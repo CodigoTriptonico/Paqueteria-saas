@@ -770,10 +770,25 @@ export default function VentaPage() {
                 </p>
                 <p className="text-2xl font-black">{nextInvoiceNumber}</p>
               </div>
-              <div className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-                <p className="font-black">{selectedSender.name}</p>
-                <p className="font-bold">{selectedRecipient.name}</p>
-                <p className="font-bold">Caja {selectedBox[0]}</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs font-black uppercase text-slate-500">
+                    Remitente
+                  </p>
+                  <p className="font-black">{selectedSender.name}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs font-black uppercase text-slate-500">
+                    Destinatario
+                  </p>
+                  <p className="font-black">{selectedRecipient.name}</p>
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-xs font-black uppercase text-slate-500">
+                  Caja
+                </p>
+                <p className="font-black">{selectedBox[0]}</p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
