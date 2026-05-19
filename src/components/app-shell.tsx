@@ -3,13 +3,15 @@ import {
   Boxes,
   ClipboardList,
   CreditCard,
+  House,
   LucideIcon,
   Settings,
   Users,
 } from "lucide-react";
 
 const navItems: { label: string; href: string; icon: LucideIcon }[] = [
-  { label: "Nueva venta", href: "/", icon: CreditCard },
+  { label: "Inicio", href: "/", icon: House },
+  { label: "Nueva venta", href: "/venta", icon: CreditCard },
   { label: "Clientes", href: "/clientes", icon: Users },
   { label: "Inventario", href: "/inventario", icon: Boxes },
   { label: "Envios", href: "/envios", icon: ClipboardList },
@@ -81,7 +83,7 @@ export function AppShell({
               </div>
             </div>
 
-            <nav className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5 lg:hidden">
+            <nav className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:hidden">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = item.label === active;

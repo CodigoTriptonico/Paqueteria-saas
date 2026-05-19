@@ -1,4 +1,4 @@
-import { PackagePlus, Printer, Truck, UserPlus } from "lucide-react";
+import { ClipboardList, PackagePlus, Truck, Users } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { BigAction, Panel, StatCard } from "@/components/ui-blocks";
 
@@ -11,27 +11,27 @@ const stats = [
 
 const actions = [
   {
-    title: "Crear envio",
-    text: "Caja llena, precio y pago.",
+    title: "Nueva venta",
+    text: "Crear envio o vender caja.",
     icon: PackagePlus,
     color: "bg-emerald-500",
   },
   {
-    title: "Vender caja",
-    text: "Caja vacia al cliente.",
-    icon: Printer,
+    title: "Clientes",
+    text: "Remitentes y destinatarios.",
+    icon: Users,
     color: "bg-sky-500",
   },
   {
-    title: "Recoger caja",
-    text: "Pickup a domicilio.",
+    title: "Pickups",
+    text: "Recoger o entregar cajas.",
     icon: Truck,
     color: "bg-amber-500",
   },
   {
-    title: "Nuevo remitente",
-    text: "Persona que envia.",
-    icon: UserPlus,
+    title: "Envios",
+    text: "Historial y estados.",
+    icon: ClipboardList,
     color: "bg-violet-500",
   },
 ];
@@ -39,10 +39,10 @@ const actions = [
 export default function Home() {
   return (
     <AppShell
-      active="Nueva venta"
-      title="Nueva venta"
-      kicker="Hoy"
-      action="+ Crear venta"
+      active="Inicio"
+      title="Inicio"
+      kicker="Resumen"
+      action="+ Nueva venta"
     >
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((item) => (
@@ -56,32 +56,27 @@ export default function Home() {
         ))}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
-        <Panel title="Venta rapida">
-          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
-            {["Remitente", "Destinatario", "Pais destino", "Caja"].map((label) => (
-              <label key={label} className="grid gap-2">
-                <span className="text-lg font-black">{label}</span>
-                <input
-                  className="h-14 min-w-0 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-emerald-500 dark:border-slate-700"
-                  placeholder={label}
-                />
-              </label>
+      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        <Panel title="Actividad reciente">
+          <div className="grid gap-3">
+            {[
+              ["Envio creado", "Maria Lopez a Mexico", "$100"],
+              ["Caja entregada", "Jose Ramirez - 20 x 20 x 20", "$12"],
+              ["Pago recibido", "Ana Perez", "$62"],
+            ].map(([type, text, amount]) => (
+              <div
+                key={type + text}
+                className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950"
+              >
+                <div>
+                  <p className="text-xl font-black">{type}</p>
+                  <p className="font-bold text-slate-500 dark:text-slate-400">
+                    {text}
+                  </p>
+                </div>
+                <p className="text-xl font-black">{amount}</p>
+              </div>
             ))}
-          </div>
-          <div className="mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950 sm:grid-cols-3">
-            <div>
-              <p className="font-bold text-emerald-700 dark:text-emerald-300">Remitente paga</p>
-              <p className="text-3xl font-black">$100</p>
-            </div>
-            <div>
-              <p className="font-bold text-emerald-700 dark:text-emerald-300">Carrier cobra</p>
-              <p className="text-3xl font-black">$60</p>
-            </div>
-            <div>
-              <p className="font-bold text-emerald-700 dark:text-emerald-300">Ganancia</p>
-              <p className="text-3xl font-black">$40</p>
-            </div>
           </div>
         </Panel>
 
