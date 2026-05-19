@@ -200,6 +200,12 @@ function AddressTags({ items }: { items: [string, string][] }) {
   );
 }
 
+function BottomAccent() {
+  return (
+    <span className="absolute inset-x-4 bottom-0 h-2 rounded-t-full bg-emerald-500 shadow-[0_-8px_24px_rgba(16,185,129,0.55)]" />
+  );
+}
+
 export default function VentaPage() {
   const [mode, setMode] = useState<"sale" | "clients" | "new-client" | "new-recipient">("sale");
   const [selectedSender, setSelectedSender] = useState<Sender | null>(null);
@@ -297,7 +303,7 @@ export default function VentaPage() {
                 }`}
               >
                 {selectedSender?.phone === sender.phone ? (
-                  <span className="absolute inset-x-4 bottom-0 h-2 rounded-t-full bg-emerald-500 shadow-[0_-8px_24px_rgba(16,185,129,0.55)]" />
+                  <BottomAccent />
                 ) : null}
                 <div className="flex items-start justify-between gap-3 pl-1">
                   <div>
@@ -422,13 +428,17 @@ export default function VentaPage() {
                 <button
                   key={`${recipient.name}-${recipient.country}`}
                   onClick={() => chooseRecipient(recipient)}
-                  className={`rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5 ${
+                  className={`relative overflow-hidden rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5 ${
                     selectedRecipient?.name === recipient.name &&
                     selectedRecipient?.country === recipient.country
                       ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100 dark:bg-emerald-950 dark:ring-emerald-900"
                       : "border-slate-200 bg-white hover:border-emerald-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-800"
-                  }`}
+                    }`}
                 >
+                    {selectedRecipient?.name === recipient.name &&
+                    selectedRecipient?.country === recipient.country ? (
+                      <BottomAccent />
+                    ) : null}
                     <span className="flex items-center justify-between gap-3">
                       <span className="text-xl font-black">{recipient.name}</span>
                       <CountryBadge country={recipient.country} />
@@ -467,12 +477,13 @@ export default function VentaPage() {
                   <button
                     key={box[0]}
                     onClick={() => setSelectedBox(box)}
-                    className={`grid gap-3 rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 md:grid-cols-[1fr_auto_auto] ${
+                    className={`relative grid gap-3 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 md:grid-cols-[1fr_auto_auto] ${
                       selectedBox?.[0] === box[0]
                         ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100 dark:bg-emerald-950 dark:ring-emerald-900"
                         : "border-slate-200 bg-white hover:border-emerald-300 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-800"
-                    }`}
+                      }`}
                   >
+                    {selectedBox?.[0] === box[0] ? <BottomAccent /> : null}
                     <div>
                       <p className="text-2xl font-black">Caja {box[0]}</p>
                       <p className="font-bold text-slate-500 dark:text-slate-400">
