@@ -57,9 +57,6 @@ export default function ConfiguracionPage() {
                   <p className="mt-2 text-lg font-bold text-slate-500 dark:text-slate-400">
                     {detail}
                   </p>
-                  <span className="mt-6 inline-flex rounded-lg bg-slate-950 px-4 py-3 font-black text-white dark:bg-emerald-500 dark:text-slate-950">
-                    Configurar
-                  </span>
                 </button>
               ))}
             </div>
