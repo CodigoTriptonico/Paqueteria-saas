@@ -703,7 +703,7 @@ export default function VentaPage() {
       {selectedSender && selectedRecipient && selectedBox ? (
         <div
           ref={detailsRef}
-          className="mt-5 grid gap-5 xl:grid-cols-[1fr_0.55fr]"
+          className="mt-5 grid items-start gap-5 xl:grid-cols-[1fr_0.55fr]"
         >
           <Panel title="Datos del envio">
             <div className="grid gap-4 md:grid-cols-3">
