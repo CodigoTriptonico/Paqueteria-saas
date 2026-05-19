@@ -13,7 +13,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { type MouseEvent, useMemo, useState } from "react";
+import { type MouseEvent, type RefObject, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { AppShell } from "@/components/app-shell";
 import { Panel } from "@/components/ui-blocks";
@@ -310,6 +310,9 @@ export default function VentaPage() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoiceSequence, setInvoiceSequence] = useState(124);
   const [invoiceNumber, setInvoiceNumber] = useState("INV-000124");
+  const recipientsRef = useRef<HTMLDivElement | null>(null);
+  const boxesRef = useRef<HTMLDivElement | null>(null);
+  const detailsRef = useRef<HTMLDivElement | null>(null);
 
   const duplicateClient = useMemo(() => {
     if (!newClientPhone.trim()) {
@@ -337,15 +340,38 @@ export default function VentaPage() {
     ? countryBoxes[selectedRecipient.country as keyof typeof countryBoxes] || []
     : [];
 
+  function scrollToNext(ref: RefObject<HTMLDivElement | null>) {
+    window.setTimeout(() => {
+      const element = ref.current;
+      if (!element) {
+        return;
+      }
+
+      const rect = element.getBoundingClientRect();
+      const isVisible = rect.top >= 80 && rect.bottom <= window.innerHeight - 24;
+
+      if (!isVisible) {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+  }
+
   function chooseSender(sender: Sender) {
     setSelectedSender(sender);
     setSelectedRecipient(null);
     setSelectedBox(null);
+    scrollToNext(recipientsRef);
   }
 
   function chooseRecipient(recipient: Recipient) {
     setSelectedRecipient(recipient);
     setSelectedBox(null);
+    scrollToNext(boxesRef);
+  }
+
+  function chooseBox(box: string[]) {
+    setSelectedBox(box);
+    scrollToNext(detailsRef);
   }
 
   function openContextMenu(
@@ -491,7 +517,10 @@ export default function VentaPage() {
 
       {selectedSender &&
       (mode === "clients" || mode === "sale" || mode === "new-recipient") ? (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+        <div
+          ref={recipientsRef}
+          className="mt-5 grid gap-5 xl:grid-cols-[0.8fr_1.2fr]"
+        >
           <Panel title={`Destinatarios de ${selectedSender.name}`}>
             <div className="mb-4 flex flex-wrap gap-3">
               <button
@@ -591,79 +620,84 @@ export default function VentaPage() {
             </div>
           </Panel>
 
-          <Panel
-            title={
-              selectedRecipient
-                ? `Cajas para ${selectedRecipient.country}`
-                : "Cajas"
-            }
-          >
-            {!selectedRecipient ? (
-              <p className="text-xl font-black text-slate-500 dark:text-slate-400">
-                Selecciona un destinatario.
-              </p>
-            ) : (
-              <div className="grid gap-3">
-                {boxesForCountry.map((box) => (
-                  <button
-                    key={box[0]}
-                    onClick={() => setSelectedBox(box)}
-                    onContextMenu={(event) =>
-                      openContextMenu(event, `Caja ${box[0]}`, "caja")
-                    }
-                    className={`relative grid gap-4 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 lg:grid-cols-[auto_1fr_auto] ${
-                      selectedBox?.[0] === box[0]
-                        ? "border-emerald-500 bg-white ring-2 ring-emerald-100 dark:bg-slate-950 dark:ring-emerald-900"
-                        : "border-slate-200 bg-white hover:border-emerald-300 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-800"
-                    }`}
-                  >
-                    {selectedBox?.[0] === box[0] ? <BottomAccent /> : null}
-                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-slate-100 shadow-inner dark:bg-slate-900">
-                      <Package className="h-9 w-9 text-slate-500" />
-                    </div>
+          <div ref={boxesRef}>
+            <Panel
+              title={
+                selectedRecipient
+                  ? `Cajas para ${selectedRecipient.country}`
+                  : "Cajas"
+              }
+            >
+              {!selectedRecipient ? (
+                <p className="text-xl font-black text-slate-500 dark:text-slate-400">
+                  Selecciona un destinatario.
+                </p>
+              ) : (
+                <div className="grid gap-3">
+                  {boxesForCountry.map((box) => (
+                    <button
+                      key={box[0]}
+                      onClick={() => chooseBox(box)}
+                      onContextMenu={(event) =>
+                        openContextMenu(event, `Caja ${box[0]}`, "caja")
+                      }
+                      className={`relative grid gap-4 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 lg:grid-cols-[auto_1fr_auto] ${
+                        selectedBox?.[0] === box[0]
+                          ? "border-emerald-500 bg-white ring-2 ring-emerald-100 dark:bg-slate-950 dark:ring-emerald-900"
+                          : "border-slate-200 bg-white hover:border-emerald-300 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-800"
+                      }`}
+                    >
+                      {selectedBox?.[0] === box[0] ? <BottomAccent /> : null}
+                      <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-slate-100 shadow-inner dark:bg-slate-900">
+                        <Package className="h-9 w-9 text-slate-500" />
+                      </div>
 
-                    <div>
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <p className="text-2xl font-black">Caja {box[0]}</p>
-                        <CountryBadge country={selectedRecipient.country} />
+                      <div>
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <p className="text-2xl font-black">Caja {box[0]}</p>
+                          <CountryBadge country={selectedRecipient.country} />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                            Carrier: {box[3]}
+                          </span>
+                          <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                            Tiempo: {box[4]}
+                          </span>
+                          <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                            Costo: {box[2]}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                          Carrier: {box[3]}
-                        </span>
-                        <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                          Tiempo: {box[4]}
-                        </span>
-                        <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                          Costo: {box[2]}
-                        </span>
-                      </div>
-                    </div>
 
-                    <div className="grid min-w-44 grid-cols-2 gap-2">
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900">
-                        <p className="text-[11px] font-black uppercase text-slate-500">
-                          Cobra
-                        </p>
-                        <p className="text-2xl font-black">{box[1]}</p>
+                      <div className="grid min-w-44 grid-cols-2 gap-2">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900">
+                          <p className="text-[11px] font-black uppercase text-slate-500">
+                            Cobra
+                          </p>
+                          <p className="text-2xl font-black">{box[1]}</p>
+                        </div>
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-100 px-4 py-3 text-right text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                          <p className="text-[11px] font-black uppercase">
+                            Gana
+                          </p>
+                          <p className="text-2xl font-black">$40</p>
+                        </div>
                       </div>
-                      <div className="rounded-xl border border-emerald-200 bg-emerald-100 px-4 py-3 text-right text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                        <p className="text-[11px] font-black uppercase">
-                          Gana
-                        </p>
-                        <p className="text-2xl font-black">$40</p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </Panel>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Panel>
+          </div>
         </div>
       ) : null}
 
       {selectedSender && selectedRecipient && selectedBox ? (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_0.55fr]">
+        <div
+          ref={detailsRef}
+          className="mt-5 grid gap-5 xl:grid-cols-[1fr_0.55fr]"
+        >
           <Panel title="Datos del envio">
             <div className="grid gap-4 md:grid-cols-3">
               <label className="grid gap-2">
