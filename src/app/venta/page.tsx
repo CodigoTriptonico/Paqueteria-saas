@@ -47,6 +47,15 @@ type ContextMenuState = {
   title: string;
   type: "remitente" | "destinatario" | "caja";
   phones: string[];
+  address: {
+    street?: string;
+    houseNumber?: string;
+    neighborhood?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  };
 };
 
 const senders: Sender[] = [
@@ -341,7 +350,7 @@ export default function VentaPage() {
       items: contextMenu?.phones.length
         ? [
             ...(contextMenu.phones.length > 1 ? ["Todos los celulares"] : []),
-            ...contextMenu.phones,
+            ...contextMenu.phones.map((phone, index) => `Celular ${index + 1}: ${phone}`),
           ]
         : [],
     },
@@ -349,13 +358,27 @@ export default function VentaPage() {
       label: "Direccion",
       items: [
         "Direccion completa",
-        "Calle",
-        "Casa",
-        "Colonia",
-        "Ciudad",
-        "Estado",
-        "CP",
-        "Pais",
+        ...(contextMenu?.address.street
+          ? [`Calle: ${contextMenu.address.street}`]
+          : []),
+        ...(contextMenu?.address.houseNumber
+          ? [`Casa: ${contextMenu.address.houseNumber}`]
+          : []),
+        ...(contextMenu?.address.neighborhood
+          ? [`Colonia: ${contextMenu.address.neighborhood}`]
+          : []),
+        ...(contextMenu?.address.city
+          ? [`Ciudad: ${contextMenu.address.city}`]
+          : []),
+        ...(contextMenu?.address.state
+          ? [`Estado: ${contextMenu.address.state}`]
+          : []),
+        ...(contextMenu?.address.postalCode
+          ? [`CP: ${contextMenu.address.postalCode}`]
+          : []),
+        ...(contextMenu?.address.country
+          ? [`Pais: ${contextMenu.address.country}`]
+          : []),
       ],
     },
   ];
@@ -403,9 +426,17 @@ export default function VentaPage() {
     title: string,
     type: ContextMenuState["type"],
     phones: string[] = [],
+    address: ContextMenuState["address"] = {},
   ) {
     event.preventDefault();
-    setContextMenu({ x: event.clientX, y: event.clientY, title, type, phones });
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      title,
+      type,
+      phones,
+      address,
+    });
   }
 
   function openInvoice() {
@@ -459,7 +490,15 @@ export default function VentaPage() {
                 key={sender.phone}
                 onClick={() => chooseSender(sender)}
                 onContextMenu={(event) =>
-                  openContextMenu(event, sender.name, "remitente", [sender.phone])
+                  openContextMenu(event, sender.name, "remitente", [sender.phone], {
+                    street: sender.street,
+                    houseNumber: sender.houseNumber,
+                    neighborhood: sender.neighborhood,
+                    city: sender.city,
+                    state: sender.state,
+                    postalCode: sender.postalCode,
+                    country: "USA",
+                  })
                 }
                 className={`relative overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 ${
                   selectedSender?.phone === sender.phone
@@ -613,7 +652,14 @@ export default function VentaPage() {
                   onContextMenu={(event) =>
                     openContextMenu(event, recipient.name, "destinatario", [
                       recipient.phone,
-                    ])
+                    ], {
+                      street: recipient.street,
+                      houseNumber: recipient.houseNumber,
+                      neighborhood: recipient.neighborhood,
+                      city: recipient.city,
+                      postalCode: recipient.postalCode,
+                      country: recipient.country,
+                    })
                   }
                   className={`relative overflow-hidden rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5 ${
                     selectedRecipient?.name === recipient.name &&
