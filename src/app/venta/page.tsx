@@ -307,6 +307,7 @@ export default function VentaPage() {
   const [newRecipientName, setNewRecipientName] = useState("");
   const [newRecipientCountry, setNewRecipientCountry] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [activeCopyGroup, setActiveCopyGroup] = useState<string | null>(null);
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoiceSequence, setInvoiceSequence] = useState(124);
   const [invoiceNumber, setInvoiceNumber] = useState("INV-000124");
@@ -450,6 +451,7 @@ export default function VentaPage() {
     address: ContextMenuState["address"] = {},
   ) {
     event.preventDefault();
+    setActiveCopyGroup(null);
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
@@ -467,7 +469,12 @@ export default function VentaPage() {
 
   return (
     <AppShell active="Nueva venta" title="Nueva venta" kicker="Clientes + venta">
-      <div onClick={() => setContextMenu(null)}>
+      <div
+        onClick={() => {
+          setContextMenu(null);
+          setActiveCopyGroup(null);
+        }}
+      >
       <div className="mb-5 grid gap-3 sm:grid-cols-[auto_auto_1fr]">
         <button
           onClick={() => setMode("clients")}
@@ -933,12 +940,16 @@ export default function VentaPage() {
                 Copiar
               </p>
               {copyGroups.map((group) => (
-                <div key={group.label} className="group/copy relative">
+                <div key={group.label} className="relative">
                   <button
                     className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-black hover:bg-slate-100 dark:hover:bg-slate-800"
+                    onMouseEnter={() =>
+                      setActiveCopyGroup(group.items.length ? group.label : null)
+                    }
                     onClick={() => {
                       if (group.items.length === 0) {
                         setContextMenu(null);
+                        setActiveCopyGroup(null);
                       }
                     }}
                   >
@@ -949,8 +960,8 @@ export default function VentaPage() {
                     ) : null}
                   </button>
 
-                  {group.items.length > 0 ? (
-                    <div className="invisible absolute left-[calc(100%-1px)] top-0 z-50 w-56 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-2xl delay-300 duration-150 group-hover/copy:visible group-hover/copy:opacity-100 group-hover/copy:delay-0 dark:border-slate-700 dark:bg-slate-900">
+                  {group.items.length > 0 && activeCopyGroup === group.label ? (
+                    <div className="absolute left-[calc(100%-1px)] top-0 z-50 w-56 rounded-xl border border-slate-200 bg-white p-2 opacity-100 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
                       <p className="px-3 pb-1 text-xs font-black uppercase text-slate-400">
                         {group.label}
                       </p>
@@ -958,7 +969,10 @@ export default function VentaPage() {
                         <button
                           key={item.label}
                           className="flex min-h-14 w-full items-start gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800"
-                          onClick={() => setContextMenu(null)}
+                          onClick={() => {
+                            setContextMenu(null);
+                            setActiveCopyGroup(null);
+                          }}
                         >
                           <Copy className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
                           <span className="grid min-w-0 gap-0.5">
