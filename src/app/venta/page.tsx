@@ -347,17 +347,7 @@ export default function VentaPage() {
   const copyAddressItems = [
     {
       label: "Direccion completa",
-      value: [
-        contextMenu?.address.street,
-        contextMenu?.address.houseNumber,
-        contextMenu?.address.neighborhood,
-        contextMenu?.address.city,
-        contextMenu?.address.state,
-        contextMenu?.address.postalCode,
-        contextMenu?.address.country,
-      ]
-        .filter(Boolean)
-        .join(", "),
+      value: "",
     },
     { label: "Calle", value: contextMenu?.address.street },
     { label: "Casa", value: contextMenu?.address.houseNumber },
@@ -979,9 +969,11 @@ export default function VentaPage() {
                             <span className="text-xs font-black uppercase text-slate-400">
                               {item.label}
                             </span>
-                            <span className="break-words text-sm font-black text-slate-950 dark:text-white">
-                              {item.value}
-                            </span>
+                            {item.value ? (
+                              <span className="break-words text-sm font-black text-slate-950 dark:text-white">
+                                {item.value}
+                              </span>
+                            ) : null}
                           </span>
                         </button>
                       ))}
