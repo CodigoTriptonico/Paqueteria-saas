@@ -1,6 +1,15 @@
 "use client";
 
-import { Check, Edit3, Package, Plus, Search, Trash2, UserPlus } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Edit3,
+  Package,
+  Plus,
+  Search,
+  Trash2,
+  UserPlus,
+} from "lucide-react";
 import { type MouseEvent, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Panel } from "@/components/ui-blocks";
@@ -34,6 +43,22 @@ type ContextMenuState = {
   title: string;
   type: "remitente" | "destinatario" | "caja";
 };
+
+const copyOptions = [
+  "Todo",
+  "Nombre > nombre completo",
+  "Nombre > solo nombre",
+  "Nombre > solo apellido",
+  "Telefono",
+  "Direccion > completa",
+  "Direccion > calle",
+  "Direccion > casa",
+  "Direccion > colonia",
+  "Direccion > ciudad",
+  "Direccion > estado",
+  "Direccion > CP",
+  "Pais",
+];
 
 const senders: Sender[] = [
   {
@@ -677,7 +702,7 @@ export default function VentaPage() {
 
       {contextMenu ? (
         <div
-          className="fixed z-50 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          className="fixed z-50 max-h-[80vh] w-80 overflow-auto rounded-xl border border-slate-200 bg-white p-2 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -686,6 +711,22 @@ export default function VentaPage() {
               {contextMenu.type}
             </p>
             <p className="truncate text-base font-black">{contextMenu.title}</p>
+          </div>
+
+          <div className="border-b border-slate-200 py-2 dark:border-slate-800">
+            <p className="px-3 pb-1 text-xs font-black uppercase text-slate-400">
+              Copiar
+            </p>
+            {copyOptions.map((option) => (
+              <button
+                key={option}
+                className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-black hover:bg-slate-100 dark:hover:bg-slate-800"
+                onClick={() => setContextMenu(null)}
+              >
+                <Copy className="h-4 w-4" />
+                {option}
+              </button>
+            ))}
           </div>
 
           <button
