@@ -51,10 +51,10 @@ type ContextMenuState = {
 const copyGroups = [
   { label: "Todo", items: [] },
   { label: "Nombre", items: ["Nombre completo", "Solo nombre", "Solo apellido"] },
-  { label: "Telefono", items: [] },
+  { label: "Telefono", items: ["Todos los celulares", "Celular 1", "Celular 2", "Celular 3"] },
   {
     label: "Direccion",
-    items: ["Completa", "Calle", "Casa", "Colonia", "Ciudad", "Estado", "CP", "Pais"],
+    items: ["Direccion completa", "Calle", "Casa", "Colonia", "Ciudad", "Estado", "CP", "Pais"],
   },
 ];
 
