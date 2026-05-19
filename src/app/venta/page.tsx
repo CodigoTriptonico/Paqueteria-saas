@@ -707,7 +707,10 @@ export default function VentaPage() {
               <label className="grid gap-2">
                 <span className="text-lg font-black">Entrega/Pickup</span>
                 <select className={selectClass} defaultValue="">
-                  <option value="" disabled>
+                  <option
+                    value=""
+                    className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white"
+                  >
                     Elegir opcion
                   </option>
                   <option className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
