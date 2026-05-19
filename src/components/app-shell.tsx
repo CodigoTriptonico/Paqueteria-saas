@@ -6,13 +6,11 @@ import {
   House,
   LucideIcon,
   Settings,
-  Users,
 } from "lucide-react";
 
 const navItems: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Inicio", href: "/", icon: House },
   { label: "Nueva venta", href: "/venta", icon: CreditCard },
-  { label: "Clientes", href: "/clientes", icon: Users },
   { label: "Inventario", href: "/inventario", icon: Boxes },
   { label: "Envios", href: "/envios", icon: ClipboardList },
   { label: "Configuracion", href: "/configuracion", icon: Settings },
