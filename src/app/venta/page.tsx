@@ -437,13 +437,18 @@ export default function VentaPage() {
       {selectedSender && (mode === "clients" || mode === "new-recipient") ? (
         <div className="mt-5 grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
           <Panel title={`Destinatarios de ${selectedSender.name}`}>
-            <button
-              onClick={() => setMode("new-recipient")}
-              className="mb-4 flex h-14 items-center justify-center gap-2 rounded-lg bg-violet-600 px-5 text-lg font-black text-white"
-            >
-              <Plus className="h-6 w-6" />
-              Nuevo destinatario
-            </button>
+            <div className="mb-4 flex flex-wrap gap-3">
+              <button
+                onClick={() => setMode("new-recipient")}
+                className="flex h-14 items-center justify-center gap-2 rounded-lg bg-violet-600 px-5 text-lg font-black text-white"
+              >
+                <Plus className="h-6 w-6" />
+                Nuevo destinatario
+              </button>
+              <button className="h-14 rounded-lg bg-amber-500 px-5 text-lg font-black text-slate-950">
+                Pendiente
+              </button>
+            </div>
 
             {mode === "new-recipient" ? (
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
