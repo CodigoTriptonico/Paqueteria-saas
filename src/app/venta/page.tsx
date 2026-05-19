@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, Plus, Search, UserPlus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Check, Edit3, Package, Plus, Search, Trash2, UserPlus } from "lucide-react";
+import { type MouseEvent, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Panel } from "@/components/ui-blocks";
 
@@ -26,6 +26,13 @@ type Sender = {
   state: string;
   postalCode: string;
   recipients: Recipient[];
+};
+
+type ContextMenuState = {
+  x: number;
+  y: number;
+  title: string;
+  type: "remitente" | "destinatario" | "caja";
 };
 
 const senders: Sender[] = [
@@ -273,6 +280,7 @@ export default function VentaPage() {
   const [newClientPhone, setNewClientPhone] = useState("");
   const [newRecipientName, setNewRecipientName] = useState("");
   const [newRecipientCountry, setNewRecipientCountry] = useState("");
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   const duplicateClient = useMemo(() => {
     if (!newClientPhone.trim()) {
@@ -311,8 +319,18 @@ export default function VentaPage() {
     setSelectedBox(null);
   }
 
+  function openContextMenu(
+    event: MouseEvent,
+    title: string,
+    type: ContextMenuState["type"],
+  ) {
+    event.preventDefault();
+    setContextMenu({ x: event.clientX, y: event.clientY, title, type });
+  }
+
   return (
     <AppShell active="Nueva venta" title="Nueva venta" kicker="Clientes + venta">
+      <div onClick={() => setContextMenu(null)}>
       <div className="mb-5 grid gap-3 sm:grid-cols-[auto_auto_1fr]">
         <button
           onClick={() => setMode("clients")}
@@ -355,6 +373,9 @@ export default function VentaPage() {
               <button
                 key={sender.phone}
                 onClick={() => chooseSender(sender)}
+                onContextMenu={(event) =>
+                  openContextMenu(event, sender.name, "remitente")
+                }
                 className={`relative overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 ${
                   selectedSender?.phone === sender.phone
                     ? "border-emerald-500 bg-white ring-2 ring-emerald-100 dark:border-emerald-500 dark:bg-slate-950 dark:ring-emerald-900"
@@ -492,6 +513,9 @@ export default function VentaPage() {
                 <button
                   key={`${recipient.name}-${recipient.country}`}
                   onClick={() => chooseRecipient(recipient)}
+                  onContextMenu={(event) =>
+                    openContextMenu(event, recipient.name, "destinatario")
+                  }
                   className={`relative overflow-hidden rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5 ${
                     selectedRecipient?.name === recipient.name &&
                     selectedRecipient?.country === recipient.country
@@ -541,6 +565,9 @@ export default function VentaPage() {
                   <button
                     key={box[0]}
                     onClick={() => setSelectedBox(box)}
+                    onContextMenu={(event) =>
+                      openContextMenu(event, `Caja ${box[0]}`, "caja")
+                    }
                     className={`relative grid gap-4 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 lg:grid-cols-[auto_1fr_auto] ${
                       selectedBox?.[0] === box[0]
                         ? "border-emerald-500 bg-white ring-2 ring-emerald-100 dark:bg-slate-950 dark:ring-emerald-900"
@@ -548,8 +575,8 @@ export default function VentaPage() {
                     }`}
                   >
                     {selectedBox?.[0] === box[0] ? <BottomAccent /> : null}
-                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-slate-100 text-3xl shadow-inner dark:bg-slate-900">
-                      📦
+                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-slate-100 shadow-inner dark:bg-slate-900">
+                      <Package className="h-9 w-9 text-slate-500" />
                     </div>
 
                     <div>
@@ -644,6 +671,44 @@ export default function VentaPage() {
               Cobrar venta
             </button>
           </Panel>
+        </div>
+      ) : null}
+      </div>
+
+      {contextMenu ? (
+        <div
+          className="fixed z-50 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+            <p className="text-xs font-black uppercase text-slate-400">
+              {contextMenu.type}
+            </p>
+            <p className="truncate text-base font-black">{contextMenu.title}</p>
+          </div>
+
+          <button
+            className="mt-1 flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left font-black hover:bg-slate-100 dark:hover:bg-slate-800"
+            onClick={() => setContextMenu(null)}
+          >
+            <Edit3 className="h-5 w-5" />
+            Editar
+          </button>
+          <button
+            className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left font-black hover:bg-slate-100 dark:hover:bg-slate-800"
+            onClick={() => setContextMenu(null)}
+          >
+            <Check className="h-5 w-5" />
+            Marcar pendiente
+          </button>
+          <button
+            className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left font-black text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950"
+            onClick={() => setContextMenu(null)}
+          >
+            <Trash2 className="h-5 w-5" />
+            Eliminar
+          </button>
         </div>
       ) : null}
     </AppShell>
