@@ -6,11 +6,14 @@ import {
   Edit3,
   Package,
   Plus,
+  Printer,
   Search,
   Trash2,
   UserPlus,
+  X,
 } from "lucide-react";
 import { type MouseEvent, useMemo, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { AppShell } from "@/components/app-shell";
 import { Panel } from "@/components/ui-blocks";
 
@@ -306,6 +309,9 @@ export default function VentaPage() {
   const [newRecipientName, setNewRecipientName] = useState("");
   const [newRecipientCountry, setNewRecipientCountry] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [invoiceSequence, setInvoiceSequence] = useState(124);
+  const [invoiceNumber, setInvoiceNumber] = useState("INV-000124");
 
   const duplicateClient = useMemo(() => {
     if (!newClientPhone.trim()) {
@@ -351,6 +357,11 @@ export default function VentaPage() {
   ) {
     event.preventDefault();
     setContextMenu({ x: event.clientX, y: event.clientY, title, type });
+  }
+
+  function openInvoice() {
+    setInvoiceNumber(`INV-${String(invoiceSequence).padStart(6, "0")}`);
+    setShowInvoice(true);
   }
 
   return (
@@ -691,7 +702,10 @@ export default function VentaPage() {
               <p className="font-bold">{selectedRecipient.name}</p>
               <p className="font-bold">Caja {selectedBox[0]}</p>
             </div>
-            <button className="flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 text-lg font-black text-slate-950">
+            <button
+              onClick={openInvoice}
+              className="flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 text-lg font-black text-slate-950"
+            >
               <Check className="h-6 w-6" />
               Cobrar venta
             </button>
@@ -750,6 +764,139 @@ export default function VentaPage() {
             <Trash2 className="h-5 w-5" />
             Eliminar
           </button>
+        </div>
+      ) : null}
+
+      {showInvoice && selectedSender && selectedRecipient && selectedBox ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-5 flex items-start justify-between gap-4 border-b border-slate-200 pb-4 dark:border-slate-800">
+              <div>
+                <p className="text-sm font-black uppercase text-slate-500">
+                  Confirmar venta
+                </p>
+                <h3 className="text-3xl font-black">Invoice {invoiceNumber}</h3>
+                <p className="font-bold text-slate-500 dark:text-slate-400">
+                  Paquemas - venta correlativa
+                </p>
+              </div>
+              <button
+                onClick={() => setShowInvoice(false)}
+                className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-[1fr_auto]">
+              <div className="grid gap-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+                    <p className="text-xs font-black uppercase text-slate-400">
+                      Remitente
+                    </p>
+                    <p className="text-xl font-black">{selectedSender.name}</p>
+                    <p className="font-bold text-slate-500">{selectedSender.phone}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+                    <p className="text-xs font-black uppercase text-slate-400">
+                      Destinatario
+                    </p>
+                    <p className="text-xl font-black">{selectedRecipient.name}</p>
+                    <p className="font-bold text-slate-500">
+                      {selectedRecipient.city}, {selectedRecipient.country}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+                  <p className="mb-3 text-xl font-black">Detalle</p>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div>
+                      <p className="text-xs font-black uppercase text-slate-400">
+                        Caja
+                      </p>
+                      <p className="font-black">{selectedBox[0]}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase text-slate-400">
+                        Carrier
+                      </p>
+                      <p className="font-black">{selectedBox[3]}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase text-slate-400">
+                        Tiempo
+                      </p>
+                      <p className="font-black">{selectedBox[4]}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase text-slate-400">
+                        Pais
+                      </p>
+                      <p className="font-black">{selectedRecipient.country}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-right dark:border-slate-800 dark:bg-slate-950">
+                    <p className="text-xs font-black uppercase text-slate-400">
+                      Cliente paga
+                    </p>
+                    <p className="text-3xl font-black">{selectedBox[1]}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-right dark:border-slate-800 dark:bg-slate-950">
+                    <p className="text-xs font-black uppercase text-slate-400">
+                      Carrier cobra
+                    </p>
+                    <p className="text-3xl font-black">{selectedBox[2]}</p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-100 p-4 text-right text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                    <p className="text-xs font-black uppercase">Ganancia</p>
+                    <p className="text-3xl font-black">$40</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-slate-950 p-4 text-center text-white">
+                <div className="rounded-xl bg-white p-3">
+                  <QRCodeSVG
+                    value={`invoice:${invoiceNumber}`}
+                    size={144}
+                    level="M"
+                    marginSize={1}
+                  />
+                </div>
+                <p className="mt-3 text-lg font-black">{invoiceNumber}</p>
+                <p className="text-sm font-bold text-slate-300">
+                  QR del invoice
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 border-t border-slate-200 pt-4 dark:border-slate-800 sm:grid-cols-3">
+              <button
+                onClick={() => setShowInvoice(false)}
+                className="h-14 rounded-lg border border-slate-200 text-lg font-black dark:border-slate-700"
+              >
+                Cancelar
+              </button>
+              <button className="flex h-14 items-center justify-center gap-2 rounded-lg bg-slate-950 text-lg font-black text-white dark:bg-slate-100 dark:text-slate-950">
+                <Printer className="h-6 w-6" />
+                Imprimir
+              </button>
+              <button
+                onClick={() => {
+                  setShowInvoice(false);
+                  setInvoiceSequence((current) => current + 1);
+                }}
+                className="h-14 rounded-lg bg-emerald-500 text-lg font-black text-slate-950"
+              >
+                Confirmar cobro
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </AppShell>
