@@ -172,6 +172,9 @@ export default function VentaPage() {
                 <p className="font-bold text-slate-500 dark:text-slate-400">
                   {sender.phone}
                 </p>
+                <p className="font-bold text-slate-500 dark:text-slate-400">
+                  {sender.address}
+                </p>
                 <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 font-black dark:bg-slate-900">
                   {sender.recipients.length} destinatarios
                 </p>
