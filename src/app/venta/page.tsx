@@ -342,44 +342,65 @@ export default function VentaPage() {
   const boxesForCountry = selectedRecipient
     ? countryBoxes[selectedRecipient.country as keyof typeof countryBoxes] || []
     : [];
+  const splitName = contextMenu?.title.trim().split(/\s+/) || [];
+  const copyAddressItems = [
+    {
+      label: "Direccion completa",
+      value: [
+        contextMenu?.address.street,
+        contextMenu?.address.houseNumber,
+        contextMenu?.address.neighborhood,
+        contextMenu?.address.city,
+        contextMenu?.address.state,
+        contextMenu?.address.postalCode,
+        contextMenu?.address.country,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    },
+    { label: "Calle", value: contextMenu?.address.street },
+    { label: "Casa", value: contextMenu?.address.houseNumber },
+    { label: "Colonia", value: contextMenu?.address.neighborhood },
+    { label: "Ciudad", value: contextMenu?.address.city },
+    { label: "Estado", value: contextMenu?.address.state },
+    { label: "CP", value: contextMenu?.address.postalCode },
+    { label: "Pais", value: contextMenu?.address.country },
+  ].filter((item) => item.value);
   const copyGroups = [
     { label: "Todo", items: [] },
-    { label: "Nombre", items: ["Nombre completo", "Solo nombre", "Solo apellido"] },
+    {
+      label: "Nombre",
+      items: [
+        { label: "Nombre completo", value: contextMenu?.title },
+        { label: "Solo nombre", value: splitName[0] },
+        {
+          label: "Solo apellido",
+          value: splitName.length > 1 ? splitName.slice(1).join(" ") : "",
+        },
+      ].filter((item) => item.value),
+    },
     {
       label: "Telefono",
       items: contextMenu?.phones.length
         ? [
-            ...(contextMenu.phones.length > 1 ? ["Todos los celulares"] : []),
-            ...contextMenu.phones.map((phone, index) => `Celular ${index + 1}: ${phone}`),
+            ...(contextMenu.phones.length > 1
+              ? [
+                  {
+                    label: "Todos los celulares",
+                    value: contextMenu.phones.join(", "),
+                  },
+                ]
+              : []),
+            ...contextMenu.phones.map((phone, index) => ({
+              label: `Celular ${index + 1}`,
+              value: phone,
+            })),
           ]
         : [],
     },
     {
       label: "Direccion",
-      items: [
-        "Direccion completa",
-        ...(contextMenu?.address.street
-          ? [`Calle: ${contextMenu.address.street}`]
-          : []),
-        ...(contextMenu?.address.houseNumber
-          ? [`Casa: ${contextMenu.address.houseNumber}`]
-          : []),
-        ...(contextMenu?.address.neighborhood
-          ? [`Colonia: ${contextMenu.address.neighborhood}`]
-          : []),
-        ...(contextMenu?.address.city
-          ? [`Ciudad: ${contextMenu.address.city}`]
-          : []),
-        ...(contextMenu?.address.state
-          ? [`Estado: ${contextMenu.address.state}`]
-          : []),
-        ...(contextMenu?.address.postalCode
-          ? [`CP: ${contextMenu.address.postalCode}`]
-          : []),
-        ...(contextMenu?.address.country
-          ? [`Pais: ${contextMenu.address.country}`]
-          : []),
-      ],
+      items: copyAddressItems,
     },
   ];
 
@@ -935,12 +956,19 @@ export default function VentaPage() {
                       </p>
                       {group.items.map((item) => (
                         <button
-                          key={item}
-                          className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-black hover:bg-slate-100 dark:hover:bg-slate-800"
+                          key={item.label}
+                          className="flex min-h-14 w-full items-start gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800"
                           onClick={() => setContextMenu(null)}
                         >
-                          <Copy className="h-4 w-4" />
-                          {item}
+                          <Copy className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
+                          <span className="grid min-w-0 gap-0.5">
+                            <span className="text-xs font-black uppercase text-slate-400">
+                              {item.label}
+                            </span>
+                            <span className="break-words text-sm font-black text-slate-950 dark:text-white">
+                              {item.value}
+                            </span>
+                          </span>
                         </button>
                       ))}
                     </div>
