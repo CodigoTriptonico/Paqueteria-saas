@@ -907,7 +907,7 @@ export default function VentaPage() {
               <ChevronRight className="h-4 w-4 text-slate-400" />
             </button>
 
-            <div className="invisible absolute left-[calc(100%-1px)] top-0 z-50 w-64 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-2xl transition before:absolute before:-inset-4 before:-z-10 before:content-[''] group-hover:visible group-hover:opacity-100 dark:border-slate-700 dark:bg-slate-900">
+            <div className="invisible absolute left-[calc(100%-1px)] top-0 z-50 w-64 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-2xl delay-300 duration-150 before:absolute before:-inset-8 before:-z-10 before:content-[''] group-hover:visible group-hover:opacity-100 group-hover:delay-0 dark:border-slate-700 dark:bg-slate-900">
               <p className="px-3 pb-1 text-xs font-black uppercase text-slate-400">
                 Copiar
               </p>
@@ -929,7 +929,7 @@ export default function VentaPage() {
                   </button>
 
                   {group.items.length > 0 ? (
-                    <div className="invisible absolute left-[calc(100%-1px)] top-0 z-50 w-56 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-2xl transition before:absolute before:-inset-4 before:-z-10 before:content-[''] group-hover/copy:visible group-hover/copy:opacity-100 dark:border-slate-700 dark:bg-slate-900">
+                    <div className="invisible absolute left-[calc(100%-1px)] top-0 z-50 w-56 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-2xl delay-300 duration-150 before:absolute before:-inset-8 before:-z-10 before:content-[''] group-hover/copy:visible group-hover/copy:opacity-100 group-hover/copy:delay-0 dark:border-slate-700 dark:bg-slate-900">
                       <p className="px-3 pb-1 text-xs font-black uppercase text-slate-400">
                         {group.label}
                       </p>
