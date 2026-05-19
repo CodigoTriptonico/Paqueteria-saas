@@ -505,6 +505,14 @@ export default function VentaPage() {
               </button>
             </div>
 
+            <div className="relative mb-4">
+              <Search className="absolute left-4 top-1/2 h-6 w-6 -translate-y-1/2 text-slate-400" />
+              <input
+                className={`${inputClass} w-full pl-12`}
+                placeholder="Buscar destinatario, telefono o pais"
+              />
+            </div>
+
             {mode === "new-recipient" ? (
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
                 <div className="grid gap-3 md:grid-cols-2">
