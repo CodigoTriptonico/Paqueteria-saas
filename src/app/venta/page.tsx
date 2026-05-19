@@ -415,7 +415,7 @@ export default function VentaPage() {
         </button>
       </div>
 
-      {mode === "clients" ? (
+      {mode === "clients" && step === "clients" ? (
         <Panel title="Clientes">
           <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
             <div className="relative">
@@ -521,7 +521,7 @@ export default function VentaPage() {
         </Panel>
       ) : null}
 
-      {selectedSender ? (
+      {selectedSender && (step === "recipients" || mode === "new-recipient") ? (
         <div ref={recipientsRef} className="mt-5 grid gap-5 scroll-mt-5">
           <Panel title={`Destinatarios de ${selectedSender.name}`}>
             <div className="mb-4 flex flex-wrap gap-3">
@@ -625,7 +625,7 @@ export default function VentaPage() {
         </div>
       ) : null}
 
-      {selectedRecipient ? (
+      {step === "boxes" && selectedRecipient ? (
         <div ref={boxesRef} className="mt-5 scroll-mt-5">
         <Panel title={`Cajas para ${selectedRecipient.country}`}>
           <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
@@ -712,7 +712,7 @@ export default function VentaPage() {
         </Panel>
       ) : null}
 
-      {selectedSender && selectedRecipient && selectedBox ? (
+      {step === "details" && selectedSender && selectedRecipient && selectedBox ? (
         <div ref={detailsRef} className="mt-5 grid scroll-mt-5 gap-5 xl:grid-cols-[1fr_0.55fr]">
           <Panel title="Datos del envio">
             <div className="grid gap-4 md:grid-cols-3">
