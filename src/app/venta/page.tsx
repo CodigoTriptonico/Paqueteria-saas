@@ -173,8 +173,8 @@ function cleanPhone(phone: string) {
 
 function CountryBadge({ country }: { country: string }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-black text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white">
-      <span className="text-lg">{countryFlags[country] || "🏳️"}</span>
+    <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+      <span className="text-xl">{countryFlags[country] || "🏳️"}</span>
       {country}
     </span>
   );
@@ -186,9 +186,9 @@ function AddressTags({ items }: { items: [string, string][] }) {
       {items.map(([label, value]) => (
         <div
           key={`${label}-${value}`}
-          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950"
         >
-          <p className="text-[11px] font-black uppercase text-slate-400">
+          <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">
             {label}
           </p>
           <p className="truncate text-sm font-black text-slate-800 dark:text-slate-100">
@@ -290,13 +290,16 @@ export default function VentaPage() {
               <button
                 key={sender.phone}
                 onClick={() => chooseSender(sender)}
-                className={`rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 ${
+                className={`relative overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 ${
                   selectedSender?.phone === sender.phone
-                    ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100 dark:border-emerald-700 dark:bg-emerald-950 dark:ring-emerald-900"
+                    ? "border-emerald-500 bg-white ring-2 ring-emerald-100 dark:border-emerald-500 dark:bg-slate-950 dark:ring-emerald-900"
                     : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-800 dark:hover:bg-slate-900"
                 }`}
               >
-                <div className="flex items-start justify-between gap-3">
+                {selectedSender?.phone === sender.phone ? (
+                  <span className="absolute inset-y-0 left-0 w-2 bg-emerald-500" />
+                ) : null}
+                <div className="flex items-start justify-between gap-3 pl-1">
                   <div>
                     <p className="text-2xl font-black">{sender.name}</p>
                     <p className="font-bold text-slate-500 dark:text-slate-400">
@@ -315,7 +318,7 @@ export default function VentaPage() {
                     ["CP", sender.postalCode],
                   ]}
                 />
-                <p className="mt-3 rounded-lg bg-slate-900 px-3 py-2 font-black text-white dark:bg-slate-800">
+                <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-black text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-white">
                   {sender.recipients.length} destinatarios
                 </p>
               </button>
