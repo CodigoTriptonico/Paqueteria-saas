@@ -1,21 +1,24 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function ThemeToggle() {
-  const [dark, setDark] = useState(() => {
-    if (typeof document === "undefined") {
-      return false;
-    }
+  const [mounted, setMounted] = useState(false);
+  const [dark, setDark] = useState(false);
 
-    return document.documentElement.classList.contains("dark");
-  });
+  useEffect(() => {
+    window.setTimeout(() => {
+      setDark(document.documentElement.classList.contains("dark"));
+      setMounted(true);
+    }, 0);
+  }, []);
 
   function toggleTheme() {
     const next = !dark;
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
+    document.documentElement.classList.toggle("light", !next);
     localStorage.setItem("theme", next ? "dark" : "light");
   }
 
@@ -29,10 +32,14 @@ export function ThemeToggle() {
       <span>
         <span className="block text-lg font-black">Modo oscuro</span>
         <span className="block text-sm font-bold text-slate-500 dark:text-slate-400">
-          {dark ? "Activado" : "Desactivado"}
+          {mounted && dark ? "Activado" : "Desactivado"}
         </span>
       </span>
-      {dark ? <Sun className="h-7 w-7" /> : <Moon className="h-7 w-7" />}
+      {mounted && dark ? (
+        <Sun className="h-7 w-7" />
+      ) : (
+        <Moon className="h-7 w-7" />
+      )}
     </button>
   );
 }

@@ -5,6 +5,27 @@
 :root {
   --background: #f6f7fb;
   --foreground: #0f172a;
+  color-scheme: light;
+}
+
+:root.dark {
+  --background: #020617;
+  --foreground: #f8fafc;
+  color-scheme: dark;
+}
+
+:root.light {
+  --background: #f6f7fb;
+  --foreground: #0f172a;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --background: #020617;
+    --foreground: #f8fafc;
+    color-scheme: dark;
+  }
 }
 
 @theme inline {
