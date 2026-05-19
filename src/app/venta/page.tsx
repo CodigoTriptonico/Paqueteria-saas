@@ -292,10 +292,13 @@ export default function VentaPage() {
                 onClick={() => chooseSender(sender)}
                 className={`relative overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 ${
                   selectedSender?.phone === sender.phone
-                    ? "border-emerald-500 bg-white shadow-[0_10px_0_0_rgba(16,185,129,0.95)] ring-2 ring-emerald-100 dark:border-emerald-500 dark:bg-slate-950 dark:ring-emerald-900"
+                    ? "border-emerald-500 bg-white ring-2 ring-emerald-100 dark:border-emerald-500 dark:bg-slate-950 dark:ring-emerald-900"
                     : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-800 dark:hover:bg-slate-900"
                 }`}
               >
+                {selectedSender?.phone === sender.phone ? (
+                  <span className="absolute inset-x-4 bottom-0 h-2 rounded-t-full bg-emerald-500 shadow-[0_-8px_24px_rgba(16,185,129,0.55)]" />
+                ) : null}
                 <div className="flex items-start justify-between gap-3 pl-1">
                   <div>
                     <p className="text-2xl font-black">{sender.name}</p>
