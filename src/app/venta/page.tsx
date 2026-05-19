@@ -93,16 +93,6 @@ export default function VentaPage() {
 
         <section className="grid gap-5">
           <Panel title="Datos del envio">
-            <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950">
-              <p className="text-sm font-black uppercase text-emerald-700 dark:text-emerald-300">
-                Seleccionado
-              </p>
-              <p className="text-2xl font-black">Maria Lopez</p>
-              <p className="font-bold text-slate-600 dark:text-slate-300">
-                Rosa Lopez - Mexico
-              </p>
-            </div>
-
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {[
                 "Caja",
