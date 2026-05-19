@@ -1,27 +1,43 @@
 import { AppShell } from "@/components/app-shell";
 import { Panel, StatCard } from "@/components/ui-blocks";
 
-const clients = [
-  ["Maria Lopez", "(305) 555-0182", "Mexico", "3 envios"],
-  ["Jose Ramirez", "(786) 555-0120", "Guatemala", "1 envio"],
-  ["Ana Perez", "(954) 555-0177", "Colombia", "5 envios"],
-  ["Carlos Diaz", "(407) 555-0144", "Honduras", "2 envios"],
+const senders = [
+  {
+    name: "Maria Lopez",
+    phone: "(305) 555-0182",
+    recipients: ["Rosa Lopez - Mexico", "Luis Lopez - Mexico", "Ana Lopez - Guatemala"],
+  },
+  {
+    name: "Jose Ramirez",
+    phone: "(786) 555-0120",
+    recipients: ["Carlos Ramirez - Guatemala", "Marta Ruiz - Honduras"],
+  },
+  {
+    name: "Ana Perez",
+    phone: "(954) 555-0177",
+    recipients: ["Diana Perez - Colombia", "Luz Gomez - Colombia"],
+  },
+  {
+    name: "Carlos Diaz",
+    phone: "(407) 555-0144",
+    recipients: ["Pedro Diaz - Mexico"],
+  },
 ];
 
 export default function ClientesPage() {
   return (
-    <AppShell active="Clientes" title="Clientes" action="+ Nuevo cliente">
+    <AppShell active="Clientes" title="Clientes" action="+ Nuevo remitente">
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
-        <StatCard label="Clientes" value="148" tone="text-violet-700" />
-        <StatCard label="Nuevos hoy" value="6" tone="text-emerald-700" />
+        <StatCard label="Remitentes" value="148" tone="text-violet-700" />
+        <StatCard label="Destinatarios" value="326" tone="text-emerald-700" />
         <StatCard label="Sin telefono" value="2" tone="text-rose-700" />
       </div>
 
-      <Panel title="Libreta de clientes">
+      <Panel title="Remitentes y destinatarios">
         <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
           <input
             className="h-14 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-violet-500 dark:border-slate-700"
-            placeholder="Buscar por nombre o telefono"
+            placeholder="Buscar remitente o telefono"
           />
           <button className="h-14 rounded-lg bg-violet-600 px-6 text-lg font-black text-white">
             Buscar
@@ -29,21 +45,33 @@ export default function ClientesPage() {
         </div>
 
         <div className="grid gap-3">
-          {clients.map(([name, phone, country, count]) => (
-            <button
-              key={phone}
-              className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-800 sm:grid-cols-[1fr_1fr_1fr_auto]"
+          {senders.map((sender) => (
+            <div
+              key={sender.phone}
+              className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm dark:border-slate-800 dark:bg-slate-950 xl:grid-cols-[0.8fr_1.2fr_auto]"
             >
               <div>
-                <p className="text-xl font-black">{name}</p>
-                <p className="font-bold text-slate-500 dark:text-slate-400">{phone}</p>
+                <p className="text-xl font-black">{sender.name}</p>
+                <p className="font-bold text-slate-500 dark:text-slate-400">
+                  {sender.phone}
+                </p>
               </div>
-              <p className="text-lg font-black">{country}</p>
-              <p className="text-lg font-bold text-slate-500 dark:text-slate-400">{count}</p>
-              <span className="rounded-lg bg-slate-100 px-4 py-2 text-center font-black dark:bg-slate-800">
-                Ver
-              </span>
-            </button>
+
+              <div className="grid gap-2">
+                {sender.recipients.map((recipient) => (
+                  <div
+                    key={recipient}
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-bold dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    {recipient}
+                  </div>
+                ))}
+              </div>
+
+              <button className="h-12 rounded-lg bg-slate-100 px-4 font-black dark:bg-slate-800">
+                + Destinatario
+              </button>
+            </div>
           ))}
         </div>
       </Panel>

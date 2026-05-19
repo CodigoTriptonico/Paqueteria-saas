@@ -7,7 +7,6 @@ import {
   Settings,
   Users,
 } from "lucide-react";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Nueva venta", href: "/", icon: CreditCard },
@@ -74,7 +73,6 @@ export function AppShell({
                 <h2 className="text-3xl font-black">{title}</h2>
               </div>
               <div className="flex gap-3">
-                <ThemeToggle />
                 {action ? (
                   <button className="h-14 rounded-lg bg-slate-950 px-6 text-lg font-black text-white shadow-sm hover:bg-slate-800 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400">
                     {action}

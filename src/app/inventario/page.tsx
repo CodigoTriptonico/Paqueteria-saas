@@ -2,10 +2,10 @@ import { AppShell } from "@/components/app-shell";
 import { Panel, StatCard } from "@/components/ui-blocks";
 
 const boxes = [
-  ["Chica", "42", "6", "$8"],
-  ["Mediana", "31", "9", "$12"],
-  ["Grande", "18", "8", "$16"],
-  ["Jumbo", "7", "3", "$22"],
+  ["30 x 30 x 30", "18", "8", "Grande"],
+  ["20 x 20 x 20", "31", "9", "Mediana"],
+  ["16 x 16 x 16", "42", "6", "Chica"],
+  ["14 x 14 x 14", "7", "3", "Mini"],
 ];
 
 export default function InventarioPage() {
@@ -19,16 +19,18 @@ export default function InventarioPage() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_0.85fr]">
-        <Panel title="Cajas vacias">
+        <Panel title="Inventario global de cajas">
           <div className="grid gap-3">
-            {boxes.map(([box, stock, pending, price]) => (
+            {boxes.map(([size, stock, pending, name]) => (
               <div
-                key={box}
+                key={size}
                 className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950 sm:grid-cols-[1fr_auto_auto_auto]"
               >
                 <div>
-                  <p className="text-2xl font-black">Caja {box}</p>
-                  <p className="font-bold text-slate-500 dark:text-slate-400">Precio {price}</p>
+                  <p className="text-2xl font-black">Caja {size}</p>
+                  <p className="font-bold text-slate-500 dark:text-slate-400">
+                    {name} - pulgadas
+                  </p>
                 </div>
                 <div className="text-center">
                   <p className="font-bold text-slate-500 dark:text-slate-400">Stock</p>
@@ -51,9 +53,9 @@ export default function InventarioPage() {
         <Panel title="Movimientos">
           <div className="grid gap-3">
             {[
-              ["Entregada", "Caja grande", "Maria Lopez"],
-              ["Regreso llena", "Caja mediana", "Ana Perez"],
-              ["Agregado stock", "10 cajas chicas", "Empleado"],
+              ["Entregada", "30 x 30 x 30", "Maria Lopez"],
+              ["Regreso llena", "20 x 20 x 20", "Ana Perez"],
+              ["Agregado stock", "10 cajas 16 x 16 x 16", "Empleado"],
             ].map(([type, box, person]) => (
               <div key={type + box} className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
                 <p className="text-xl font-black">{type}</p>

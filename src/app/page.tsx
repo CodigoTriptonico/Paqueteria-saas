@@ -29,8 +29,8 @@ const actions = [
     color: "bg-amber-500",
   },
   {
-    title: "Nuevo cliente",
-    text: "Nombre, telefono y direccion.",
+    title: "Nuevo remitente",
+    text: "Persona que envia.",
     icon: UserPlus,
     color: "bg-violet-500",
   },
@@ -59,7 +59,7 @@ export default function Home() {
       <div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
         <Panel title="Venta rapida">
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
-            {["Cliente", "Pais destino", "Caja", "Peso"].map((label) => (
+            {["Remitente", "Destinatario", "Pais destino", "Caja"].map((label) => (
               <label key={label} className="grid gap-2">
                 <span className="text-lg font-black">{label}</span>
                 <input
@@ -71,7 +71,7 @@ export default function Home() {
           </div>
           <div className="mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950 sm:grid-cols-3">
             <div>
-              <p className="font-bold text-emerald-700 dark:text-emerald-300">Cliente paga</p>
+              <p className="font-bold text-emerald-700 dark:text-emerald-300">Remitente paga</p>
               <p className="text-3xl font-black">$100</p>
             </div>
             <div>
