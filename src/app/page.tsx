@@ -56,14 +56,14 @@ export default function Home() {
         ))}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_0.9fr]">
+      <div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
         <Panel title="Venta rapida">
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
             {["Cliente", "Pais destino", "Caja", "Peso"].map((label) => (
               <label key={label} className="grid gap-2">
                 <span className="text-lg font-black">{label}</span>
                 <input
-                  className="h-14 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-emerald-500"
+                  className="h-14 min-w-0 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-emerald-500"
                   placeholder={label}
                 />
               </label>

@@ -33,8 +33,8 @@ export function AppShell({
 }: AppShellProps) {
   return (
     <main className="min-h-screen bg-[#f6f7fb] text-slate-950">
-      <div className="mx-auto flex max-w-7xl gap-5 p-4 sm:p-5">
-        <aside className="hidden w-64 shrink-0 rounded-lg bg-white p-4 shadow-sm lg:block">
+      <div className="flex min-h-screen w-full gap-5 p-4 sm:p-5">
+        <aside className="hidden w-72 shrink-0 rounded-lg bg-white p-4 shadow-sm lg:block">
           <div className="mb-8 rounded-lg bg-slate-950 p-4 text-white">
             <p className="text-sm font-bold text-slate-300">SaaS</p>
             <h1 className="text-2xl font-black">Paquemas</h1>
