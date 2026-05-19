@@ -21,6 +21,7 @@ type AppShellProps = {
   title: string;
   kicker?: string;
   action?: string;
+  secondaryAction?: string;
   children: React.ReactNode;
 };
 
@@ -29,6 +30,7 @@ export function AppShell({
   title,
   kicker = "Paqueteria",
   action,
+  secondaryAction,
   children,
 }: AppShellProps) {
   return (
@@ -73,6 +75,11 @@ export function AppShell({
                 <h2 className="text-3xl font-black">{title}</h2>
               </div>
               <div className="flex gap-3">
+                {secondaryAction ? (
+                  <button className="h-14 rounded-lg border border-slate-200 bg-white px-6 text-lg font-black text-slate-950 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:hover:bg-slate-800">
+                    {secondaryAction}
+                  </button>
+                ) : null}
                 {action ? (
                   <button className="h-14 rounded-lg bg-slate-950 px-6 text-lg font-black text-white shadow-sm hover:bg-slate-800 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400">
                     {action}

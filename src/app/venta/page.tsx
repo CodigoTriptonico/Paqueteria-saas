@@ -29,7 +29,8 @@ export default function VentaPage() {
       active="Nueva venta"
       title="Nueva venta"
       kicker="Remitente + venta"
-      action="Cobrar"
+      secondaryAction="Agregar nuevo cliente"
+      action="Nueva venta"
     >
       <div className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
         <section className="grid gap-5">
