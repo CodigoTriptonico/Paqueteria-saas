@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChevronRight,
   Check,
   Copy,
   Edit3,
@@ -47,20 +48,14 @@ type ContextMenuState = {
   type: "remitente" | "destinatario" | "caja";
 };
 
-const copyOptions = [
-  "Todo",
-  "Nombre > nombre completo",
-  "Nombre > solo nombre",
-  "Nombre > solo apellido",
-  "Telefono",
-  "Direccion > completa",
-  "Direccion > calle",
-  "Direccion > casa",
-  "Direccion > colonia",
-  "Direccion > ciudad",
-  "Direccion > estado",
-  "Direccion > CP",
-  "Pais",
+const copyGroups = [
+  { label: "Todo", items: [] },
+  { label: "Nombre", items: ["Nombre completo", "Solo nombre", "Solo apellido"] },
+  { label: "Telefono", items: [] },
+  {
+    label: "Direccion",
+    items: ["Completa", "Calle", "Casa", "Colonia", "Ciudad", "Estado", "CP", "Pais"],
+  },
 ];
 
 const senders: Sender[] = [
@@ -716,7 +711,7 @@ export default function VentaPage() {
 
       {contextMenu ? (
         <div
-          className="fixed z-50 max-h-[80vh] w-80 overflow-auto rounded-xl border border-slate-200 bg-white p-2 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          className="fixed z-50 w-72 overflow-visible rounded-xl border border-slate-200 bg-white p-2 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -731,15 +726,41 @@ export default function VentaPage() {
             <p className="px-3 pb-1 text-xs font-black uppercase text-slate-400">
               Copiar
             </p>
-            {copyOptions.map((option) => (
-              <button
-                key={option}
-                className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-black hover:bg-slate-100 dark:hover:bg-slate-800"
-                onClick={() => setContextMenu(null)}
-              >
-                <Copy className="h-4 w-4" />
-                {option}
-              </button>
+            {copyGroups.map((group) => (
+              <div key={group.label} className="group relative">
+                <button
+                  className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-black hover:bg-slate-100 dark:hover:bg-slate-800"
+                  onClick={() => {
+                    if (group.items.length === 0) {
+                      setContextMenu(null);
+                    }
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                  <span className="flex-1">{group.label}</span>
+                  {group.items.length > 0 ? (
+                    <ChevronRight className="h-4 w-4 text-slate-400" />
+                  ) : null}
+                </button>
+
+                {group.items.length > 0 ? (
+                  <div className="invisible absolute left-full top-0 z-50 ml-2 w-56 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-2xl transition group-hover:visible group-hover:opacity-100 dark:border-slate-700 dark:bg-slate-900">
+                    <p className="px-3 pb-1 text-xs font-black uppercase text-slate-400">
+                      {group.label}
+                    </p>
+                    {group.items.map((item) => (
+                      <button
+                        key={item}
+                        className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-black hover:bg-slate-100 dark:hover:bg-slate-800"
+                        onClick={() => setContextMenu(null)}
+                      >
+                        <Copy className="h-4 w-4" />
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             ))}
           </div>
 
