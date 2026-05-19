@@ -156,12 +156,12 @@ const countryBoxes = {
 
 const countries = Object.keys(countryBoxes);
 
-const countryFlags: Record<string, string> = {
-  USA: "🇺🇸",
-  Mexico: "🇲🇽",
-  Guatemala: "🇬🇹",
-  Colombia: "🇨🇴",
-  Honduras: "🇭🇳",
+const countryCodes: Record<string, string> = {
+  USA: "US",
+  Mexico: "MX",
+  Guatemala: "GT",
+  Colombia: "CO",
+  Honduras: "HN",
 };
 
 const inputClass =
@@ -174,8 +174,67 @@ function cleanPhone(phone: string) {
 function CountryBadge({ country }: { country: string }) {
   return (
     <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white">
-      <span className="text-xl">{countryFlags[country] || "🏳️"}</span>
+      <Flag country={country} />
       {country}
+    </span>
+  );
+}
+
+function Flag({ country }: { country: string }) {
+  const base = "h-4 w-7 overflow-hidden rounded-sm border border-white/50 shadow-sm";
+
+  if (country === "Mexico") {
+    return (
+      <span className={`${base} grid grid-cols-3`}>
+        <span className="bg-emerald-600" />
+        <span className="bg-white" />
+        <span className="bg-red-600" />
+      </span>
+    );
+  }
+
+  if (country === "Guatemala") {
+    return (
+      <span className={`${base} grid grid-cols-3`}>
+        <span className="bg-sky-500" />
+        <span className="bg-white" />
+        <span className="bg-sky-500" />
+      </span>
+    );
+  }
+
+  if (country === "Colombia") {
+    return (
+      <span className={`${base} grid grid-rows-4`}>
+        <span className="row-span-2 bg-yellow-400" />
+        <span className="bg-blue-600" />
+        <span className="bg-red-600" />
+      </span>
+    );
+  }
+
+  if (country === "Honduras") {
+    return (
+      <span className={`${base} grid grid-rows-3`}>
+        <span className="bg-sky-500" />
+        <span className="bg-white" />
+        <span className="bg-sky-500" />
+      </span>
+    );
+  }
+
+  if (country === "USA") {
+    return (
+      <span className={`${base} relative bg-red-600`}>
+        <span className="absolute inset-0 bg-[repeating-linear-gradient(to_bottom,#b91c1c_0_2px,#fff_2px_4px)]" />
+        <span className="absolute left-0 top-0 h-2.5 w-3.5 bg-blue-700" />
+      </span>
+    );
+  }
+
+  return (
+    <span className={`${base} flex items-center justify-center bg-slate-300 text-[9px]`}>
+      {countryCodes[country] || "--"}
     </span>
   );
 }
@@ -463,7 +522,7 @@ export default function VentaPage() {
           <Panel
             title={
               selectedRecipient
-                ? `Cajas para ${countryFlags[selectedRecipient.country] || ""} ${selectedRecipient.country}`
+                ? `Cajas para ${selectedRecipient.country}`
                 : "Cajas"
             }
           >
