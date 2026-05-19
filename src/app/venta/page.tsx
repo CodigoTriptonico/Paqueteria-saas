@@ -25,7 +25,6 @@ type Sender = {
   city: string;
   state: string;
   postalCode: string;
-  country: string;
   recipients: Recipient[];
 };
 
@@ -39,7 +38,6 @@ const senders: Sender[] = [
     city: "Miami",
     state: "FL",
     postalCode: "33142",
-    country: "USA",
     recipients: [
       {
         name: "Rosa Lopez",
@@ -82,7 +80,6 @@ const senders: Sender[] = [
     city: "Hialeah",
     state: "FL",
     postalCode: "33012",
-    country: "USA",
     recipients: [
       {
         name: "Carlos Ramirez",
@@ -115,7 +112,6 @@ const senders: Sender[] = [
     city: "Fort Lauderdale",
     state: "FL",
     postalCode: "33311",
-    country: "USA",
     recipients: [
       {
         name: "Diana Perez",
@@ -286,7 +282,7 @@ export default function VentaPage() {
                     `Ciudad: ${sender.city}`,
                     `Estado: ${sender.state}`,
                     `CP: ${sender.postalCode}`,
-                    `Pais: ${sender.country}`,
+                    "Pais: USA",
                   ]}
                 />
                 <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 font-black dark:bg-slate-900">
