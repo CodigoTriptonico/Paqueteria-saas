@@ -23,7 +23,7 @@ export default function EnviosPage() {
           {["Buscar cliente", "Fecha", "Pais", "Estado"].map((item) => (
             <input
               key={item}
-              className="h-12 rounded-lg border border-slate-200 px-4 font-bold outline-none focus:border-sky-500"
+              className="h-12 rounded-lg border border-slate-200 px-4 font-bold outline-none focus:border-sky-500 dark:border-slate-700"
               placeholder={item}
             />
           ))}
@@ -33,17 +33,17 @@ export default function EnviosPage() {
           {shipments.map(([code, name, country, carrier, paid, profit, status]) => (
             <div
               key={code}
-              className="grid gap-3 rounded-lg border border-slate-200 p-4 lg:grid-cols-[auto_1fr_1fr_1fr_auto_auto]"
+              className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950 lg:grid-cols-[auto_1fr_1fr_1fr_auto_auto]"
             >
               <p className="text-xl font-black">{code}</p>
               <div>
                 <p className="text-lg font-black">{name}</p>
-                <p className="font-bold text-slate-500">{country}</p>
+                <p className="font-bold text-slate-500 dark:text-slate-400">{country}</p>
               </div>
               <p className="font-black">{carrier}</p>
-              <p className="font-bold text-slate-500">{status}</p>
+              <p className="font-bold text-slate-500 dark:text-slate-400">{status}</p>
               <p className="text-xl font-black">{paid}</p>
-              <p className="rounded-lg bg-emerald-50 px-4 py-2 text-center text-xl font-black text-emerald-800">
+              <p className="rounded-lg bg-emerald-50 px-4 py-2 text-center text-xl font-black text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
                 {profit}
               </p>
             </div>

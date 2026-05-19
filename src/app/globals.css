@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f6f7fb;
   --foreground: #0f172a;
@@ -20,4 +22,17 @@ body {
 
 button {
   cursor: pointer;
+}
+
+input {
+  background: white;
+}
+
+.dark input {
+  background: #0f172a;
+  color: white;
+}
+
+.dark input::placeholder {
+  color: #94a3b8;
 }

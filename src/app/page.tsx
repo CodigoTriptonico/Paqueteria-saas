@@ -63,23 +63,23 @@ export default function Home() {
               <label key={label} className="grid gap-2">
                 <span className="text-lg font-black">{label}</span>
                 <input
-                  className="h-14 min-w-0 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-emerald-500"
+                  className="h-14 min-w-0 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-emerald-500 dark:border-slate-700"
                   placeholder={label}
                 />
               </label>
             ))}
           </div>
-          <div className="mt-4 grid gap-3 rounded-lg bg-emerald-50 p-4 sm:grid-cols-3">
+          <div className="mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950 sm:grid-cols-3">
             <div>
-              <p className="font-bold text-emerald-700">Cliente paga</p>
+              <p className="font-bold text-emerald-700 dark:text-emerald-300">Cliente paga</p>
               <p className="text-3xl font-black">$100</p>
             </div>
             <div>
-              <p className="font-bold text-emerald-700">Carrier cobra</p>
+              <p className="font-bold text-emerald-700 dark:text-emerald-300">Carrier cobra</p>
               <p className="text-3xl font-black">$60</p>
             </div>
             <div>
-              <p className="font-bold text-emerald-700">Ganancia</p>
+              <p className="font-bold text-emerald-700 dark:text-emerald-300">Ganancia</p>
               <p className="text-3xl font-black">$40</p>
             </div>
           </div>
@@ -94,11 +94,11 @@ export default function Home() {
             ].map(([type, name, extra]) => (
               <div
                 key={name}
-                className="flex items-center justify-between rounded-lg bg-slate-50 p-4"
+                className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950"
               >
                 <div>
                   <p className="text-xl font-black">{type}</p>
-                  <p className="font-bold text-slate-500">{name}</p>
+                  <p className="font-bold text-slate-500 dark:text-slate-400">{name}</p>
                 </div>
                 <p className="text-xl font-black">{extra}</p>
               </div>

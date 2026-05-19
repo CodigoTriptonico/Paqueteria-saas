@@ -22,7 +22,7 @@ export default function ConfiguracionPage() {
                 <label key={label} className="grid gap-2">
                   <span className="text-lg font-black">{label}</span>
                   <input
-                    className="h-14 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-slate-950"
+                    className="h-14 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-slate-950 dark:border-slate-700 dark:focus:border-emerald-500"
                     placeholder={label}
                   />
                 </label>
@@ -34,32 +34,32 @@ export default function ConfiguracionPage() {
         <Panel title="Precios por pais y caja">
           <div className="grid gap-3">
             {prices.map(([country, box, carrier, client, cost, profit, time]) => (
-              <div key={country + box} className="rounded-lg bg-slate-50 p-4">
+              <div key={country + box} className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
                 <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-2xl font-black">
                       {country} - {box}
                     </p>
-                    <p className="font-bold text-slate-500">
+                    <p className="font-bold text-slate-500 dark:text-slate-400">
                       {carrier} - {time}
                     </p>
                   </div>
-                  <button className="rounded-lg bg-slate-950 px-5 py-3 font-black text-white">
+                  <button className="rounded-lg bg-slate-950 px-5 py-3 font-black text-white dark:bg-emerald-500 dark:text-slate-950">
                     Editar
                   </button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-lg bg-white p-3">
-                    <p className="font-bold text-slate-500">Cliente paga</p>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                    <p className="font-bold text-slate-500 dark:text-slate-400">Cliente paga</p>
                     <p className="text-2xl font-black">{client}</p>
                   </div>
-                  <div className="rounded-lg bg-white p-3">
-                    <p className="font-bold text-slate-500">Te cobran</p>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                    <p className="font-bold text-slate-500 dark:text-slate-400">Te cobran</p>
                     <p className="text-2xl font-black">{cost}</p>
                   </div>
-                  <div className="rounded-lg bg-emerald-100 p-3">
-                    <p className="font-bold text-emerald-700">Ganancia</p>
-                    <p className="text-2xl font-black text-emerald-800">
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-100 p-3 dark:border-emerald-800 dark:bg-emerald-950">
+                    <p className="font-bold text-emerald-700 dark:text-emerald-300">Ganancia</p>
+                    <p className="text-2xl font-black text-emerald-800 dark:text-emerald-200">
                       {profit}
                     </p>
                   </div>

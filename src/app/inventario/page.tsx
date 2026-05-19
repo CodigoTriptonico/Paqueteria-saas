@@ -24,23 +24,23 @@ export default function InventarioPage() {
             {boxes.map(([box, stock, pending, price]) => (
               <div
                 key={box}
-                className="grid gap-3 rounded-lg bg-slate-50 p-4 sm:grid-cols-[1fr_auto_auto_auto]"
+                className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950 sm:grid-cols-[1fr_auto_auto_auto]"
               >
                 <div>
                   <p className="text-2xl font-black">Caja {box}</p>
-                  <p className="font-bold text-slate-500">Precio {price}</p>
+                  <p className="font-bold text-slate-500 dark:text-slate-400">Precio {price}</p>
                 </div>
                 <div className="text-center">
-                  <p className="font-bold text-slate-500">Stock</p>
+                  <p className="font-bold text-slate-500 dark:text-slate-400">Stock</p>
                   <p className="text-3xl font-black">{stock}</p>
                 </div>
                 <div className="text-center">
-                  <p className="font-bold text-slate-500">Pendientes</p>
+                  <p className="font-bold text-slate-500 dark:text-slate-400">Pendientes</p>
                   <p className="text-3xl font-black text-amber-700">
                     {pending}
                   </p>
                 </div>
-                <button className="rounded-lg bg-slate-950 px-5 py-3 font-black text-white">
+                <button className="rounded-lg bg-slate-950 px-5 py-3 font-black text-white dark:bg-emerald-500 dark:text-slate-950">
                   Mover
                 </button>
               </div>
@@ -55,9 +55,9 @@ export default function InventarioPage() {
               ["Regreso llena", "Caja mediana", "Ana Perez"],
               ["Agregado stock", "10 cajas chicas", "Empleado"],
             ].map(([type, box, person]) => (
-              <div key={type + box} className="rounded-lg bg-slate-50 p-4">
+              <div key={type + box} className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
                 <p className="text-xl font-black">{type}</p>
-                <p className="font-bold text-slate-500">
+                <p className="font-bold text-slate-500 dark:text-slate-400">
                   {box} - {person}
                 </p>
               </div>
