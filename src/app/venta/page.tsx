@@ -605,12 +605,26 @@ export default function VentaPage() {
         <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_0.55fr]">
           <Panel title="Datos del envio">
             <div className="grid gap-4 md:grid-cols-3">
-              {["Peso", "Entrega/Pickup", "Notas"].map((label) => (
-                <label key={label} className="grid gap-2">
-                  <span className="text-lg font-black">{label}</span>
-                  <input className={inputClass} placeholder={label} />
-                </label>
-              ))}
+              <label className="grid gap-2">
+                <span className="text-lg font-black">Peso</span>
+                <input className={inputClass} placeholder="Peso" />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-lg font-black">Entrega/Pickup</span>
+                <select className={inputClass} defaultValue="">
+                  <option value="" disabled>
+                    Elegir opcion
+                  </option>
+                  <option>Cliente trajo caja a oficina</option>
+                  <option>Recoger caja llena a domicilio</option>
+                  <option>Cliente recoge caja vacia</option>
+                  <option>Entregar caja vacia a domicilio</option>
+                </select>
+              </label>
+              <label className="grid gap-2">
+                <span className="text-lg font-black">Notas</span>
+                <input className={inputClass} placeholder="Notas" />
+              </label>
             </div>
           </Panel>
 
