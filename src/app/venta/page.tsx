@@ -310,9 +310,12 @@ export default function VentaPage() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoiceSequence, setInvoiceSequence] = useState(124);
   const [invoiceNumber, setInvoiceNumber] = useState("INV-000124");
+  const [shipmentWeight, setShipmentWeight] = useState("");
+  const [deliveryMode, setDeliveryMode] = useState("");
   const recipientsRef = useRef<HTMLDivElement | null>(null);
   const boxesRef = useRef<HTMLDivElement | null>(null);
   const detailsRef = useRef<HTMLDivElement | null>(null);
+  const nextInvoiceNumber = `INV-${String(invoiceSequence).padStart(6, "0")}`;
 
   const duplicateClient = useMemo(() => {
     if (!newClientPhone.trim()) {
@@ -360,12 +363,16 @@ export default function VentaPage() {
     setSelectedSender(sender);
     setSelectedRecipient(null);
     setSelectedBox(null);
+    setShipmentWeight("");
+    setDeliveryMode("");
     scrollToNext(recipientsRef);
   }
 
   function chooseRecipient(recipient: Recipient) {
     setSelectedRecipient(recipient);
     setSelectedBox(null);
+    setShipmentWeight("");
+    setDeliveryMode("");
     scrollToNext(boxesRef);
   }
 
@@ -384,7 +391,7 @@ export default function VentaPage() {
   }
 
   function openInvoice() {
-    setInvoiceNumber(`INV-${String(invoiceSequence).padStart(6, "0")}`);
+    setInvoiceNumber(nextInvoiceNumber);
     setShowInvoice(true);
   }
 
@@ -702,27 +709,48 @@ export default function VentaPage() {
             <div className="grid gap-4 md:grid-cols-3">
               <label className="grid gap-2">
                 <span className="text-lg font-black">Peso</span>
-                <input className={inputClass} placeholder="Peso" />
+                <input
+                  className={inputClass}
+                  placeholder="Peso"
+                  value={shipmentWeight}
+                  onChange={(event) => setShipmentWeight(event.target.value)}
+                />
               </label>
               <label className="grid gap-2">
                 <span className="text-lg font-black">Entrega/Pickup</span>
-                <select className={selectClass} defaultValue="">
+                <select
+                  className={selectClass}
+                  value={deliveryMode}
+                  onChange={(event) => setDeliveryMode(event.target.value)}
+                >
                   <option
                     value=""
                     className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white"
                   >
                     Elegir opcion
                   </option>
-                  <option className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
+                  <option
+                    value="Cliente trajo caja a oficina"
+                    className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white"
+                  >
                     Cliente trajo caja a oficina
                   </option>
-                  <option className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
+                  <option
+                    value="Recoger caja llena a domicilio"
+                    className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white"
+                  >
                     Recoger caja llena a domicilio
                   </option>
-                  <option className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
+                  <option
+                    value="Cliente recoge caja vacia"
+                    className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white"
+                  >
                     Cliente recoge caja vacia
                   </option>
-                  <option className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
+                  <option
+                    value="Entregar caja vacia a domicilio"
+                    className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white"
+                  >
                     Entregar caja vacia a domicilio
                   </option>
                 </select>
@@ -735,10 +763,36 @@ export default function VentaPage() {
           </Panel>
 
           <Panel title="Finalizar">
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-              <p className="text-lg font-black">{selectedSender.name}</p>
-              <p className="font-bold">{selectedRecipient.name}</p>
-              <p className="font-bold">Caja {selectedBox[0]}</p>
+            <div className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+              <div>
+                <p className="text-xs font-black uppercase text-slate-500">
+                  Invoice
+                </p>
+                <p className="text-2xl font-black">{nextInvoiceNumber}</p>
+              </div>
+              <div className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                <p className="font-black">{selectedSender.name}</p>
+                <p className="font-bold">{selectedRecipient.name}</p>
+                <p className="font-bold">Caja {selectedBox[0]}</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs font-black uppercase text-slate-500">
+                    Peso
+                  </p>
+                  <p className="font-black">
+                    {shipmentWeight.trim() || "Pendiente"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs font-black uppercase text-slate-500">
+                    Entrega/Pickup
+                  </p>
+                  <p className="font-black">
+                    {deliveryMode || "Pendiente"}
+                  </p>
+                </div>
+              </div>
             </div>
             <button
               onClick={openInvoice}
@@ -875,7 +929,7 @@ export default function VentaPage() {
 
                 <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
                   <p className="mb-3 text-xl font-black">Detalle</p>
-                  <div className="grid gap-3 md:grid-cols-4">
+                  <div className="grid gap-3 md:grid-cols-3">
                     <div>
                       <p className="text-xs font-black uppercase text-slate-400">
                         Caja
@@ -899,6 +953,22 @@ export default function VentaPage() {
                         Pais
                       </p>
                       <p className="font-black">{selectedRecipient.country}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase text-slate-400">
+                        Peso
+                      </p>
+                      <p className="font-black">
+                        {shipmentWeight.trim() || "Pendiente"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase text-slate-400">
+                        Entrega/Pickup
+                      </p>
+                      <p className="font-black">
+                        {deliveryMode || "Pendiente"}
+                      </p>
                     </div>
                   </div>
                 </div>
