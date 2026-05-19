@@ -48,8 +48,6 @@ type ContextMenuState = {
   type: "remitente" | "destinatario" | "caja";
 };
 
-type Step = "start" | "clients" | "recipients" | "boxes" | "details";
-
 const copyGroups = [
   { label: "Todo", items: [] },
   { label: "Nombre", items: ["Nombre completo", "Solo nombre", "Solo apellido"] },
@@ -302,7 +300,6 @@ function BottomAccent() {
 
 export default function VentaPage() {
   const [mode, setMode] = useState<"sale" | "clients" | "new-client" | "new-recipient">("sale");
-  const [step, setStep] = useState<Step>("start");
   const [selectedSender, setSelectedSender] = useState<Sender | null>(null);
   const [selectedRecipient, setSelectedRecipient] = useState<Recipient | null>(null);
   const [selectedBox, setSelectedBox] = useState<string[] | null>(null);
@@ -344,13 +341,11 @@ export default function VentaPage() {
     setSelectedSender(sender);
     setSelectedRecipient(null);
     setSelectedBox(null);
-    setStep("recipients");
   }
 
   function chooseRecipient(recipient: Recipient) {
     setSelectedRecipient(recipient);
     setSelectedBox(null);
-    setStep("boxes");
   }
 
   function openContextMenu(
@@ -367,30 +362,20 @@ export default function VentaPage() {
     setShowInvoice(true);
   }
 
-  function resetSale() {
-    setMode("sale");
-    setStep("start");
-    setSelectedSender(null);
-    setSelectedRecipient(null);
-    setSelectedBox(null);
-  }
-
   return (
     <AppShell active="Nueva venta" title="Nueva venta" kicker="Clientes + venta">
       <div onClick={() => setContextMenu(null)}>
       <div className="mb-5 grid gap-3 sm:grid-cols-[auto_auto_1fr]">
         <button
-          onClick={() => {
-            setMode("clients");
-            setStep("clients");
-          }}
+          onClick={() => setMode("clients")}
           className="h-14 rounded-lg bg-slate-950 px-6 text-lg font-black text-white dark:bg-slate-100 dark:text-slate-950"
         >
           Clientes
         </button>
         <button
           onClick={() => {
-            resetSale();
+            setMode("sale");
+            setSelectedBox(null);
           }}
           className="h-14 rounded-lg bg-emerald-500 px-6 text-lg font-black text-slate-950"
         >
@@ -398,7 +383,7 @@ export default function VentaPage() {
         </button>
       </div>
 
-      {mode === "clients" && step === "clients" ? (
+      {mode === "clients" ? (
         <Panel title="Clientes">
           <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
             <div className="relative">
@@ -504,8 +489,8 @@ export default function VentaPage() {
         </Panel>
       ) : null}
 
-      {selectedSender && (step === "recipients" || mode === "new-recipient") ? (
-        <div className="mt-5 grid gap-5">
+      {selectedSender && (mode === "clients" || mode === "new-recipient") ? (
+        <div className="mt-5 grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
           <Panel title={`Destinatarios de ${selectedSender.name}`}>
             <div className="mb-4 flex flex-wrap gap-3">
               <button
@@ -565,7 +550,7 @@ export default function VentaPage() {
               </div>
             ) : null}
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-2">
               {selectedSender.recipients.map((recipient) => (
                 <button
                   key={`${recipient.name}-${recipient.country}`}
@@ -605,88 +590,84 @@ export default function VentaPage() {
             </div>
           </Panel>
 
+          <Panel
+            title={
+              selectedRecipient
+                ? `Cajas para ${selectedRecipient.country}`
+                : "Cajas"
+            }
+          >
+            {!selectedRecipient ? (
+              <p className="text-xl font-black text-slate-500 dark:text-slate-400">
+                Selecciona un destinatario.
+              </p>
+            ) : (
+              <div className="grid gap-3">
+                {boxesForCountry.map((box) => (
+                  <button
+                    key={box[0]}
+                    onClick={() => setSelectedBox(box)}
+                    onContextMenu={(event) =>
+                      openContextMenu(event, `Caja ${box[0]}`, "caja")
+                    }
+                    className={`relative grid gap-4 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 lg:grid-cols-[auto_1fr_auto] ${
+                      selectedBox?.[0] === box[0]
+                        ? "border-emerald-500 bg-white ring-2 ring-emerald-100 dark:bg-slate-950 dark:ring-emerald-900"
+                        : "border-slate-200 bg-white hover:border-emerald-300 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-800"
+                    }`}
+                  >
+                    {selectedBox?.[0] === box[0] ? <BottomAccent /> : null}
+                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-slate-100 shadow-inner dark:bg-slate-900">
+                      <Package className="h-9 w-9 text-slate-500" />
+                    </div>
+
+                    <div>
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <p className="text-2xl font-black">Caja {box[0]}</p>
+                        <CountryBadge country={selectedRecipient.country} />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          Carrier: {box[3]}
+                        </span>
+                        <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          Tiempo: {box[4]}
+                        </span>
+                        <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          Costo: {box[2]}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid min-w-44 grid-cols-2 gap-2">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900">
+                        <p className="text-[11px] font-black uppercase text-slate-500">
+                          Cobra
+                        </p>
+                        <p className="text-2xl font-black">{box[1]}</p>
+                      </div>
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-100 px-4 py-3 text-right text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                        <p className="text-[11px] font-black uppercase">
+                          Gana
+                        </p>
+                        <p className="text-2xl font-black">$40</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </Panel>
         </div>
       ) : null}
 
-      {step === "boxes" && selectedRecipient ? (
-        <Panel title={`Cajas para ${selectedRecipient.country}`}>
-          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-            <p className="text-sm font-black uppercase text-slate-400">
-              Cliente elegido
-            </p>
-            <p className="text-xl font-black">
-              {selectedSender?.name} → {selectedRecipient.name}
-            </p>
-          </div>
-
-          <div className="grid gap-3">
-            {boxesForCountry.map((box) => (
-              <button
-                key={box[0]}
-                onClick={() => {
-                  setSelectedBox(box);
-                  setStep("details");
-                }}
-                onContextMenu={(event) =>
-                  openContextMenu(event, `Caja ${box[0]}`, "caja")
-                }
-                className={`relative grid gap-4 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 lg:grid-cols-[auto_1fr_auto] ${
-                  selectedBox?.[0] === box[0]
-                    ? "border-emerald-500 bg-white ring-2 ring-emerald-100 dark:bg-slate-950 dark:ring-emerald-900"
-                    : "border-slate-200 bg-white hover:border-emerald-300 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-800"
-                }`}
-              >
-                {selectedBox?.[0] === box[0] ? <BottomAccent /> : null}
-                <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-slate-100 shadow-inner dark:bg-slate-900">
-                  <Package className="h-9 w-9 text-slate-500" />
-                </div>
-
-                <div>
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <p className="text-2xl font-black">Caja {box[0]}</p>
-                    <CountryBadge country={selectedRecipient.country} />
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                      Carrier: {box[3]}
-                    </span>
-                    <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                      Tiempo: {box[4]}
-                    </span>
-                    <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                      Costo: {box[2]}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid min-w-44 grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900">
-                    <p className="text-[11px] font-black uppercase text-slate-500">
-                      Cobra
-                    </p>
-                    <p className="text-2xl font-black">{box[1]}</p>
-                  </div>
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-100 px-4 py-3 text-right text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                    <p className="text-[11px] font-black uppercase">Gana</p>
-                    <p className="text-2xl font-black">$40</p>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </Panel>
-      ) : null}
-
-      {step === "start" ? (
+      {mode === "sale" && !selectedRecipient ? (
         <Panel title="Nueva venta">
           <p className="mb-4 text-2xl font-black">
             Primero elige un cliente.
           </p>
           <button
-            onClick={() => {
-              setMode("clients");
-              setStep("clients");
-            }}
+            onClick={() => setMode("clients")}
             className="h-14 rounded-lg bg-slate-950 px-6 text-lg font-black text-white dark:bg-slate-100 dark:text-slate-950"
           >
             Clientes
@@ -694,7 +675,7 @@ export default function VentaPage() {
         </Panel>
       ) : null}
 
-      {step === "details" && selectedSender && selectedRecipient && selectedBox ? (
+      {selectedSender && selectedRecipient && selectedBox ? (
         <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_0.55fr]">
           <Panel title="Datos del envio">
             <div className="grid gap-4 md:grid-cols-3">
