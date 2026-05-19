@@ -8,14 +8,24 @@ import { Panel } from "@/components/ui-blocks";
 type Recipient = {
   name: string;
   country: string;
-  address: string;
-  phone?: string;
+  phone: string;
+  street: string;
+  houseNumber: string;
+  neighborhood: string;
+  city: string;
+  postalCode: string;
 };
 
 type Sender = {
   name: string;
   phone: string;
-  address?: string;
+  street: string;
+  houseNumber: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
   recipients: Recipient[];
 };
 
@@ -23,29 +33,110 @@ const senders: Sender[] = [
   {
     name: "Maria Lopez",
     phone: "(305) 555-0182",
-    address: "Miami, FL",
+    street: "NW 17th Ave",
+    houseNumber: "2450",
+    neighborhood: "Allapattah",
+    city: "Miami",
+    state: "FL",
+    postalCode: "33142",
+    country: "USA",
     recipients: [
-      { name: "Rosa Lopez", country: "Mexico", address: "Calle 12 #45, CDMX" },
-      { name: "Luis Lopez", country: "Mexico", address: "Av. Reforma 200, CDMX" },
-      { name: "Ana Lopez", country: "Guatemala", address: "Zona 10, Guatemala City" },
+      {
+        name: "Rosa Lopez",
+        phone: "+52 55 1234 8899",
+        street: "Calle 12",
+        houseNumber: "45",
+        neighborhood: "Centro",
+        city: "CDMX",
+        postalCode: "06000",
+        country: "Mexico",
+      },
+      {
+        name: "Luis Lopez",
+        phone: "+52 55 7788 1122",
+        street: "Av. Reforma",
+        houseNumber: "200",
+        neighborhood: "Juarez",
+        city: "CDMX",
+        postalCode: "06600",
+        country: "Mexico",
+      },
+      {
+        name: "Ana Lopez",
+        phone: "+502 2233 4455",
+        street: "6A Avenida",
+        houseNumber: "10-22",
+        neighborhood: "Zona 10",
+        city: "Guatemala City",
+        postalCode: "01010",
+        country: "Guatemala",
+      },
     ],
   },
   {
     name: "Jose Ramirez",
     phone: "(786) 555-0120",
-    address: "Hialeah, FL",
+    street: "W 49th St",
+    houseNumber: "1220",
+    neighborhood: "Palm Springs",
+    city: "Hialeah",
+    state: "FL",
+    postalCode: "33012",
+    country: "USA",
     recipients: [
-      { name: "Carlos Ramirez", country: "Guatemala", address: "Zona 1, Guatemala City" },
-      { name: "Marta Ruiz", country: "Honduras", address: "Col. Kennedy, Tegucigalpa" },
+      {
+        name: "Carlos Ramirez",
+        phone: "+502 5555 1200",
+        street: "1A Calle",
+        houseNumber: "8-20",
+        neighborhood: "Zona 1",
+        city: "Guatemala City",
+        postalCode: "01001",
+        country: "Guatemala",
+      },
+      {
+        name: "Marta Ruiz",
+        phone: "+504 9988 7711",
+        street: "Boulevard Kennedy",
+        houseNumber: "310",
+        neighborhood: "Col. Kennedy",
+        city: "Tegucigalpa",
+        postalCode: "11101",
+        country: "Honduras",
+      },
     ],
   },
   {
     name: "Ana Perez",
     phone: "(954) 555-0177",
-    address: "Fort Lauderdale, FL",
+    street: "Sistrunk Blvd",
+    houseNumber: "805",
+    neighborhood: "Dorsey-Riverbend",
+    city: "Fort Lauderdale",
+    state: "FL",
+    postalCode: "33311",
+    country: "USA",
     recipients: [
-      { name: "Diana Perez", country: "Colombia", address: "Carrera 7 #82, Bogota" },
-      { name: "Luz Gomez", country: "Colombia", address: "Calle 10 #33, Medellin" },
+      {
+        name: "Diana Perez",
+        phone: "+57 310 555 9090",
+        street: "Carrera 7",
+        houseNumber: "82-10",
+        neighborhood: "Chico",
+        city: "Bogota",
+        postalCode: "110221",
+        country: "Colombia",
+      },
+      {
+        name: "Luz Gomez",
+        phone: "+57 300 444 1234",
+        street: "Calle 10",
+        houseNumber: "33-18",
+        neighborhood: "El Poblado",
+        city: "Medellin",
+        postalCode: "050021",
+        country: "Colombia",
+      },
     ],
   },
 ];
@@ -74,6 +165,14 @@ const inputClass =
 
 function cleanPhone(phone: string) {
   return phone.replace(/\D/g, "");
+}
+
+function senderAddress(sender: Sender) {
+  return `${sender.houseNumber} ${sender.street}, ${sender.neighborhood}, ${sender.city}, ${sender.state} ${sender.postalCode}, ${sender.country}`;
+}
+
+function recipientAddress(recipient: Recipient) {
+  return `${recipient.street} ${recipient.houseNumber}, ${recipient.neighborhood}, ${recipient.city}, CP ${recipient.postalCode}, ${recipient.country}`;
 }
 
 export default function VentaPage() {
@@ -173,7 +272,7 @@ export default function VentaPage() {
                   {sender.phone}
                 </p>
                 <p className="font-bold text-slate-500 dark:text-slate-400">
-                  {sender.address}
+                  {senderAddress(sender)}
                 </p>
                 <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 font-black dark:bg-slate-900">
                   {sender.recipients.length} destinatarios
@@ -290,7 +389,10 @@ export default function VentaPage() {
                       {recipient.name} - {recipient.country}
                     </span>
                     <span className="mt-1 block text-sm font-bold opacity-75">
-                      {recipient.address}
+                      {recipient.phone}
+                    </span>
+                    <span className="mt-1 block text-sm font-bold opacity-75">
+                      {recipientAddress(recipient)}
                     </span>
                   </button>
               ))}
