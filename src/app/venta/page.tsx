@@ -477,28 +477,48 @@ export default function VentaPage() {
                   <button
                     key={box[0]}
                     onClick={() => setSelectedBox(box)}
-                    className={`relative grid gap-3 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 md:grid-cols-[1fr_auto_auto] ${
+                    className={`relative grid gap-4 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 lg:grid-cols-[auto_1fr_auto] ${
                       selectedBox?.[0] === box[0]
-                        ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100 dark:bg-emerald-950 dark:ring-emerald-900"
+                        ? "border-emerald-500 bg-white ring-2 ring-emerald-100 dark:bg-slate-950 dark:ring-emerald-900"
                         : "border-slate-200 bg-white hover:border-emerald-300 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-800"
-                      }`}
+                    }`}
                   >
                     {selectedBox?.[0] === box[0] ? <BottomAccent /> : null}
+                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-slate-100 text-3xl shadow-inner dark:bg-slate-900">
+                      📦
+                    </div>
+
                     <div>
-                      <p className="text-2xl font-black">Caja {box[0]}</p>
-                      <p className="font-bold text-slate-500 dark:text-slate-400">
-                        {box[3]} - {box[4]}
-                      </p>
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <p className="text-2xl font-black">Caja {box[0]}</p>
+                        <CountryBadge country={selectedRecipient.country} />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          Carrier: {box[3]}
+                        </span>
+                        <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          Tiempo: {box[4]}
+                        </span>
+                        <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          Costo: {box[2]}
+                        </span>
+                      </div>
                     </div>
-                    <div className="rounded-lg bg-slate-100 px-4 py-2 text-right dark:bg-slate-900">
-                      <p className="text-xs font-black uppercase text-slate-500">
-                        Cliente paga
-                      </p>
-                      <p className="text-2xl font-black">{box[1]}</p>
-                    </div>
-                    <div className="rounded-lg bg-emerald-100 px-4 py-2 text-right text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                      <p className="text-xs font-black uppercase">Ganancia</p>
-                      <p className="text-2xl font-black">$40</p>
+
+                    <div className="grid min-w-44 grid-cols-2 gap-2">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900">
+                        <p className="text-[11px] font-black uppercase text-slate-500">
+                          Cobra
+                        </p>
+                        <p className="text-2xl font-black">{box[1]}</p>
+                      </div>
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-100 px-4 py-3 text-right text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                        <p className="text-[11px] font-black uppercase">
+                          Gana
+                        </p>
+                        <p className="text-2xl font-black">$40</p>
+                      </div>
                     </div>
                   </button>
                 ))}
