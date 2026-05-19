@@ -197,6 +197,9 @@ const countryCodes: Record<string, string> = {
 const inputClass =
   "h-14 min-w-0 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-emerald-500 dark:border-slate-700";
 
+const selectClass =
+  "h-14 min-w-0 rounded-lg border border-slate-200 bg-white px-4 text-lg font-bold text-slate-950 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white";
+
 function cleanPhone(phone: string) {
   return phone.replace(/\D/g, "");
 }
@@ -674,14 +677,22 @@ export default function VentaPage() {
               </label>
               <label className="grid gap-2">
                 <span className="text-lg font-black">Entrega/Pickup</span>
-                <select className={inputClass} defaultValue="">
+                <select className={selectClass} defaultValue="">
                   <option value="" disabled>
                     Elegir opcion
                   </option>
-                  <option>Cliente trajo caja a oficina</option>
-                  <option>Recoger caja llena a domicilio</option>
-                  <option>Cliente recoge caja vacia</option>
-                  <option>Entregar caja vacia a domicilio</option>
+                  <option className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
+                    Cliente trajo caja a oficina
+                  </option>
+                  <option className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
+                    Recoger caja llena a domicilio
+                  </option>
+                  <option className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
+                    Cliente recoge caja vacia
+                  </option>
+                  <option className="bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
+                    Entregar caja vacia a domicilio
+                  </option>
                 </select>
               </label>
               <label className="grid gap-2">
