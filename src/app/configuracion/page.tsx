@@ -1,10 +1,50 @@
 "use client";
 
-import { ArrowLeft, Plus } from "lucide-react";
+import {
+  ArrowLeft,
+  Building2,
+  Globe2,
+  Palette,
+  Plus,
+  Users,
+} from "lucide-react";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Panel } from "@/components/ui-blocks";
+
+type Section = "menu" | "prices" | "appearance" | "company" | "users";
+
+const sections = [
+  {
+    id: "prices" as Section,
+    title: "Paises y precios",
+    text: "Crear paises y poner precios por caja.",
+    icon: Globe2,
+    color: "bg-emerald-500",
+  },
+  {
+    id: "appearance" as Section,
+    title: "Apariencia",
+    text: "Modo oscuro y visual.",
+    icon: Palette,
+    color: "bg-violet-500",
+  },
+  {
+    id: "company" as Section,
+    title: "Empresa",
+    text: "Nombre, telefono y direccion.",
+    icon: Building2,
+    color: "bg-sky-500",
+  },
+  {
+    id: "users" as Section,
+    title: "Usuarios",
+    text: "Dueño y empleados.",
+    icon: Users,
+    color: "bg-amber-500",
+  },
+];
 
 const countries = [
   ["Mexico", "4 cajas configuradas"],
@@ -24,7 +64,17 @@ const inputClass =
   "h-12 rounded-lg border border-slate-200 px-3 text-base font-bold outline-none focus:border-emerald-500 dark:border-slate-700";
 
 export default function ConfiguracionPage() {
+  const [section, setSection] = useState<Section>("menu");
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+
+  function goBack() {
+    if (selectedCountry) {
+      setSelectedCountry(null);
+      return;
+    }
+
+    setSection("menu");
+  }
 
   return (
     <AppShell
@@ -32,50 +82,72 @@ export default function ConfiguracionPage() {
       title="Configuracion"
       action={selectedCountry ? "Guardar cambios" : undefined}
     >
-      {!selectedCountry ? (
-        <div className="grid gap-5 xl:grid-cols-[1fr_0.45fr]">
-          <Panel title="Paises">
-            <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_auto]">
-              <input
-                className="h-14 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-emerald-500 dark:border-slate-700"
-                placeholder="Nombre del pais"
-              />
-              <button className="flex h-14 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-6 text-lg font-black text-slate-950">
-                <Plus className="h-6 w-6" />
-                Crear pais
-              </button>
-            </div>
+      {section === "menu" ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {sections.map((item) => {
+            const Icon = item.icon;
 
-            <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-              {countries.map(([country, detail]) => (
-                <button
-                  key={country}
-                  onClick={() => setSelectedCountry(country)}
-                  className="min-h-40 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm hover:border-emerald-400 hover:bg-emerald-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-700 dark:hover:bg-emerald-950"
+            return (
+              <button
+                key={item.id}
+                onClick={() => setSection(item.id)}
+                className="min-h-44 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm hover:border-emerald-400 hover:bg-emerald-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-700 dark:hover:bg-emerald-950"
+              >
+                <span
+                  className={`mb-5 flex h-16 w-16 items-center justify-center rounded-lg text-white ${item.color}`}
                 >
-                  <p className="text-3xl font-black">{country}</p>
-                  <p className="mt-2 text-lg font-bold text-slate-500 dark:text-slate-400">
-                    {detail}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel title="Apariencia">
-            <ThemeToggle />
-          </Panel>
+                  <Icon className="h-9 w-9" />
+                </span>
+                <span className="block text-2xl font-black">{item.title}</span>
+                <span className="mt-2 block text-lg font-semibold text-slate-500 dark:text-slate-400">
+                  {item.text}
+                </span>
+              </button>
+            );
+          })}
         </div>
       ) : (
-        <Panel title={`${selectedCountry} - configurar cajas`}>
-          <button
-            onClick={() => setSelectedCountry(null)}
-            className="mb-5 flex h-12 items-center gap-2 rounded-lg border border-slate-200 px-4 font-black dark:border-slate-700"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            Volver a paises
-          </button>
+        <button
+          onClick={goBack}
+          className="mb-5 flex h-12 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 font-black dark:border-slate-700 dark:bg-slate-900"
+        >
+          <ArrowLeft className="h-5 w-5" />
+          Volver
+        </button>
+      )}
 
+      {section === "prices" && !selectedCountry ? (
+        <Panel title="Paises y precios">
+          <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <input
+              className="h-14 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-emerald-500 dark:border-slate-700"
+              placeholder="Nombre del pais"
+            />
+            <button className="flex h-14 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-6 text-lg font-black text-slate-950">
+              <Plus className="h-6 w-6" />
+              Crear pais
+            </button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            {countries.map(([country, detail]) => (
+              <button
+                key={country}
+                onClick={() => setSelectedCountry(country)}
+                className="min-h-36 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm hover:border-emerald-400 hover:bg-emerald-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-700 dark:hover:bg-emerald-950"
+              >
+                <p className="text-3xl font-black">{country}</p>
+                <p className="mt-2 text-lg font-bold text-slate-500 dark:text-slate-400">
+                  {detail}
+                </p>
+              </button>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+
+      {section === "prices" && selectedCountry ? (
+        <Panel title={`${selectedCountry} - configurar cajas`}>
           <div className="grid gap-4">
             {inventoryBoxes.map(([size, stock, customerPrice, carrierCost, carrier, time]) => (
               <div
@@ -124,7 +196,41 @@ export default function ConfiguracionPage() {
             ))}
           </div>
         </Panel>
-      )}
+      ) : null}
+
+      {section === "appearance" ? (
+        <Panel title="Apariencia">
+          <ThemeToggle />
+        </Panel>
+      ) : null}
+
+      {section === "company" ? (
+        <Panel title="Empresa">
+          <div className="grid gap-4 md:grid-cols-2">
+            {["Nombre empresa", "Telefono", "Direccion", "Moneda"].map((label) => (
+              <label key={label} className="grid gap-2">
+                <span className="text-lg font-black">{label}</span>
+                <input className={inputClass} placeholder={label} />
+              </label>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+
+      {section === "users" ? (
+        <Panel title="Usuarios">
+          <div className="grid gap-3">
+            {["Dueño", "Empleado caja", "Driver"].map((user) => (
+              <div
+                key={user}
+                className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xl font-black dark:border-slate-800 dark:bg-slate-950"
+              >
+                {user}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
     </AppShell>
   );
 }
