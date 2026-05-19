@@ -46,17 +46,8 @@ type ContextMenuState = {
   y: number;
   title: string;
   type: "remitente" | "destinatario" | "caja";
+  phones: string[];
 };
-
-const copyGroups = [
-  { label: "Todo", items: [] },
-  { label: "Nombre", items: ["Nombre completo", "Solo nombre", "Solo apellido"] },
-  { label: "Telefono", items: ["Todos los celulares", "Celular 1", "Celular 2", "Celular 3"] },
-  {
-    label: "Direccion",
-    items: ["Direccion completa", "Calle", "Casa", "Colonia", "Ciudad", "Estado", "CP", "Pais"],
-  },
-];
 
 const senders: Sender[] = [
   {
@@ -342,6 +333,32 @@ export default function VentaPage() {
   const boxesForCountry = selectedRecipient
     ? countryBoxes[selectedRecipient.country as keyof typeof countryBoxes] || []
     : [];
+  const copyGroups = [
+    { label: "Todo", items: [] },
+    { label: "Nombre", items: ["Nombre completo", "Solo nombre", "Solo apellido"] },
+    {
+      label: "Telefono",
+      items: contextMenu?.phones.length
+        ? [
+            ...(contextMenu.phones.length > 1 ? ["Todos los celulares"] : []),
+            ...contextMenu.phones,
+          ]
+        : [],
+    },
+    {
+      label: "Direccion",
+      items: [
+        "Direccion completa",
+        "Calle",
+        "Casa",
+        "Colonia",
+        "Ciudad",
+        "Estado",
+        "CP",
+        "Pais",
+      ],
+    },
+  ];
 
   function scrollToNext(ref: RefObject<HTMLDivElement | null>) {
     window.setTimeout(() => {
@@ -385,9 +402,10 @@ export default function VentaPage() {
     event: MouseEvent,
     title: string,
     type: ContextMenuState["type"],
+    phones: string[] = [],
   ) {
     event.preventDefault();
-    setContextMenu({ x: event.clientX, y: event.clientY, title, type });
+    setContextMenu({ x: event.clientX, y: event.clientY, title, type, phones });
   }
 
   function openInvoice() {
@@ -441,7 +459,7 @@ export default function VentaPage() {
                 key={sender.phone}
                 onClick={() => chooseSender(sender)}
                 onContextMenu={(event) =>
-                  openContextMenu(event, sender.name, "remitente")
+                  openContextMenu(event, sender.name, "remitente", [sender.phone])
                 }
                 className={`relative overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 ${
                   selectedSender?.phone === sender.phone
@@ -593,7 +611,9 @@ export default function VentaPage() {
                   key={`${recipient.name}-${recipient.country}`}
                   onClick={() => chooseRecipient(recipient)}
                   onContextMenu={(event) =>
-                    openContextMenu(event, recipient.name, "destinatario")
+                    openContextMenu(event, recipient.name, "destinatario", [
+                      recipient.phone,
+                    ])
                   }
                   className={`relative overflow-hidden rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5 ${
                     selectedRecipient?.name === recipient.name &&
