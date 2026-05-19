@@ -383,7 +383,7 @@ export default function VentaPage() {
         </button>
       </div>
 
-      {mode === "clients" ? (
+      {mode === "clients" || mode === "sale" ? (
         <Panel title="Clientes">
           <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
             <div className="relative">
@@ -489,7 +489,8 @@ export default function VentaPage() {
         </Panel>
       ) : null}
 
-      {selectedSender && (mode === "clients" || mode === "new-recipient") ? (
+      {selectedSender &&
+      (mode === "clients" || mode === "sale" || mode === "new-recipient") ? (
         <div className="mt-5 grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
           <Panel title={`Destinatarios de ${selectedSender.name}`}>
             <div className="mb-4 flex flex-wrap gap-3">
@@ -659,20 +660,6 @@ export default function VentaPage() {
             )}
           </Panel>
         </div>
-      ) : null}
-
-      {mode === "sale" && !selectedRecipient ? (
-        <Panel title="Nueva venta">
-          <p className="mb-4 text-2xl font-black">
-            Primero elige un cliente.
-          </p>
-          <button
-            onClick={() => setMode("clients")}
-            className="h-14 rounded-lg bg-slate-950 px-6 text-lg font-black text-white dark:bg-slate-100 dark:text-slate-950"
-          >
-            Clientes
-          </button>
-        </Panel>
       ) : null}
 
       {selectedSender && selectedRecipient && selectedBox ? (
