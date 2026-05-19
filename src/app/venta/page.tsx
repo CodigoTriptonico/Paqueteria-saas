@@ -735,7 +735,7 @@ export default function VentaPage() {
           </Panel>
 
           <Panel title="Finalizar">
-            <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950">
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
               <p className="text-lg font-black">{selectedSender.name}</p>
               <p className="font-bold">{selectedRecipient.name}</p>
               <p className="font-bold">Caja {selectedBox[0]}</p>
