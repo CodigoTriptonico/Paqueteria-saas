@@ -4,16 +4,19 @@ import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function ThemeToggle() {
-  const [dark, setDark] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
+  const [mounted, setMounted] = useState(false);
+  const [dark, setDark] = useState(false);
 
+  useEffect(() => {
     const saved = localStorage.getItem("theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const shouldUseDark = saved ? saved === "dark" : prefersDark;
 
-    return saved ? saved === "dark" : prefersDark;
-  });
+    window.setTimeout(() => {
+      setDark(shouldUseDark);
+      setMounted(true);
+    }, 0);
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -36,10 +39,14 @@ export function ThemeToggle() {
       <span>
         <span className="block text-lg font-black">Modo oscuro</span>
         <span className="block text-sm font-bold text-slate-500 dark:text-slate-400">
-          {dark ? "Activado" : "Desactivado"}
+          {mounted && dark ? "Activado" : "Desactivado"}
         </span>
       </span>
-      {dark ? <Sun className="h-7 w-7" /> : <Moon className="h-7 w-7" />}
+      {mounted && dark ? (
+        <Sun className="h-7 w-7" />
+      ) : (
+        <Moon className="h-7 w-7" />
+      )}
     </button>
   );
 }
