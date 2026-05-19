@@ -223,7 +223,7 @@ export default function VentaPage() {
         </Panel>
       ) : null}
 
-      {selectedSender && mode !== "new-client" ? (
+      {selectedSender && (mode === "clients" || mode === "new-recipient") ? (
         <div className="mt-5 grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
           <Panel title={`Destinatarios de ${selectedSender.name}`}>
             <button
@@ -289,40 +289,83 @@ export default function VentaPage() {
             </div>
           </Panel>
 
-          <Panel title={selectedRecipient ? `Cajas para ${selectedRecipient.country}` : "Venta"}>
-            {!selectedRecipient ? (
-              <p className="text-xl font-black text-slate-500 dark:text-slate-400">
-                Selecciona un destinatario para ver cajas.
-              </p>
-            ) : (
-              <div className="grid gap-3">
-                {boxesForCountry.map((box) => (
-                  <button
-                    key={box[0]}
-                    onClick={() => setSelectedBox(box)}
-                    className={`grid gap-3 rounded-xl border p-4 text-left md:grid-cols-[1fr_auto_auto_auto] ${
-                      selectedBox?.[0] === box[0]
-                        ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950"
-                        : "border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950"
-                    }`}
-                  >
-                    <div>
-                      <p className="text-2xl font-black">Caja {box[0]}</p>
-                      <p className="font-bold text-slate-500 dark:text-slate-400">
-                        {box[3]} - {box[4]}
-                      </p>
-                    </div>
-                    <p className="text-2xl font-black">{box[1]}</p>
-                    <p className="text-lg font-black text-slate-500 dark:text-slate-400">
-                      Costo {box[2]}
-                    </p>
-                    <p className="rounded-lg bg-emerald-100 px-4 py-2 text-xl font-black text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                      Ganancia $40
-                    </p>
-                  </button>
-                ))}
+          <Panel title="Siguiente paso">
+            <p className="text-xl font-black text-slate-500 dark:text-slate-400">
+              Selecciona un destinatario para ir a cajas.
+            </p>
+          </Panel>
+        </div>
+      ) : null}
+
+      {mode === "sale" && !selectedRecipient ? (
+        <Panel title="Nueva venta">
+          <p className="mb-4 text-2xl font-black">
+            Primero elige un cliente.
+          </p>
+          <button
+            onClick={() => setMode("clients")}
+            className="h-14 rounded-lg bg-slate-950 px-6 text-lg font-black text-white dark:bg-slate-100 dark:text-slate-950"
+          >
+            Clientes
+          </button>
+        </Panel>
+      ) : null}
+
+      {mode === "sale" && selectedSender && selectedRecipient ? (
+        <div className="grid gap-5">
+          <Panel title="Cliente seleccionado">
+            <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+                <p className="font-bold text-slate-500 dark:text-slate-400">
+                  Remitente
+                </p>
+                <p className="text-2xl font-black">{selectedSender.name}</p>
               </div>
-            )}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+                <p className="font-bold text-slate-500 dark:text-slate-400">
+                  Destinatario
+                </p>
+                <p className="text-2xl font-black">
+                  {selectedRecipient.name} - {selectedRecipient.country}
+                </p>
+              </div>
+              <button
+                onClick={() => setMode("clients")}
+                className="h-full min-h-16 rounded-xl border border-slate-200 px-5 text-lg font-black dark:border-slate-700"
+              >
+                Cambiar
+              </button>
+            </div>
+          </Panel>
+
+          <Panel title={`Cajas para ${selectedRecipient.country}`}>
+            <div className="grid gap-3">
+              {boxesForCountry.map((box) => (
+                <button
+                  key={box[0]}
+                  onClick={() => setSelectedBox(box)}
+                  className={`grid gap-3 rounded-xl border p-4 text-left md:grid-cols-[1fr_auto_auto_auto] ${
+                    selectedBox?.[0] === box[0]
+                      ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950"
+                      : "border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950"
+                  }`}
+                >
+                  <div>
+                    <p className="text-2xl font-black">Caja {box[0]}</p>
+                    <p className="font-bold text-slate-500 dark:text-slate-400">
+                      {box[3]} - {box[4]}
+                    </p>
+                  </div>
+                  <p className="text-2xl font-black">{box[1]}</p>
+                  <p className="text-lg font-black text-slate-500 dark:text-slate-400">
+                    Costo {box[2]}
+                  </p>
+                  <p className="rounded-lg bg-emerald-100 px-4 py-2 text-xl font-black text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                    Ganancia $40
+                  </p>
+                </button>
+              ))}
+            </div>
           </Panel>
         </div>
       ) : null}
