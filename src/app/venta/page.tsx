@@ -13,7 +13,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { type MouseEvent, useMemo, useRef, useState } from "react";
+import { type MouseEvent, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { AppShell } from "@/components/app-shell";
 import { Panel } from "@/components/ui-blocks";
@@ -313,9 +313,6 @@ export default function VentaPage() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoiceSequence, setInvoiceSequence] = useState(124);
   const [invoiceNumber, setInvoiceNumber] = useState("INV-000124");
-  const recipientsRef = useRef<HTMLDivElement>(null);
-  const boxesRef = useRef<HTMLDivElement>(null);
-  const detailsRef = useRef<HTMLDivElement>(null);
 
   const duplicateClient = useMemo(() => {
     if (!newClientPhone.trim()) {
@@ -348,18 +345,12 @@ export default function VentaPage() {
     setSelectedRecipient(null);
     setSelectedBox(null);
     setStep("recipients");
-    window.setTimeout(() => {
-      recipientsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
   }
 
   function chooseRecipient(recipient: Recipient) {
     setSelectedRecipient(recipient);
     setSelectedBox(null);
     setStep("boxes");
-    window.setTimeout(() => {
-      boxesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
   }
 
   function openContextMenu(
@@ -382,14 +373,6 @@ export default function VentaPage() {
     setSelectedSender(null);
     setSelectedRecipient(null);
     setSelectedBox(null);
-  }
-
-  function chooseBox(box: string[]) {
-    setSelectedBox(box);
-    setStep("details");
-    window.setTimeout(() => {
-      detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
   }
 
   return (
@@ -415,7 +398,7 @@ export default function VentaPage() {
         </button>
       </div>
 
-      {mode === "clients" ? (
+      {mode === "clients" && step === "clients" ? (
         <Panel title="Clientes">
           <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
             <div className="relative">
@@ -521,8 +504,8 @@ export default function VentaPage() {
         </Panel>
       ) : null}
 
-      {selectedSender ? (
-        <div ref={recipientsRef} className="mt-5 grid gap-5 scroll-mt-5">
+      {selectedSender && (step === "recipients" || mode === "new-recipient") ? (
+        <div className="mt-5 grid gap-5">
           <Panel title={`Destinatarios de ${selectedSender.name}`}>
             <div className="mb-4 flex flex-wrap gap-3">
               <button
@@ -625,8 +608,7 @@ export default function VentaPage() {
         </div>
       ) : null}
 
-      {selectedRecipient ? (
-        <div ref={boxesRef} className="mt-5 scroll-mt-5">
+      {step === "boxes" && selectedRecipient ? (
         <Panel title={`Cajas para ${selectedRecipient.country}`}>
           <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
             <p className="text-sm font-black uppercase text-slate-400">
@@ -642,7 +624,8 @@ export default function VentaPage() {
               <button
                 key={box[0]}
                 onClick={() => {
-                  chooseBox(box);
+                  setSelectedBox(box);
+                  setStep("details");
                 }}
                 onContextMenu={(event) =>
                   openContextMenu(event, `Caja ${box[0]}`, "caja")
@@ -692,7 +675,6 @@ export default function VentaPage() {
             ))}
           </div>
         </Panel>
-        </div>
       ) : null}
 
       {step === "start" ? (
@@ -712,8 +694,8 @@ export default function VentaPage() {
         </Panel>
       ) : null}
 
-      {selectedSender && selectedRecipient && selectedBox ? (
-        <div ref={detailsRef} className="mt-5 grid scroll-mt-5 gap-5 xl:grid-cols-[1fr_0.55fr]">
+      {step === "details" && selectedSender && selectedRecipient && selectedBox ? (
+        <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_0.55fr]">
           <Panel title="Datos del envio">
             <div className="grid gap-4 md:grid-cols-3">
               <label className="grid gap-2">
