@@ -8,6 +8,7 @@ import { Panel } from "@/components/ui-blocks";
 type Recipient = {
   name: string;
   country: string;
+  address: string;
   phone?: string;
 };
 
@@ -24,9 +25,9 @@ const senders: Sender[] = [
     phone: "(305) 555-0182",
     address: "Miami, FL",
     recipients: [
-      { name: "Rosa Lopez", country: "Mexico" },
-      { name: "Luis Lopez", country: "Mexico" },
-      { name: "Ana Lopez", country: "Guatemala" },
+      { name: "Rosa Lopez", country: "Mexico", address: "Calle 12 #45, CDMX" },
+      { name: "Luis Lopez", country: "Mexico", address: "Av. Reforma 200, CDMX" },
+      { name: "Ana Lopez", country: "Guatemala", address: "Zona 10, Guatemala City" },
     ],
   },
   {
@@ -34,8 +35,8 @@ const senders: Sender[] = [
     phone: "(786) 555-0120",
     address: "Hialeah, FL",
     recipients: [
-      { name: "Carlos Ramirez", country: "Guatemala" },
-      { name: "Marta Ruiz", country: "Honduras" },
+      { name: "Carlos Ramirez", country: "Guatemala", address: "Zona 1, Guatemala City" },
+      { name: "Marta Ruiz", country: "Honduras", address: "Col. Kennedy, Tegucigalpa" },
     ],
   },
   {
@@ -43,8 +44,8 @@ const senders: Sender[] = [
     phone: "(954) 555-0177",
     address: "Fort Lauderdale, FL",
     recipients: [
-      { name: "Diana Perez", country: "Colombia" },
-      { name: "Luz Gomez", country: "Colombia" },
+      { name: "Diana Perez", country: "Colombia", address: "Carrera 7 #82, Bogota" },
+      { name: "Luz Gomez", country: "Colombia", address: "Calle 10 #33, Medellin" },
     ],
   },
 ];
@@ -282,8 +283,13 @@ export default function VentaPage() {
                       : "border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900"
                   }`}
                 >
-                  {recipient.name} - {recipient.country}
-                </button>
+                    <span className="block">
+                      {recipient.name} - {recipient.country}
+                    </span>
+                    <span className="mt-1 block text-sm font-bold opacity-75">
+                      {recipient.address}
+                    </span>
+                  </button>
               ))}
             </div>
           </Panel>
