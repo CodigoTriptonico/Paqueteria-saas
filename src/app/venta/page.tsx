@@ -356,7 +356,7 @@ export default function VentaPage() {
     { label: "Estado", value: contextMenu?.address.state },
     { label: "CP", value: contextMenu?.address.postalCode },
     { label: "Pais", value: contextMenu?.address.country },
-  ].filter((item) => item.value);
+  ].filter((item) => item.label === "Direccion completa" || item.value);
   const copyGroups = [
     { label: "Todo", items: [] },
     {
