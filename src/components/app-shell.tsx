@@ -1,17 +1,22 @@
+"use client";
+
 import Link from "next/link";
 import {
+  ArrowLeft,
   Boxes,
+  ChevronRight,
   ClipboardList,
   CreditCard,
   House,
   LucideIcon,
   Settings,
 } from "lucide-react";
+import { useEffect, useState, ViewTransition } from "react";
 
-const navItems: { label: string; href: string; icon: LucideIcon }[] = [
+const navItems: { label: string; href: string; icon: LucideIcon; hasSubmenu?: boolean }[] = [
   { label: "Inicio", href: "/", icon: House },
-  { label: "Nueva venta", href: "/venta", icon: CreditCard },
-  { label: "Inventario", href: "/inventario", icon: Boxes },
+  { label: "Nueva venta", href: "/venta", icon: CreditCard, hasSubmenu: true },
+  { label: "Inventario", href: "/inventario", icon: Boxes, hasSubmenu: true },
   { label: "Envios", href: "/envios", icon: ClipboardList },
   { label: "Configuracion", href: "/configuracion", icon: Settings },
 ];
@@ -21,74 +26,130 @@ type AppShellProps = {
   title: string;
   kicker?: string;
   action?: string;
+  actionHref?: string;
   secondaryAction?: string;
+  secondaryActionHref?: string;
+  onActiveClick?: () => void;
+  compactContent?: React.ReactNode;
+  compactNavLabel?: string;
+  compactNavFocusKey?: string | number;
+  onCompactNavClick?: () => void;
+  hideCompactNavHeader?: boolean;
+  compactNavSettingsHref?: string;
   children: React.ReactNode;
 };
 
+function hasCompactSidebarContent(content: React.ReactNode) {
+  return content !== null && content !== undefined && content !== false;
+}
+
 export function AppShell({
   active,
-  title,
-  kicker = "Paqueteria",
-  action,
-  secondaryAction,
   children,
+  compactContent,
+  compactNavLabel,
+  compactNavFocusKey,
+  onCompactNavClick,
+  hideCompactNavHeader,
+  compactNavSettingsHref,
+  onActiveClick,
 }: AppShellProps) {
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const activeItem = navItems.find((item) => item.label === active) ?? navItems[0];
+  const showCompactSidebar = hasCompactSidebarContent(compactContent);
+
+  function collapseToCompactNav() {
+    setNavCollapsed(true);
+    window.sessionStorage.setItem("paquemas-nav-collapsed", "1");
+  }
+
+  useEffect(() => {
+    if (!showCompactSidebar) {
+      setNavCollapsed(false);
+      window.sessionStorage.removeItem("paquemas-nav-collapsed");
+      return;
+    }
+
+    collapseToCompactNav();
+  }, [active, showCompactSidebar, compactNavFocusKey]);
+
+  function expandNav() {
+    setNavCollapsed(false);
+    window.sessionStorage.removeItem("paquemas-nav-collapsed");
+  }
+
+  function handleCompactNavClick() {
+    if (onCompactNavClick) {
+      onCompactNavClick();
+      return;
+    }
+
+    expandNav();
+  }
+
+  const compactNavTitle = compactNavLabel ?? activeItem.label;
+  const compactNavBackTitle = onCompactNavClick ? "Volver" : "Mostrar menu";
+
+  function CompactNavHeader({ compact }: { compact?: boolean }) {
+    const buttonClass = compact
+      ? "flex h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border border-black bg-surface-card px-3 text-sm font-black text-slate-200 transition-all duration-200 active:scale-[0.98] hover:bg-[#2f3834]"
+      : "flex h-14 min-w-0 flex-1 items-center gap-3 rounded-lg border border-black bg-surface-card px-4 text-left text-lg font-black text-slate-200 transition-all duration-200 hover:-translate-x-0.5 hover:bg-[#2f3834]";
+    const settingsClass = compact
+      ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card text-slate-300 transition-all duration-200 active:scale-[0.98] hover:bg-[#2f3834] hover:text-slate-100"
+      : "flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card text-slate-300 transition-all duration-200 hover:bg-[#2f3834] hover:text-slate-100";
+
+    return (
+      <div className="flex gap-2">
+        <button
+          onClick={handleCompactNavClick}
+          className={buttonClass}
+          title={compactNavBackTitle}
+        >
+          <ArrowLeft className={compact ? "h-5 w-5 shrink-0" : "h-6 w-6 shrink-0"} />
+          <span className="min-w-0 flex-1 truncate text-left">{compactNavTitle}</span>
+        </button>
+        {compactNavSettingsHref ? (
+          <Link
+            href={compactNavSettingsHref}
+            className={settingsClass}
+            title="Configuracion"
+            aria-label="Configuracion"
+          >
+            <Settings className={compact ? "h-4 w-4" : "h-5 w-5"} />
+          </Link>
+        ) : null}
+      </div>
+    );
+  }
+
+  function handleNavClick(isActive: boolean, hasSubmenu?: boolean) {
+    if (isActive && hasSubmenu && showCompactSidebar) {
+      collapseToCompactNav();
+    }
+
+    if (isActive) {
+      onActiveClick?.();
+    }
+  }
+
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-      <div className="flex min-h-screen w-full gap-5 p-4 sm:p-5">
-        <aside className="hidden w-72 shrink-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:block">
-          <div className="mb-8 rounded-xl border border-slate-800 bg-slate-950 p-4 text-white shadow-sm dark:border-slate-700">
-            <p className="text-sm font-bold text-slate-300">SaaS</p>
-            <h1 className="text-2xl font-black">Paquemas</h1>
-          </div>
-
-          <nav className="grid gap-2">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = item.label === active;
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex h-14 items-center gap-3 rounded-lg px-4 text-left text-lg font-bold ${
-                    isActive
-                      ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-800"
-                      : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  <Icon className="h-6 w-6" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </aside>
-
-        <section className="min-w-0 flex-1">
-          <header className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">
-                  {kicker}
-                </p>
-                <h2 className="text-3xl font-black">{title}</h2>
-              </div>
-              <div className="flex gap-3">
-                {secondaryAction ? (
-                  <button className="h-14 rounded-lg border border-slate-200 bg-white px-6 text-lg font-black text-slate-950 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:hover:bg-slate-800">
-                    {secondaryAction}
-                  </button>
-                ) : null}
-                {action ? (
-                  <button className="h-14 rounded-lg bg-slate-950 px-6 text-lg font-black text-white shadow-sm hover:bg-slate-800 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400">
-                    {action}
-                  </button>
-                ) : null}
-              </div>
+    <main className="min-h-screen bg-surface-shell text-[#f8fafc]">
+      <div className="flex min-h-screen w-full gap-4 bg-surface-shell p-3 sm:gap-5 sm:p-5">
+        <aside className="hidden w-72 shrink-0 overflow-visible rounded-xl border border-black bg-surface-panel p-4 shadow-md transition-all duration-300 ease-out lg:sticky lg:top-5 lg:z-[100] lg:flex lg:max-h-[calc(100vh-2.5rem)] lg:min-h-[calc(100vh-2.5rem)] lg:flex-col">
+          {!navCollapsed ? (
+            <div className="motion-enter-top mb-8 rounded-xl border border-black bg-surface-card p-4 text-[#f8fafc] shadow-sm">
+              <p className="text-xs font-black uppercase text-slate-500">SaaS</p>
+              <h1 className="text-2xl font-black">Paquemas</h1>
             </div>
+          ) : null}
 
-            <nav className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:hidden">
+          {navCollapsed && showCompactSidebar ? (
+            <div className="motion-enter-left flex min-h-0 flex-1 flex-col gap-3">
+              {hideCompactNavHeader ? null : <CompactNavHeader />}
+              {compactContent}
+            </div>
+          ) : (
+            <nav className="motion-enter-left grid gap-2">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = item.label === active;
@@ -97,21 +158,80 @@ export function AppShell({
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex min-h-16 flex-col items-center justify-center rounded-lg text-center text-sm font-black ${
+                    transitionTypes={["app-nav"]}
+                    onClick={() => handleNavClick(isActive, item.hasSubmenu)}
+                    className={`flex h-14 min-w-0 items-center gap-3 rounded-lg border px-4 text-left text-lg font-black transition-all duration-200 hover:translate-x-1 ${
                       isActive
-                        ? "bg-emerald-500 text-white"
-                        : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                        ? "border-black bg-surface-card text-white"
+                        : "border-transparent text-slate-300 hover:border-black hover:bg-surface-card hover:text-white"
                     }`}
                   >
+                    <Icon className="h-6 w-6 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    {item.hasSubmenu ? (
+                      <ChevronRight
+                        className={`h-5 w-5 shrink-0 ${
+                          isActive ? "text-slate-400" : "text-slate-500"
+                        }`}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </nav>
+          )}
+        </aside>
+
+        <section className="min-w-0 flex-1">
+          {navCollapsed && showCompactSidebar ? (
+            <div className="motion-enter-top sticky top-3 z-50 mb-4 grid gap-3 lg:hidden">
+              {hideCompactNavHeader ? null : <CompactNavHeader compact />}
+              {compactContent}
+            </div>
+          ) : null}
+
+          {!navCollapsed ? (
+            <nav className="motion-enter-top mb-4 grid grid-cols-2 gap-2 sm:mb-5 sm:grid-cols-3 lg:hidden">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = item.label === active;
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    transitionTypes={["app-nav"]}
+                    onClick={() => handleNavClick(isActive, item.hasSubmenu)}
+                    className={`relative flex min-h-14 flex-col items-center justify-center rounded-lg border px-2 text-center text-xs font-black transition-all duration-200 active:scale-[0.98] sm:min-h-16 sm:text-sm ${
+                      isActive
+                        ? "border-black bg-surface-card text-white"
+                        : "border-black bg-surface-card text-slate-300"
+                    }`}
+                  >
+                    {item.hasSubmenu ? (
+                      <ChevronRight
+                        className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-slate-500"
+                        aria-hidden
+                      />
+                    ) : null}
                     <Icon className="mb-1 h-6 w-6" />
                     {item.label}
                   </Link>
                 );
               })}
             </nav>
-          </header>
+          ) : null}
 
-          {children}
+          <ViewTransition
+            key={activeItem.href}
+            name="app-content"
+            enter={{ "app-nav": "app-fade", default: "none" }}
+            exit={{ "app-nav": "app-fade", default: "none" }}
+            default="none"
+          >
+            {children}
+          </ViewTransition>
         </section>
       </div>
     </main>

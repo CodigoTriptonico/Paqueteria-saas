@@ -2,195 +2,1694 @@
 
 import {
   ArrowLeft,
+  Box,
   Building2,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  DollarSign,
+  Edit3,
   Globe2,
   Palette,
   Plus,
+  Search,
+  Trash2,
+  Truck,
   Users,
+  X,
 } from "lucide-react";
-import { useState } from "react";
-import { AppShell } from "@/components/app-shell";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { Panel } from "@/components/ui-blocks";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 
-type Section = "menu" | "prices" | "appearance" | "company" | "users";
+type Section = "menu" | "prices" | "distributors" | "inventory" | "deliveries" | "appearance" | "company" | "users";
+type InventoryConfigSection = "menu" | "categories";
+
+type BoxConfig = {
+  size: string;
+  price: string;
+};
+
+type CountryConfig = {
+  code: string;
+  name: string;
+  deliveryTime: string;
+  boxes: BoxConfig[];
+};
+
+type DistributorConfig = {
+  name: string;
+  contact: string;
+  phone: string;
+  active: boolean;
+};
+
+type DistributorPrices = Record<string, Record<string, BoxConfig[]>>;
+type InventoryItem = {
+  id: string;
+  name: string;
+  category: string;
+  kind: string;
+  size: string;
+  stock: number;
+  reserved: number;
+  minStock: number;
+  location: string;
+  unit: string;
+};
+type InventoryMovement = {
+  id: string;
+  itemId: string;
+  itemName: string;
+  type: "entrada" | "salida" | "ajuste";
+  qty: number;
+  note: string;
+  createdAt: string;
+};
+type InventoryTreeItem = { id: string; name: string; children?: InventoryTreeItem[] };
+type CategoryConfig = { name: string; items: InventoryTreeItem[]; types?: string[] };
+type InventoryStorage = {
+  items?: InventoryItem[];
+  movements?: InventoryMovement[];
+  categoryConfigs?: CategoryConfig[];
+};
+type RouteConfig = {
+  deliveryDays: string[];
+  pickupDays: string[];
+  deliveryRanges: string[];
+  pickupRanges: string[];
+  pendingAllowed: boolean;
+  routeLeadTime: string;
+};
 
 const sections = [
   {
     id: "prices" as Section,
     title: "Paises y precios",
-    text: "Crear paises y poner precios por caja.",
+    text: "Paises, tiempos y productos.",
     icon: Globe2,
+    color: "bg-[#34D399]",
+  },
+  {
+    id: "distributors" as Section,
+    title: "Distribuidores",
+    text: "Base global de proveedores.",
+    icon: Truck,
     color: "bg-emerald-500",
+  },
+  {
+    id: "inventory" as Section,
+    title: "Inventario",
+    text: "Categorias e items.",
+    icon: Box,
+    color: "bg-emerald-300",
+  },
+  {
+    id: "deliveries" as Section,
+    title: "Rutas y horarios",
+    text: "Entregas, recolecciones y dias.",
+    icon: Clock,
+    color: "bg-emerald-400",
   },
   {
     id: "appearance" as Section,
     title: "Apariencia",
-    text: "Modo oscuro y visual.",
+    text: "Visual del sistema.",
     icon: Palette,
-    color: "bg-violet-500",
+    color: "bg-emerald-400",
   },
   {
     id: "company" as Section,
     title: "Empresa",
     text: "Nombre, telefono y direccion.",
     icon: Building2,
-    color: "bg-sky-500",
+    color: "bg-emerald-400",
   },
   {
     id: "users" as Section,
     title: "Usuarios",
-    text: "Dueño y empleados.",
+    text: "Dueno y empleados.",
     icon: Users,
-    color: "bg-amber-500",
+    color: "bg-emerald-400",
   },
 ];
 
-const countries = [
-  ["Mexico", "4 cajas configuradas"],
-  ["Guatemala", "3 cajas configuradas"],
-  ["Colombia", "2 cajas configuradas"],
-  ["Honduras", "1 caja configurada"],
-];
+const INVENTORY_STORAGE_KEY = "paquemas-inventory-v3";
+const LEGACY_INVENTORY_STORAGE_KEYS = ["paquemas-inventory-v1", "paquemas-inventory-v2"];
+const makeInventoryTreeItems = (names: string[], prefix: string) =>
+  names.map((name) => ({
+    id: `${prefix}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    name,
+  }));
+
+const initialInventoryCategories: CategoryConfig[] = [];
 
 const inventoryBoxes = [
-  ["30 x 30 x 30", "18", "$100", "$60", "FedEx", "10-15 dias"],
-  ["20 x 20 x 20", "31", "$85", "$54", "Paquete Express", "8-12 dias"],
-  ["16 x 16 x 16", "42", "$62", "$40", "Estafeta", "8-12 dias"],
-  ["14 x 14 x 14", "7", "$48", "$31", "MGS", "7-10 dias"],
+  ["30 x 30 x 30", "$100"],
+  ["20 x 20 x 20", "$85"],
+  ["16 x 16 x 16", "$62"],
+  ["14 x 14 x 14", "$48"],
 ];
 
-const inputClass =
-  "h-12 rounded-lg border border-slate-200 px-3 text-base font-bold outline-none focus:border-emerald-500 dark:border-slate-700";
+const makeBoxes = (count = 4) =>
+  inventoryBoxes.slice(0, count).map(([size, price]) => ({
+    size,
+    price,
+  }));
+
+const initialCountries: CountryConfig[] = [
+  { code: "MX", name: "Mexico", deliveryTime: "5-8 dias", boxes: makeBoxes(4) },
+  { code: "GT", name: "Guatemala", deliveryTime: "6-10 dias", boxes: makeBoxes(3) },
+  { code: "CO", name: "Colombia", deliveryTime: "7-12 dias", boxes: makeBoxes(2) },
+  { code: "HN", name: "Honduras", deliveryTime: "6-9 dias", boxes: makeBoxes(1) },
+];
+
+const initialDistributors: DistributorConfig[] = [
+  {
+    name: "MGS",
+    contact: "Operaciones",
+    phone: "(000) 000-0000",
+    active: true,
+  },
+  {
+    name: "Cargo Express",
+    contact: "Ventas",
+    phone: "(000) 000-0000",
+    active: true,
+  },
+];
+
+const emptyDistributor = {
+  name: "",
+  contact: "",
+  phone: "",
+};
+
+const weekDays = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
+const initialRouteConfig: RouteConfig = {
+  deliveryDays: ["Lun", "Mie", "Vie"],
+  pickupDays: ["Mar", "Jue", "Sab"],
+  deliveryRanges: ["10:00-12:00", "14:00-16:00", "17:00-19:00"],
+  pickupRanges: ["09:00-11:00", "13:00-15:00", "16:00-18:00"],
+  pendingAllowed: true,
+  routeLeadTime: "1 dia",
+};
+
+import {
+  cardClass,
+  inputClass,
+  labelMutedClass,
+  Panel,
+  primaryButtonClass,
+  secondaryButtonClass,
+  textMutedClass,
+} from "@/components/ui-blocks";
+import { InventoryStructureEditor } from "@/components/inventory-structure-editor";
+
+const configSections: Section[] = [
+  "menu",
+  "prices",
+  "distributors",
+  "inventory",
+  "deliveries",
+  "appearance",
+  "company",
+  "users",
+];
+
+function getConfigStateFromUrl() {
+  if (typeof window === "undefined") {
+    return { section: "menu" as Section, inventorySection: "menu" as InventoryConfigSection };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const open = params.get("open");
+  const view = params.get("view");
+
+  if (open === "inventory") {
+    return {
+      section: "inventory" as Section,
+      inventorySection: "categories" as InventoryConfigSection,
+    };
+  }
+
+  return {
+    section: configSections.includes(view as Section) ? (view as Section) : ("menu" as Section),
+    inventorySection:
+      params.get("inventory") === "categories"
+        ? ("categories" as InventoryConfigSection)
+        : ("menu" as InventoryConfigSection),
+  };
+}
+
+const dayOptions = Array.from({ length: 31 }, (_, index) => index + 1);
+const weekOptions = Array.from({ length: 12 }, (_, index) => index + 1);
+type TimeUnit = "dias" | "semanas";
+
+const countryFallbacks = [
+  "Mexico",
+  "Guatemala",
+  "Colombia",
+  "Honduras",
+  "El Salvador",
+  "Nicaragua",
+  "Costa Rica",
+  "Panama",
+  "Republica Dominicana",
+  "Ecuador",
+  "Peru",
+  "Chile",
+  "Argentina",
+  "Brasil",
+  "Uruguay",
+  "Paraguay",
+  "Bolivia",
+  "Venezuela",
+  "Estados Unidos",
+  "Canada",
+  "Espana",
+];
+
+const latinAmericaCodes = [
+  "MX", "GT", "HN", "SV", "NI", "CR", "PA", "DO", "CU", "PR", "CO", "VE",
+  "EC", "PE", "BO", "CL", "AR", "PY", "UY", "BR", "GF", "GY", "SR", "BZ",
+];
+
+const countryCodes = [
+  "AF", "AL", "DE", "AD", "AO", "AI", "AQ", "AG", "SA", "DZ", "AR", "AM",
+  "AW", "AU", "AT", "AZ", "BS", "BH", "BD", "BB", "BE", "BZ", "BJ", "BM",
+  "BY", "BO", "BA", "BW", "BR", "BN", "BG", "BF", "BI", "BT", "CV", "KH",
+  "CM", "CA", "BQ", "QA", "TD", "CL", "CN", "CY", "CO", "KM", "CG", "CD",
+  "KP", "KR", "CI", "CR", "HR", "CU", "CW", "DK", "DM", "EC", "EG", "SV",
+  "AE", "ER", "SK", "SI", "ES", "US", "EE", "SZ", "ET", "PH", "FI", "FJ",
+  "FR", "GA", "GM", "GE", "GH", "GI", "GD", "GR", "GL", "GP", "GU", "GT",
+  "GF", "GG", "GN", "GQ", "GW", "GY", "HT", "HN", "HK", "HU", "IN", "ID",
+  "IQ", "IR", "IE", "IM", "IS", "KY", "CK", "FO", "FK", "MP", "MH", "SB",
+  "TC", "VG", "VI", "IL", "IT", "JM", "JP", "JE", "JO", "KZ", "KE", "KG",
+  "KI", "KW", "LA", "LS", "LV", "LB", "LR", "LY", "LI", "LT", "LU", "MO",
+  "MG", "MY", "MW", "MV", "ML", "MT", "MA", "MQ", "MU", "MR", "YT", "MX",
+  "FM", "MD", "MC", "MN", "ME", "MS", "MZ", "MM", "NA", "NR", "NP", "NI",
+  "NE", "NG", "NU", "NO", "NC", "NZ", "OM", "NL", "PK", "PW", "PS", "PA",
+  "PG", "PY", "PE", "PF", "PL", "PT", "PR", "GB", "CF", "CZ", "DO", "RE",
+  "RW", "RO", "RU", "EH", "WS", "AS", "BL", "KN", "SM", "MF", "PM", "VC",
+  "SH", "LC", "ST", "SN", "RS", "SC", "SL", "SG", "SX", "SY", "SO", "LK",
+  "ZA", "SD", "SS", "SE", "CH", "SR", "SJ", "TH", "TW", "TZ", "TJ", "IO",
+  "TF", "TL", "TG", "TK", "TO", "TT", "TN", "TM", "TR", "TV", "UA", "UG",
+  "UY", "UZ", "VU", "VA", "VE", "VN", "WF", "YE", "DJ", "ZM", "ZW",
+];
+
+const normalizeText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+const categoryItems = (category: CategoryConfig) =>
+  category.items?.length
+    ? category.items
+    : makeInventoryTreeItems(category.types || [], normalizeText(category.name));
+
+const cleanSavedCategoryItems = (category: CategoryConfig) => {
+  const items = categoryItems(category);
+
+  if (category.name !== "Cajas") {
+    return items;
+  }
+
+  return items.filter((item) => item.name !== "Caja" && item.name !== "30x30x30");
+};
+
+const countInventoryTreeItems = (items: InventoryTreeItem[]): number =>
+  items.reduce(
+    (sum, item) => sum + 1 + countInventoryTreeItems(item.children || []),
+    0,
+  );
+
+const countInventoryTreeFolders = (items: InventoryTreeItem[]): number =>
+  items.reduce(
+    (sum, item) =>
+      sum + (item.children?.length ? 1 : 0) + countInventoryTreeFolders(item.children || []),
+    0,
+  );
+
+function addInventoryTreeChild(
+  items: InventoryTreeItem[],
+  parentId: string,
+  child: InventoryTreeItem,
+): InventoryTreeItem[] {
+  return items.map((item) => {
+    if (item.id === parentId) {
+      return { ...item, children: [...(item.children || []), child] };
+    }
+
+    return {
+      ...item,
+      children: item.children ? addInventoryTreeChild(item.children, parentId, child) : item.children,
+    };
+  });
+}
+
+function updateInventoryTreeItem(
+  items: InventoryTreeItem[],
+  itemId: string,
+  name: string,
+): InventoryTreeItem[] {
+  return items.map((item) => {
+    if (item.id === itemId) {
+      return { ...item, name };
+    }
+
+    return {
+      ...item,
+      children: item.children ? updateInventoryTreeItem(item.children, itemId, name) : item.children,
+    };
+  });
+}
+
+function deleteInventoryTreeItem(
+  items: InventoryTreeItem[],
+  itemId: string,
+): InventoryTreeItem[] {
+  return items
+    .filter((item) => item.id !== itemId)
+    .map((item) => ({
+      ...item,
+      children: item.children ? deleteInventoryTreeItem(item.children, itemId) : item.children,
+    }));
+}
+
+function inventoryItemExists(items: InventoryTreeItem[], name: string) {
+  return items.some((item) => normalizeText(item.name) === normalizeText(name));
+}
+
+type CountryOption = {
+  code: string;
+  name: string;
+};
+
+function CountryFlag({ code, large = false }: { code: string; large?: boolean }) {
+  if (!code) {
+    return (
+      <span
+        className={`flex items-center justify-center rounded-md bg-surface-card font-black text-slate-300 ${
+          large ? "h-12 w-16 text-sm" : "h-5 w-8 text-[10px]"
+        }`}
+      >
+        --
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`block overflow-hidden rounded-md border border-black bg-cover bg-center shadow-sm ${
+        large ? "h-12 w-16" : "h-5 w-8"
+      }`}
+      style={{
+        backgroundImage: `url(https://flagcdn.com/w80/${code.toLowerCase()}.png)`,
+      }}
+    />
+  );
+}
+
+function getCountryOptions() {
+  try {
+    const displayNames = new Intl.DisplayNames(["es"], { type: "region" });
+    const countryByCode = new Map<string, CountryOption>(
+      countryCodes
+        .map((code) => [code, { code, name: displayNames.of(code) || code }] as const)
+        .filter((entry) => Boolean(entry[1].name)),
+    );
+    const latinCountries = latinAmericaCodes
+      .map((code) => countryByCode.get(code))
+      .filter((country): country is CountryOption => Boolean(country));
+    const otherCountries = countryCodes
+      .filter((code) => !latinAmericaCodes.includes(code))
+      .map((code) => countryByCode.get(code))
+      .filter((country): country is CountryOption => Boolean(country))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+
+    return [...latinCountries, ...otherCountries];
+  } catch {
+    return countryFallbacks.map((name) => ({ code: "", name }));
+  }
+}
+
+function parseDeliveryTime(value: string) {
+  const match = value.match(/^(\d+)(?:-(\d+))?\s+(dia|dias|semana|semanas)$/);
+  const unit: TimeUnit = match?.[3]?.startsWith("semana") ? "semanas" : "dias";
+  const start = Number(match?.[1] || 5);
+  const end = Number(match?.[2] || match?.[1] || 8);
+
+  return { start, end, unit };
+}
+
+function formatDeliveryTime(start: number, end: number, unit: TimeUnit) {
+  if (start === end) {
+    return `${start} ${unit === "dias" ? "dia" : "semana"}`;
+  }
+
+  return `${start}-${end} ${unit}`;
+}
+
+function formatTime12Hour(value: string) {
+  const [hourValue, minuteValue = "00"] = value.split(":");
+  const hour = Number(hourValue);
+  const period = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+
+  return `${displayHour}:${minuteValue} ${period}`;
+}
+
+function formatRouteRange(range: string) {
+  const [start, end] = range.split("-");
+
+  if (!start || !end) {
+    return range;
+  }
+
+  return `${formatTime12Hour(start)} - ${formatTime12Hour(end)}`;
+}
+
+function parseMoney(value: string) {
+  return Number(value.replace(/[^\d.-]/g, "")) || 0;
+}
+
+function TimeRangeSelect({
+  value,
+  onChange,
+  large = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  large?: boolean;
+}) {
+  const [openPicker, setOpenPicker] = useState<"start" | "end" | "unit" | null>(null);
+  const range = parseDeliveryTime(value);
+  const numbers = range.unit === "dias" ? dayOptions : weekOptions;
+  const controlSize = large ? "h-12 text-xl" : "h-10 text-base";
+  const numberWidth = large ? "w-14" : "w-12";
+  const unitWidth = large ? "w-28" : "w-24";
+
+  function updateRange(nextRange: Partial<typeof range>) {
+    const next = { ...range, ...nextRange };
+    const max = next.unit === "dias" ? 31 : 12;
+    next.start = Math.min(next.start, max);
+    next.end = Math.min(next.end, max);
+
+    if (next.start > next.end) {
+      if (nextRange.start) {
+        next.end = next.start;
+      } else {
+        next.start = next.end;
+      }
+    }
+
+    onChange(formatDeliveryTime(next.start, next.end, next.unit));
+  }
+
+  function pickNumber(key: "start" | "end", number: number) {
+    updateRange({ [key]: number });
+    setOpenPicker(null);
+  }
+
+  function pickUnit(unit: TimeUnit) {
+    updateRange({ unit });
+    setOpenPicker(null);
+  }
+
+  return (
+    <div className={`relative flex ${controlSize} w-fit max-w-full items-center gap-2`}>
+      {[
+        ["start", range.start],
+        ["end", range.end],
+      ].map(([key, currentValue], index) => (
+        <div key={index} className="flex items-center gap-1">
+          {index === 1 ? (
+            <span className="text-base font-black text-slate-400 text-slate-400">a</span>
+          ) : null}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOpenPicker(openPicker === key ? null : (key as "start" | "end"))}
+              className={`flex h-full ${numberWidth} items-center justify-center gap-1 rounded-lg border border-black bg-surface-panel px-2 font-black text-[#f8fafc] hover:border-black`}
+            >
+              {currentValue as number}
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+            </button>
+            {openPicker === key ? (
+              <div className="absolute left-0 top-full z-50 mt-2 grid w-48 grid-cols-4 gap-1 rounded-lg border border-black bg-surface-card p-2 shadow-xl">
+                {numbers.map((number) => (
+                  <button
+                    key={number}
+                    type="button"
+                    onClick={() => pickNumber(key as "start" | "end", number)}
+                    className={`h-9 rounded-md text-sm font-black hover:bg-[#34D399] hover:text-[#f8fafc] ${
+                      number === currentValue
+                        ? "bg-[#34D399] text-[#f8fafc]"
+                        : "bg-surface-panel text-[#f8fafc]"
+                    }`}
+                  >
+                    {number}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ))}
+      <div className={`relative flex ${unitWidth} items-center`}>
+        <button
+          type="button"
+          onClick={() => setOpenPicker(openPicker === "unit" ? null : "unit")}
+          className="flex h-full w-full items-center justify-center gap-2 rounded-lg border border-black bg-surface-panel px-3 font-black text-[#f8fafc] hover:border-black"
+        >
+          {range.unit}
+          <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+        </button>
+        {openPicker === "unit" ? (
+          <div className="absolute left-3 top-full z-50 mt-2 grid w-32 gap-1 rounded-lg border border-black bg-surface-card p-2 shadow-xl">
+            {(["dias", "semanas"] as TimeUnit[]).map((unit) => (
+              <button
+                key={unit}
+                type="button"
+                onClick={() => pickUnit(unit)}
+                className={`h-9 rounded-md px-3 text-left text-sm font-black hover:bg-[#34D399] hover:text-[#f8fafc] ${
+                  unit === range.unit
+                    ? "bg-[#34D399] text-[#f8fafc]"
+                    : "bg-surface-panel text-[#f8fafc]"
+                }`}
+              >
+                {unit}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export default function ConfiguracionPage() {
   const [section, setSection] = useState<Section>("menu");
+  const [locationKey, setLocationKey] = useState("");
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [countryQuery, setCountryQuery] = useState("");
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [countries, setCountries] = useState(initialCountries);
+  const [distributors, setDistributors] = useState(initialDistributors);
+  const [selectedDistributor, setSelectedDistributor] = useState<string | null>(null);
+  const [selectedDistributorCountry, setSelectedDistributorCountry] = useState<string | null>(null);
+  const [distributorPrices, setDistributorPrices] = useState<DistributorPrices>({});
+  const [showDistributorForm, setShowDistributorForm] = useState(false);
+  const [newDistributor, setNewDistributor] = useState(emptyDistributor);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [inventoryMovements, setInventoryMovements] = useState<InventoryMovement[]>([]);
+  const [inventoryConfigSection, setInventoryConfigSection] = useState<InventoryConfigSection>("menu");
+  const [categoryConfigs, setCategoryConfigs] = useState<CategoryConfig[]>(initialInventoryCategories);
+  const [inventoryCategoryQuery, setInventoryCategoryQuery] = useState("");
+  const [selectedInventoryCategory, setSelectedInventoryCategory] = useState(
+    initialInventoryCategories[0]?.name || "",
+  );
+  const [inventoryLoaded, setInventoryLoaded] = useState(false);
+  const [returnToInventory, setReturnToInventory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [editingCategory, setEditingCategory] = useState("");
+  const [editingCategoryName, setEditingCategoryName] = useState("");
+  const [newTypeByCategory, setNewTypeByCategory] = useState<Record<string, string>>({});
+  const [openChildInput, setOpenChildInput] = useState("");
+  const [collapsedInventoryItems, setCollapsedInventoryItems] = useState<Record<string, boolean>>({});
+  const [editingType, setEditingType] = useState<{ category: string; type: string } | null>(null);
+  const [editingTypeName, setEditingTypeName] = useState("");
+  const [routeConfig, setRouteConfig] = useState<RouteConfig>(initialRouteConfig);
+  const [newDeliveryRange, setNewDeliveryRange] = useState({ start: "", end: "" });
+  const [newPickupRange, setNewPickupRange] = useState({ start: "", end: "" });
+  const countryOptions = useMemo(() => getCountryOptions(), []);
+  const selectedCountryData = useMemo(
+    () => countries.find((country) => country.name === selectedCountry),
+    [countries, selectedCountry],
+  );
+  const selectedDistributorData = useMemo(
+    () => distributors.find((distributor) => distributor.name === selectedDistributor),
+    [distributors, selectedDistributor],
+  );
+  const selectedDistributorCountryData = useMemo(
+    () => countries.find((country) => country.name === selectedDistributorCountry),
+    [countries, selectedDistributorCountry],
+  );
+  const selectedDistributorBoxes =
+    selectedDistributor && selectedDistributorCountry
+      ? distributorPrices[selectedDistributor]?.[selectedDistributorCountry] ||
+        selectedDistributorCountryData?.boxes ||
+        []
+      : [];
+  const filteredCountryOptions = useMemo(() => {
+    const existing = new Set(countries.map((country) => normalizeText(country.name)));
+    const query = normalizeText(countryQuery.trim());
+
+    return countryOptions
+      .filter((country) => !existing.has(normalizeText(country.name)))
+      .filter((country) => normalizeText(country.name).includes(query));
+  }, [countries, countryOptions, countryQuery]);
+
+  function openConfigSection(nextSection: Section, push = true) {
+    setSection(nextSection);
+    if (nextSection !== "inventory") {
+      setInventoryConfigSection("menu");
+    }
+
+    if (push) {
+      window.history.pushState(null, "", `/configuracion?view=${nextSection}`);
+    }
+  }
+
+  function openInventoryConfigSection(nextSection: InventoryConfigSection, push = true) {
+    setInventoryConfigSection(nextSection);
+    if (push) {
+      window.history.pushState(
+        null,
+        "",
+        `/configuracion?view=inventory&inventory=${nextSection}`,
+      );
+    }
+  }
+
+  useEffect(() => {
+    function syncLocationKey() {
+      setLocationKey(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+    }
+
+    syncLocationKey();
+    const intervalId = window.setInterval(syncLocationKey, 200);
+    window.addEventListener("popstate", syncLocationKey);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("popstate", syncLocationKey);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!locationKey) {
+      return;
+    }
+
+    window.queueMicrotask(() => {
+      const nextState = getConfigStateFromUrl();
+      setSection(nextState.section);
+      setInventoryConfigSection(nextState.inventorySection);
+
+      const params = new URLSearchParams(window.location.search);
+
+      if (params.get("from") === "inventario") {
+        setReturnToInventory(true);
+        window.sessionStorage.setItem("return-to-inventory", "1");
+        params.delete("from");
+        const query = params.toString();
+        window.history.replaceState(
+          null,
+          "",
+          `/configuracion${query ? `?${query}` : ""}`,
+        );
+      }
+    });
+  }, [locationKey]);
+
+  useEffect(() => {
+    const shouldOpenInventory =
+      window.location.hash === "#inventory" ||
+      new URLSearchParams(window.location.search).get("open") === "inventory";
+
+    if (shouldOpenInventory) {
+      window.queueMicrotask(() => {
+        setSection("inventory");
+        setInventoryConfigSection("categories");
+        window.history.replaceState(null, "", "/configuracion?view=inventory&inventory=categories");
+        setReturnToInventory(window.sessionStorage.getItem("return-to-inventory") === "1");
+      });
+    }
+
+    LEGACY_INVENTORY_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
+
+    const saved = window.localStorage.getItem(INVENTORY_STORAGE_KEY);
+
+    if (!saved) {
+      window.queueMicrotask(() => setInventoryLoaded(true));
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(saved) as InventoryStorage;
+
+      window.queueMicrotask(() => {
+        if (parsed.items?.length) {
+          setInventoryItems(parsed.items);
+        }
+
+        if (parsed.movements?.length) {
+          setInventoryMovements(parsed.movements);
+        }
+
+        if (parsed.categoryConfigs?.length) {
+          const mergedCategories = initialInventoryCategories.map((defaultCategory) => {
+            const savedCategory = parsed.categoryConfigs?.find(
+              (currentCategory) => currentCategory.name === defaultCategory.name,
+            );
+
+            if (!savedCategory) {
+              return defaultCategory;
+            }
+
+            return {
+              ...savedCategory,
+              items: [
+                ...cleanSavedCategoryItems(savedCategory),
+                ...categoryItems(defaultCategory).filter(
+                  (defaultItem) =>
+                    !cleanSavedCategoryItems(savedCategory).some(
+                      (savedItem) =>
+                        normalizeText(savedItem.name) === normalizeText(defaultItem.name),
+                    ),
+                ),
+              ],
+            };
+          });
+
+          parsed.categoryConfigs.forEach((savedCategory) => {
+            if (!mergedCategories.some((currentCategory) => currentCategory.name === savedCategory.name)) {
+              mergedCategories.push(savedCategory);
+            }
+          });
+
+          setCategoryConfigs(mergedCategories);
+          setSelectedInventoryCategory(
+            mergedCategories[0]?.name || initialInventoryCategories[0]?.name || "",
+          );
+        }
+
+        setInventoryLoaded(true);
+      });
+    } catch {
+      window.localStorage.removeItem(INVENTORY_STORAGE_KEY);
+      window.queueMicrotask(() => setInventoryLoaded(true));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!inventoryLoaded) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      INVENTORY_STORAGE_KEY,
+      JSON.stringify({
+        items: inventoryItems,
+        movements: inventoryMovements,
+        categoryConfigs,
+      }),
+    );
+  }, [categoryConfigs, inventoryItems, inventoryLoaded, inventoryMovements]);
+
+  const inventoryCategoryNames = useMemo(
+    () => categoryConfigs.map((currentCategory) => currentCategory.name),
+    [categoryConfigs],
+  );
+
+  const inventoryCategoryStats = useMemo(
+    () =>
+      categoryConfigs.map((currentCategory) => {
+        const categoryItems = inventoryItems.filter(
+          (item) => item.category === currentCategory.name,
+        );
+
+        return {
+          name: currentCategory.name,
+          items: categoryItems.length,
+          stock: categoryItems.reduce((sum, item) => sum + item.stock, 0),
+        };
+      }),
+    [categoryConfigs, inventoryItems],
+  );
+
+  const filteredInventoryCategories = useMemo(() => {
+    const query = normalizeText(inventoryCategoryQuery.trim());
+
+    return categoryConfigs.filter((currentCategory) =>
+      normalizeText(currentCategory.name).includes(query),
+    );
+  }, [categoryConfigs, inventoryCategoryQuery]);
+
+  const selectedInventoryCategoryData = useMemo(
+    () =>
+      categoryConfigs.find(
+        (currentCategory) => currentCategory.name === selectedInventoryCategory,
+      ) || categoryConfigs[0],
+    [categoryConfigs, selectedInventoryCategory],
+  );
+
+  const selectedInventoryCategoryStats = useMemo(
+    () =>
+      inventoryCategoryStats.find(
+        (currentStats) => currentStats.name === selectedInventoryCategoryData?.name,
+      ) || { items: 0, stock: 0 },
+    [inventoryCategoryStats, selectedInventoryCategoryData?.name],
+  );
+
+  const selectedInventoryTreeItems = useMemo(
+    () => (selectedInventoryCategoryData ? categoryItems(selectedInventoryCategoryData) : []),
+    [selectedInventoryCategoryData],
+  );
+
+  const selectedInventoryItemCount = useMemo(
+    () => countInventoryTreeItems(selectedInventoryTreeItems),
+    [selectedInventoryTreeItems],
+  );
+
+  const selectedInventoryFolderCount = useMemo(
+    () => countInventoryTreeFolders(selectedInventoryTreeItems),
+    [selectedInventoryTreeItems],
+  );
+
+  function addCountry(country: CountryOption) {
+    setCountries((current) => [
+      ...current,
+      {
+        code: country.code,
+        name: country.name,
+        deliveryTime: "5-8 dias",
+        boxes: makeBoxes(4),
+      },
+    ]);
+    setCountryQuery("");
+    setShowCountryPicker(false);
+    setSelectedCountry(country.name);
+  }
+
+  function updateCountryTime(time: string) {
+    if (!selectedCountry) {
+      return;
+    }
+
+    setCountries((current) =>
+      current.map((country) =>
+        country.name === selectedCountry ? { ...country, deliveryTime: time } : country,
+      ),
+    );
+  }
+
+  function updateCountryBoxPrice(size: string, rawPrice: string) {
+    if (!selectedCountry) {
+      return;
+    }
+
+    const digits = rawPrice.replace(/[^\d.]/g, "");
+    const price = digits ? `$${digits}` : "$0";
+
+    setCountries((current) =>
+      current.map((country) =>
+        country.name === selectedCountry
+          ? {
+              ...country,
+              boxes: country.boxes.map((box) =>
+                box.size === size ? { ...box, price } : box,
+              ),
+            }
+          : country,
+      ),
+    );
+  }
+
+  function addDistributor() {
+    const name = newDistributor.name.trim();
+
+    if (!name) {
+      return;
+    }
+
+    setDistributors((current) => [
+      ...current,
+      {
+        name,
+        contact: newDistributor.contact.trim() || "Sin contacto",
+        phone: newDistributor.phone.trim() || "Sin telefono",
+        active: true,
+      },
+    ]);
+    setNewDistributor(emptyDistributor);
+    setShowDistributorForm(false);
+  }
+
+  function toggleDistributor(name: string) {
+    setDistributors((current) =>
+      current.map((distributor) =>
+        distributor.name === name
+          ? { ...distributor, active: !distributor.active }
+          : distributor,
+      ),
+    );
+  }
+
+  function updateDistributorPrice(size: string, price: string) {
+    if (!selectedDistributor || !selectedDistributorCountry || !selectedDistributorCountryData) {
+      return;
+    }
+
+    const cleanPrice = price.replace("$", "");
+
+    setDistributorPrices((current) => {
+      const currentDistributor = current[selectedDistributor] || {};
+      const currentBoxes = currentDistributor[selectedDistributorCountry] ||
+        selectedDistributorCountryData.boxes;
+
+      return {
+        ...current,
+        [selectedDistributor]: {
+          ...currentDistributor,
+          [selectedDistributorCountry]: currentBoxes.map((box) =>
+            box.size === size ? { ...box, price: `$${cleanPrice}` } : box,
+          ),
+        },
+      };
+    });
+  }
+
+  function addInventoryCategory() {
+    const name = newCategoryName.trim();
+
+    if (!name || inventoryCategoryNames.includes(name)) {
+      return;
+    }
+
+    setCategoryConfigs((current) => [...current, { name, items: [] }]);
+    setSelectedInventoryCategory(name);
+    setNewCategoryName("");
+  }
+
+  function startEditInventoryCategory(name: string) {
+    setEditingCategory(name);
+    setEditingCategoryName(name);
+  }
+
+  function saveInventoryCategory(oldName: string) {
+    const name = editingCategoryName.trim();
+
+    if (!name || (name !== oldName && inventoryCategoryNames.includes(name))) {
+      return;
+    }
+
+    setCategoryConfigs((current) =>
+      current.map((currentCategory) =>
+        currentCategory.name === oldName ? { ...currentCategory, name } : currentCategory,
+      ),
+    );
+    setInventoryItems((current) =>
+      current.map((item) =>
+        item.category === oldName ? { ...item, category: name } : item,
+      ),
+    );
+    if (selectedInventoryCategory === oldName) {
+      setSelectedInventoryCategory(name);
+    }
+    setEditingCategory("");
+    setEditingCategoryName("");
+  }
+
+  function deleteInventoryCategory(name: string) {
+    const used = inventoryItems.some((item) => item.category === name);
+
+    if (used) {
+      return;
+    }
+
+    setCategoryConfigs((current) =>
+      current.filter((currentCategory) => currentCategory.name !== name),
+    );
+    if (selectedInventoryCategory === name) {
+      setSelectedInventoryCategory(categoryConfigs.find((item) => item.name !== name)?.name || "");
+    }
+    setNewTypeByCategory((current) => {
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
+  }
+
+  function addInventoryType(categoryName: string) {
+    const typeName = (newTypeByCategory[categoryName] || "").trim();
+
+    if (!typeName) {
+      return;
+    }
+
+    setCategoryConfigs((current) =>
+      current.map((currentCategory) => {
+        const items = categoryItems(currentCategory);
+
+        if (
+          currentCategory.name !== categoryName ||
+          inventoryItemExists(items, typeName)
+        ) {
+          return currentCategory;
+        }
+
+        return {
+          ...currentCategory,
+          items: [
+            ...items,
+            {
+              id: `${normalizeText(categoryName).replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
+              name: typeName,
+            },
+          ],
+        };
+      }),
+    );
+    setNewTypeByCategory((current) => ({ ...current, [categoryName]: "" }));
+  }
+
+  function addInventoryChildItem(categoryName: string, parentId: string) {
+    const inputKey = `${categoryName}:${parentId}`;
+    const itemName = (newTypeByCategory[inputKey] || "").trim();
+
+    if (!itemName) {
+      return;
+    }
+
+    setCategoryConfigs((current) =>
+      current.map((currentCategory) => {
+        if (currentCategory.name !== categoryName) {
+          return currentCategory;
+        }
+
+        return {
+          ...currentCategory,
+          items: addInventoryTreeChild(categoryItems(currentCategory), parentId, {
+            id: `${parentId}-${Date.now()}`,
+            name: itemName,
+          }),
+        };
+      }),
+    );
+    setNewTypeByCategory((current) => ({ ...current, [inputKey]: "" }));
+    setOpenChildInput("");
+    setCollapsedInventoryItems((current) => ({ ...current, [parentId]: false }));
+  }
+
+  function startEditInventoryType(categoryName: string, itemId: string, itemName: string) {
+    setEditingType({ category: categoryName, type: itemId });
+    setEditingTypeName(itemName);
+  }
+
+  function saveInventoryType(categoryName: string, itemId: string, oldName: string) {
+    const typeName = editingTypeName.trim();
+
+    if (!typeName) {
+      return;
+    }
+
+    setCategoryConfigs((current) =>
+      current.map((currentCategory) => {
+        if (currentCategory.name !== categoryName) {
+          return currentCategory;
+        }
+
+        return {
+          ...currentCategory,
+          items: updateInventoryTreeItem(categoryItems(currentCategory), itemId, typeName),
+        };
+      }),
+    );
+    setInventoryItems((current) =>
+      current.map((item) =>
+        item.category === categoryName && item.kind === oldName
+          ? { ...item, kind: typeName }
+          : item,
+      ),
+    );
+    setEditingType(null);
+    setEditingTypeName("");
+  }
+
+  function deleteInventoryType(categoryName: string, itemId: string, itemName: string) {
+    const used = inventoryItems.some(
+      (item) => item.category === categoryName && item.kind === itemName,
+    );
+
+    if (used) {
+      return;
+    }
+
+    setCategoryConfigs((current) =>
+      current.map((currentCategory) =>
+        currentCategory.name === categoryName
+          ? {
+              ...currentCategory,
+              items: deleteInventoryTreeItem(categoryItems(currentCategory), itemId),
+            }
+          : currentCategory,
+      ),
+    );
+  }
 
   function goBack() {
+    if (returnToInventory && section === "inventory") {
+      window.sessionStorage.removeItem("return-to-inventory");
+      window.location.href = "/inventario";
+      return;
+    }
+
+    if (section === "inventory" && inventoryConfigSection !== "menu") {
+      openInventoryConfigSection("menu");
+      return;
+    }
+
+    if (selectedDistributorCountry) {
+      setSelectedDistributorCountry(null);
+      return;
+    }
+
+    if (selectedDistributor) {
+      setSelectedDistributor(null);
+      return;
+    }
+
     if (selectedCountry) {
       setSelectedCountry(null);
       return;
     }
 
-    setSection("menu");
+    openConfigSection("menu");
+  }
+
+  function goConfigHome() {
+    setSelectedCountry(null);
+    setSelectedDistributor(null);
+    setSelectedDistributorCountry(null);
+    openInventoryConfigSection("menu", false);
+    openConfigSection("menu");
+  }
+
+  function toggleRouteDay(key: "deliveryDays" | "pickupDays", day: string) {
+    setRouteConfig((current) => {
+      const active = current[key].includes(day);
+
+      return {
+        ...current,
+        [key]: active
+          ? current[key].filter((currentDay) => currentDay !== day)
+          : [...current[key], day],
+      };
+    });
+  }
+
+  function addRouteRange(key: "deliveryRanges" | "pickupRanges", start: string, end: string) {
+    if (!start || !end) {
+      return;
+    }
+
+    const value = `${start}-${end}`;
+
+    setRouteConfig((current) => {
+      if (current[key].includes(value)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [key]: [...current[key], value].sort(),
+      };
+    });
+  }
+
+  function removeRouteRange(key: "deliveryRanges" | "pickupRanges", value: string) {
+    setRouteConfig((current) => ({
+      ...current,
+      [key]: current[key].filter((currentTime) => currentTime !== value),
+    }));
+  }
+
+  const backButton =
+    section === "menu" ? null : (
+      <button
+        onClick={goBack}
+        className="flex h-10 items-center gap-2 rounded-lg border border-black bg-surface-panel px-3 text-sm font-black border-black bg-surface-card"
+      >
+        <ArrowLeft className="h-5 w-5" />
+        Volver
+      </button>
+    );
+
+  function toggleInventoryGroup(itemId: string) {
+    setCollapsedInventoryItems((current) => ({
+      ...current,
+      [itemId]: current[itemId] === false,
+    }));
+  }
+
+  function renderInventoryTreeItems(items: InventoryTreeItem[], depth = 0) {
+    return items.map((item) => {
+      const inputKey = `${selectedInventoryCategoryData.name}:${item.id}`;
+      const editing =
+        editingType?.category === selectedInventoryCategoryData.name &&
+        editingType.type === item.id;
+      const typeInUse = inventoryItems.some(
+        (inventoryItem) =>
+          inventoryItem.category === selectedInventoryCategoryData.name &&
+          inventoryItem.kind === item.name,
+      );
+      const hasChildren = item.children !== undefined;
+      const isChildInputOpen = openChildInput === inputKey;
+      const isCollapsed =
+        hasChildren && collapsedInventoryItems[item.id] !== false;
+
+      return (
+        <div key={item.id} className="grid gap-1">
+          <div
+            className={`rounded-lg border bg-surface-panel ${
+              depth ? "border-black ml-5" : "border-black"
+            }`}
+          >
+            <div className="flex min-h-12 items-center gap-2 px-2">
+              {hasChildren ? (
+                <button
+                  onClick={() => toggleInventoryGroup(item.id)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-emerald-600 bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+                  title={isCollapsed ? "Expandir" : "Contraer"}
+                >
+                  <ChevronRight
+                    className={`h-4 w-4 transition ${isCollapsed ? "" : "rotate-90"}`}
+                  />
+                </button>
+              ) : (
+                <span className="h-2 w-2 shrink-0 rounded-full bg-surface-card" />
+              )}
+
+              {editing ? (
+                <input
+                  className={`${inputClass} h-9 min-w-0 flex-1`}
+                  value={editingTypeName}
+                  onChange={(event) => setEditingTypeName(event.target.value)}
+                />
+              ) : hasChildren ? (
+                <button
+                  onClick={() => toggleInventoryGroup(item.id)}
+                  className="min-w-0 flex-1 truncate text-left text-sm font-black text-[#f8fafc]"
+                  title={isCollapsed ? "Expandir" : "Contraer"}
+                >
+                  {item.name}
+                </button>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-sm font-black text-[#f8fafc]">
+                  {item.name}
+                </span>
+              )}
+
+              {editing ? (
+                <>
+                  <button
+                    onClick={() =>
+                      saveInventoryType(selectedInventoryCategoryData.name, item.id, item.name)
+                    }
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400 text-slate-950"
+                    title="Guardar item"
+                  >
+                    <Check className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingType(null);
+                      setEditingTypeName("");
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-black text-[#f8fafc]"
+                    title="Cancelar"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setOpenChildInput(isChildInputOpen ? "" : inputKey)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400 text-slate-950"
+                    title="Crear dentro"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() =>
+                      startEditInventoryType(
+                        selectedInventoryCategoryData.name,
+                        item.id,
+                        item.name,
+                      )
+                    }
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-black text-[#f8fafc] hover:border-black"
+                    title="Editar item"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() =>
+                      deleteInventoryType(
+                        selectedInventoryCategoryData.name,
+                        item.id,
+                        item.name,
+                      )
+                    }
+                    disabled={typeInUse}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-black text-[#f8fafc] enabled:hover:border-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={typeInUse ? "Item en uso" : "Borrar item"}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+            </div>
+
+            {isChildInputOpen ? (
+              <div className="grid grid-cols-[1fr_auto] gap-2 border-t border-black p-2">
+                <input
+                  className={`${inputClass} h-10 text-sm`}
+                  placeholder={`Nuevo dentro de ${item.name}`}
+                  value={newTypeByCategory[inputKey] || ""}
+                  onChange={(event) =>
+                    setNewTypeByCategory((current) => ({
+                      ...current,
+                      [inputKey]: event.target.value,
+                    }))
+                  }
+                />
+                <button
+                  onClick={() => addInventoryChildItem(selectedInventoryCategoryData.name, item.id)}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-400 text-slate-950"
+                  title="Crear subitem"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {item.children?.length && !isCollapsed
+            ? renderInventoryTreeItems(item.children, depth + 1)
+            : null}
+        </div>
+      );
+    });
   }
 
   return (
-    <AppShell
-      active="Configuracion"
-      title="Configuracion"
-      action={selectedCountry ? "Guardar cambios" : undefined}
-    >
+    <>
       {section === "menu" ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {sections.map((item) => {
-            const Icon = item.icon;
+        <Panel title="Configuracion" hideHeader>
+          <div className="mb-4 min-w-0">
+            <p className="text-xs font-black uppercase text-slate-400">Sistema</p>
+            <h3 className="truncate text-2xl font-black">Configuracion</h3>
+          </div>
 
-            return (
-              <button
-                key={item.id}
-                onClick={() => setSection(item.id)}
-                className="min-h-44 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm hover:border-emerald-400 hover:bg-emerald-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-700 dark:hover:bg-emerald-950"
-              >
-                <span
-                  className={`mb-5 flex h-16 w-16 items-center justify-center rounded-lg text-white ${item.color}`}
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
+            {sections.map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <Link
+                  key={item.id}
+                  href={`/configuracion?view=${item.id}`}
+                  className="flex min-w-0 items-center gap-3 rounded-lg border border-black bg-surface-card p-4 text-left shadow-sm transition hover:border-black"
                 >
-                  <Icon className="h-9 w-9" />
-                </span>
-                <span className="block text-2xl font-black">{item.title}</span>
-                <span className="mt-2 block text-lg font-semibold text-slate-500 dark:text-slate-400">
-                  {item.text}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <button
-          onClick={goBack}
-          className="mb-5 flex h-12 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 font-black dark:border-slate-700 dark:bg-slate-900"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          Volver
-        </button>
-      )}
+                  <span
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-950 ${item.color}`}
+                  >
+                    <Icon className="h-6 w-6" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block break-words text-xl font-black leading-tight">
+                      {item.title}
+                    </span>
+                    <span className="mt-1 block break-words text-sm font-bold leading-snug text-slate-300">
+                      {item.text}
+                    </span>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </Panel>
+      ) : null}
 
       {section === "prices" && !selectedCountry ? (
-        <Panel title="Paises y precios">
-          <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_auto]">
-            <input
-              className="h-14 rounded-lg border border-slate-200 px-4 text-lg font-bold outline-none focus:border-emerald-500 dark:border-slate-700"
-              placeholder="Nombre del pais"
-            />
-            <button className="flex h-14 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-6 text-lg font-black text-slate-950">
+        <Panel title="Paises y precios" action={backButton}>
+          <div className="mb-5 grid gap-3">
+            <button
+              onClick={() => setShowCountryPicker((current) => !current)}
+              className="flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-[#34D399] px-6 text-lg font-black text-[#f8fafc] sm:w-fit"
+            >
               <Plus className="h-6 w-6" />
               Crear pais
             </button>
+            {showCountryPicker ? (
+              <div className="rounded-xl border border-black bg-surface-card p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-xl font-black">Elegir pais</p>
+                  <button
+                    onClick={() => {
+                      setCountryQuery("");
+                      setShowCountryPicker(false);
+                    }}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-black border-black"
+                    aria-label="Cerrar"
+                    title="Cerrar"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="relative mb-4">
+                  <Search className="absolute left-4 top-1/2 h-6 w-6 -translate-y-1/2 text-slate-500" />
+                  <input
+                    className={`${inputClass} w-full pl-12`}
+                    placeholder="Buscar pais"
+                    value={countryQuery}
+                    onChange={(event) => setCountryQuery(event.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="grid max-h-96 gap-2 overflow-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+                  {filteredCountryOptions.map((country) => (
+                    <button
+                      key={country.code || country.name}
+                      onClick={() => addCountry(country)}
+                      className="flex items-center gap-3 rounded-lg border border-black bg-surface-panel px-4 py-3 text-left text-lg font-black hover:border-black hover:bg-surface-card"
+                    >
+                      <CountryFlag code={country.code} />
+                      <span>{country.name}</span>
+                    </button>
+                  ))}
+                  {!filteredCountryOptions.length ? (
+                    <div className="rounded-lg border border-black bg-surface-panel px-4 py-3 text-lg font-black border-black bg-surface-panel">
+                      Sin resultados
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {countries.map(([country, detail]) => (
-              <button
-                key={country}
-                onClick={() => setSelectedCountry(country)}
-                className="min-h-36 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm hover:border-emerald-400 hover:bg-emerald-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-700 dark:hover:bg-emerald-950"
+          {!showCountryPicker ? (
+            <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+              {countries.map((country) => (
+                <button
+                  key={country.name}
+                  onClick={() => setSelectedCountry(country.name)}
+                  className="group relative min-h-40 overflow-hidden rounded-xl border border-black bg-surface-panel p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-black hover:shadow-lg border-black bg-surface-card hover:border-black"
+                >
+                  <div className="relative flex h-full items-center justify-between gap-5">
+                    <div className="flex min-w-0 items-center gap-4">
+                      <CountryFlag code={country.code} large />
+                      <span className="min-w-0">
+                        <span className="block truncate text-3xl font-black leading-tight">
+                          {country.name}
+                        </span>
+                        <span className="mt-3 flex flex-wrap gap-2">
+                          <span className="inline-flex h-9 items-center gap-2 rounded-full border border-black bg-surface-panel px-3 text-sm font-black text-slate-300">
+                            <Box className="h-4 w-4 text-slate-400" />
+                            {country.boxes.length} productos
+                          </span>
+                          <span className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-600 bg-emerald-400 text-slate-950 px-3 text-sm font-black">
+                            <Clock className="h-4 w-4" />
+                            {country.deliveryTime}
+                          </span>
+                        </span>
+                      </span>
+                    </div>
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-panel text-slate-300 transition group-hover:border-black group-hover:bg-emerald-400 group-hover:text-slate-950">
+                      <ChevronRight className="h-6 w-6" />
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </Panel>
+      ) : null}
+
+      {section === "prices" && selectedCountry ? (
+        <Panel
+          action={backButton}
+          title={
+            <span className="flex items-center gap-3">
+              <CountryFlag code={selectedCountryData?.code || ""} />
+              <span>{selectedCountry} - tiempos y cajas</span>
+            </span>
+          }
+        >
+          <div className="mb-5 flex w-fit max-w-full flex-wrap items-center gap-3">
+            <span className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-600 bg-emerald-400 text-slate-950 px-3 text-sm font-black uppercase">
+              <Clock className="h-4 w-4" />
+              Tiempo
+            </span>
+            <TimeRangeSelect
+              value={selectedCountryData?.deliveryTime || "5-8 dias"}
+              onChange={updateCountryTime}
+            />
+          </div>
+
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-4">
+            {(selectedCountryData?.boxes || []).map((box) => (
+              <div
+                key={box.size}
+                className="relative overflow-hidden rounded-lg border border-black bg-surface-card p-4 shadow-[0_14px_34px_rgba(0,0,0,0.34)]"
               >
-                <p className="text-3xl font-black">{country}</p>
-                <p className="mt-2 text-lg font-bold text-slate-500 dark:text-slate-400">
-                  {detail}
+                <div className="mb-3 flex items-center gap-3">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card-header text-slate-400">
+                    <Box className="h-7 w-7" />
+                  </span>
+                  <span className="text-sm font-black uppercase text-slate-400 text-slate-400">
+                    Caja
+                  </span>
+                </div>
+                <p className="mb-5 whitespace-nowrap text-center text-2xl font-black leading-tight text-slate-300">
+                  {box.size}
                 </p>
-              </button>
+
+                <label className="flex h-14 items-center justify-between gap-2 rounded-xl border border-black bg-surface-panel px-3">
+                  <span className="text-sm font-black uppercase text-slate-400 text-slate-400">
+                    Precio publico
+                  </span>
+                  <span className="flex h-10 w-28 items-center justify-center gap-1 text-slate-400">
+                    <DollarSign className="h-5 w-5 shrink-0" />
+                    <input
+                      className="h-10 w-20 rounded-none border-0 bg-transparent px-0 text-center text-2xl font-black leading-10 text-[#f8fafc] outline-none focus:ring-0"
+                      style={{ background: "transparent" }}
+                      value={box.price.replace("$", "")}
+                      onChange={(event) =>
+                        updateCountryBoxPrice(box.size, event.target.value)
+                      }
+                    />
+                  </span>
+                </label>
+              </div>
             ))}
           </div>
         </Panel>
       ) : null}
 
-      {section === "prices" && selectedCountry ? (
-        <Panel title={`${selectedCountry} - configurar cajas`}>
-          <div className="grid gap-4">
-            {inventoryBoxes.map(([size, stock, customerPrice, carrierCost, carrier, time]) => (
-              <div
-                key={size}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950"
-              >
-                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-2xl font-black">Caja {size}</p>
-                    <p className="font-bold text-slate-500 dark:text-slate-400">
-                      Stock global: {stock}
-                    </p>
-                  </div>
-                  <button className="h-11 rounded-lg bg-slate-950 px-5 font-black text-white dark:bg-slate-100 dark:text-slate-950">
-                    Activa
+      {section === "distributors" && !selectedDistributor ? (
+        <Panel title="Distribuidores globales" action={backButton}>
+          <div className="mb-5 grid gap-3">
+            <button
+              onClick={() => setShowDistributorForm((current) => !current)}
+              className="flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-6 text-lg font-black text-[#f8fafc] sm:w-fit"
+            >
+              <Plus className="h-6 w-6" />
+              Crear distribuidor
+            </button>
+
+            {showDistributorForm ? (
+              <div className="rounded-xl border border-black bg-surface-card p-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  {[
+                    ["Nombre", "name", "Ej: MGS"],
+                    ["Contacto", "contact", "Ej: Operaciones"],
+                    ["Telefono", "phone", "Ej: (305) 000-0000"],
+                  ].map(([label, key, placeholder]) => (
+                    <label key={key} className="grid gap-2">
+                      <span className="text-sm font-black uppercase text-slate-400 text-slate-400">
+                        {label}
+                      </span>
+                      <input
+                        className={inputClass}
+                        placeholder={placeholder}
+                        value={newDistributor[key as keyof typeof newDistributor]}
+                        onChange={(event) =>
+                          setNewDistributor((current) => ({
+                            ...current,
+                            [key]: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    onClick={addDistributor}
+                    className="h-11 rounded-lg bg-[#34D399] px-5 font-black text-[#f8fafc]"
+                  >
+                    Guardar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setNewDistributor(emptyDistributor);
+                      setShowDistributorForm(false);
+                    }}
+                    className="h-11 rounded-lg border border-black px-5 font-black border-black"
+                  >
+                    Cancelar
                   </button>
                 </div>
+              </div>
+            ) : null}
+          </div>
 
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                  <label className="grid gap-2">
-                    <span className="font-black">Cliente paga</span>
-                    <input className={inputClass} defaultValue={customerPrice} />
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="font-black">Distribuidora cobra</span>
-                    <input className={inputClass} defaultValue={carrierCost} />
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="font-black">Carrier</span>
-                    <input className={inputClass} defaultValue={carrier} />
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="font-black">Tiempo</span>
-                    <input className={inputClass} defaultValue={time} />
-                  </label>
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-100 p-3 dark:border-emerald-800 dark:bg-emerald-950">
-                    <p className="font-bold text-emerald-700 dark:text-emerald-300">
-                      Ganancia
-                    </p>
-                    <p className="text-2xl font-black text-emerald-800 dark:text-emerald-200">
-                      $40
-                    </p>
-                  </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {distributors.map((distributor) => (
+              <div
+                key={distributor.name}
+                onClick={() => setSelectedDistributor(distributor.name)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    setSelectedDistributor(distributor.name);
+                  }
+                }}
+                className="relative overflow-hidden rounded-lg border border-black bg-surface-card p-5 shadow-[0_14px_34px_rgba(0,0,0,0.34)] transition hover:bg-surface-card-hover"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950 text-slate-400">
+                    <Truck className="h-8 w-8" />
+                  </span>
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleDistributor(distributor.name);
+                    }}
+                    className={`h-9 rounded-full px-4 text-sm font-black ${
+                      distributor.active
+                        ? "border border-emerald-600 bg-emerald-400 text-slate-950"
+                        : "bg-surface-inset text-slate-300"
+                    }`}
+                  >
+                    {distributor.active ? "Activo" : "Apagado"}
+                  </button>
+                </div>
+                <p className="mt-5 text-3xl font-black leading-tight">{distributor.name}</p>
+                <p className="mt-2 text-base font-bold text-slate-300">
+                  {distributor.contact} · {distributor.phone}
+                </p>
+                <div className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-600 bg-emerald-400 text-slate-950 px-4 text-sm font-black">
+                  Configurar precios
+                  <ChevronRight className="h-4 w-4" />
                 </div>
               </div>
             ))}
@@ -198,14 +1697,399 @@ export default function ConfiguracionPage() {
         </Panel>
       ) : null}
 
+      {section === "distributors" && selectedDistributor && !selectedDistributorCountry ? (
+        <Panel
+          action={backButton}
+          title={
+            <span className="flex flex-wrap items-center gap-3">
+              <Truck className="h-7 w-7 text-slate-400" />
+              <span>Editando precios para {selectedDistributorData?.name}</span>
+            </span>
+          }
+        >
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            {countries.map((country) => (
+              <button
+                key={country.name}
+                onClick={() => setSelectedDistributorCountry(country.name)}
+                className="group relative min-h-36 overflow-hidden rounded-lg border border-black bg-surface-card p-5 text-left shadow-[0_14px_34px_rgba(0,0,0,0.34)] transition hover:bg-surface-card-hover"
+              >
+                <div className="relative flex h-full items-center justify-between gap-5">
+                  <div className="flex min-w-0 items-center gap-4">
+                    <CountryFlag code={country.code} large />
+                    <span className="min-w-0">
+                      <span className="block truncate text-3xl font-black leading-tight">
+                        {country.name}
+                      </span>
+                      <span className="mt-3 flex flex-wrap gap-2">
+                        <span className="inline-flex h-9 items-center gap-2 rounded-full border border-black bg-surface-panel px-3 text-sm font-black text-slate-300">
+                          <Box className="h-4 w-4 text-slate-400" />
+                          {country.boxes.length} productos
+                        </span>
+                        <span className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-600 bg-emerald-400 text-slate-950 px-3 text-sm font-black">
+                          Editar precios
+                        </span>
+                      </span>
+                    </span>
+                  </div>
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-panel text-slate-300 transition group-hover:border-black group-hover:bg-emerald-400 group-hover:text-slate-950">
+                    <ChevronRight className="h-6 w-6" />
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+
+      {section === "distributors" && selectedDistributor && selectedDistributorCountry ? (
+        <Panel
+          action={backButton}
+          title={
+            <span className="flex flex-wrap items-center gap-3">
+              <Truck className="h-7 w-7 text-slate-400" />
+              <span>
+                {selectedDistributor} · {selectedDistributorCountry}
+              </span>
+            </span>
+          }
+        >
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
+            {selectedDistributorBoxes.map((box) => {
+              const publicPrice =
+                selectedDistributorCountryData?.boxes.find(
+                  (publicBox) => publicBox.size === box.size,
+                )?.price || box.price;
+              const profit = parseMoney(publicPrice) - parseMoney(box.price);
+
+              return (
+                <div
+                  key={box.size}
+                  className="relative overflow-hidden rounded-lg border border-black bg-surface-card p-5 shadow-[0_14px_34px_rgba(0,0,0,0.34)]"
+                >
+                  <div className="mb-5 flex items-center gap-4">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950 text-slate-400">
+                      <Box className="h-8 w-8" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-black uppercase text-slate-400 text-slate-400">
+                        Producto
+                      </span>
+                      <span className="block whitespace-nowrap text-2xl font-black leading-tight text-slate-300">
+                        {box.size}
+                      </span>
+                    </span>
+                  </div>
+
+                  <div className="grid gap-3">
+                    <div className="flex h-14 items-center justify-between gap-4 rounded-xl border border-black bg-surface-panel px-4">
+                      <span className="text-sm font-black uppercase text-slate-400 text-slate-400">
+                        Publico general
+                      </span>
+                      <span className="flex h-10 w-28 items-center justify-center gap-1 text-[#f8fafc]">
+                        <DollarSign className="h-5 w-5 shrink-0" />
+                        <span className="text-2xl font-black leading-10">
+                          {publicPrice.replace("$", "")}
+                        </span>
+                      </span>
+                    </div>
+
+                    <label className="flex h-14 items-center justify-between gap-4 rounded-xl border border-emerald-600 bg-emerald-400 px-4 text-slate-950">
+                      <span className="text-sm font-black uppercase text-slate-400 text-slate-400">
+                        Precio distribuidor
+                      </span>
+                      <span className="flex h-10 w-28 items-center justify-center gap-1 text-slate-400">
+                        <DollarSign className="h-5 w-5 shrink-0" />
+                        <input
+                          className="h-10 w-20 rounded-none border-0 bg-transparent px-0 text-center text-2xl font-black leading-10 text-[#f8fafc] outline-none focus:ring-0"
+                          style={{ background: "transparent" }}
+                          value={box.price.replace("$", "")}
+                          onChange={(event) =>
+                            updateDistributorPrice(box.size, event.target.value)
+                          }
+                        />
+                      </span>
+                    </label>
+
+                    <div className="flex h-14 items-center justify-between gap-4 rounded-xl border border-black bg-surface-panel px-4">
+                      <span className="text-sm font-black uppercase text-slate-400 text-slate-400">
+                        Ganancia
+                      </span>
+                      <span className="flex h-10 w-28 items-center justify-center gap-1 text-slate-400">
+                        <DollarSign className="h-5 w-5 shrink-0" />
+                        <span className="text-2xl font-black leading-10 text-[#f8fafc]">
+                          {profit}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      ) : null}
+
+      {section === "inventory" ? (
+        <Panel
+          title={inventoryConfigSection === "menu" ? "Inventario" : "Categorias e items"}
+          action={backButton}
+        >
+          {inventoryConfigSection === "menu" ? (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,340px))] justify-start gap-4">
+              <a
+                href="/configuracion?view=inventory&inventory=categories"
+                className="group rounded-xl border border-black bg-surface-card p-5 text-left shadow-sm transition hover:border-black"
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950 text-slate-400">
+                  <Box className="h-7 w-7" />
+                </span>
+                <span className="mt-5 block text-3xl font-black leading-tight">
+                  Categorias e items
+                </span>
+                <span className="mt-2 block text-base font-bold text-slate-300">
+                  Subcategorias y objetos del inventario.
+                </span>
+                <span className="mt-5 flex gap-2">
+                  <span className="rounded-lg border border-black bg-surface-panel px-3 py-2 text-sm font-black text-slate-400">
+                    {categoryConfigs.length} categorias
+                  </span>
+                  <span className="rounded-lg border border-black bg-surface-panel px-3 py-2 text-sm font-black text-[#f8fafc]">
+                    {categoryConfigs.reduce((sum, current) => sum + countInventoryTreeItems(categoryItems(current)), 0)} items
+                  </span>
+                </span>
+              </a>
+
+              <div className="rounded-xl border border-dashed border-black bg-surface-card p-5 text-left ">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-panel text-slate-400">
+                  <Plus className="h-7 w-7" />
+                </span>
+                <span className="mt-5 block text-2xl font-black leading-tight">
+                  Proxima configuracion
+                </span>
+                <span className="mt-2 block text-base font-bold text-slate-400">
+                  Aqui agregamos mas opciones despues.
+                </span>
+              </div>
+            </div>
+          ) : null}
+
+          {inventoryConfigSection === "categories" ? (
+            <InventoryStructureEditor
+              layout="inline"
+              showCategoryCreate
+              categoryConfigs={categoryConfigs}
+              onCategoryConfigsChange={setCategoryConfigs}
+            />
+          ) : null}
+        </Panel>
+      ) : null}
+
+      {section === "deliveries" ? (
+        <Panel title="Rutas y horarios" action={backButton}>
+          <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+            {[
+              {
+                title: "Entrega de caja vacia",
+                text: "Horarios para llevar caja al cliente.",
+                daysKey: "deliveryDays" as const,
+                rangesKey: "deliveryRanges" as const,
+                newRange: newDeliveryRange,
+                setNewRange: setNewDeliveryRange,
+              },
+              {
+                title: "Recoleccion de caja llena",
+                text: "Horarios para recoger caja en domicilio.",
+                daysKey: "pickupDays" as const,
+                rangesKey: "pickupRanges" as const,
+                newRange: newPickupRange,
+                setNewRange: setNewPickupRange,
+              },
+            ].map((route) => (
+              <div
+                key={route.title}
+                className="rounded-xl border border-black bg-surface-card p-4"
+              >
+                <div className="mb-4 flex items-start gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-surface-panel text-slate-400">
+                    <Truck className="h-6 w-6" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-xl font-black leading-tight">
+                      {route.title}
+                    </span>
+                    <span className="mt-1 block text-sm font-bold text-slate-300">
+                      {route.text}
+                    </span>
+                  </span>
+                </div>
+
+                <div className="grid gap-4">
+                  <div>
+                    <p className="mb-2 text-xs font-black uppercase text-slate-400">
+                      Dias de ruta
+                    </p>
+                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                      {weekDays.map((day) => {
+                        const active = routeConfig[route.daysKey].includes(day);
+
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => toggleRouteDay(route.daysKey, day)}
+                            className={`h-10 rounded-lg border text-sm font-black ${
+                              active
+                                ? "border-black bg-emerald-400 text-slate-950"
+                                : "border-black bg-surface-panel text-[#f8fafc] hover:border-black"
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-xs font-black uppercase text-slate-400">
+                      Rangos disponibles
+                    </p>
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {routeConfig[route.rangesKey].map((range) => (
+                        <button
+                          key={range}
+                          type="button"
+                          onClick={() => removeRouteRange(route.rangesKey, range)}
+                          className="group inline-flex h-10 items-center gap-2 rounded-lg border border-black bg-surface-card-header px-3 text-sm font-black text-[#f8fafc]"
+                          title="Quitar rango"
+                        >
+                          {formatRouteRange(range)}
+                          <X className="h-4 w-4 opacity-60 group-hover:opacity-100" />
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                      <input
+                        className={inputClass}
+                        type="time"
+                        value={route.newRange.start}
+                        onChange={(event) =>
+                          route.setNewRange((current) => ({
+                            ...current,
+                            start: event.target.value,
+                          }))
+                        }
+                      />
+                      <input
+                        className={inputClass}
+                        type="time"
+                        value={route.newRange.end}
+                        onChange={(event) =>
+                          route.setNewRange((current) => ({
+                            ...current,
+                            end: event.target.value,
+                          }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          addRouteRange(route.rangesKey, route.newRange.start, route.newRange.end);
+                          route.setNewRange({ start: "", end: "" });
+                        }}
+                        className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-400 text-slate-950"
+                        title="Agregar rango"
+                      >
+                        <Plus className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            <div className="rounded-lg border border-black bg-surface-card p-4 shadow-[0_14px_34px_rgba(0,0,0,0.34)] xl:col-span-2">
+              <div className="mb-4 flex items-start gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-surface-panel text-slate-400">
+                  <Clock className="h-6 w-6" />
+                </span>
+                <span>
+                  <span className="block text-xl font-black">Reglas generales</span>
+                  <span className="mt-1 block text-sm font-bold text-slate-300">
+                    Opciones que usan entrega y recoleccion.
+                  </span>
+                </span>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="grid gap-2">
+                  <span className="text-xs font-black uppercase text-slate-400">
+                    Anticipacion minima
+                  </span>
+                  <select
+                    className={inputClass}
+                    value={routeConfig.routeLeadTime}
+                    onChange={(event) =>
+                      setRouteConfig((current) => ({
+                        ...current,
+                        routeLeadTime: event.target.value,
+                      }))
+                    }
+                  >
+                    <option>1 dia</option>
+                    <option>2 dias</option>
+                    <option>3 dias</option>
+                    <option>1 semana</option>
+                  </select>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setRouteConfig((current) => ({
+                      ...current,
+                      pendingAllowed: !current.pendingAllowed,
+                    }))
+                  }
+                  className={`flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 text-left font-black ${
+                    routeConfig.pendingAllowed
+                      ? "border border-emerald-600 bg-emerald-400 text-slate-950"
+                      : "border-black bg-surface-panel text-[#f8fafc]"
+                  }`}
+                >
+                  Permitir dejar pendiente
+                  <span
+                    className={`h-6 w-11 rounded-full p-1 transition ${
+                      routeConfig.pendingAllowed ? "bg-emerald-400" : "bg-surface-card"
+                    }`}
+                  >
+                    <span
+                      className={`block h-4 w-4 rounded-full bg-slate-950 transition ${
+                        routeConfig.pendingAllowed ? "translate-x-5" : ""
+                      }`}
+                    />
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </Panel>
+      ) : null}
+
       {section === "appearance" ? (
-        <Panel title="Apariencia">
-          <ThemeToggle />
+        <Panel title="Apariencia" action={backButton}>
+          <div className="rounded-xl border border-black bg-surface-panel p-5 shadow-sm">
+            <p className="text-xl font-black">Tema unico</p>
+            <p className="mt-2 font-bold text-slate-400">
+              Una sola paleta activa para todo el sistema.
+            </p>
+          </div>
         </Panel>
       ) : null}
 
       {section === "company" ? (
-        <Panel title="Empresa">
+        <Panel title="Empresa" action={backButton}>
           <div className="grid gap-4 md:grid-cols-2">
             {["Nombre empresa", "Telefono", "Direccion", "Moneda"].map((label) => (
               <label key={label} className="grid gap-2">
@@ -218,12 +2102,12 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {section === "users" ? (
-        <Panel title="Usuarios">
+        <Panel title="Usuarios" action={backButton}>
           <div className="grid gap-3">
-            {["Dueño", "Empleado caja", "Driver"].map((user) => (
+            {["Dueno", "Empleado caja", "Driver"].map((user) => (
               <div
                 key={user}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xl font-black dark:border-slate-800 dark:bg-slate-950"
+                className="rounded-xl border border-black bg-surface-card p-4 text-xl font-black"
               >
                 {user}
               </div>
@@ -231,6 +2115,6 @@ export default function ConfiguracionPage() {
           </div>
         </Panel>
       ) : null}
-    </AppShell>
+    </>
   );
 }

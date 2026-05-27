@@ -1,4 +1,53 @@
 import { LucideIcon } from "lucide-react";
+import Link from "next/link";
+
+export const inputClass =
+  "h-11 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc] outline-none focus:border-black";
+
+export const primaryButtonClass =
+  "inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 text-sm font-black text-slate-950";
+
+export const secondaryButtonClass =
+  "inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc] hover:border-black hover:bg-surface-card";
+
+export const cardHeaderClass =
+  "flex items-center gap-3 border-b border-black bg-surface-card-header px-4 py-3";
+
+/** Header band for split cards (inventario categorías, items, etc.) */
+export const cardBodyHeaderClass = "border-b border-black bg-surface-card-header";
+
+export const cardClass =
+  "rounded-xl border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)]";
+
+export const cardHoverClass =
+  "transition-colors hover:border-black hover:bg-surface-card-hover";
+
+export const accentEmeraldSolid =
+  "border border-emerald-600 bg-emerald-400 text-slate-950";
+
+export const accentAmberSolid = "border border-amber-600 bg-amber-400 text-slate-950";
+
+export const accentSkySolid = "border border-sky-600 bg-sky-400 text-slate-950";
+
+export const accentRoseSolid = "border border-rose-600 bg-rose-400 text-slate-950";
+
+export const accentMutedSolid = "border border-black bg-surface-inset text-slate-300";
+
+export const iconWellEmerald =
+  "flex items-center justify-center rounded-lg border border-emerald-600 bg-emerald-400 text-slate-950";
+
+export const iconWellMuted =
+  "flex items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300";
+
+export const alertAmberSolid =
+  "rounded-lg border border-amber-600 bg-amber-400 font-black text-slate-950";
+
+export const badgeEmeraldSolid =
+  "inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-emerald-400 font-black text-slate-950";
+
+export const labelMutedClass = "text-xs font-black uppercase text-slate-500";
+
+export const textMutedClass = "text-sm font-bold text-slate-300";
 
 export function StatCard({
   label,
@@ -10,9 +59,11 @@ export function StatCard({
   tone: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <p className="text-base font-bold text-slate-500 dark:text-slate-400">{label}</p>
-      <p className={`mt-2 text-4xl font-black ${tone}`}>{value}</p>
+    <div className="overflow-hidden rounded-lg border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
+      <p className="border-b border-black bg-surface-card-header px-3 py-2 text-xs font-black uppercase text-slate-400">
+        {label}
+      </p>
+      <p className={`px-3 py-3 text-3xl font-black ${tone}`}>{value}</p>
     </div>
   );
 }
@@ -22,38 +73,64 @@ export function BigAction({
   text,
   icon: Icon,
   color,
+  href,
 }: {
   title: string;
   text: string;
   icon: LucideIcon;
   color: string;
+  href?: string;
 }) {
-  return (
-    <button className="min-h-44 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+  const className = `${cardClass} ${cardHoverClass} block p-4 text-left`;
+  const content = (
+    <>
       <span
-        className={`mb-5 flex h-16 w-16 items-center justify-center rounded-lg text-white ${color}`}
+        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-lg border border-black text-slate-950 ${color}`}
       >
-        <Icon className="h-9 w-9" />
+        <Icon className="h-6 w-6" />
       </span>
-      <span className="block text-2xl font-black">{title}</span>
-      <span className="mt-2 block text-lg font-semibold text-slate-500 dark:text-slate-400">
-        {text}
-      </span>
-    </button>
+      <span className="block text-xl font-black text-[#f8fafc]">{title}</span>
+      <span className={`mt-1 block ${textMutedClass}`}>{text}</span>
+    </>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {content}
+      </Link>
+    );
+  }
+
+  return <button className={className}>{content}</button>;
 }
 
 export function Panel({
   title,
+  action,
+  hideHeader = false,
   children,
+  className,
+  contentClassName,
 }: {
-  title: string;
+  title: React.ReactNode;
+  action?: React.ReactNode;
+  hideHeader?: boolean;
   children: React.ReactNode;
+  className?: string;
+  contentClassName?: string;
 }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <h3 className="mb-4 text-2xl font-black">{title}</h3>
-      {children}
+    <section
+      className={`overflow-hidden rounded-xl border border-black bg-surface-panel shadow-md ${className ?? ""}`}
+    >
+      {hideHeader ? null : (
+        <div className={`flex flex-wrap items-center gap-3 sm:px-5 ${cardHeaderClass}`}>
+          {action}
+          <h3 className="min-w-0 text-xl font-black tracking-tight text-[#f8fafc] sm:text-2xl">{title}</h3>
+        </div>
+      )}
+      <div className={`p-4 sm:p-5 ${contentClassName ?? ""}`}>{children}</div>
     </section>
   );
 }

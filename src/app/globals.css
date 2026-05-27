@@ -1,38 +1,28 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
 :root {
-  --background: #f6f7fb;
-  --foreground: #0f172a;
-  color-scheme: light;
-}
-
-:root.dark {
-  --background: #020617;
+  --background: #263241;
   --foreground: #f8fafc;
+  --surface-shell: #29312d;
+  --surface-panel: #1e2623;
+  --surface-card: #3d4844;
+  --surface-card-hover: #47534e;
+  --surface-card-header: #252e2b;
+  --surface-inset: #2a322f;
   color-scheme: dark;
-}
-
-:root.light {
-  --background: #f6f7fb;
-  --foreground: #0f172a;
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    --background: #020617;
-    --foreground: #f8fafc;
-    color-scheme: dark;
-  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface-shell: var(--surface-shell);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-card: var(--surface-card);
+  --color-surface-card-hover: var(--surface-card-hover);
+  --color-surface-card-header: var(--surface-card-header);
+  --color-surface-inset: var(--surface-inset);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: Consolas, "Courier New", monospace;
 }
 
 body {
@@ -41,19 +31,140 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+input,
+select,
+textarea {
+  border-color: #334155;
+}
+
 button {
   cursor: pointer;
 }
 
-input {
-  background: white;
+button:focus {
+  outline: none;
 }
 
-.dark input {
-  background: #0f172a;
-  color: white;
+button:focus-visible {
+  outline: 2px solid #34d399;
+  outline-offset: 2px;
 }
 
-.dark input::placeholder {
-  color: #94a3b8;
+input:not(.client-form-field) {
+  background: #0B1220;
+}
+
+input.client-form-field {
+  background-color: var(--surface-inset);
+  color: #f8fafc;
+}
+
+select {
+  background: #0B1220;
+  color: #f8fafc;
+}
+
+input::placeholder {
+  color: #cbd5e1;
+}
+
+@keyframes enter-left {
+  from {
+    opacity: 0;
+    transform: translateX(-10px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes enter-top {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.motion-enter-left {
+  animation: enter-left 220ms ease-out both;
+}
+
+.motion-enter-top {
+  animation: enter-top 220ms ease-out both;
+}
+
+::view-transition-old(.app-fade) {
+  animation: app-fade-out 120ms ease-out both;
+}
+
+::view-transition-new(.app-fade) {
+  animation: app-fade-in 180ms ease-out both;
+}
+
+::view-transition-old(.inventory-view) {
+  animation: inventory-view-out 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+::view-transition-new(.inventory-view) {
+  animation: inventory-view-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes inventory-view-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px) scale(0.988);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes inventory-view-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-14px) scale(0.988);
+  }
+}
+
+@keyframes app-fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes app-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-enter-left,
+  .motion-enter-top,
+  ::view-transition-old(.app-fade),
+  ::view-transition-new(.app-fade),
+  ::view-transition-old(.inventory-view),
+  ::view-transition-new(.inventory-view) {
+    animation: none;
+  }
 }
