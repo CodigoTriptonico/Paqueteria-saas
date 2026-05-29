@@ -13,6 +13,7 @@ import {
   Shield,
 } from "lucide-react";
 import { useEffect, useMemo, useState, ViewTransition } from "react";
+import { UserAccountMenu } from "@/components/user-account-menu";
 import { canAccessPath } from "@/lib/auth/permissions";
 import type { AppSession } from "@/lib/auth/types";
 
@@ -223,9 +224,23 @@ export function AppShell({
               })}
             </nav>
           )}
+
+          {!navCollapsed ? (
+            <div className="mt-auto hidden pt-4 lg:block">
+              <UserAccountMenu session={session} variant="sidebar" />
+            </div>
+          ) : null}
         </aside>
 
         <section className="min-w-0 flex-1">
+          <div
+            className={`motion-enter-top sticky top-3 z-50 mb-4 flex justify-end lg:top-5 ${
+              navCollapsed ? "lg:flex" : "lg:hidden"
+            }`}
+          >
+            <UserAccountMenu session={session} variant="bar" />
+          </div>
+
           {navCollapsed && showCompactSidebar ? (
             <div className="motion-enter-top sticky top-3 z-50 mb-4 grid gap-3 lg:hidden">
               {hideCompactNavHeader ? null : (
