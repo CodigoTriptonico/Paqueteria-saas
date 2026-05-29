@@ -37,7 +37,19 @@ Cada vez que hagas **push** a la rama `main`, Vercel reconstruye y actualiza:
 
 **https://paqueteria-saas.vercel.app**
 
-### Flujo en tu PC
+### Interfaz grafica (recomendado)
+
+Doble clic en el archivo:
+
+**`PUBLICAR-EN-INTERNET.bat`**
+
+(o ejecuta `npm run publish:gui`)
+
+Botones:
+1. **Probar en mi PC** — abre localhost
+2. **PUBLICAR EN INTERNET** — sube todo y Vercel actualiza el link
+
+### Flujo en terminal (opcional)
 
 1. Editas codigo y pruebas en local: `npm run dev`
 2. Cuando quieras publicar:
@@ -64,7 +76,7 @@ En 1-2 minutos el link online tiene la version nueva.
 
 - **Next.js 16** (App Router) + **Supabase** (Auth + Postgres + RLS)
 - Server Actions en `src/app/actions/`
-- Middleware de sesión y guards por rol en `src/middleware.ts`
+- Proxy de sesión y guards por rol en `src/proxy.ts`
 - Super-admin de plataforma en `/platform` (tabla `platform_admins`, ver SETUP.md §7)
 
 ## Sin Supabase

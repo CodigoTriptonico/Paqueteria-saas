@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:check": "node scripts/check-schema.mjs",
     "db:apply": "node scripts/apply-migrations.mjs",
-    "publish:online": "powershell -ExecutionPolicy Bypass -File scripts/publish-online.ps1"
+    "publish:online": "powershell -ExecutionPolicy Bypass -File scripts/publish-online.ps1",
+    "publish:gui": "powershell -ExecutionPolicy Bypass -File scripts/publish-gui.ps1"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
