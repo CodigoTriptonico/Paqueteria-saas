@@ -4,26 +4,29 @@ import {
   ArrowLeft,
   Box,
   Building2,
-  Check,
   ChevronDown,
   ChevronRight,
   Clock,
   DollarSign,
-  Edit3,
   Globe2,
   Palette,
   Plus,
   Search,
-  Trash2,
   Truck,
   Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { InventoryConfigSection as InventoryCategoriesPanel } from "@/components/config/inventory-config-section";
+import { UsersSettingsPanel } from "@/components/config/users-settings-panel";
+import { WarehousesSettingsPanel } from "@/components/config/warehouses-settings-panel";
+import { useInventoryBackend } from "@/hooks/use-inventory-backend";
+import { categoryItems, countInventoryTreeItems } from "@/lib/inventory-tree";
+import { inputClass, Panel } from "@/components/ui-blocks";
 
 type Section = "menu" | "prices" | "distributors" | "inventory" | "deliveries" | "appearance" | "company" | "users";
-type InventoryConfigSection = "menu" | "categories";
+type InventoryConfigSection = "menu" | "categories" | "warehouses";
 
 type BoxConfig = {
   size: string;
@@ -45,34 +48,6 @@ type DistributorConfig = {
 };
 
 type DistributorPrices = Record<string, Record<string, BoxConfig[]>>;
-type InventoryItem = {
-  id: string;
-  name: string;
-  category: string;
-  kind: string;
-  size: string;
-  stock: number;
-  reserved: number;
-  minStock: number;
-  location: string;
-  unit: string;
-};
-type InventoryMovement = {
-  id: string;
-  itemId: string;
-  itemName: string;
-  type: "entrada" | "salida" | "ajuste";
-  qty: number;
-  note: string;
-  createdAt: string;
-};
-type InventoryTreeItem = { id: string; name: string; children?: InventoryTreeItem[] };
-type CategoryConfig = { name: string; items: InventoryTreeItem[]; types?: string[] };
-type InventoryStorage = {
-  items?: InventoryItem[];
-  movements?: InventoryMovement[];
-  categoryConfigs?: CategoryConfig[];
-};
 type RouteConfig = {
   deliveryDays: string[];
   pickupDays: string[];
@@ -134,50 +109,9 @@ const sections = [
   },
 ];
 
-const INVENTORY_STORAGE_KEY = "paquemas-inventory-v3";
-const LEGACY_INVENTORY_STORAGE_KEYS = ["paquemas-inventory-v1", "paquemas-inventory-v2"];
-const makeInventoryTreeItems = (names: string[], prefix: string) =>
-  names.map((name) => ({
-    id: `${prefix}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-    name,
-  }));
+const initialCountries: CountryConfig[] = [];
 
-const initialInventoryCategories: CategoryConfig[] = [];
-
-const inventoryBoxes = [
-  ["30 x 30 x 30", "$100"],
-  ["20 x 20 x 20", "$85"],
-  ["16 x 16 x 16", "$62"],
-  ["14 x 14 x 14", "$48"],
-];
-
-const makeBoxes = (count = 4) =>
-  inventoryBoxes.slice(0, count).map(([size, price]) => ({
-    size,
-    price,
-  }));
-
-const initialCountries: CountryConfig[] = [
-  { code: "MX", name: "Mexico", deliveryTime: "5-8 dias", boxes: makeBoxes(4) },
-  { code: "GT", name: "Guatemala", deliveryTime: "6-10 dias", boxes: makeBoxes(3) },
-  { code: "CO", name: "Colombia", deliveryTime: "7-12 dias", boxes: makeBoxes(2) },
-  { code: "HN", name: "Honduras", deliveryTime: "6-9 dias", boxes: makeBoxes(1) },
-];
-
-const initialDistributors: DistributorConfig[] = [
-  {
-    name: "MGS",
-    contact: "Operaciones",
-    phone: "(000) 000-0000",
-    active: true,
-  },
-  {
-    name: "Cargo Express",
-    contact: "Ventas",
-    phone: "(000) 000-0000",
-    active: true,
-  },
-];
+const initialDistributors: DistributorConfig[] = [];
 
 const emptyDistributor = {
   name: "",
@@ -187,24 +121,13 @@ const emptyDistributor = {
 
 const weekDays = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
 const initialRouteConfig: RouteConfig = {
-  deliveryDays: ["Lun", "Mie", "Vie"],
-  pickupDays: ["Mar", "Jue", "Sab"],
-  deliveryRanges: ["10:00-12:00", "14:00-16:00", "17:00-19:00"],
-  pickupRanges: ["09:00-11:00", "13:00-15:00", "16:00-18:00"],
+  deliveryDays: [],
+  pickupDays: [],
+  deliveryRanges: [],
+  pickupRanges: [],
   pendingAllowed: true,
-  routeLeadTime: "1 dia",
+  routeLeadTime: "",
 };
-
-import {
-  cardClass,
-  inputClass,
-  labelMutedClass,
-  Panel,
-  primaryButtonClass,
-  secondaryButtonClass,
-  textMutedClass,
-} from "@/components/ui-blocks";
-import { InventoryStructureEditor } from "@/components/inventory-structure-editor";
 
 const configSections: Section[] = [
   "menu",
@@ -238,7 +161,9 @@ function getConfigStateFromUrl() {
     inventorySection:
       params.get("inventory") === "categories"
         ? ("categories" as InventoryConfigSection)
-        : ("menu" as InventoryConfigSection),
+        : params.get("inventory") === "warehouses"
+          ? ("warehouses" as InventoryConfigSection)
+          : ("menu" as InventoryConfigSection),
   };
 }
 
@@ -303,84 +228,6 @@ const normalizeText = (value: string) =>
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
-
-const categoryItems = (category: CategoryConfig) =>
-  category.items?.length
-    ? category.items
-    : makeInventoryTreeItems(category.types || [], normalizeText(category.name));
-
-const cleanSavedCategoryItems = (category: CategoryConfig) => {
-  const items = categoryItems(category);
-
-  if (category.name !== "Cajas") {
-    return items;
-  }
-
-  return items.filter((item) => item.name !== "Caja" && item.name !== "30x30x30");
-};
-
-const countInventoryTreeItems = (items: InventoryTreeItem[]): number =>
-  items.reduce(
-    (sum, item) => sum + 1 + countInventoryTreeItems(item.children || []),
-    0,
-  );
-
-const countInventoryTreeFolders = (items: InventoryTreeItem[]): number =>
-  items.reduce(
-    (sum, item) =>
-      sum + (item.children?.length ? 1 : 0) + countInventoryTreeFolders(item.children || []),
-    0,
-  );
-
-function addInventoryTreeChild(
-  items: InventoryTreeItem[],
-  parentId: string,
-  child: InventoryTreeItem,
-): InventoryTreeItem[] {
-  return items.map((item) => {
-    if (item.id === parentId) {
-      return { ...item, children: [...(item.children || []), child] };
-    }
-
-    return {
-      ...item,
-      children: item.children ? addInventoryTreeChild(item.children, parentId, child) : item.children,
-    };
-  });
-}
-
-function updateInventoryTreeItem(
-  items: InventoryTreeItem[],
-  itemId: string,
-  name: string,
-): InventoryTreeItem[] {
-  return items.map((item) => {
-    if (item.id === itemId) {
-      return { ...item, name };
-    }
-
-    return {
-      ...item,
-      children: item.children ? updateInventoryTreeItem(item.children, itemId, name) : item.children,
-    };
-  });
-}
-
-function deleteInventoryTreeItem(
-  items: InventoryTreeItem[],
-  itemId: string,
-): InventoryTreeItem[] {
-  return items
-    .filter((item) => item.id !== itemId)
-    .map((item) => ({
-      ...item,
-      children: item.children ? deleteInventoryTreeItem(item.children, itemId) : item.children,
-    }));
-}
-
-function inventoryItemExists(items: InventoryTreeItem[], name: string) {
-  return items.some((item) => normalizeText(item.name) === normalizeText(name));
-}
 
 type CountryOption = {
   code: string;
@@ -603,24 +450,9 @@ export default function ConfiguracionPage() {
   const [distributorPrices, setDistributorPrices] = useState<DistributorPrices>({});
   const [showDistributorForm, setShowDistributorForm] = useState(false);
   const [newDistributor, setNewDistributor] = useState(emptyDistributor);
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
-  const [inventoryMovements, setInventoryMovements] = useState<InventoryMovement[]>([]);
+  const { categoryConfigs } = useInventoryBackend();
   const [inventoryConfigSection, setInventoryConfigSection] = useState<InventoryConfigSection>("menu");
-  const [categoryConfigs, setCategoryConfigs] = useState<CategoryConfig[]>(initialInventoryCategories);
-  const [inventoryCategoryQuery, setInventoryCategoryQuery] = useState("");
-  const [selectedInventoryCategory, setSelectedInventoryCategory] = useState(
-    initialInventoryCategories[0]?.name || "",
-  );
-  const [inventoryLoaded, setInventoryLoaded] = useState(false);
   const [returnToInventory, setReturnToInventory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [editingCategory, setEditingCategory] = useState("");
-  const [editingCategoryName, setEditingCategoryName] = useState("");
-  const [newTypeByCategory, setNewTypeByCategory] = useState<Record<string, string>>({});
-  const [openChildInput, setOpenChildInput] = useState("");
-  const [collapsedInventoryItems, setCollapsedInventoryItems] = useState<Record<string, boolean>>({});
-  const [editingType, setEditingType] = useState<{ category: string; type: string } | null>(null);
-  const [editingTypeName, setEditingTypeName] = useState("");
   const [routeConfig, setRouteConfig] = useState<RouteConfig>(initialRouteConfig);
   const [newDeliveryRange, setNewDeliveryRange] = useState({ start: "", end: "" });
   const [newPickupRange, setNewPickupRange] = useState({ start: "", end: "" });
@@ -728,147 +560,7 @@ export default function ConfiguracionPage() {
         setReturnToInventory(window.sessionStorage.getItem("return-to-inventory") === "1");
       });
     }
-
-    LEGACY_INVENTORY_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
-
-    const saved = window.localStorage.getItem(INVENTORY_STORAGE_KEY);
-
-    if (!saved) {
-      window.queueMicrotask(() => setInventoryLoaded(true));
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(saved) as InventoryStorage;
-
-      window.queueMicrotask(() => {
-        if (parsed.items?.length) {
-          setInventoryItems(parsed.items);
-        }
-
-        if (parsed.movements?.length) {
-          setInventoryMovements(parsed.movements);
-        }
-
-        if (parsed.categoryConfigs?.length) {
-          const mergedCategories = initialInventoryCategories.map((defaultCategory) => {
-            const savedCategory = parsed.categoryConfigs?.find(
-              (currentCategory) => currentCategory.name === defaultCategory.name,
-            );
-
-            if (!savedCategory) {
-              return defaultCategory;
-            }
-
-            return {
-              ...savedCategory,
-              items: [
-                ...cleanSavedCategoryItems(savedCategory),
-                ...categoryItems(defaultCategory).filter(
-                  (defaultItem) =>
-                    !cleanSavedCategoryItems(savedCategory).some(
-                      (savedItem) =>
-                        normalizeText(savedItem.name) === normalizeText(defaultItem.name),
-                    ),
-                ),
-              ],
-            };
-          });
-
-          parsed.categoryConfigs.forEach((savedCategory) => {
-            if (!mergedCategories.some((currentCategory) => currentCategory.name === savedCategory.name)) {
-              mergedCategories.push(savedCategory);
-            }
-          });
-
-          setCategoryConfigs(mergedCategories);
-          setSelectedInventoryCategory(
-            mergedCategories[0]?.name || initialInventoryCategories[0]?.name || "",
-          );
-        }
-
-        setInventoryLoaded(true);
-      });
-    } catch {
-      window.localStorage.removeItem(INVENTORY_STORAGE_KEY);
-      window.queueMicrotask(() => setInventoryLoaded(true));
-    }
   }, []);
-
-  useEffect(() => {
-    if (!inventoryLoaded) {
-      return;
-    }
-
-    window.localStorage.setItem(
-      INVENTORY_STORAGE_KEY,
-      JSON.stringify({
-        items: inventoryItems,
-        movements: inventoryMovements,
-        categoryConfigs,
-      }),
-    );
-  }, [categoryConfigs, inventoryItems, inventoryLoaded, inventoryMovements]);
-
-  const inventoryCategoryNames = useMemo(
-    () => categoryConfigs.map((currentCategory) => currentCategory.name),
-    [categoryConfigs],
-  );
-
-  const inventoryCategoryStats = useMemo(
-    () =>
-      categoryConfigs.map((currentCategory) => {
-        const categoryItems = inventoryItems.filter(
-          (item) => item.category === currentCategory.name,
-        );
-
-        return {
-          name: currentCategory.name,
-          items: categoryItems.length,
-          stock: categoryItems.reduce((sum, item) => sum + item.stock, 0),
-        };
-      }),
-    [categoryConfigs, inventoryItems],
-  );
-
-  const filteredInventoryCategories = useMemo(() => {
-    const query = normalizeText(inventoryCategoryQuery.trim());
-
-    return categoryConfigs.filter((currentCategory) =>
-      normalizeText(currentCategory.name).includes(query),
-    );
-  }, [categoryConfigs, inventoryCategoryQuery]);
-
-  const selectedInventoryCategoryData = useMemo(
-    () =>
-      categoryConfigs.find(
-        (currentCategory) => currentCategory.name === selectedInventoryCategory,
-      ) || categoryConfigs[0],
-    [categoryConfigs, selectedInventoryCategory],
-  );
-
-  const selectedInventoryCategoryStats = useMemo(
-    () =>
-      inventoryCategoryStats.find(
-        (currentStats) => currentStats.name === selectedInventoryCategoryData?.name,
-      ) || { items: 0, stock: 0 },
-    [inventoryCategoryStats, selectedInventoryCategoryData?.name],
-  );
-
-  const selectedInventoryTreeItems = useMemo(
-    () => (selectedInventoryCategoryData ? categoryItems(selectedInventoryCategoryData) : []),
-    [selectedInventoryCategoryData],
-  );
-
-  const selectedInventoryItemCount = useMemo(
-    () => countInventoryTreeItems(selectedInventoryTreeItems),
-    [selectedInventoryTreeItems],
-  );
-
-  const selectedInventoryFolderCount = useMemo(
-    () => countInventoryTreeFolders(selectedInventoryTreeItems),
-    [selectedInventoryTreeItems],
-  );
 
   function addCountry(country: CountryOption) {
     setCountries((current) => [
@@ -876,8 +568,8 @@ export default function ConfiguracionPage() {
       {
         code: country.code,
         name: country.name,
-        deliveryTime: "5-8 dias",
-        boxes: makeBoxes(4),
+        deliveryTime: "",
+        boxes: [],
       },
     ]);
     setCountryQuery("");
@@ -973,184 +665,6 @@ export default function ConfiguracionPage() {
     });
   }
 
-  function addInventoryCategory() {
-    const name = newCategoryName.trim();
-
-    if (!name || inventoryCategoryNames.includes(name)) {
-      return;
-    }
-
-    setCategoryConfigs((current) => [...current, { name, items: [] }]);
-    setSelectedInventoryCategory(name);
-    setNewCategoryName("");
-  }
-
-  function startEditInventoryCategory(name: string) {
-    setEditingCategory(name);
-    setEditingCategoryName(name);
-  }
-
-  function saveInventoryCategory(oldName: string) {
-    const name = editingCategoryName.trim();
-
-    if (!name || (name !== oldName && inventoryCategoryNames.includes(name))) {
-      return;
-    }
-
-    setCategoryConfigs((current) =>
-      current.map((currentCategory) =>
-        currentCategory.name === oldName ? { ...currentCategory, name } : currentCategory,
-      ),
-    );
-    setInventoryItems((current) =>
-      current.map((item) =>
-        item.category === oldName ? { ...item, category: name } : item,
-      ),
-    );
-    if (selectedInventoryCategory === oldName) {
-      setSelectedInventoryCategory(name);
-    }
-    setEditingCategory("");
-    setEditingCategoryName("");
-  }
-
-  function deleteInventoryCategory(name: string) {
-    const used = inventoryItems.some((item) => item.category === name);
-
-    if (used) {
-      return;
-    }
-
-    setCategoryConfigs((current) =>
-      current.filter((currentCategory) => currentCategory.name !== name),
-    );
-    if (selectedInventoryCategory === name) {
-      setSelectedInventoryCategory(categoryConfigs.find((item) => item.name !== name)?.name || "");
-    }
-    setNewTypeByCategory((current) => {
-      const next = { ...current };
-      delete next[name];
-      return next;
-    });
-  }
-
-  function addInventoryType(categoryName: string) {
-    const typeName = (newTypeByCategory[categoryName] || "").trim();
-
-    if (!typeName) {
-      return;
-    }
-
-    setCategoryConfigs((current) =>
-      current.map((currentCategory) => {
-        const items = categoryItems(currentCategory);
-
-        if (
-          currentCategory.name !== categoryName ||
-          inventoryItemExists(items, typeName)
-        ) {
-          return currentCategory;
-        }
-
-        return {
-          ...currentCategory,
-          items: [
-            ...items,
-            {
-              id: `${normalizeText(categoryName).replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
-              name: typeName,
-            },
-          ],
-        };
-      }),
-    );
-    setNewTypeByCategory((current) => ({ ...current, [categoryName]: "" }));
-  }
-
-  function addInventoryChildItem(categoryName: string, parentId: string) {
-    const inputKey = `${categoryName}:${parentId}`;
-    const itemName = (newTypeByCategory[inputKey] || "").trim();
-
-    if (!itemName) {
-      return;
-    }
-
-    setCategoryConfigs((current) =>
-      current.map((currentCategory) => {
-        if (currentCategory.name !== categoryName) {
-          return currentCategory;
-        }
-
-        return {
-          ...currentCategory,
-          items: addInventoryTreeChild(categoryItems(currentCategory), parentId, {
-            id: `${parentId}-${Date.now()}`,
-            name: itemName,
-          }),
-        };
-      }),
-    );
-    setNewTypeByCategory((current) => ({ ...current, [inputKey]: "" }));
-    setOpenChildInput("");
-    setCollapsedInventoryItems((current) => ({ ...current, [parentId]: false }));
-  }
-
-  function startEditInventoryType(categoryName: string, itemId: string, itemName: string) {
-    setEditingType({ category: categoryName, type: itemId });
-    setEditingTypeName(itemName);
-  }
-
-  function saveInventoryType(categoryName: string, itemId: string, oldName: string) {
-    const typeName = editingTypeName.trim();
-
-    if (!typeName) {
-      return;
-    }
-
-    setCategoryConfigs((current) =>
-      current.map((currentCategory) => {
-        if (currentCategory.name !== categoryName) {
-          return currentCategory;
-        }
-
-        return {
-          ...currentCategory,
-          items: updateInventoryTreeItem(categoryItems(currentCategory), itemId, typeName),
-        };
-      }),
-    );
-    setInventoryItems((current) =>
-      current.map((item) =>
-        item.category === categoryName && item.kind === oldName
-          ? { ...item, kind: typeName }
-          : item,
-      ),
-    );
-    setEditingType(null);
-    setEditingTypeName("");
-  }
-
-  function deleteInventoryType(categoryName: string, itemId: string, itemName: string) {
-    const used = inventoryItems.some(
-      (item) => item.category === categoryName && item.kind === itemName,
-    );
-
-    if (used) {
-      return;
-    }
-
-    setCategoryConfigs((current) =>
-      current.map((currentCategory) =>
-        currentCategory.name === categoryName
-          ? {
-              ...currentCategory,
-              items: deleteInventoryTreeItem(categoryItems(currentCategory), itemId),
-            }
-          : currentCategory,
-      ),
-    );
-  }
-
   function goBack() {
     if (returnToInventory && section === "inventory") {
       window.sessionStorage.removeItem("return-to-inventory");
@@ -1178,14 +692,6 @@ export default function ConfiguracionPage() {
       return;
     }
 
-    openConfigSection("menu");
-  }
-
-  function goConfigHome() {
-    setSelectedCountry(null);
-    setSelectedDistributor(null);
-    setSelectedDistributorCountry(null);
-    openInventoryConfigSection("menu", false);
     openConfigSection("menu");
   }
 
@@ -1238,165 +744,6 @@ export default function ConfiguracionPage() {
         Volver
       </button>
     );
-
-  function toggleInventoryGroup(itemId: string) {
-    setCollapsedInventoryItems((current) => ({
-      ...current,
-      [itemId]: current[itemId] === false,
-    }));
-  }
-
-  function renderInventoryTreeItems(items: InventoryTreeItem[], depth = 0) {
-    return items.map((item) => {
-      const inputKey = `${selectedInventoryCategoryData.name}:${item.id}`;
-      const editing =
-        editingType?.category === selectedInventoryCategoryData.name &&
-        editingType.type === item.id;
-      const typeInUse = inventoryItems.some(
-        (inventoryItem) =>
-          inventoryItem.category === selectedInventoryCategoryData.name &&
-          inventoryItem.kind === item.name,
-      );
-      const hasChildren = item.children !== undefined;
-      const isChildInputOpen = openChildInput === inputKey;
-      const isCollapsed =
-        hasChildren && collapsedInventoryItems[item.id] !== false;
-
-      return (
-        <div key={item.id} className="grid gap-1">
-          <div
-            className={`rounded-lg border bg-surface-panel ${
-              depth ? "border-black ml-5" : "border-black"
-            }`}
-          >
-            <div className="flex min-h-12 items-center gap-2 px-2">
-              {hasChildren ? (
-                <button
-                  onClick={() => toggleInventoryGroup(item.id)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-emerald-600 bg-emerald-400 text-slate-950 hover:bg-emerald-300"
-                  title={isCollapsed ? "Expandir" : "Contraer"}
-                >
-                  <ChevronRight
-                    className={`h-4 w-4 transition ${isCollapsed ? "" : "rotate-90"}`}
-                  />
-                </button>
-              ) : (
-                <span className="h-2 w-2 shrink-0 rounded-full bg-surface-card" />
-              )}
-
-              {editing ? (
-                <input
-                  className={`${inputClass} h-9 min-w-0 flex-1`}
-                  value={editingTypeName}
-                  onChange={(event) => setEditingTypeName(event.target.value)}
-                />
-              ) : hasChildren ? (
-                <button
-                  onClick={() => toggleInventoryGroup(item.id)}
-                  className="min-w-0 flex-1 truncate text-left text-sm font-black text-[#f8fafc]"
-                  title={isCollapsed ? "Expandir" : "Contraer"}
-                >
-                  {item.name}
-                </button>
-              ) : (
-                <span className="min-w-0 flex-1 truncate text-sm font-black text-[#f8fafc]">
-                  {item.name}
-                </span>
-              )}
-
-              {editing ? (
-                <>
-                  <button
-                    onClick={() =>
-                      saveInventoryType(selectedInventoryCategoryData.name, item.id, item.name)
-                    }
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400 text-slate-950"
-                    title="Guardar item"
-                  >
-                    <Check className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditingType(null);
-                      setEditingTypeName("");
-                    }}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-black text-[#f8fafc]"
-                    title="Cancelar"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => setOpenChildInput(isChildInputOpen ? "" : inputKey)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400 text-slate-950"
-                    title="Crear dentro"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() =>
-                      startEditInventoryType(
-                        selectedInventoryCategoryData.name,
-                        item.id,
-                        item.name,
-                      )
-                    }
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-black text-[#f8fafc] hover:border-black"
-                    title="Editar item"
-                  >
-                    <Edit3 className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() =>
-                      deleteInventoryType(
-                        selectedInventoryCategoryData.name,
-                        item.id,
-                        item.name,
-                      )
-                    }
-                    disabled={typeInUse}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-black text-[#f8fafc] enabled:hover:border-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
-                    title={typeInUse ? "Item en uso" : "Borrar item"}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </>
-              )}
-            </div>
-
-            {isChildInputOpen ? (
-              <div className="grid grid-cols-[1fr_auto] gap-2 border-t border-black p-2">
-                <input
-                  className={`${inputClass} h-10 text-sm`}
-                  placeholder={`Nuevo dentro de ${item.name}`}
-                  value={newTypeByCategory[inputKey] || ""}
-                  onChange={(event) =>
-                    setNewTypeByCategory((current) => ({
-                      ...current,
-                      [inputKey]: event.target.value,
-                    }))
-                  }
-                />
-                <button
-                  onClick={() => addInventoryChildItem(selectedInventoryCategoryData.name, item.id)}
-                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-400 text-slate-950"
-                  title="Crear subitem"
-                >
-                  <Check className="h-4 w-4" />
-                </button>
-              </div>
-            ) : null}
-          </div>
-
-          {item.children?.length && !isCollapsed
-            ? renderInventoryTreeItems(item.children, depth + 1)
-            : null}
-        </div>
-      );
-    });
-  }
 
   return (
     <>
@@ -1832,7 +1179,13 @@ export default function ConfiguracionPage() {
 
       {section === "inventory" ? (
         <Panel
-          title={inventoryConfigSection === "menu" ? "Inventario" : "Categorias e items"}
+          title={
+            inventoryConfigSection === "menu"
+              ? "Inventario"
+              : inventoryConfigSection === "warehouses"
+                ? "Bodegas"
+                : "Categorias e items"
+          }
           action={backButton}
         >
           {inventoryConfigSection === "menu" ? (
@@ -1860,28 +1213,27 @@ export default function ConfiguracionPage() {
                 </span>
               </a>
 
-              <div className="rounded-xl border border-dashed border-black bg-surface-card p-5 text-left ">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-panel text-slate-400">
-                  <Plus className="h-7 w-7" />
+              <button
+                type="button"
+                onClick={() => openInventoryConfigSection("warehouses")}
+                className="group rounded-xl border border-black bg-surface-card p-5 text-left shadow-sm transition hover:border-black"
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950">
+                  <Building2 className="h-7 w-7" />
                 </span>
-                <span className="mt-5 block text-2xl font-black leading-tight">
-                  Proxima configuracion
+                <span className="mt-5 block text-3xl font-black leading-tight">
+                  Bodegas
                 </span>
-                <span className="mt-2 block text-base font-bold text-slate-400">
-                  Aqui agregamos mas opciones despues.
+                <span className="mt-2 block text-base font-bold text-slate-300">
+                  Multiples bodegas, copiar catalogo y desactivar.
                 </span>
-              </div>
+              </button>
             </div>
           ) : null}
 
-          {inventoryConfigSection === "categories" ? (
-            <InventoryStructureEditor
-              layout="inline"
-              showCategoryCreate
-              categoryConfigs={categoryConfigs}
-              onCategoryConfigsChange={setCategoryConfigs}
-            />
-          ) : null}
+          {inventoryConfigSection === "categories" ? <InventoryCategoriesPanel /> : null}
+
+          {inventoryConfigSection === "warehouses" ? <WarehousesSettingsPanel /> : null}
         </Panel>
       ) : null}
 
@@ -2103,16 +1455,7 @@ export default function ConfiguracionPage() {
 
       {section === "users" ? (
         <Panel title="Usuarios" action={backButton}>
-          <div className="grid gap-3">
-            {["Dueno", "Empleado caja", "Driver"].map((user) => (
-              <div
-                key={user}
-                className="rounded-xl border border-black bg-surface-card p-4 text-xl font-black"
-              >
-                {user}
-              </div>
-            ))}
-          </div>
+          <UsersSettingsPanel />
         </Panel>
       ) : null}
     </>

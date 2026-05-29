@@ -1,12 +1,7 @@
 import { ClipboardList, PackagePlus, Truck, Users } from "lucide-react";
-import { BigAction, labelMutedClass, Panel, StatCard, textMutedClass } from "@/components/ui-blocks";
-
-const stats = [
-  { label: "Ventas hoy", value: "$1,240", tone: "text-[#f8fafc]" },
-  { label: "Ganancia", value: "$430", tone: "text-[#f8fafc]" },
-  { label: "Pickups", value: "8", tone: "text-[#f8fafc]" },
-  { label: "Cajas pendientes", value: "23", tone: "text-rose-400" },
-];
+import { BigAction, labelMutedClass, Panel } from "@/components/ui-blocks";
+import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 const actions = [
   {
@@ -39,29 +34,9 @@ const actions = [
   },
 ];
 
-function ActivityRow({
-  title,
-  text,
-  amount,
-}: {
-  title: string;
-  text: string;
-  amount: string;
-}) {
-  return (
-    <div className="overflow-hidden rounded-lg border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
-      <div className="border-b border-black bg-surface-card-header px-3 py-2">
-        <p className="text-base font-black text-[#f8fafc]">{title}</p>
-      </div>
-      <div className="flex items-center justify-between gap-3 px-3 py-3">
-        <p className={textMutedClass}>{text}</p>
-        <p className="text-lg font-black text-[#f8fafc]">{amount}</p>
-      </div>
-    </div>
-  );
-}
-
 export default function Home() {
+  const supabaseReady = isSupabaseConfigured();
+
   return (
     <>
       <Panel title="Inicio" hideHeader>
@@ -72,11 +47,14 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {stats.map((item) => (
-            <StatCard key={item.label} {...item} />
-          ))}
-        </div>
+        {!supabaseReady ? (
+          <SupabaseRequiredBanner detail="El panel de resumen mostrará métricas cuando existan ventas y envíos en Supabase." />
+        ) : (
+          <p className="mb-4 rounded-lg border border-black bg-surface-card px-4 py-3 text-sm font-bold text-slate-300">
+            Sin métricas agregadas aún. Los datos de actividad vendrán de ventas y envíos registrados en la base de
+            datos.
+          </p>
+        )}
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {actions.map((action) => (
@@ -84,32 +62,6 @@ export default function Home() {
           ))}
         </div>
       </Panel>
-
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr]">
-        <Panel title="Actividad reciente">
-          <div className="grid gap-3">
-            {[
-              ["Envio creado", "Maria Lopez a Mexico", "$100"],
-              ["Caja entregada", "Jose Ramirez - 20 x 20 x 20", "$12"],
-              ["Pago recibido", "Ana Perez", "$62"],
-            ].map(([type, text, amount]) => (
-              <ActivityRow key={type + text} title={type} text={text} amount={amount} />
-            ))}
-          </div>
-        </Panel>
-
-        <Panel title="Pendientes hoy">
-          <div className="grid gap-3">
-            {[
-              ["Recoger", "Maria Lopez", "5:00 PM"],
-              ["Entregar caja", "Jose Ramirez", "6:30 PM"],
-              ["Cobrar", "Ana Perez", "$62"],
-            ].map(([type, name, extra]) => (
-              <ActivityRow key={name} title={type} text={name} amount={extra} />
-            ))}
-          </div>
-        </Panel>
-      </div>
     </>
   );
 }

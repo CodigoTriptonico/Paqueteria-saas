@@ -21,8 +21,10 @@ import {
 } from "lucide-react";
 import { type MouseEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { deductStockForBoxSaleAction } from "@/app/actions/inventory";
 import { useSetShellConfig } from "@/components/app-frame";
 import { cardHeaderClass, cardHoverClass, iconWellEmerald, Panel } from "@/components/ui-blocks";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 let activeSaleScrollFrame: number | null = null;
 
@@ -141,15 +143,6 @@ type Sender = PersonName & {
   recipients: Recipient[];
 };
 
-type NamedRecipientInput = Omit<Recipient, "firstName" | "lastName"> & { name: string };
-type NamedSenderInput = Omit<Sender, "firstName" | "lastName" | "recipients" | "phones" | "email"> & {
-  name: string;
-  phone?: string;
-  phones?: string[];
-  email?: string;
-  recipients: NamedRecipientInput[];
-};
-
 type ContextMenuState = {
   x: number;
   y: number;
@@ -184,20 +177,6 @@ type AddressSuggestion = {
   secondaryText: string;
 };
 
-function splitFullName(fullName: string): PersonName {
-  const parts = fullName.trim().split(/\s+/).filter(Boolean);
-
-  if (!parts.length) {
-    return { firstName: "", lastName: "" };
-  }
-
-  if (parts.length === 1) {
-    return { firstName: parts[0], lastName: "" };
-  }
-
-  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
-}
-
 function personFullName(person: PersonName) {
   return [person.firstName, person.lastName].filter(Boolean).join(" ").trim();
 }
@@ -213,694 +192,11 @@ function recipientIdentityKey(recipient: Recipient) {
   return `${recipient.firstName}|${recipient.lastName}|${recipient.country}`.toLowerCase();
 }
 
-function buildSender(input: NamedSenderInput): Sender {
-  const { name, recipients, phone, phones, email, ...rest } = input;
-  const { firstName, lastName } = splitFullName(name);
-  const phoneList = normalizePhoneList(phones?.length ? phones : phone ? [phone] : []);
+const initialSenders: Sender[] = [];
 
-  return {
-    ...rest,
-    firstName,
-    lastName,
-    email: email?.trim() || "",
-    phones: phoneList.length ? phoneList : [""],
-    recipients: recipients.map(({ name: recipientName, ...recipientRest }) => ({
-      ...splitFullName(recipientName),
-      ...recipientRest,
-    })),
-  };
-}
-
-const initialSenders: Sender[] = [
-  buildSender({
-    name: "Maria Lopez",
-    phones: ["(305) 555-0182", "(305) 555-0183"],
-    email: "maria.lopez@correo.com",
-    street: "NW 17th Ave",
-    houseNumber: "2450",
-    neighborhood: "Allapattah",
-    city: "Miami",
-    state: "FL",
-    postalCode: "33142",
-    recipients: [
-      {
-        name: "Rosa Lopez",
-        phone: "+52 55 1234 8899",
-        street: "Calle 12",
-        houseNumber: "45",
-        neighborhood: "Centro",
-        city: "CDMX",
-        postalCode: "06000",
-        country: "Mexico",
-      },
-      {
-        name: "Luis Lopez",
-        phone: "+52 55 7788 1122",
-        street: "Av. Reforma",
-        houseNumber: "200",
-        neighborhood: "Juarez",
-        city: "CDMX",
-        postalCode: "06600",
-        country: "Mexico",
-      },
-      {
-        name: "Ana Lopez",
-        phone: "+502 2233 4455",
-        street: "6A Avenida",
-        houseNumber: "10-22",
-        neighborhood: "Zona 10",
-        city: "Guatemala City",
-        postalCode: "01010",
-        country: "Guatemala",
-      },
-      {
-        name: "Pedro Lopez",
-        phone: "+52 55 9988 3344",
-        street: "Calle Norte",
-        houseNumber: "18",
-        neighborhood: "Roma",
-        city: "CDMX",
-        postalCode: "06700",
-        country: "Mexico",
-      },
-      {
-        name: "Elena Morales",
-        phone: "+504 2234 9012",
-        street: "Avenida Central",
-        houseNumber: "77",
-        neighborhood: "Centro",
-        city: "Tegucigalpa",
-        postalCode: "11101",
-        country: "Honduras",
-      },
-      {
-        name: "Sofia Martinez",
-        phone: "+57 301 555 2222",
-        street: "Carrera 15",
-        houseNumber: "40-20",
-        neighborhood: "Chapinero",
-        city: "Bogota",
-        postalCode: "110231",
-        country: "Colombia",
-      },
-      {
-        name: "Miguel Garcia",
-        phone: "+502 5566 7788",
-        street: "Calzada Roosevelt",
-        houseNumber: "14-80",
-        neighborhood: "Zona 7",
-        city: "Guatemala City",
-        postalCode: "01007",
-        country: "Guatemala",
-      },
-      {
-        name: "Carmen Ruiz",
-        phone: "+52 81 4444 0909",
-        street: "Av. Universidad",
-        houseNumber: "500",
-        neighborhood: "San Nicolas",
-        city: "Monterrey",
-        postalCode: "66450",
-        country: "Mexico",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Jose Ramirez",
-    phones: ["(786) 555-0120", "(786) 555-0121"],
-    email: "jose.ramirez@correo.com",
-    street: "W 49th St",
-    houseNumber: "1220",
-    neighborhood: "Palm Springs",
-    city: "Hialeah",
-    state: "FL",
-    postalCode: "33012",
-    recipients: [
-      {
-        name: "Carlos Ramirez",
-        phone: "+502 5555 1200",
-        street: "1A Calle",
-        houseNumber: "8-20",
-        neighborhood: "Zona 1",
-        city: "Guatemala City",
-        postalCode: "01001",
-        country: "Guatemala",
-      },
-      {
-        name: "Marta Ruiz",
-        phone: "+504 9988 7711",
-        street: "Boulevard Kennedy",
-        houseNumber: "310",
-        neighborhood: "Col. Kennedy",
-        city: "Tegucigalpa",
-        postalCode: "11101",
-        country: "Honduras",
-      },
-      {
-        name: "Paola Ramirez",
-        phone: "+52 55 4411 2200",
-        street: "Av. Insurgentes",
-        houseNumber: "890",
-        neighborhood: "Narvarte",
-        city: "CDMX",
-        postalCode: "03020",
-        country: "Mexico",
-      },
-      {
-        name: "Luis Ramirez",
-        phone: "+57 310 220 8899",
-        street: "Calle 53",
-        houseNumber: "21-10",
-        neighborhood: "La Candelaria",
-        city: "Bogota",
-        postalCode: "110231",
-        country: "Colombia",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Ana Perez",
-    phone: "(954) 555-0177",
-    email: "ana.perez@mail.com",
-    street: "Sistrunk Blvd",
-    houseNumber: "805",
-    neighborhood: "Dorsey-Riverbend",
-    city: "Fort Lauderdale",
-    state: "FL",
-    postalCode: "33311",
-    recipients: [
-      {
-        name: "Diana Perez",
-        phone: "+57 310 555 9090",
-        street: "Carrera 7",
-        houseNumber: "82-10",
-        neighborhood: "Chico",
-        city: "Bogota",
-        postalCode: "110221",
-        country: "Colombia",
-      },
-      {
-        name: "Luz Gomez",
-        phone: "+57 300 444 1234",
-        street: "Calle 10",
-        houseNumber: "33-18",
-        neighborhood: "El Poblado",
-        city: "Medellin",
-        postalCode: "050021",
-        country: "Colombia",
-      },
-      {
-        name: "Ricardo Perez",
-        phone: "+52 33 7788 9900",
-        street: "Av. Vallarta",
-        houseNumber: "3200",
-        neighborhood: "Vallarta",
-        city: "Guadalajara",
-        postalCode: "44110",
-        country: "Mexico",
-      },
-      {
-        name: "Ines Perez",
-        phone: "+502 3344 5566",
-        street: "12 Avenida",
-        houseNumber: "5-18",
-        neighborhood: "Zona 1",
-        city: "Guatemala City",
-        postalCode: "01001",
-        country: "Guatemala",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Carlos Diaz",
-    phones: ["(305) 555-0000", "(786) 555-4411"],
-    email: "carlos.diaz@mail.com",
-    street: "Saratoga Way",
-    houseNumber: "18006",
-    neighborhood: "Canyon Country",
-    city: "Santa Clarita",
-    state: "CA",
-    postalCode: "91387",
-    recipients: [
-      {
-        name: "Patricia Diaz",
-        phone: "+52 33 1122 3344",
-        street: "Av. Chapultepec",
-        houseNumber: "102",
-        neighborhood: "Americana",
-        city: "Guadalajara",
-        postalCode: "44160",
-        country: "Mexico",
-      },
-      {
-        name: "Roberto Diaz",
-        phone: "+52 55 6677 8899",
-        street: "Insurgentes Sur",
-        houseNumber: "1450",
-        neighborhood: "Del Valle",
-        city: "CDMX",
-        postalCode: "03100",
-        country: "Mexico",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Elena Vargas",
-    phone: "(954) 555-0299",
-    email: "elena.vargas@gmail.com",
-    street: "Oakland Park Blvd",
-    houseNumber: "4102",
-    neighborhood: "Lauderdale Lakes",
-    city: "Fort Lauderdale",
-    state: "FL",
-    postalCode: "33311",
-    recipients: [
-      {
-        name: "Hector Vargas",
-        phone: "+502 4444 5566",
-        street: "Diagonal 6",
-        houseNumber: "12-45",
-        neighborhood: "Zona 9",
-        city: "Guatemala City",
-        postalCode: "01009",
-        country: "Guatemala",
-      },
-      {
-        name: "Isabel Vargas",
-        phone: "+504 2211 3344",
-        street: "Col. Palmira",
-        houseNumber: "88",
-        neighborhood: "Palmira",
-        city: "San Pedro Sula",
-        postalCode: "21102",
-        country: "Honduras",
-      },
-      {
-        name: "Natalia Vargas",
-        phone: "+57 320 998 7766",
-        street: "Calle 80",
-        houseNumber: "22-15",
-        neighborhood: "Laureles",
-        city: "Medellin",
-        postalCode: "050034",
-        country: "Colombia",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Miguel Torres",
-    phone: "(786) 555-0331",
-    street: "E 8th St",
-    houseNumber: "330",
-    neighborhood: "Little Havana",
-    city: "Miami",
-    state: "FL",
-    postalCode: "33130",
-    recipients: [
-      {
-        name: "Laura Torres",
-        phone: "+52 81 2200 1100",
-        street: "Av. Constitucion",
-        houseNumber: "900",
-        neighborhood: "Centro",
-        city: "Monterrey",
-        postalCode: "64000",
-        country: "Mexico",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Sofia Herrera",
-    phones: ["(305) 555-0777"],
-    email: "sofia.herrera@empresa.co",
-    street: "Coral Way",
-    houseNumber: "1520",
-    neighborhood: "Coral Gables",
-    city: "Miami",
-    state: "FL",
-    postalCode: "33145",
-    recipients: [
-      {
-        name: "Diego Herrera",
-        phone: "+52 55 4400 2211",
-        street: "Calle Madero",
-        houseNumber: "55",
-        neighborhood: "Centro Historico",
-        city: "CDMX",
-        postalCode: "06000",
-        country: "Mexico",
-      },
-      {
-        name: "Valentina Herrera",
-        phone: "+52 33 8899 0011",
-        street: "Av. Mexico",
-        houseNumber: "2100",
-        neighborhood: "Providencia",
-        city: "Guadalajara",
-        postalCode: "44630",
-        country: "Mexico",
-      },
-      {
-        name: "Andres Herrera",
-        phone: "+502 7788 9900",
-        street: "7A Avenida",
-        houseNumber: "3-12",
-        neighborhood: "Zona 4",
-        city: "Guatemala City",
-        postalCode: "01004",
-        country: "Guatemala",
-      },
-      {
-        name: "Camila Herrera",
-        phone: "+57 301 220 3344",
-        street: "Carrera 50",
-        houseNumber: "12-30",
-        neighborhood: "Envigado",
-        city: "Medellin",
-        postalCode: "055421",
-        country: "Colombia",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Ricardo Mendoza",
-    phone: "(954) 555-0412",
-    street: "Pines Blvd",
-    houseNumber: "9801",
-    neighborhood: "Pembroke Pines",
-    city: "Pembroke Pines",
-    state: "FL",
-    postalCode: "33024",
-    recipients: [],
-  }),
-  buildSender({
-    name: "Lucia Fernandez",
-    phones: ["(786) 555-0888", "(305) 555-0991"],
-    email: "lucia.fernandez@outlook.com",
-    street: "Bird Rd",
-    houseNumber: "7420",
-    neighborhood: "Westchester",
-    city: "Miami",
-    state: "FL",
-    postalCode: "33155",
-    recipients: [
-      {
-        name: "Jorge Fernandez",
-        phone: "+504 9900 1122",
-        street: "Boulevard Morazan",
-        houseNumber: "1200",
-        neighborhood: "Centro",
-        city: "Tegucigalpa",
-        postalCode: "11101",
-        country: "Honduras",
-      },
-      {
-        name: "Mariana Fernandez",
-        phone: "+52 55 3010 4050",
-        street: "Av. Patriotismo",
-        houseNumber: "300",
-        neighborhood: "San Pedro de los Pinos",
-        city: "CDMX",
-        postalCode: "03800",
-        country: "Mexico",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Pedro Castillo",
-    phone: "(305) 555-0618",
-    street: "SW 8th St",
-    houseNumber: "12001",
-    neighborhood: "Sweetwater",
-    city: "Miami",
-    state: "FL",
-    postalCode: "33184",
-    recipients: [
-      {
-        name: "Gabriela Castillo",
-        phone: "+57 310 550 7788",
-        street: "Calle 100",
-        houseNumber: "19-40",
-        neighborhood: "Chico Norte",
-        city: "Bogota",
-        postalCode: "110221",
-        country: "Colombia",
-      },
-      {
-        name: "Felipe Castillo",
-        phone: "+57 300 881 2200",
-        street: "Av. Santander",
-        houseNumber: "45-10",
-        neighborhood: "Cabecera",
-        city: "Bucaramanga",
-        postalCode: "680003",
-        country: "Colombia",
-      },
-      {
-        name: "Renata Castillo",
-        phone: "+502 5511 2233",
-        street: "18 Calle",
-        houseNumber: "8-55",
-        neighborhood: "Zona 10",
-        city: "Guatemala City",
-        postalCode: "01010",
-        country: "Guatemala",
-      },
-      {
-        name: "Oscar Castillo",
-        phone: "+52 81 9000 1122",
-        street: "Calle Morelos",
-        houseNumber: "220",
-        neighborhood: "Centro",
-        city: "Monterrey",
-        postalCode: "64000",
-        country: "Mexico",
-      },
-      {
-        name: "Paula Castillo",
-        phone: "+504 2233 9900",
-        street: "Col. Las Colinas",
-        houseNumber: "15",
-        neighborhood: "Las Colinas",
-        city: "Tegucigalpa",
-        postalCode: "11101",
-        country: "Honduras",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Daniela Rios",
-    phone: "(954) 555-0520",
-    email: "daniela.rios@correo.com",
-    street: "Commercial Blvd",
-    houseNumber: "2200",
-    neighborhood: "Tamarac",
-    city: "Tamarac",
-    state: "FL",
-    postalCode: "33321",
-    recipients: [
-      {
-        name: "Emilio Rios",
-        phone: "+52 55 8800 4411",
-        street: "Eje Central",
-        houseNumber: "75",
-        neighborhood: "Guerrero",
-        city: "CDMX",
-        postalCode: "06300",
-        country: "Mexico",
-      },
-      {
-        name: "Claudia Rios",
-        phone: "+52 33 5500 6677",
-        street: "Av. Americas",
-        houseNumber: "1500",
-        neighborhood: "Country Club",
-        city: "Guadalajara",
-        postalCode: "44610",
-        country: "Mexico",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Andres Navarro",
-    phone: "(786) 555-0701",
-    street: "NW 36th St",
-    houseNumber: "5100",
-    neighborhood: "Doral",
-    city: "Doral",
-    state: "FL",
-    postalCode: "33166",
-    recipients: [
-      {
-        name: "Teresa Navarro",
-        phone: "+502 6600 7788",
-        street: "Calzada Aguilar Batres",
-        houseNumber: "22-10",
-        neighborhood: "Zona 12",
-        city: "Guatemala City",
-        postalCode: "01012",
-        country: "Guatemala",
-      },
-      {
-        name: "Raul Navarro",
-        phone: "+57 315 440 9900",
-        street: "Carrera 43A",
-        houseNumber: "1-50",
-        neighborhood: "El Poblado",
-        city: "Medellin",
-        postalCode: "050021",
-        country: "Colombia",
-      },
-      {
-        name: "Beatriz Navarro",
-        phone: "+504 8811 2233",
-        street: "Res. Las Uvas",
-        houseNumber: "4-B",
-        neighborhood: "Las Uvas",
-        city: "Comayaguela",
-        postalCode: "11102",
-        country: "Honduras",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Gabriela Morales",
-    phones: ["(305) 555-0912", "(954) 555-0913"],
-    email: "gabriela.morales@paquemas.demo",
-    street: "Flagler St",
-    houseNumber: "88",
-    neighborhood: "Downtown",
-    city: "Miami",
-    state: "FL",
-    postalCode: "33130",
-    recipients: [
-      {
-        name: "Ignacio Morales",
-        phone: "+52 55 1122 9900",
-        street: "Calle Durango",
-        houseNumber: "210",
-        neighborhood: "Roma Norte",
-        city: "CDMX",
-        postalCode: "06700",
-        country: "Mexico",
-      },
-      {
-        name: "Silvia Morales",
-        phone: "+52 81 3344 5566",
-        street: "Av. Garza Sada",
-        houseNumber: "2501",
-        neighborhood: "Tecnologico",
-        city: "Monterrey",
-        postalCode: "64849",
-        country: "Mexico",
-      },
-      {
-        name: "Tomas Morales",
-        phone: "+502 9900 1122",
-        street: "Boulevard Liberacion",
-        houseNumber: "15-20",
-        neighborhood: "Zona 9",
-        city: "Guatemala City",
-        postalCode: "01009",
-        country: "Guatemala",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Hector Salinas",
-    phone: "(954) 555-0633",
-    street: "Sunrise Blvd",
-    houseNumber: "3300",
-    neighborhood: "Plantation",
-    city: "Plantation",
-    state: "FL",
-    postalCode: "33322",
-    recipients: [
-      {
-        name: "Monica Salinas",
-        phone: "+57 320 110 9988",
-        street: "Calle 72",
-        houseNumber: "10-22",
-        neighborhood: "Chapinero",
-        city: "Bogota",
-        postalCode: "110231",
-        country: "Colombia",
-      },
-    ],
-  }),
-  buildSender({
-    name: "Valentina Cruz",
-    phone: "(305) 555-0844",
-    email: "valentina.cruz@demo.com",
-    street: "Biscayne Blvd",
-    houseNumber: "4500",
-    neighborhood: "Edgewater",
-    city: "Miami",
-    state: "FL",
-    postalCode: "33137",
-    recipients: [
-      {
-        name: "Alonso Cruz",
-        phone: "+52 55 6677 1122",
-        street: "Av. Universidad",
-        houseNumber: "1200",
-        neighborhood: "Copilco",
-        city: "CDMX",
-        postalCode: "04360",
-        country: "Mexico",
-      },
-      {
-        name: "Jimena Cruz",
-        phone: "+502 2233 4455",
-        street: "6A Avenida",
-        houseNumber: "10-22",
-        neighborhood: "Zona 10",
-        city: "Guatemala City",
-        postalCode: "01010",
-        country: "Guatemala",
-      },
-      {
-        name: "Mateo Cruz",
-        phone: "+504 5566 7788",
-        street: "Col. Miraflores",
-        houseNumber: "22",
-        neighborhood: "Miraflores",
-        city: "Tegucigalpa",
-        postalCode: "11101",
-        country: "Honduras",
-      },
-      {
-        name: "Renata Cruz",
-        phone: "+57 301 555 2222",
-        street: "Carrera 15",
-        houseNumber: "40-20",
-        neighborhood: "Chapinero",
-        city: "Bogota",
-        postalCode: "110231",
-        country: "Colombia",
-      },
-    ],
-  }),
-];
-
-const countryBoxes = {
-  Mexico: [
-    ["30 x 30 x 30", "$100", "$60", "FedEx", "10-15 dias"],
-    ["20 x 20 x 20", "$85", "$54", "Paquete Express", "8-12 dias"],
-    ["16 x 16 x 16", "$62", "$40", "Estafeta", "8-12 dias"],
-  ],
-  Guatemala: [
-    ["30 x 30 x 30", "$115", "$73", "MGS", "12-18 dias"],
-    ["20 x 20 x 20", "$92", "$61", "MGS", "12-18 dias"],
-  ],
-  Colombia: [
-    ["16 x 16 x 16", "$62", "$40", "Estafeta", "8-12 dias"],
-    ["14 x 14 x 14", "$48", "$31", "MGS", "7-10 dias"],
-  ],
-  Honduras: [["20 x 20 x 20", "$88", "$56", "MGS", "12-18 dias"]],
-};
-
+const countryBoxes: Record<string, string[][]> = {};
 const countries = Object.keys(countryBoxes);
+
 const RECIPIENTS_PER_PAGE = 3;
 const SENDERS_PER_PAGE = 3;
 const RECENT_SENDERS_PER_PAGE = 3;
@@ -1052,8 +348,6 @@ function applyAddressSuggestResult(
 
 const inputClass =
   "h-11 min-w-0 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc] outline-none focus:border-black";
-const compactInputClass =
-  "h-8 min-w-0 rounded-md border border-black bg-[#101820] px-2.5 text-xs font-black text-[#f8fafc] outline-none ring-1 ring-black focus:ring-2 focus:ring-emerald-400";
 const clientFormInputClass =
   "client-form-field h-11 w-full rounded-lg border border-black bg-surface-inset px-3.5 text-[15px] font-bold text-[#f8fafc] outline-none transition placeholder:font-bold placeholder:text-slate-500 focus:border-black focus:bg-surface-panel focus:ring-2 focus:ring-emerald-400";
 const clientFormLabelClass =
@@ -1441,6 +735,7 @@ export default function VentaPage() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoiceSequence, setInvoiceSequence] = useState(124);
   const [invoiceNumber, setInvoiceNumber] = useState("INV-000124");
+  const [stockMessage, setStockMessage] = useState("");
   const [emptyBoxMode, setEmptyBoxMode] = useState("");
   const [emptyBoxScheduleMode, setEmptyBoxScheduleMode] = useState("");
   const [emptyBoxScheduleAt, setEmptyBoxScheduleAt] = useState("");
@@ -1790,16 +1085,6 @@ export default function VentaPage() {
     safeRecipientPage * RECIPIENTS_PER_PAGE + RECIPIENTS_PER_PAGE,
   );
   const emptyRecipientSlots = Math.max(0, RECIPIENTS_PER_PAGE - visibleRecipients.length);
-
-  useEffect(() => {
-    setRecentSenderPage((current) =>
-      Math.min(current, Math.max(0, recentSenderPageCount - 1)),
-    );
-  }, [recentSenderPageCount]);
-
-  useEffect(() => {
-    setSenderPage((current) => Math.min(current, Math.max(0, senderPageCount - 1)));
-  }, [senderPageCount]);
 
   useEffect(() => {
     const elements = Array.from(
@@ -2664,6 +1949,7 @@ export default function VentaPage() {
     });
 
     return () => setShellConfig({});
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- step nav helpers are stable for shell sync
   }, [activeStep, activeStepIndex, completedStepIndex, maxUnlockedStepIndex, mode, setShellConfig]);
 
   return (
@@ -3016,6 +2302,7 @@ export default function VentaPage() {
                     type="search"
                     role="combobox"
                     aria-autocomplete="list"
+                    aria-controls="client-address-suggestions-listbox"
                     aria-expanded={clientAddressSuggestions.length > 0}
                     className={clientFormInputClass}
                     placeholder="Buscar calle o lugar en Google"
@@ -3030,7 +2317,11 @@ export default function VentaPage() {
                     }}
                   />
                   {clientAddressSuggestions.length ? (
-                    <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-lg border border-black bg-[#101820] shadow-2xl">
+                    <div
+                      id="client-address-suggestions-listbox"
+                      role="listbox"
+                      className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-lg border border-black bg-[#101820] shadow-2xl"
+                    >
                       {clientAddressSuggestions.map((suggestion) => (
                         <button
                           key={suggestion.placeId}
@@ -3473,6 +2764,7 @@ export default function VentaPage() {
                         type="search"
                         role="combobox"
                         aria-autocomplete="list"
+                        aria-controls="recipient-address-suggestions-listbox"
                         aria-expanded={recipientAddressSuggestions.length > 0}
                         className={`${inputClass} w-full`}
                         placeholder={
@@ -3492,7 +2784,11 @@ export default function VentaPage() {
                         disabled={!newRecipientCountry}
                       />
                       {recipientAddressSuggestions.length ? (
-                        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-md border border-black bg-[#101820] shadow-2xl">
+                        <div
+                          id="recipient-address-suggestions-listbox"
+                          role="listbox"
+                          className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-md border border-black bg-[#101820] shadow-2xl"
+                        >
                           {recipientAddressSuggestions.map((suggestion) => (
                             <button
                               key={suggestion.placeId}
@@ -4301,6 +3597,12 @@ export default function VentaPage() {
               </div>
             </div>
 
+            {stockMessage ? (
+              <p className="mt-4 rounded-lg border border-black bg-surface-panel px-3 py-2 text-center text-sm font-bold text-emerald-200">
+                {stockMessage}
+              </p>
+            ) : null}
+
             <div className="mt-5 grid gap-3 border-t border-black pt-4 border-black sm:grid-cols-3">
               <button
                 onClick={() => setShowInvoice(false)}
@@ -4317,8 +3619,36 @@ export default function VentaPage() {
               </button>
               <button
                 onClick={() => {
-                  setShowInvoice(false);
-                  setInvoiceSequence((current) => current + 1);
+                  void (async () => {
+                    if (!selectedBox?.[0]) {
+                      return;
+                    }
+
+                    setStockMessage("");
+
+                    const note = `Venta ${invoiceNumber}`;
+
+                    if (!isSupabaseConfigured()) {
+                      setStockMessage(
+                        "Configura Supabase en .env.local para descontar stock en la base de datos.",
+                      );
+                      return;
+                    }
+
+                    const result = await deductStockForBoxSaleAction({
+                      boxLabel: selectedBox[0],
+                      note,
+                    });
+
+                    if (!result.ok) {
+                      setStockMessage(result.error);
+                      return;
+                    }
+
+                    setShowInvoice(false);
+                    setInvoiceSequence((current) => current + 1);
+                    setStockMessage("Cobro confirmado y stock descontado.");
+                  })();
                 }}
                 className="h-14 rounded-lg bg-emerald-400 text-lg font-black text-slate-950"
               >

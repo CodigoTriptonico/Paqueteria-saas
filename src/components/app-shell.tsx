@@ -10,15 +10,19 @@ import {
   House,
   LucideIcon,
   Settings,
+  Shield,
 } from "lucide-react";
-import { useEffect, useState, ViewTransition } from "react";
+import { useEffect, useMemo, useState, ViewTransition } from "react";
+import { getCurrentSessionAction } from "@/app/actions/session";
+import { canAccessPath } from "@/lib/auth/permissions";
 
-const navItems: { label: string; href: string; icon: LucideIcon; hasSubmenu?: boolean }[] = [
+const navItems: { label: string; href: string; icon: LucideIcon; hasSubmenu?: boolean; platformOnly?: boolean }[] = [
   { label: "Inicio", href: "/", icon: House },
   { label: "Nueva venta", href: "/venta", icon: CreditCard, hasSubmenu: true },
   { label: "Inventario", href: "/inventario", icon: Boxes, hasSubmenu: true },
   { label: "Envios", href: "/envios", icon: ClipboardList },
   { label: "Configuracion", href: "/configuracion", icon: Settings },
+  { label: "Plataforma", href: "/platform", icon: Shield, platformOnly: true },
 ];
 
 type AppShellProps = {
@@ -43,6 +47,52 @@ function hasCompactSidebarContent(content: React.ReactNode) {
   return content !== null && content !== undefined && content !== false;
 }
 
+type CompactNavHeaderProps = {
+  compact?: boolean;
+  compactNavTitle: string;
+  compactNavBackTitle: string;
+  onCompactNavClick: () => void;
+  compactNavSettingsHref?: string;
+};
+
+function CompactNavHeader({
+  compact,
+  compactNavTitle,
+  compactNavBackTitle,
+  onCompactNavClick,
+  compactNavSettingsHref,
+}: CompactNavHeaderProps) {
+  const buttonClass = compact
+    ? "flex h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border border-black bg-surface-card px-3 text-sm font-black text-slate-200 transition-all duration-200 active:scale-[0.98] hover:bg-[#2f3834]"
+    : "flex h-14 min-w-0 flex-1 items-center gap-3 rounded-lg border border-black bg-surface-card px-4 text-left text-lg font-black text-slate-200 transition-all duration-200 hover:-translate-x-0.5 hover:bg-[#2f3834]";
+  const settingsClass = compact
+    ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card text-slate-300 transition-all duration-200 active:scale-[0.98] hover:bg-[#2f3834] hover:text-slate-100"
+    : "flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card text-slate-300 transition-all duration-200 hover:bg-[#2f3834] hover:text-slate-100";
+
+  return (
+    <div className="flex gap-2">
+      <button
+        onClick={onCompactNavClick}
+        className={buttonClass}
+        title={compactNavBackTitle}
+      >
+        <ArrowLeft className={compact ? "h-5 w-5 shrink-0" : "h-6 w-6 shrink-0"} />
+        <span className="min-w-0 flex-1 truncate text-left">{compactNavTitle}</span>
+      </button>
+      {compactNavSettingsHref ? (
+        <Link
+          href={compactNavSettingsHref}
+          className={settingsClass}
+          title="Configuracion"
+          aria-label="Configuracion"
+        >
+          <Settings className={compact ? "h-4 w-4" : "h-5 w-5"} />
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
 export function AppShell({
   active,
   children,
@@ -55,8 +105,27 @@ export function AppShell({
   onActiveClick,
 }: AppShellProps) {
   const [navCollapsed, setNavCollapsed] = useState(false);
-  const activeItem = navItems.find((item) => item.label === active) ?? navItems[0];
+  const [allowedNavItems, setAllowedNavItems] = useState(navItems);
+  const activeItem = allowedNavItems.find((item) => item.label === active) ?? allowedNavItems[0];
   const showCompactSidebar = hasCompactSidebarContent(compactContent);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void (async () => {
+        const sessionResult = await getCurrentSessionAction();
+        const session = sessionResult.ok ? sessionResult.data : null;
+
+        if (!session) {
+          setAllowedNavItems(navItems);
+          return;
+        }
+
+        setAllowedNavItems(navItems.filter((item) => canAccessPath(session, item.href)));
+      })();
+    });
+  }, []);
+
+  const mobileNavItems = useMemo(() => allowedNavItems, [allowedNavItems]);
 
   function collapseToCompactNav() {
     setNavCollapsed(true);
@@ -65,12 +134,16 @@ export function AppShell({
 
   useEffect(() => {
     if (!showCompactSidebar) {
-      setNavCollapsed(false);
-      window.sessionStorage.removeItem("paquemas-nav-collapsed");
+      queueMicrotask(() => {
+        setNavCollapsed(false);
+        window.sessionStorage.removeItem("paquemas-nav-collapsed");
+      });
       return;
     }
 
-    collapseToCompactNav();
+    queueMicrotask(() => {
+      collapseToCompactNav();
+    });
   }, [active, showCompactSidebar, compactNavFocusKey]);
 
   function expandNav() {
@@ -89,38 +162,6 @@ export function AppShell({
 
   const compactNavTitle = compactNavLabel ?? activeItem.label;
   const compactNavBackTitle = onCompactNavClick ? "Volver" : "Mostrar menu";
-
-  function CompactNavHeader({ compact }: { compact?: boolean }) {
-    const buttonClass = compact
-      ? "flex h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border border-black bg-surface-card px-3 text-sm font-black text-slate-200 transition-all duration-200 active:scale-[0.98] hover:bg-[#2f3834]"
-      : "flex h-14 min-w-0 flex-1 items-center gap-3 rounded-lg border border-black bg-surface-card px-4 text-left text-lg font-black text-slate-200 transition-all duration-200 hover:-translate-x-0.5 hover:bg-[#2f3834]";
-    const settingsClass = compact
-      ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card text-slate-300 transition-all duration-200 active:scale-[0.98] hover:bg-[#2f3834] hover:text-slate-100"
-      : "flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card text-slate-300 transition-all duration-200 hover:bg-[#2f3834] hover:text-slate-100";
-
-    return (
-      <div className="flex gap-2">
-        <button
-          onClick={handleCompactNavClick}
-          className={buttonClass}
-          title={compactNavBackTitle}
-        >
-          <ArrowLeft className={compact ? "h-5 w-5 shrink-0" : "h-6 w-6 shrink-0"} />
-          <span className="min-w-0 flex-1 truncate text-left">{compactNavTitle}</span>
-        </button>
-        {compactNavSettingsHref ? (
-          <Link
-            href={compactNavSettingsHref}
-            className={settingsClass}
-            title="Configuracion"
-            aria-label="Configuracion"
-          >
-            <Settings className={compact ? "h-4 w-4" : "h-5 w-5"} />
-          </Link>
-        ) : null}
-      </div>
-    );
-  }
 
   function handleNavClick(isActive: boolean, hasSubmenu?: boolean) {
     if (isActive && hasSubmenu && showCompactSidebar) {
@@ -145,12 +186,19 @@ export function AppShell({
 
           {navCollapsed && showCompactSidebar ? (
             <div className="motion-enter-left flex min-h-0 flex-1 flex-col gap-3">
-              {hideCompactNavHeader ? null : <CompactNavHeader />}
+              {hideCompactNavHeader ? null : (
+                <CompactNavHeader
+                  compactNavTitle={compactNavTitle}
+                  compactNavBackTitle={compactNavBackTitle}
+                  onCompactNavClick={handleCompactNavClick}
+                  compactNavSettingsHref={compactNavSettingsHref}
+                />
+              )}
               {compactContent}
             </div>
           ) : (
             <nav className="motion-enter-left grid gap-2">
-              {navItems.map((item) => {
+              {allowedNavItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = item.label === active;
 
@@ -186,14 +234,22 @@ export function AppShell({
         <section className="min-w-0 flex-1">
           {navCollapsed && showCompactSidebar ? (
             <div className="motion-enter-top sticky top-3 z-50 mb-4 grid gap-3 lg:hidden">
-              {hideCompactNavHeader ? null : <CompactNavHeader compact />}
+              {hideCompactNavHeader ? null : (
+                <CompactNavHeader
+                  compact
+                  compactNavTitle={compactNavTitle}
+                  compactNavBackTitle={compactNavBackTitle}
+                  onCompactNavClick={handleCompactNavClick}
+                  compactNavSettingsHref={compactNavSettingsHref}
+                />
+              )}
               {compactContent}
             </div>
           ) : null}
 
           {!navCollapsed ? (
             <nav className="motion-enter-top mb-4 grid grid-cols-2 gap-2 sm:mb-5 sm:grid-cols-3 lg:hidden">
-              {navItems.map((item) => {
+              {mobileNavItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = item.label === active;
 

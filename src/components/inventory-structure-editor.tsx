@@ -23,12 +23,18 @@ import {
   Panel,
   primaryButtonClass,
 } from "@/components/ui-blocks";
+import { StockBadgeDisplay } from "@/components/stock-badge";
+import {
+  inventoryItemsForLeaf,
+  resolveCategoryStockItems,
+  resolveSubcategoryStockItems,
+  type InventoryStockItem,
+} from "@/lib/inventory-stock";
 import {
   addInventoryTreeChild,
   categoryDirectItems,
   categoryItems,
   categorySubcategories,
-  countCategoryLeafItems,
   deleteInventoryTreeItem,
   inventoryTreeItemExists,
   normalizeInventoryText,
@@ -40,6 +46,8 @@ import {
 type InventoryStructureEditorProps = {
   categoryConfigs: CategoryConfig[];
   onCategoryConfigsChange: (next: CategoryConfig[]) => void;
+  inventoryItems?: InventoryStockItem[];
+  onInventoryItemsChange?: (next: InventoryStockItem[]) => void;
   layout?: "sidebar" | "inline";
   showCategoryCreate?: boolean;
 };
@@ -48,33 +56,47 @@ const addBtnClass =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-400 text-slate-950 transition hover:brightness-110";
 const iconBtnClass =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-40";
-const rowMetaClass = "truncate text-[11px] font-medium text-slate-400";
-const categoryRowClass = (selected: boolean) =>
-  `group flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 transition ${
-    selected
-      ? "bg-surface-card-header ring-1 ring-emerald-600/40"
-      : "hover:bg-surface-card/60"
+const countBadgeClass =
+  "inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md border border-black bg-surface-inset px-1.5 text-[11px] font-semibold tabular-nums text-slate-200";
+const categoryCardSelectedClass =
+  "border-2 border-emerald-400 bg-surface-card-header shadow-[0_0_0_1px_rgba(52,211,153,0.25),0_4px_14px_rgba(0,0,0,0.22)]";
+const subcategoryRowSelectedClass =
+  "border-2 border-emerald-400 bg-surface-card-header shadow-[0_0_0_1px_rgba(52,211,153,0.2)]";
+const categoryCardClass = (active: boolean) =>
+  `overflow-hidden rounded-xl border bg-surface-card transition ${
+    active
+      ? categoryCardSelectedClass
+      : "border-black shadow-[0_4px_14px_rgba(0,0,0,0.2)] hover:bg-surface-card-hover"
   }`;
+const categoryHeaderClass = (selected: boolean, hasSubsBelow: boolean) =>
+  `group min-w-0 border-black transition ${
+    hasSubsBelow ? "border-b" : ""
+  } ${selected ? "bg-surface-card-header/60" : "hover:bg-surface-card-hover"}`;
+const rowActionsBarClass =
+  "flex items-center justify-end gap-0.5 border-t border-black bg-surface-inset/60 px-2 py-1.5";
+const subcategoryPanelClass =
+  "mx-2 mb-2 flex min-w-0 flex-col gap-1.5 rounded-lg border border-black bg-surface-panel px-2 py-2";
 const subcategoryRowClass = (selected: boolean) =>
-  `group flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 transition ${
-    selected ? "bg-surface-card ring-1 ring-emerald-600/30" : "hover:bg-surface-card/50"
+  `group flex min-w-0 flex-col overflow-hidden rounded-md border bg-surface-card transition ${
+    selected ? subcategoryRowSelectedClass : "border-black hover:bg-surface-card-hover"
   }`;
 
-function formatCategoryMeta(subCount: number, itemCount: number) {
-  const itemsLabel = itemCount === 1 ? "item" : "items";
-
-  if (subCount === 0) {
-    return `${itemCount} ${itemsLabel}`;
-  }
-
-  return `${subCount} sub · ${itemCount} ${itemsLabel}`;
+function CountBadge({ count, title }: { count: number; title: string }) {
+  return (
+    <span className={countBadgeClass} title={title} aria-label={`${count} ${title}`}>
+      {count}
+    </span>
+  );
 }
+
 const itemsGridClass =
   "grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(260px,1fr))]";
 
 export function InventoryStructureEditor({
   categoryConfigs,
   onCategoryConfigsChange,
+  inventoryItems = [],
+  onInventoryItemsChange,
   layout = "sidebar",
   showCategoryCreate = false,
 }: InventoryStructureEditorProps) {
@@ -152,6 +174,43 @@ export function InventoryStructureEditor({
     setShowNewItemForm(false);
   }
 
+  function categoryStockItems(category: CategoryConfig) {
+    return resolveCategoryStockItems(inventoryItems, category);
+  }
+
+  function subcategoryStockItems(
+    category: CategoryConfig,
+    subcategoryName: string,
+    childKindNames: string[],
+  ) {
+    return resolveSubcategoryStockItems(
+      inventoryItems,
+      category,
+      subcategoryName,
+      childKindNames,
+    );
+  }
+
+  function pushInventoryItem(item: InventoryStockItem) {
+    onInventoryItemsChange?.([...inventoryItems, item]);
+  }
+
+  function removeInventoryForLeaf(
+    categoryName: string,
+    leafName: string,
+    subcategoryName?: string,
+  ) {
+    const matches = inventoryItemsForLeaf(
+      inventoryItems,
+      categoryName,
+      leafName,
+      subcategoryName,
+    );
+    const matchIds = new Set(matches.map((item) => item.id));
+
+    onInventoryItemsChange?.(inventoryItems.filter((item) => !matchIds.has(item.id)));
+  }
+
   function addCategory() {
     const name = newCategoryName.trim();
 
@@ -177,6 +236,14 @@ export function InventoryStructureEditor({
       ),
     );
 
+    onInventoryItemsChange?.(
+      inventoryItems.map((item) =>
+        normalizeInventoryText(item.category) === normalizeInventoryText(oldName)
+          ? { ...item, category: name }
+          : item,
+      ),
+    );
+
     if (selectedCategory === oldName) {
       setSelectedCategory(name);
     }
@@ -188,6 +255,12 @@ export function InventoryStructureEditor({
   function deleteCategory(name: string) {
     onCategoryConfigsChange(
       categoryConfigs.filter((currentCategory) => currentCategory.name !== name),
+    );
+
+    onInventoryItemsChange?.(
+      inventoryItems.filter(
+        (item) => normalizeInventoryText(item.category) !== normalizeInventoryText(name),
+      ),
     );
 
     if (selectedCategory === name) {
@@ -247,6 +320,15 @@ export function InventoryStructureEditor({
       return;
     }
 
+    const categoryData = categoryConfigs.find(
+      (currentCategory) => currentCategory.name === categoryName,
+    );
+    const subcategory =
+      (categoryData ? categorySubcategories(categoryData) : []).find(
+        (item) => item.id === subcategoryId,
+      ) || null;
+    const previousName = subcategory?.name || "";
+
     onCategoryConfigsChange(
       categoryConfigs.map((currentCategory) => {
         if (currentCategory.name !== categoryName) {
@@ -259,6 +341,18 @@ export function InventoryStructureEditor({
         };
       }),
     );
+
+    if (previousName && previousName !== nextName) {
+      onInventoryItemsChange?.(
+        inventoryItems.map((item) =>
+          normalizeInventoryText(item.category) === normalizeInventoryText(categoryName) &&
+          item.subcategory &&
+          normalizeInventoryText(item.subcategory) === normalizeInventoryText(previousName)
+            ? { ...item, subcategory: nextName }
+            : item,
+        ),
+      );
+    }
 
     setEditingSubcategoryId("");
     setEditingSubcategoryName("");
@@ -336,6 +430,23 @@ export function InventoryStructureEditor({
 
     setNewNameByKey((current) => ({ ...current, [inputKey]: "" }));
     setShowNewItemForm(false);
+
+    const subcategoryName = subcategoryId
+      ? categoryConfigs
+          .find((currentCategory) => currentCategory.name === categoryName)
+          ?.items?.find((item) => item.id === subcategoryId)?.name
+      : undefined;
+
+    pushInventoryItem({
+      id: `inv-${Date.now()}`,
+      name: itemName,
+      category: categoryName,
+      kind: itemName,
+      subcategory: subcategoryName,
+      stock: 0,
+      reserved: 0,
+      minStock: 2,
+    });
   }
 
   function saveItem(categoryName: string, itemId: string) {
@@ -344,6 +455,8 @@ export function InventoryStructureEditor({
     if (!nextName) {
       return;
     }
+
+    const previousItem = selectedItems.find((item) => item.id === itemId);
 
     onCategoryConfigsChange(
       categoryConfigs.map((currentCategory) => {
@@ -358,11 +471,32 @@ export function InventoryStructureEditor({
       }),
     );
 
+    if (previousItem && previousItem.name !== nextName) {
+      onInventoryItemsChange?.(
+        inventoryItems.map((item) => {
+          const leafMatches = inventoryItemsForLeaf(
+            inventoryItems,
+            categoryName,
+            previousItem.name,
+            selectedSubcategory?.name,
+          ).some((match) => match.id === item.id);
+
+          if (!leafMatches) {
+            return item;
+          }
+
+          return { ...item, name: nextName, kind: nextName };
+        }),
+      );
+    }
+
     setEditingItemId("");
     setEditingItemName("");
   }
 
   function deleteItem(categoryName: string, itemId: string) {
+    const treeItem = selectedItems.find((entry) => entry.id === itemId);
+
     onCategoryConfigsChange(
       categoryConfigs.map((currentCategory) =>
         currentCategory.name === categoryName
@@ -373,6 +507,10 @@ export function InventoryStructureEditor({
           : currentCategory,
       ),
     );
+
+    if (treeItem) {
+      removeInventoryForLeaf(categoryName, treeItem.name, selectedSubcategory?.name);
+    }
   }
 
   function renderItemCard(item: InventoryTreeItem) {
@@ -381,13 +519,36 @@ export function InventoryStructureEditor({
     }
 
     const editing = editingItemId === item.id;
-
+    const leafItems = inventoryItemsForLeaf(
+      inventoryItems,
+      selectedCategoryData.name,
+      item.name,
+      selectedSubcategory?.name,
+    );
+    const leafStockItems =
+      leafItems.length > 0
+        ? leafItems
+        : [
+            {
+              id: `virtual-leaf-${item.id}`,
+              name: item.name,
+              category: selectedCategoryData.name,
+              kind: item.name,
+              subcategory: selectedSubcategory?.name,
+              stock: 0,
+              reserved: 0,
+              minStock: 2,
+            },
+          ];
     return (
       <article key={item.id} className={`${cardClass} flex flex-col p-0`}>
         <div className={`${cardBodyHeaderClass} rounded-t-xl px-4 py-3`}>
-          <span className={`h-9 w-9 shrink-0 ${iconWellEmerald}`}>
-            <Package2 className="h-4 w-4" />
-          </span>
+          <div className="flex items-start justify-between gap-2">
+            <span className={`h-9 w-9 shrink-0 ${iconWellEmerald}`}>
+              <Package2 className="h-4 w-4" />
+            </span>
+            <StockBadgeDisplay items={leafStockItems} title="Stock disponible" />
+          </div>
           {editing ? (
             <input
               className={`${inputClass} mt-2 h-9 w-full text-sm`}
@@ -500,60 +661,74 @@ export function InventoryStructureEditor({
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-2">
-          <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3">
+          <div className="flex min-w-0 flex-col gap-2.5">
             {filteredCategories.map((currentCategory) => {
               const categorySelected = currentCategory.name === selectedCategory;
               const subs = categorySubcategories(currentCategory);
               const subCount = subs.length;
-              const itemCount = countCategoryLeafItems(currentCategory);
+              const categoryStockItemsResolved = categoryStockItems(currentCategory);
               const editing = editingCategory === currentCategory.name;
               const isAddingSubcategory = openSubcategoryInput === currentCategory.name;
 
               return (
-                <div key={currentCategory.name} className="min-w-0">
-                  <div className={categoryRowClass(categorySelected && !selectedSubcategoryId)}>
-                    {editing ? (
-                      <input
-                        className={`${inputClass} h-8 min-w-0 flex-1 text-sm`}
-                        value={editingCategoryName}
-                        onChange={(event) => setEditingCategoryName(event.target.value)}
-                        autoFocus
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => selectCategory(currentCategory.name)}
-                        className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left"
-                      >
-                        <span
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-                            categorySelected
-                              ? accentEmeraldSolid
-                              : "bg-surface-panel text-slate-400"
-                          }`}
-                        >
-                          <Layers3 className="h-3.5 w-3.5" />
-                        </span>
-                        <span className="min-w-0 flex-1 overflow-hidden">
-                          <span className="block truncate text-sm font-medium capitalize text-[#f8fafc]">
-                            {currentCategory.name}
-                          </span>
-                          <span className={rowMetaClass}>
-                            {formatCategoryMeta(subCount, itemCount)}
-                          </span>
-                        </span>
-                      </button>
+                <div key={currentCategory.name} className={`min-w-0 ${categoryCardClass(categorySelected)}`}>
+                  <div
+                    className={categoryHeaderClass(
+                      categorySelected && !selectedSubcategoryId,
+                      categorySelected && subs.length > 0,
                     )}
+                  >
+                    <div className="px-3 py-2.5">
+                      {editing ? (
+                        <input
+                          className={`${inputClass} h-9 w-full text-sm`}
+                          value={editingCategoryName}
+                          onChange={(event) => setEditingCategoryName(event.target.value)}
+                          autoFocus
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => selectCategory(currentCategory.name)}
+                          className="flex w-full min-w-0 flex-col gap-2 text-left"
+                        >
+                          <span className="flex items-start gap-2.5">
+                            <span
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${
+                                categorySelected
+                                  ? accentEmeraldSolid
+                                  : "border-black bg-surface-inset text-slate-400"
+                              }`}
+                            >
+                              <Layers3 className="h-3.5 w-3.5" />
+                            </span>
+                            <span className="min-w-0 flex-1 break-words text-sm font-semibold capitalize leading-snug text-[#f8fafc]">
+                              {currentCategory.name}
+                            </span>
+                          </span>
+                          <span className="flex flex-wrap items-center gap-1 pl-[2.875rem]">
+                            {subCount > 0 ? (
+                              <CountBadge count={subCount} title="subcategorías" />
+                            ) : null}
+                            <StockBadgeDisplay
+                              items={categoryStockItemsResolved}
+                              title="Stock en categoría"
+                            />
+                          </span>
+                        </button>
+                      )}
+                    </div>
 
                     {categorySelected || editing ? (
-                      <div className="flex shrink-0 items-center gap-0.5">
+                      <div className={rowActionsBarClass}>
                         {editing ? (
                           <>
                             <button
                               type="button"
                               onClick={() => saveCategory(currentCategory.name)}
                               className={addBtnClass}
+                              title="Guardar"
                             >
                               <Check className="h-3.5 w-3.5" />
                             </button>
@@ -564,6 +739,7 @@ export function InventoryStructureEditor({
                                 setEditingCategoryName("");
                               }}
                               className={iconBtnClass}
+                              title="Cancelar"
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
@@ -609,7 +785,7 @@ export function InventoryStructureEditor({
                   </div>
 
                   {isAddingSubcategory ? (
-                    <div className="mt-1 flex items-center gap-1.5 rounded-md border border-dashed border-emerald-600/40 bg-surface-inset px-2 py-1.5 pl-10">
+                    <div className="mx-2 mb-2 flex items-center gap-1.5 rounded-lg border border-dashed border-black bg-surface-inset px-2.5 py-2">
                       <input
                         className={`${inputClass} h-8 min-w-0 flex-1 border-0 bg-transparent text-sm`}
                         placeholder="Subcategoria"
@@ -638,47 +814,60 @@ export function InventoryStructureEditor({
                   ) : null}
 
                   {categorySelected && subs.length > 0 ? (
-                    <div className="mb-1 ml-4 mt-0.5 flex min-w-0 flex-col gap-0.5 border-l border-emerald-600/25 pl-2">
+                    <div className={subcategoryPanelClass}>
+                      <p className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        Subcategorías
+                      </p>
+                      <div className="flex flex-col gap-1.5">
                       {subs.map((subcategory) => {
                         const subSelected = selectedSubcategoryId === subcategory.id;
                         const subEditing = editingSubcategoryId === subcategory.id;
-                        const childCount = subcategory.children?.length || 0;
+                        const subStockItems = subcategoryStockItems(
+                          currentCategory,
+                          subcategory.name,
+                          (subcategory.children || []).map((child) => child.name),
+                        );
 
                         return (
                           <div key={subcategory.id} className={subcategoryRowClass(subSelected)}>
-                            {subEditing ? (
-                              <input
-                                className={`${inputClass} h-8 min-w-0 flex-1 text-sm`}
-                                value={editingSubcategoryName}
-                                onChange={(event) =>
-                                  setEditingSubcategoryName(event.target.value)
-                                }
-                                autoFocus
-                              />
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => selectSubcategory(subcategory.id)}
-                                className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-left"
-                              >
-                                <ChevronRight
-                                  className={`h-3.5 w-3.5 shrink-0 ${
-                                    subSelected ? "text-emerald-400" : "text-slate-500"
-                                  }`}
+                            <div className="px-2 py-1.5">
+                              {subEditing ? (
+                                <input
+                                  className={`${inputClass} h-8 w-full text-sm`}
+                                  value={editingSubcategoryName}
+                                  onChange={(event) =>
+                                    setEditingSubcategoryName(event.target.value)
+                                  }
+                                  autoFocus
                                 />
-                                <span className="min-w-0 flex-1 overflow-hidden">
-                                  <span className="block truncate text-sm font-medium capitalize text-slate-200">
-                                    {subcategory.name}
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => selectSubcategory(subcategory.id)}
+                                  className="flex w-full min-w-0 flex-col gap-1.5 text-left"
+                                >
+                                  <span className="flex items-start gap-1.5">
+                                    <ChevronRight
+                                      className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${
+                                        subSelected ? "text-emerald-400" : "text-slate-500"
+                                      }`}
+                                    />
+                                    <span className="min-w-0 flex-1 break-words text-sm font-medium capitalize leading-snug text-slate-200">
+                                      {subcategory.name}
+                                    </span>
                                   </span>
-                                  <span className={rowMetaClass}>
-                                    {childCount} {childCount === 1 ? "item" : "items"}
+                                  <span className="pl-5">
+                                    <StockBadgeDisplay
+                                      items={subStockItems}
+                                      title="Stock en subcategoría"
+                                    />
                                   </span>
-                                </span>
-                              </button>
-                            )}
+                                </button>
+                              )}
+                            </div>
 
                             {subSelected || subEditing ? (
-                              <div className="flex shrink-0 items-center gap-0.5">
+                              <div className={rowActionsBarClass}>
                                 {subEditing ? (
                                   <>
                                     <button
@@ -687,6 +876,7 @@ export function InventoryStructureEditor({
                                         saveSubcategory(currentCategory.name, subcategory.id)
                                       }
                                       className={addBtnClass}
+                                      title="Guardar"
                                     >
                                       <Check className="h-3.5 w-3.5" />
                                     </button>
@@ -697,6 +887,7 @@ export function InventoryStructureEditor({
                                         setEditingSubcategoryName("");
                                       }}
                                       className={iconBtnClass}
+                                      title="Cancelar"
                                     >
                                       <X className="h-3.5 w-3.5" />
                                     </button>
@@ -731,6 +922,7 @@ export function InventoryStructureEditor({
                           </div>
                         );
                       })}
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -738,7 +930,7 @@ export function InventoryStructureEditor({
             })}
 
             {!filteredCategories.length ? (
-              <div className="rounded-lg border border-dashed border-black bg-surface-card px-3 py-8 text-center">
+              <div className="rounded-xl border border-dashed border-black bg-surface-card px-4 py-10 text-center">
                 <p className="text-sm font-black text-slate-300">Sin categorias</p>
                 {showCategoryCreate ? (
                   <p className="mt-1 text-xs font-bold text-slate-500">
@@ -751,6 +943,8 @@ export function InventoryStructureEditor({
         </div>
       </div>
     ),
+    // Sidebar shell: handlers close over latest state; full deps would rebuild every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional stable shell snapshot
     [
       categoryQuery,
       newCategoryName,

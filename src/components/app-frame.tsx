@@ -32,6 +32,10 @@ function activeFromPath(pathname: string) {
     return "Configuracion";
   }
 
+  if (pathname.startsWith("/platform")) {
+    return "Plataforma";
+  }
+
   return "Inicio";
 }
 
@@ -39,6 +43,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [config, setConfig] = useState<ShellConfig>({});
   const active = useMemo(() => activeFromPath(pathname), [pathname]);
+
+  if (pathname.startsWith("/login")) {
+    return <>{children}</>;
+  }
 
   return (
     <ShellConfigContext.Provider value={setConfig}>
