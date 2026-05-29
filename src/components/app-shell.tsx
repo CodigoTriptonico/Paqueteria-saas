@@ -13,8 +13,8 @@ import {
   Shield,
 } from "lucide-react";
 import { useEffect, useMemo, useState, ViewTransition } from "react";
-import { getCurrentSessionAction } from "@/app/actions/session";
 import { canAccessPath } from "@/lib/auth/permissions";
+import type { AppSession } from "@/lib/auth/types";
 
 const navItems: { label: string; href: string; icon: LucideIcon; hasSubmenu?: boolean; platformOnly?: boolean }[] = [
   { label: "Inicio", href: "/", icon: House },
@@ -93,7 +93,16 @@ function CompactNavHeader({
   );
 }
 
+function navItemsForSession(session: AppSession | null) {
+  if (!session) {
+    return navItems;
+  }
+
+  return navItems.filter((item) => canAccessPath(session, item.href));
+}
+
 export function AppShell({
+  session,
   active,
   children,
   compactContent,
@@ -103,27 +112,11 @@ export function AppShell({
   hideCompactNavHeader,
   compactNavSettingsHref,
   onActiveClick,
-}: AppShellProps) {
+}: AppShellProps & { session: AppSession | null }) {
   const [navCollapsed, setNavCollapsed] = useState(false);
-  const [allowedNavItems, setAllowedNavItems] = useState(navItems);
+  const allowedNavItems = useMemo(() => navItemsForSession(session), [session]);
   const activeItem = allowedNavItems.find((item) => item.label === active) ?? allowedNavItems[0];
   const showCompactSidebar = hasCompactSidebarContent(compactContent);
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      void (async () => {
-        const sessionResult = await getCurrentSessionAction();
-        const session = sessionResult.ok ? sessionResult.data : null;
-
-        if (!session) {
-          setAllowedNavItems(navItems);
-          return;
-        }
-
-        setAllowedNavItems(navItems.filter((item) => canAccessPath(session, item.href)));
-      })();
-    });
-  }, []);
 
   const mobileNavItems = useMemo(() => allowedNavItems, [allowedNavItems]);
 
@@ -206,6 +199,7 @@ export function AppShell({
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch
                     transitionTypes={["app-nav"]}
                     onClick={() => handleNavClick(isActive, item.hasSubmenu)}
                     className={`flex h-14 min-w-0 items-center gap-3 rounded-lg border px-4 text-left text-lg font-black transition-all duration-200 hover:translate-x-1 ${
@@ -257,6 +251,7 @@ export function AppShell({
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch
                     transitionTypes={["app-nav"]}
                     onClick={() => handleNavClick(isActive, item.hasSubmenu)}
                     className={`relative flex min-h-14 flex-col items-center justify-center rounded-lg border px-2 text-center text-xs font-black transition-all duration-200 active:scale-[0.98] sm:min-h-16 sm:text-sm ${

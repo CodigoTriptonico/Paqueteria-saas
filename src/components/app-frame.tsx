@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import type { AppSession } from "@/lib/auth/types";
 
 type ShellConfig = {
   compactContent?: React.ReactNode;
@@ -39,7 +40,13 @@ function activeFromPath(pathname: string) {
   return "Inicio";
 }
 
-export function AppFrame({ children }: { children: React.ReactNode }) {
+export function AppFrame({
+  children,
+  session,
+}: {
+  children: React.ReactNode;
+  session: AppSession | null;
+}) {
   const pathname = usePathname();
   const [config, setConfig] = useState<ShellConfig>({});
   const active = useMemo(() => activeFromPath(pathname), [pathname]);
@@ -51,6 +58,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   return (
     <ShellConfigContext.Provider value={setConfig}>
       <AppShell
+        session={session}
         active={active}
         title={active}
         compactContent={config.compactContent}

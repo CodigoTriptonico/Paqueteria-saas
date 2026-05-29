@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -18,7 +19,7 @@ async function loadIsPlatformAdmin(userId: string) {
   return Boolean(data?.user_id);
 }
 
-export async function getAppSession(): Promise<AppSession | null> {
+export const getAppSession = cache(async (): Promise<AppSession | null> => {
   if (!isSupabaseConfigured()) {
     return null;
   }
@@ -39,12 +40,12 @@ export async function getAppSession(): Promise<AppSession | null> {
   const { data: profile, error } = await supabase
     .from("profiles")
     .select(
-      "id, email, full_name, organization_id, role_id, roles(slug, name), organizations(name, settings)",
+      "id, email, full_name, organization_id, role_id, is_active, roles(slug, name), organizations(name, settings)",
     )
     .eq("id", user.id)
     .maybeSingle();
 
-  if (error || !profile) {
+  if (error || !profile || profile.is_active === false) {
     return null;
   }
 
@@ -56,11 +57,15 @@ export async function getAppSession(): Promise<AppSession | null> {
     | null;
   const org = Array.isArray(orgRow) ? orgRow[0] : orgRow;
 
-  const { data: grantedPerms } = await supabase
-    .from("role_permissions")
-    .select("permissions(key)")
-    .eq("role_id", profile.role_id)
-    .eq("granted", true);
+  const [{ data: grantedPerms }, { data: warehouseLinks }, isPlatformAdmin] = await Promise.all([
+    supabase
+      .from("role_permissions")
+      .select("permissions(key)")
+      .eq("role_id", profile.role_id)
+      .eq("granted", true),
+    supabase.from("profile_warehouses").select("warehouse_id").eq("profile_id", user.id),
+    loadIsPlatformAdmin(user.id),
+  ]);
 
   const permissions = (grantedPerms || [])
     .map((row) => {
@@ -68,13 +73,6 @@ export async function getAppSession(): Promise<AppSession | null> {
       return Array.isArray(perm) ? perm[0]?.key : perm?.key;
     })
     .filter(Boolean) as PermissionKey[];
-
-  const { data: warehouseLinks } = await supabase
-    .from("profile_warehouses")
-    .select("warehouse_id")
-    .eq("profile_id", user.id);
-
-  const isPlatformAdmin = await loadIsPlatformAdmin(user.id);
 
   return {
     userId: user.id,
@@ -89,7 +87,7 @@ export async function getAppSession(): Promise<AppSession | null> {
     warehouseIds: (warehouseLinks || []).map((row) => row.warehouse_id),
     isPlatformAdmin,
   };
-}
+});
 
 export async function requireAppSession() {
   const session = await getAppSession();

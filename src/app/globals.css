@@ -99,11 +99,11 @@ input::placeholder {
 }
 
 ::view-transition-old(.app-fade) {
-  animation: app-fade-out 120ms ease-out both;
+  animation: app-fade-out 60ms ease-out both;
 }
 
 ::view-transition-new(.app-fade) {
-  animation: app-fade-in 180ms ease-out both;
+  animation: app-fade-in 80ms ease-out both;
 }
 
 ::view-transition-old(.inventory-view) {

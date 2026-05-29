@@ -27,6 +27,38 @@ Guía detallada: [SETUP.md](./SETUP.md)
 | `npm run build` | Build de producción |
 | `npm run lint` | ESLint |
 | `npm run db:check` | Valida migraciones y tablas esperadas |
+| `npm run publish:online` | Sube a GitHub → Vercel actualiza el sitio online |
+
+## Publicar cambios online (automatico)
+
+El proyecto **ya esta conectado** a GitHub (`CodigoTriptonico/Paqueteria-saas`) y Vercel.
+
+Cada vez que hagas **push** a la rama `main`, Vercel reconstruye y actualiza:
+
+**https://paqueteria-saas.vercel.app**
+
+### Flujo en tu PC
+
+1. Editas codigo y pruebas en local: `npm run dev`
+2. Cuando quieras publicar:
+
+```powershell
+npm run publish:online
+```
+
+O con mensaje de commit:
+
+```powershell
+npm run publish:online -- -Message "Arreglo inventario"
+```
+
+En 1-2 minutos el link online tiene la version nueva.
+
+### Importante
+
+- **No se sube solo al guardar el archivo** — hace falta `publish:online` (o `git push`).
+- **`.env.local` no se sube** (secretos). Variables de produccion van en Vercel → Settings → Environment Variables.
+- Cambios de **base de datos** (SQL) van aparte: `npm run db:apply` o SQL Editor en Supabase.
 
 ## Arquitectura
 
