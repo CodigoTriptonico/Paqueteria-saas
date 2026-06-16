@@ -10,20 +10,40 @@ import {
   Edit3,
   Package,
   Plus,
-  Printer,
   Search,
-  Trash2,
-  Mail,
   MapPin,
-  Phone,
-  UserPlus,
   X,
 } from "lucide-react";
-import { type MouseEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
+import { type MouseEvent, type RefObject, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  createCustomerAction,
+  createRecipientAction,
+  listCustomersWithRecipientsAction,
+  updateCustomerAction,
+  updateRecipientAction,
+} from "@/app/actions/customers";
+import { listActivityHistoryAction, type ActivityHistoryRow } from "@/app/actions/history";
 import { deductStockForBoxSaleAction } from "@/app/actions/inventory";
-import { useSetShellConfig } from "@/components/app-frame";
-import { cardHeaderClass, cardHoverClass, iconWellEmerald, Panel } from "@/components/ui-blocks";
+import { allocateInvoiceNumberAction, loadSaleCountryBoxesAction } from "@/app/actions/pricing";
+import { createShipmentAction } from "@/app/actions/shipments";
+import { useContextNav } from "@/hooks/use-context-nav";
+import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
+import { iconWellEmerald, Panel } from "@/components/ui-blocks";
+import { customerRowToSender } from "@/lib/customers/mappers";
+import {
+  flowIntroClass,
+  flowPageShellWideClass,
+  flowPanelContentClass,
+  flowStepBodyClass,
+} from "@/components/flow-form-styles";
+import { FlowPageHeader } from "@/components/flow-page-header";
+import { FlowStepTitle } from "@/components/flow-step-title";
+import { InlineSearchCombobox } from "@/components/inline-search-picker";
+import { SaleCheckoutModal } from "@/components/sale/sale-checkout-modal";
+import { SaleClientForm } from "@/components/sale/sale-client-form";
+import { SaleRecipientForm } from "@/components/sale/sale-recipient-form";
+import { SaleRecipientList } from "@/components/sale/sale-recipient-list";
+import { SaleSenderList } from "@/components/sale/sale-sender-list";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 let activeSaleScrollFrame: number | null = null;
@@ -77,617 +97,91 @@ function saleScrollTopOffset() {
   return window.matchMedia("(min-width: 768px)").matches ? 132 : 96;
 }
 
-function saleStepButtonClass(isActive: boolean, isUnlocked: boolean) {
-  if (isActive) {
-    return "border-emerald-600 bg-emerald-400 text-slate-950";
+import {
+  type AddressFormKind,
+  type AddressSuggestResponse,
+  type AddressSuggestion,
+  type AddressValidation,
+  boxCardClass,
+  boxProfitDisplay,
+  ContextMenuState,
+  contextActiveClass,
+  CountryBadge,
+  deliveryModeCardClass,
+  deliveryModeIconClass,
+  deliverySegmentClass,
+  Flag,
+  formatDateInput,
+  historyDateLabel,
+  inputClass,
+  normalizePhoneList,
+  personFullName,
+  RECIPIENTS_PER_PAGE,
+  recipientCardClass,
+  recipientIdentityKey,
+  type Recipient,
+  saleStepNumber,
+  saleSteps,
+  type SaleStep,
+  selectedCardClass,
+  type Sender,
+  senderCardClass,
+  senderHasPhone,
+  senderPhoneKey,
+  senderPhonesLabel,
+  SENDERS_PER_PAGE,
+  samePersonName,
+  SaleInvoicePaper,
+  unselectedDimClass,
+  applyAddressSuggestResult,
+} from "@/components/sale/venta-parts";
+
+function buildAddressSuggestQuery(parts: string[]) {
+  const cleanParts = parts.map((part) => part.trim()).filter(Boolean);
+
+  if (!cleanParts.length) {
+    return "";
   }
 
-  if (isUnlocked) {
-    return "border-black bg-surface-card text-slate-300 hover:border-black hover:bg-surface-card-hover";
-  }
-
-  return "cursor-not-allowed border-black bg-surface-inset text-slate-500";
+  return cleanParts.join(" ");
 }
 
-const unselectedDimClass =
-  "opacity-45 saturate-[0.85] transition-opacity hover:opacity-75 hover:saturate-100";
-const selectedBorderClass =
-  "border-2 border-emerald-400 shadow-[0_0_0_1px_rgba(52,211,153,0.25),0_6px_20px_rgba(0,0,0,0.22)]";
-
-function deliveryModeCardClass(selected: boolean, groupHasSelection: boolean) {
-  if (selected) {
-    return `relative overflow-hidden ${selectedBorderClass} bg-surface-card`;
-  }
-
-  const base = `${cardHoverClass} border-black bg-surface-panel hover:ring-1 hover:ring-white/10`;
-  return groupHasSelection ? `${base} ${unselectedDimClass}` : base;
-}
-
-function deliveryModeIconClass(selected: boolean) {
-  return selected
-    ? "border-emerald-500/50 bg-emerald-400/15 text-emerald-300"
-    : "border-black bg-surface-inset text-slate-400";
-}
-
-function deliverySegmentClass(selected: boolean) {
-  return selected
-    ? "bg-emerald-400 text-slate-950 shadow-sm"
-    : "text-slate-400 hover:bg-surface-card/60 hover:text-slate-200";
-}
-
-type PersonName = {
-  firstName: string;
-  lastName: string;
-};
-
-type Recipient = PersonName & {
-  country: string;
-  phone: string;
-  street: string;
-  houseNumber: string;
-  neighborhood: string;
-  city: string;
-  state?: string;
-  postalCode: string;
-};
-
-type Sender = PersonName & {
-  phones: string[];
-  email: string;
-  street: string;
-  houseNumber: string;
-  neighborhood: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  recipients: Recipient[];
-};
-
-type ContextMenuState = {
-  x: number;
-  y: number;
-  title: string;
-  firstName: string;
-  lastName: string;
-  type: "remitente" | "destinatario" | "caja";
-  targetKey: string;
-  phones: string[];
+function formatValidatedAddress(
   address: {
     street?: string;
     houseNumber?: string;
-    neighborhood?: string;
     city?: string;
     state?: string;
     postalCode?: string;
     country?: string;
-  };
-};
-
-type SaleStep = "client" | "recipient" | "box" | "delivery" | "finish";
-type AddressFormKind = "client" | "recipient";
-type AddressValidation = {
-  status: "idle" | "checking" | "valid" | "invalid";
-  message: string;
-  formattedAddress?: string;
-};
-type AddressSuggestion = {
-  placeId: string;
-  description: string;
-  mainText: string;
-  secondaryText: string;
-};
-
-function personFullName(person: PersonName) {
-  return [person.firstName, person.lastName].filter(Boolean).join(" ").trim();
-}
-
-function samePersonName(a: PersonName, b: PersonName) {
-  return (
-    a.firstName.trim().toLowerCase() === b.firstName.trim().toLowerCase() &&
-    a.lastName.trim().toLowerCase() === b.lastName.trim().toLowerCase()
-  );
-}
-
-function recipientIdentityKey(recipient: Recipient) {
-  return `${recipient.firstName}|${recipient.lastName}|${recipient.country}`.toLowerCase();
-}
-
-const initialSenders: Sender[] = [];
-
-const countryBoxes: Record<string, string[][]> = {};
-const countries = Object.keys(countryBoxes);
-
-const RECIPIENTS_PER_PAGE = 3;
-const SENDERS_PER_PAGE = 3;
-const RECENT_SENDERS_PER_PAGE = 3;
-
-const countryCodes: Record<string, string> = {
-  USA: "US",
-  Mexico: "MX",
-  Guatemala: "GT",
-  Colombia: "CO",
-  Honduras: "HN",
-};
-
-function parseMoney(value: string) {
-  return Number(value.replace(/[^\d.-]/g, "")) || 0;
-}
-
-function boxProfitDisplay(box: string[]) {
-  const profit = parseMoney(box[1] || "0") - parseMoney(box[2] || "0");
-  return `$${Math.max(profit, 0)}`;
-}
-
-type SaleInvoicePaperProps = {
-  invoiceNumber: string;
-  sender: Sender;
-  recipient: Recipient;
-  box: string[];
-  deliveryLine: string;
-  className?: string;
-};
-
-function SaleInvoicePaper({
-  invoiceNumber,
-  sender,
-  recipient,
-  box,
-  deliveryLine,
-  className,
-}: SaleInvoicePaperProps) {
-  const issuedAt = new Date().toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-
-  return (
-    <article
-      className={`w-full shrink-0 overflow-hidden rounded-sm border border-slate-300 bg-[#fdfcf8] text-slate-900 shadow-[0_1px_0_rgba(0,0,0,0.06),0_6px_18px_rgba(0,0,0,0.1)] ${className ?? ""}`}
-    >
-      <div className="border-b border-dashed border-slate-300 px-4 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="font-serif text-lg font-black tracking-tight text-slate-900">Paquemas</p>
-            <p className="text-[11px] font-medium text-slate-600">Paqueteria y envios internacionales</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Factura</p>
-            <p className="font-serif text-xl font-black tabular-nums text-slate-900">{invoiceNumber}</p>
-            <p className="text-[11px] text-slate-600">{issuedAt}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 border-b border-slate-200 px-4 py-3 sm:grid-cols-2">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Remitente</p>
-          <p className="mt-0.5 text-sm font-bold text-slate-900">{personFullName(sender)}</p>
-          <p className="text-xs text-slate-700">{senderPhonesLabel(sender)}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Destinatario</p>
-          <p className="mt-0.5 text-sm font-bold text-slate-900">{personFullName(recipient)}</p>
-          <p className="text-xs text-slate-600">
-            {[recipient.city, recipient.country].filter(Boolean).join(", ")}
-          </p>
-        </div>
-      </div>
-
-      <div className="px-4 py-3">
-        <table className="w-full border-collapse text-xs">
-          <thead>
-            <tr className="border-b border-slate-800 text-left text-[10px] uppercase tracking-wider text-slate-600">
-              <th className="pb-1.5 font-bold">Concepto</th>
-              <th className="pb-1.5 text-right font-bold">Importe</th>
-            </tr>
-          </thead>
-          <tbody className="text-slate-800">
-            <tr className="border-b border-slate-200">
-              <td className="py-2 pr-2 align-top">
-                <p className="font-bold">Caja {box[0]}</p>
-                <p className="mt-0.5 text-[11px] text-slate-600">
-                  {box[3]} · {box[4]} · {recipient.country}
-                </p>
-              </td>
-              <td className="py-2 text-right align-top font-bold tabular-nums">{box[1]}</td>
-            </tr>
-            <tr>
-              <td className="py-2 pr-2 align-top">
-                <p className="font-bold">Entrega caja vacia</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-slate-600">{deliveryLine}</p>
-              </td>
-              <td className="py-2 text-right align-top tabular-nums text-slate-500">—</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div className="border-t border-slate-300 bg-slate-100/80 px-4 py-3">
-        <div className="flex items-center justify-between gap-3 text-xs text-slate-700">
-          <span>Costo carrier</span>
-          <span className="font-semibold tabular-nums">{box[2]}</span>
-        </div>
-        <div className="mt-2 flex items-center justify-between gap-3 border-t border-slate-300 pt-2">
-          <span className="text-sm font-black uppercase tracking-wide text-slate-900">Total a cobrar</span>
-          <span className="font-serif text-2xl font-black tabular-nums text-slate-900">{box[1]}</span>
-        </div>
-        <p className="mt-1 text-right text-[11px] text-slate-500">Ganancia: {boxProfitDisplay(box)}</p>
-      </div>
-    </article>
-  );
-}
-
-type AddressSuggestResponse = {
-  ok?: boolean;
-  error?: string;
-  suggestions?: AddressSuggestion[];
-};
-
-function applyAddressSuggestResult(
-  data: AddressSuggestResponse,
-  responseOk: boolean,
-  setSuggestions: (suggestions: AddressSuggestion[]) => void,
-  setValidation: (validation: AddressValidation) => void,
+    formattedAddress?: string;
+  },
+  typedUnit: string,
 ) {
-  if (!responseOk || data.ok === false) {
-    setSuggestions([]);
-    if (data.error?.includes("GOOGLE_MAPS_API_KEY")) {
-      setValidation({
-        status: "invalid",
-        message: "Configura GOOGLE_MAPS_API_KEY en .env.local y reinicia el servidor",
-      });
-    } else if (data.error) {
-      setValidation({ status: "invalid", message: data.error });
-    }
-    return;
+  const unit = typedUnit.trim() || address.houseNumber?.trim() || "";
+
+  if (!unit) {
+    return address.formattedAddress;
   }
 
-  setSuggestions(data.suggestions || []);
-}
-
-const inputClass =
-  "h-11 min-w-0 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc] outline-none focus:border-black";
-const clientFormInputClass =
-  "client-form-field h-11 w-full rounded-lg border border-black bg-surface-inset px-3.5 text-[15px] font-bold text-[#f8fafc] outline-none transition placeholder:font-bold placeholder:text-slate-500 focus:border-black focus:bg-surface-panel focus:ring-2 focus:ring-emerald-400";
-const clientFormLabelClass =
-  "text-[11px] font-black uppercase tracking-[0.1em] text-slate-400";
-const noBrowserAutocomplete = {
-  autoComplete: "off",
-  autoCorrect: "off",
-  autoCapitalize: "off",
-  spellCheck: false,
-  "data-1p-ignore": true,
-  "data-lpignore": "true",
-  "data-form-type": "other",
-} as const;
-
-function cleanPhone(phone: string) {
-  return phone.replace(/\D/g, "");
-}
-
-function senderPrimaryPhone(sender: Pick<Sender, "phones">) {
-  return sender.phones[0]?.trim() || "";
-}
-
-function senderPhoneKey(sender: Pick<Sender, "phones">) {
-  return cleanPhone(senderPrimaryPhone(sender));
-}
-
-function senderPhonesLabel(sender: Pick<Sender, "phones">) {
-  return sender.phones.filter(Boolean).join(" · ");
-}
-
-function senderHasPhone(sender: Pick<Sender, "phones">, phone: string) {
-  const target = cleanPhone(phone);
-  if (!target) {
-    return false;
-  }
-
-  return sender.phones.some((entry) => cleanPhone(entry) === target);
-}
-
-function normalizePhoneList(phones: string[]) {
-  return phones.map((phone) => phone.trim()).filter(Boolean);
-}
-
-function formatDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function CountryBadge({ country }: { country: string }) {
-  return (
-    <span className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-black bg-surface-card-header px-2.5 text-[13px] font-black text-[#f8fafc] shadow-[0_8px_18px_rgba(0,0,0,0.22)]">
-      <Flag country={country} />
-      <span className="leading-none">{country}</span>
-    </span>
-  );
-}
-
-function Flag({ country }: { country: string }) {
-  const base = "h-[18px] w-[30px] overflow-hidden rounded-[5px] border border-black shadow-[0_1px_0_rgba(255,255,255,0.12),0_6px_12px_rgba(0,0,0,0.22)]";
-
-  if (country === "Mexico") {
-    return (
-      <span className={`${base} grid grid-cols-3 bg-white`}>
-        <span className="bg-[#07865f]" />
-        <span className="relative bg-[#f8fafc]">
-          <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#9a6b2f]" />
-        </span>
-        <span className="bg-[#d6262f]" />
-      </span>
-    );
-  }
-
-  if (country === "Guatemala") {
-    return (
-      <span className={`${base} grid grid-cols-3 bg-white`}>
-        <span className="bg-[#1597d3]" />
-        <span className="relative bg-[#f8fafc]">
-          <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#88a45c]" />
-        </span>
-        <span className="bg-[#1597d3]" />
-      </span>
-    );
-  }
-
-  if (country === "Colombia") {
-    return (
-      <span className={`${base} grid grid-rows-4`}>
-        <span className="row-span-2 bg-yellow-400" />
-        <span className="bg-blue-600" />
-        <span className="bg-red-600" />
-      </span>
-    );
-  }
-
-  if (country === "Honduras") {
-    return (
-      <span className={`${base} grid grid-rows-3 bg-white`}>
-        <span className="bg-[#1f9bd7]" />
-        <span className="relative bg-[#f8fafc]">
-          <span className="absolute left-[10px] top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-[#1f9bd7]" />
-          <span className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1f9bd7]" />
-          <span className="absolute right-[10px] top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-[#1f9bd7]" />
-        </span>
-        <span className="bg-[#1f9bd7]" />
-      </span>
-    );
-  }
-
-  if (country === "USA") {
-    return (
-      <span className={`${base} relative bg-red-600`}>
-        <span className="absolute inset-0 bg-[repeating-linear-gradient(to_bottom,#b91c1c_0_2px,#fff_2px_4px)]" />
-        <span className="absolute left-0 top-0 h-2.5 w-3.5 bg-blue-700" />
-      </span>
-    );
-  }
-
-  return (
-    <span className={`${base} flex items-center justify-center bg-slate-300 text-[9px]`}>
-      {countryCodes[country] || "--"}
-    </span>
-  );
-}
-
-function AddressTags({ items }: { items: [string, string][] }) {
-  return (
-    <div className="mt-3 grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
-      {items.map(([label, value]) => (
-        <div
-          key={`${label}-${value}`}
-          className="rounded-lg border border-black bg-surface-panel px-3 py-2 border-black bg-surface-card"
-        >
-          <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">
-            {label}
-          </p>
-          <p className="truncate text-sm font-black text-[#f8fafc]">
-            {value}
-          </p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const contextActiveClass =
-  "scale-[1.01] border-2 border-emerald-400 bg-surface-card shadow-[0_0_0_1px_rgba(52,211,153,0.25),0_6px_20px_rgba(0,0,0,0.22)]";
-const selectedCardClass = `${selectedBorderClass} bg-surface-card`;
-const senderCardClass =
-  "border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:border-black hover:bg-surface-card-hover";
-const recipientCardClass =
-  "border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:border-black hover:bg-surface-card-hover";
-const boxCardClass =
-  "border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:border-black hover:bg-surface-card-hover";
-const saleSteps: { id: SaleStep; label: string }[] = [
-  { id: "client", label: "Cliente" },
-  { id: "recipient", label: "Destino" },
-  { id: "box", label: "Caja" },
-  { id: "delivery", label: "Entrega" },
-  { id: "finish", label: "Final" },
-];
-
-type SaleFlowNavProps = {
-  activeStep: SaleStep;
-  activeStepIndex: number;
-  completedStepIndex: number;
-  maxUnlockedStepIndex: number;
-  canOpenStep: (step: SaleStep) => boolean;
-  openStep: (step: SaleStep) => void;
-  goStep: (direction: -1 | 1) => void;
-  variant?: "float" | "panel";
-};
-
-function SaleFlowNav({
-  activeStep,
-  activeStepIndex,
-  completedStepIndex,
-  maxUnlockedStepIndex,
-  canOpenStep,
-  openStep,
-  goStep,
-  variant = "float",
-}: SaleFlowNavProps) {
-  const currentStep = saleSteps[activeStepIndex] ?? saleSteps[0];
-
-  const flowPanel = (
-    <div className="rounded-xl border border-black bg-surface-panel p-3 shadow-[0_18px_45px_rgba(0,0,0,0.45)] ring-1 ring-black">
-          <div className="mb-3 border-b border-black pb-2">
-            <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">
-              Flujo de venta
-            </p>
-            <p className="text-[11px] font-black text-slate-500">
-              Paso {activeStepIndex + 1} de {saleSteps.length}
-            </p>
-          </div>
-          <div className="grid gap-2">
-            {saleSteps.map((step, index) => {
-              const isActive = activeStep === step.id;
-              const isUnlocked = canOpenStep(step.id);
-              const isDone = index < completedStepIndex;
-
-              return (
-                <button
-                  key={step.id}
-                  type="button"
-                  disabled={!isUnlocked}
-                  onClick={() => openStep(step.id)}
-                  className={`relative flex min-h-12 items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${saleStepButtonClass(
-                    isActive,
-                    isUnlocked,
-                  )}`}
-                  title={step.label}
-                >
-                  <span
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-black ${
-                      isActive
-                        ? "bg-slate-950 text-emerald-300"
-                        : isDone
-                          ? "bg-emerald-400 text-slate-950"
-                          : "bg-surface-inset text-slate-400"
-                    }`}
-                  >
-                    {isDone ? <Check className="h-4 w-4" /> : index + 1}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-black">{step.label}</span>
-                    <span
-                      className={`block text-[10px] font-black uppercase ${
-                        isActive ? "text-slate-800" : "text-slate-500"
-                      }`}
-                    >
-                      {isActive ? "Actual" : isDone ? "Listo" : isUnlocked ? "Abierto" : "Bloqueado"}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => goStep(-1)}
-              disabled={activeStepIndex <= 0}
-              className="flex h-10 items-center justify-center rounded-lg border border-black bg-surface-card text-[#f8fafc] hover:border-black disabled:cursor-not-allowed disabled:opacity-30"
-              title="Paso anterior"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => goStep(1)}
-              disabled={activeStepIndex >= maxUnlockedStepIndex}
-              className="flex h-10 items-center justify-center rounded-lg border border-black bg-surface-card text-[#f8fafc] hover:border-black disabled:cursor-not-allowed disabled:opacity-30"
-              title="Paso siguiente"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-    </div>
-  );
-
-  if (variant === "panel") {
-    return flowPanel;
-  }
-
-  return (
-    <>
-      <aside className="sticky top-3 z-40 hidden md:block">
-        {flowPanel}
-      </aside>
-
-      <div className="fixed inset-x-3 bottom-3 z-50 md:hidden">
-        <div className="rounded-xl border border-black bg-surface-panel p-2 shadow-2xl shadow-black ring-1 ring-black">
-          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
-            <button
-              type="button"
-              onClick={() => goStep(-1)}
-              disabled={activeStepIndex <= 0}
-              className="flex h-11 w-11 items-center justify-center rounded-lg border border-black bg-surface-card text-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-30"
-              title="Paso anterior"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => openStep(currentStep.id)}
-              className="min-w-0 rounded-lg border border-emerald-600 bg-emerald-400 px-3 py-2 text-left text-slate-950"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="truncate text-base font-black text-[#f8fafc]">{currentStep.label}</span>
-                <span className="shrink-0 rounded-md bg-emerald-400 px-2 py-1 text-xs font-black text-slate-950">
-                  {activeStepIndex + 1}/5
-                </span>
-              </div>
-              <div className="mt-2 flex items-center gap-1">
-                {saleSteps.map((step, index) => {
-                  const isActive = activeStep === step.id;
-                  const isDone = index < completedStepIndex;
-                  const isUnlocked = canOpenStep(step.id);
-
-                  return (
-                    <span
-                      key={step.id}
-                      className={`h-1.5 flex-1 rounded-full ${
-                        isActive || isDone
-                          ? "bg-emerald-300"
-                          : isUnlocked
-                            ? "bg-surface-card"
-                            : "bg-[#1f2937]"
-                      }`}
-                    />
-                  );
-                })}
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => goStep(1)}
-              disabled={activeStepIndex >= maxUnlockedStepIndex}
-              className="flex h-11 w-11 items-center justify-center rounded-lg border border-black bg-surface-card text-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-30"
-              title="Paso siguiente"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
+  const streetLine = [address.street, unit].filter(Boolean).join(" ");
+  const cityLine = [address.city, address.state, address.postalCode].filter(Boolean).join(" ");
+  return [streetLine, cityLine, address.country].filter(Boolean).join(", ");
 }
 
 export default function VentaPage() {
-  const setShellConfig = useSetShellConfig();
-  const [mode, setMode] = useState<"sale" | "clients" | "new-client" | "new-recipient">("sale");
+  const localIdPrefix = useId();
+  const localIdCounterRef = useRef(0);
+  const [mode, setMode] = useState<"sale" | "clients" | "history" | "new-client" | "new-recipient">("sale");
   const [activeStep, setActiveStep] = useState<SaleStep>("client");
-  const [senderList, setSenderList] = useState<Sender[]>(initialSenders);
+  const [senderList, setSenderList] = useState<Sender[]>([]);
+  const [, setCustomersLoading] = useState(isSupabaseConfigured());
+  const [customersError, setCustomersError] = useState("");
+  const [, setCustomersSaving] = useState(false);
+  const [historyRows, setHistoryRows] = useState<ActivityHistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(isSupabaseConfigured());
+  const [historyError, setHistoryError] = useState("");
+  const [countryBoxes, setCountryBoxes] = useState<Record<string, string[][]>>({});
   const [selectedSender, setSelectedSender] = useState<Sender | null>(null);
   const [selectedRecipient, setSelectedRecipient] = useState<Recipient | null>(null);
   const [selectedBox, setSelectedBox] = useState<string[] | null>(null);
@@ -695,7 +189,6 @@ export default function VentaPage() {
   const [senderPage, setSenderPage] = useState(0);
   const [recipientQuery, setRecipientQuery] = useState("");
   const [recipientPage, setRecipientPage] = useState(0);
-  const [recentSenderPage, setRecentSenderPage] = useState(0);
   const [newClientFirstName, setNewClientFirstName] = useState("");
   const [newClientLastName, setNewClientLastName] = useState("");
   const [newClientPhones, setNewClientPhones] = useState<string[]>([""]);
@@ -706,6 +199,7 @@ export default function VentaPage() {
   const [newClientCity, setNewClientCity] = useState("");
   const [newClientState, setNewClientState] = useState("");
   const [newClientPostalCode, setNewClientPostalCode] = useState("");
+  const [newClientReferredByCustomerId, setNewClientReferredByCustomerId] = useState("");
   const [clientAddressSearch, setClientAddressSearch] = useState("");
   const [clientAddressSuggestions, setClientAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [newRecipientFirstName, setNewRecipientFirstName] = useState("");
@@ -724,17 +218,61 @@ export default function VentaPage() {
     status: "idle",
     message: "",
   });
-  const [editingClientPhone, setEditingClientPhone] = useState<string | null>(null);
-  const [deleteConfirmPhone, setDeleteConfirmPhone] = useState<string | null>(null);
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
+  const [editingRecipientId, setEditingRecipientId] = useState<string | null>(null);
   const [recipientAddressValidation, setRecipientAddressValidation] = useState<AddressValidation>({
     status: "idle",
     message: "",
   });
+  const clientAddressQuery = useMemo(
+    () =>
+      buildAddressSuggestQuery(
+        [
+          newClientStreet,
+          newClientHouse,
+          newClientNeighborhood,
+          newClientCity,
+          newClientState,
+          newClientPostalCode,
+        ],
+      ),
+    [
+      newClientStreet,
+      newClientHouse,
+      newClientNeighborhood,
+      newClientCity,
+      newClientState,
+      newClientPostalCode,
+    ],
+  );
+  const recipientAddressQuery = useMemo(
+    () =>
+      buildAddressSuggestQuery(
+        [
+          newRecipientStreet,
+          newRecipientHouse,
+          newRecipientNeighborhood,
+          newRecipientCity,
+          newRecipientState,
+          newRecipientPostalCode,
+        ],
+      ),
+    [
+      newRecipientStreet,
+      newRecipientHouse,
+      newRecipientNeighborhood,
+      newRecipientCity,
+      newRecipientState,
+      newRecipientPostalCode,
+      newRecipientCountry,
+    ],
+  );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [activeCopyGroup, setActiveCopyGroup] = useState<string | null>(null);
   const [showInvoice, setShowInvoice] = useState(false);
-  const [invoiceSequence, setInvoiceSequence] = useState(124);
-  const [invoiceNumber, setInvoiceNumber] = useState("INV-000124");
+  const [invoiceSequence, setInvoiceSequence] = useState(1);
+  const [invoiceNumber, setInvoiceNumber] = useState("INV-000001");
+  const countries = useMemo(() => Object.keys(countryBoxes), [countryBoxes]);
   const [stockMessage, setStockMessage] = useState("");
   const [emptyBoxMode, setEmptyBoxMode] = useState("");
   const [emptyBoxScheduleMode, setEmptyBoxScheduleMode] = useState("");
@@ -764,9 +302,29 @@ export default function VentaPage() {
         : selectedSender
           ? "recipient"
           : "client";
-  const activeStepIndex = saleSteps.findIndex((step) => step.id === activeStep);
   const completedStepIndex = saleSteps.findIndex((step) => step.id === completedStep);
   const maxUnlockedStepIndex = completedStepIndex;
+
+  const reloadHistory = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      setHistoryLoading(false);
+      return;
+    }
+
+    setHistoryLoading(true);
+    setHistoryError("");
+
+    const result = await listActivityHistoryAction();
+
+    setHistoryLoading(false);
+
+    if (!result.ok) {
+      setHistoryError(result.error);
+      return;
+    }
+
+    setHistoryRows(result.data);
+  }, []);
 
   function canOpenStep(step: SaleStep) {
     return saleSteps.findIndex((currentStep) => currentStep.id === step) <= maxUnlockedStepIndex;
@@ -777,6 +335,11 @@ export default function VentaPage() {
       return;
     }
 
+    if (mode === "new-client") {
+      resetNewClientForm();
+    } else if (mode === "new-recipient") {
+      resetNewRecipientForm();
+    }
     setMode("sale");
     setActiveStep(step);
     scrollToStep(step);
@@ -788,17 +351,6 @@ export default function VentaPage() {
     }
 
     return "rounded-xl";
-  }
-
-  function goStep(direction: -1 | 1) {
-    const nextIndex = Math.min(
-      maxUnlockedStepIndex,
-      Math.max(0, activeStepIndex + direction),
-    );
-
-    const nextStep = saleSteps[nextIndex].id;
-    setActiveStep(nextStep);
-    scrollToStep(nextStep);
   }
 
   const openContextMenuAt = useCallback(
@@ -934,44 +486,13 @@ export default function VentaPage() {
     }
 
     return senderList.find((sender) => {
-      if (editingClientPhone && senderPhoneKey(sender) === cleanPhone(editingClientPhone)) {
+      if (editingCustomerId && sender.id === editingCustomerId) {
         return false;
       }
 
       return newClientPhoneList.some((phone) => senderHasPhone(sender, phone));
     });
-  }, [editingClientPhone, newClientPhoneList, senderList]);
-
-  const recentSenderPageCount = Math.max(
-    1,
-    Math.ceil(senderList.length / RECENT_SENDERS_PER_PAGE),
-  );
-  const safeRecentSenderPage = Math.min(recentSenderPage, recentSenderPageCount - 1);
-  const visibleRecentSenders = senderList.slice(
-    safeRecentSenderPage * RECENT_SENDERS_PER_PAGE,
-    safeRecentSenderPage * RECENT_SENDERS_PER_PAGE + RECENT_SENDERS_PER_PAGE,
-  );
-  const totalRecipients = useMemo(
-    () => senderList.reduce((total, sender) => total + sender.recipients.length, 0),
-    [senderList],
-  );
-  const sendersWithoutRecipients = useMemo(
-    () => senderList.filter((sender) => sender.recipients.length === 0).length,
-    [senderList],
-  );
-  const topDestinationCountries = useMemo(() => {
-    const totals = new Map<string, number>();
-
-    senderList.forEach((sender) => {
-      sender.recipients.forEach((recipient) => {
-        totals.set(recipient.country, (totals.get(recipient.country) || 0) + 1);
-      });
-    });
-
-    return Array.from(totals.entries())
-      .sort((first, second) => second[1] - first[1])
-      .slice(0, 4);
-  }, [senderList]);
+  }, [editingCustomerId, newClientPhoneList, senderList]);
 
   const duplicateRecipient = useMemo(() => {
     if (
@@ -990,9 +511,11 @@ export default function VentaPage() {
 
     return selectedSender.recipients.find(
       (recipient) =>
+        recipient.id !== editingRecipientId &&
         samePersonName(recipient, candidate) && recipient.country === newRecipientCountry,
     );
   }, [
+    editingRecipientId,
     newRecipientCountry,
     newRecipientFirstName,
     newRecipientLastName,
@@ -1068,12 +591,35 @@ export default function VentaPage() {
     );
   }, [recipientQuery, selectedSender]);
 
+  const recipientSearchOptions = useMemo(() => {
+    if (!selectedSender) {
+      return [];
+    }
+
+    return selectedSender.recipients.map((recipient) => ({
+      value: recipientIdentityKey(recipient),
+      label: personFullName(recipient),
+      searchText: [
+        personFullName(recipient),
+        recipient.firstName,
+        recipient.lastName,
+        recipient.phone,
+        recipient.country,
+        recipient.street,
+        recipient.city,
+        recipient.postalCode,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    }));
+  }, [selectedSender]);
+
   const boxesForCountry = useMemo(
     () =>
       selectedRecipient
         ? countryBoxes[selectedRecipient.country as keyof typeof countryBoxes] || []
         : [],
-    [selectedRecipient],
+    [countryBoxes, selectedRecipient],
   );
   const recipientPageCount = Math.max(
     1,
@@ -1205,6 +751,12 @@ export default function VentaPage() {
       items: copyAddressItems,
     },
   ];
+  const editGroups = [
+    { label: "Todo", text: "Editar ficha completa" },
+    { label: "Nombre", text: "Editar nombre y apellido" },
+    { label: "Telefono", text: "Editar celulares" },
+    { label: "Direccion", text: "Editar direccion" },
+  ];
 
   function scrollToNext(ref: RefObject<HTMLDivElement | null>, force = false) {
     afterLayoutPaint(() => {
@@ -1264,6 +816,21 @@ export default function VentaPage() {
   }
 
   function chooseSender(sender: Sender) {
+    const isSameSender =
+      selectedSender !== null && senderPhoneKey(selectedSender) === senderPhoneKey(sender);
+
+    if (isSameSender) {
+      setSelectedSender(null);
+      setSelectedRecipient(null);
+      setSelectedBox(null);
+      setEmptyBoxMode("");
+      setEmptyBoxScheduleMode("");
+      setEmptyBoxScheduleAt("");
+      setRecipientPage(0);
+      setActiveStep("client");
+      return;
+    }
+
     setSelectedSender(sender);
     setSelectedRecipient(null);
     setSelectedBox(null);
@@ -1272,7 +839,6 @@ export default function VentaPage() {
     setEmptyBoxScheduleAt("");
     setRecipientPage(0);
     setActiveStep("recipient");
-    scrollToNext(recipientsRef);
   }
 
   function resetNewClientForm() {
@@ -1286,13 +852,60 @@ export default function VentaPage() {
     setNewClientCity("");
     setNewClientState("");
     setNewClientPostalCode("");
+    setNewClientReferredByCustomerId("");
     setClientAddressSearch("");
     setClientAddressSuggestions([]);
     setClientAddressValidation({ status: "idle", message: "" });
-    setEditingClientPhone(null);
-    setDeleteConfirmPhone(null);
-    setRecentSenderPage(0);
+    setEditingCustomerId(null);
   }
+
+  const reloadCustomers = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      setCustomersLoading(false);
+      return;
+    }
+
+    setCustomersLoading(true);
+    setCustomersError("");
+
+    const result = await listCustomersWithRecipientsAction();
+
+    setCustomersLoading(false);
+    if (!result.ok) {
+      setCustomersError(result.error);
+      return;
+    }
+
+    setSenderList(result.data.map(customerRowToSender));
+  }, []);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void reloadCustomers();
+    });
+  }, [reloadCustomers]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void reloadHistory();
+    });
+  }, [reloadHistory]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      void (async () => {
+        const boxesResult = await loadSaleCountryBoxesAction();
+
+        if (boxesResult.ok) {
+          setCountryBoxes(boxesResult.data);
+        }
+      })();
+    });
+  }, []);
 
   function resetNewRecipientForm() {
     setNewRecipientFirstName("");
@@ -1308,6 +921,7 @@ export default function VentaPage() {
     setRecipientAddressSearch("");
     setRecipientAddressSuggestions([]);
     setRecipientAddressValidation({ status: "idle", message: "" });
+    setEditingRecipientId(null);
   }
 
   async function selectAddressSuggestion(kind: AddressFormKind, suggestion: AddressSuggestion) {
@@ -1370,13 +984,14 @@ export default function VentaPage() {
       }
 
       const needsUnit = !data.address.houseNumber?.trim();
+      const typedUnit = isClient ? newClientHouse : newRecipientHouse;
 
       setValidation({
         status: "valid",
         message: needsUnit
-          ? "Validada — agrega unidad o apt en Casa si aplica"
+          ? "Validada - agrega unidad o apt en Casa si aplica"
           : "Direccion valida",
-        formattedAddress: data.address.formattedAddress,
+        formattedAddress: formatValidatedAddress(data.address, typedUnit),
       });
     } catch {
       setValidation({
@@ -1388,26 +1003,24 @@ export default function VentaPage() {
 
   function touchClientAddressField(update: () => void) {
     update();
-    setClientAddressValidation((current) =>
-      current.status === "valid"
-        ? { ...current, message: "Puedes corregir unidad o detalles" }
-        : { status: "idle", message: "" },
-    );
+    setClientAddressValidation({ status: "idle", message: "" });
   }
 
   function touchRecipientAddressField(update: () => void) {
     update();
-    setRecipientAddressValidation((current) =>
-      current.status === "valid"
-        ? { ...current, message: "Puedes corregir unidad o detalles" }
-        : { status: "idle", message: "" },
-    );
+    setRecipientAddressValidation({ status: "idle", message: "" });
   }
 
   useEffect(() => {
-    const query = clientAddressSearch.trim();
+    const query = clientAddressQuery.trim();
 
-    if (clientAddressValidation.status === "valid" || query.length < 3) {
+    if (clientAddressValidation.status === "valid") {
+      queueMicrotask(() => setClientAddressSuggestions([]));
+      return;
+    }
+
+    if (query.length < 3) {
+      queueMicrotask(() => setClientAddressSuggestions([]));
       return;
     }
 
@@ -1446,12 +1059,18 @@ export default function VentaPage() {
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [clientAddressSearch, clientAddressValidation.status]);
+  }, [clientAddressQuery, clientAddressValidation.status]);
 
   useEffect(() => {
-    const query = recipientAddressSearch.trim();
+    const query = recipientAddressQuery.trim();
 
-    if (recipientAddressValidation.status === "valid" || query.length < 3 || !newRecipientCountry) {
+    if (recipientAddressValidation.status === "valid") {
+      queueMicrotask(() => setRecipientAddressSuggestions([]));
+      return;
+    }
+
+    if (query.length < 3 || !newRecipientCountry) {
+      queueMicrotask(() => setRecipientAddressSuggestions([]));
       return;
     }
 
@@ -1490,7 +1109,7 @@ export default function VentaPage() {
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [newRecipientCountry, recipientAddressSearch, recipientAddressValidation.status]);
+  }, [newRecipientCountry, recipientAddressQuery, recipientAddressValidation.status]);
 
   function updateClientPhone(index: number, value: string) {
     setNewClientPhones((current) =>
@@ -1506,7 +1125,14 @@ export default function VentaPage() {
     setNewClientPhones((current) => (current.length <= 1 ? [""] : current.filter((_, i) => i !== index)));
   }
 
-  function createClient() {
+  function addReferralClient(sender: Sender) {
+    resetNewClientForm();
+    setNewClientReferredByCustomerId(sender.id);
+    setMode("new-client");
+    setActiveStep("client");
+  }
+
+  async function createClient() {
     const phones = normalizePhoneList(newClientPhones);
 
     if (!phones.length) {
@@ -1514,7 +1140,7 @@ export default function VentaPage() {
     }
 
     if (duplicateClient) {
-      if (editingClientPhone) {
+      if (editingCustomerId) {
         return;
       }
 
@@ -1523,7 +1149,14 @@ export default function VentaPage() {
       return;
     }
 
-    if (!newClientFirstName.trim() || !newClientLastName.trim()) {
+    if (
+      !newClientFirstName.trim() ||
+      !newClientLastName.trim() ||
+      !newClientStreet.trim() ||
+      !newClientCity.trim() ||
+      !newClientState.trim() ||
+      !newClientPostalCode.trim()
+    ) {
       return;
     }
 
@@ -1535,93 +1168,88 @@ export default function VentaPage() {
       return;
     }
 
-    const currentSender = editingClientPhone
-      ? senderList.find((sender) => senderPhoneKey(sender) === cleanPhone(editingClientPhone))
-      : null;
-    const nextSender: Sender = {
+    const payload = {
       firstName: newClientFirstName.trim(),
       lastName: newClientLastName.trim(),
       phones,
       email: newClientEmail.trim(),
-      street: newClientStreet.trim() || "Sin calle",
+      street: newClientStreet.trim(),
       houseNumber: newClientHouse.trim() || "-",
       neighborhood: newClientNeighborhood.trim() || "-",
-      city: newClientCity.trim() || "-",
-      state: newClientState.trim() || "FL",
-      postalCode: newClientPostalCode.trim() || "-",
-      recipients: currentSender?.recipients || [],
+      city: newClientCity.trim(),
+      state: newClientState.trim(),
+      postalCode: newClientPostalCode.trim(),
+      country: "USA",
+      referredByCustomerId: editingCustomerId ? "" : newClientReferredByCustomerId,
     };
 
-    setSenderList((current) =>
-      editingClientPhone
-        ? current.map((sender) =>
-            senderPhoneKey(sender) === cleanPhone(editingClientPhone) ? nextSender : sender,
-          )
-        : [nextSender, ...current],
-    );
-    chooseSender(nextSender);
-    resetNewClientForm();
-    setMode("sale");
-  }
+    if (isSupabaseConfigured()) {
+      setCustomersSaving(true);
+      setCustomersError("");
 
-  function editSender(sender: Sender) {
-    setNewClientFirstName(sender.firstName);
-    setNewClientLastName(sender.lastName);
-    setNewClientPhones(sender.phones.length ? [...sender.phones] : [""]);
-    setNewClientEmail(sender.email);
-    setNewClientStreet(sender.street);
-    setNewClientHouse(sender.houseNumber);
-    setNewClientNeighborhood(sender.neighborhood);
-    setNewClientCity(sender.city);
-    setNewClientState(sender.state);
-    setNewClientPostalCode(sender.postalCode);
-    setClientAddressSearch([
-      sender.houseNumber,
-      sender.street,
-      sender.city,
-      sender.state,
-      sender.postalCode,
-      "USA",
-    ].filter(Boolean).join(", "));
-    setClientAddressSuggestions([]);
-    setClientAddressValidation({
-      status: "valid",
-      message: "Direccion cargada",
-      formattedAddress: [
-        sender.houseNumber,
-        sender.street,
-        sender.neighborhood,
-        sender.city,
-        sender.state,
-        sender.postalCode,
-        "USA",
-      ].filter(Boolean).join(", "),
-    });
-    setEditingClientPhone(senderPrimaryPhone(sender));
-    setDeleteConfirmPhone(null);
-    setMode("new-client");
-  }
+      const result = editingCustomerId
+        ? await updateCustomerAction({
+            customerId: editingCustomerId,
+            firstName: payload.firstName,
+            lastName: payload.lastName,
+            phones: payload.phones,
+            email: payload.email,
+            street: payload.street,
+            houseNumber: payload.houseNumber,
+            neighborhood: payload.neighborhood,
+            city: payload.city,
+            state: payload.state,
+            postalCode: payload.postalCode,
+            country: payload.country,
+          })
+        : await createCustomerAction(payload);
 
-  function deleteSender(sender: Sender) {
-    setSenderList((current) =>
-      current.filter((item) => senderPhoneKey(item) !== senderPhoneKey(sender)),
-    );
+      setCustomersSaving(false);
 
-    if (selectedSender && senderPhoneKey(selectedSender) === senderPhoneKey(sender)) {
+      if (!result.ok) {
+        setCustomersError(result.error);
+        return;
+      }
+
+      const nextSender = customerRowToSender(result.data);
+      setSenderList((current) =>
+        editingCustomerId
+          ? current.map((sender) => (sender.id === nextSender.id ? nextSender : sender))
+          : [nextSender, ...current],
+      );
+      void reloadHistory();
+      resetNewClientForm();
       setSelectedSender(null);
       setSelectedRecipient(null);
       setSelectedBox(null);
       setActiveStep("client");
+      setMode("sale");
+      return;
     }
 
-    if (editingClientPhone && cleanPhone(editingClientPhone) === senderPhoneKey(sender)) {
-      resetNewClientForm();
-    }
+    const nextSender: Sender = {
+      id: nextLocalId("local"),
+      ...payload,
+      referredByCustomerId: payload.referredByCustomerId,
+      recipients: editingCustomerId
+        ? senderList.find((sender) => sender.id === editingCustomerId)?.recipients || []
+        : [],
+    };
 
-    setDeleteConfirmPhone(null);
+    setSenderList((current) =>
+      editingCustomerId
+        ? current.map((sender) => (sender.id === editingCustomerId ? nextSender : sender))
+        : [nextSender, ...current],
+    );
+    resetNewClientForm();
+    setSelectedSender(null);
+    setSelectedRecipient(null);
+    setSelectedBox(null);
+    setActiveStep("client");
+    setMode("sale");
   }
 
-  function createRecipient() {
+  async function createRecipient() {
     if (
       !selectedSender ||
       !newRecipientFirstName.trim() ||
@@ -1632,7 +1260,7 @@ export default function VentaPage() {
       return;
     }
 
-    if (duplicateRecipient) {
+    if (duplicateRecipient && !editingRecipientId) {
       chooseRecipient(duplicateRecipient);
       setMode("sale");
       return;
@@ -1646,7 +1274,7 @@ export default function VentaPage() {
       return;
     }
 
-    const nextRecipient: Recipient = {
+    const recipientPayload = {
       firstName: newRecipientFirstName.trim(),
       lastName: newRecipientLastName.trim(),
       phone: newRecipientPhone.trim(),
@@ -1659,20 +1287,75 @@ export default function VentaPage() {
       postalCode: newRecipientPostalCode.trim(),
     };
 
+    let nextRecipient: Recipient;
+
+    if (
+      isSupabaseConfigured() &&
+      selectedSender.id &&
+      !selectedSender.id.startsWith("local-")
+    ) {
+      setCustomersSaving(true);
+      setCustomersError("");
+
+      const result = editingRecipientId
+        ? await updateRecipientAction({
+            recipientId: editingRecipientId,
+            ...recipientPayload,
+          })
+        : await createRecipientAction({
+            customerId: selectedSender.id,
+            ...recipientPayload,
+          });
+
+      setCustomersSaving(false);
+
+      if (!result.ok) {
+        setCustomersError(result.error);
+        return;
+      }
+
+      nextRecipient = {
+        id: result.data.id,
+        firstName: result.data.firstName,
+        lastName: result.data.lastName,
+        phone: result.data.phone,
+        country: result.data.country,
+        street: result.data.street,
+        houseNumber: result.data.houseNumber,
+        neighborhood: result.data.neighborhood,
+        city: result.data.city,
+        state: result.data.state,
+        postalCode: result.data.postalCode,
+      };
+    } else {
+      nextRecipient = {
+        id: editingRecipientId || nextLocalId("local-r"),
+        ...recipientPayload,
+      };
+    }
+
     const nextSender = {
       ...selectedSender,
-      recipients: [nextRecipient, ...selectedSender.recipients],
+      recipients: editingRecipientId
+        ? selectedSender.recipients.map((recipient) =>
+            recipient.id === editingRecipientId ? nextRecipient : recipient,
+          )
+        : [nextRecipient, ...selectedSender.recipients],
     };
 
     setSenderList((current) =>
-      current.map((sender) =>
-        senderPhoneKey(sender) === senderPhoneKey(selectedSender) ? nextSender : sender,
-      ),
+      current.map((sender) => (sender.id === selectedSender.id ? nextSender : sender)),
     );
     setSelectedSender(nextSender);
     chooseRecipient(nextRecipient);
+    void reloadHistory();
     resetNewRecipientForm();
     setMode("sale");
+  }
+
+  function nextLocalId(prefix: string) {
+    localIdCounterRef.current += 1;
+    return `${prefix}-${localIdPrefix}-${localIdCounterRef.current}`;
   }
 
   function chooseRecipient(recipient: Recipient) {
@@ -1682,13 +1365,11 @@ export default function VentaPage() {
     setEmptyBoxScheduleMode("");
     setEmptyBoxScheduleAt("");
     setActiveStep("box");
-    scrollToNext(boxesRef);
   }
 
   function chooseBox(box: string[]) {
     setSelectedBox(box);
     setActiveStep("delivery");
-    scrollToNext(deliveryRef);
   }
 
   function selectEmptyBoxMode(mode: string) {
@@ -1812,13 +1493,106 @@ export default function VentaPage() {
     return defaultClass;
   }
 
-  function openInvoice() {
+  async function openInvoice() {
     if (!deliveryComplete) {
       return;
     }
 
-    setInvoiceNumber(nextInvoiceNumber);
+    if (isSupabaseConfigured()) {
+      const result = await allocateInvoiceNumberAction();
+
+      if (!result.ok) {
+        setStockMessage(result.error);
+        return;
+      }
+
+      setInvoiceNumber(result.data.invoiceNumber);
+      const match = result.data.invoiceNumber.match(/(\d+)$/);
+
+      if (match) {
+        setInvoiceSequence(Number(match[1]));
+      }
+    } else {
+      setInvoiceNumber(nextInvoiceNumber);
+    }
+
     setShowInvoice(true);
+  }
+
+  async function confirmCharge() {
+    if (!selectedBox?.[0]) {
+      return;
+    }
+
+    setStockMessage("");
+
+    const note = `Venta ${invoiceNumber}`;
+
+    if (!isSupabaseConfigured()) {
+      setStockMessage("Configura Supabase en .env.local para descontar stock en la base de datos.");
+      return;
+    }
+
+    const stockResult = await deductStockForBoxSaleAction({
+      boxLabel: selectedBox[0],
+      note,
+    });
+
+    if (!stockResult.ok) {
+      setStockMessage(stockResult.error);
+      return;
+    }
+
+    if (selectedSender && selectedRecipient && isSupabaseConfigured()) {
+      const shipmentResult = await createShipmentAction({
+        invoiceNumber,
+        customerId: selectedSender.id.startsWith("local-") ? undefined : selectedSender.id,
+        recipientId: selectedRecipient.id.startsWith("local-r-") ? undefined : selectedRecipient.id,
+        customerName: personFullName(selectedSender),
+        country: selectedRecipient.country,
+        carrier: selectedBox[3] || "Sin carrier",
+        paid: selectedBox[1] || "0",
+        cost: selectedBox[2] || "0",
+        recipientSnapshot: {
+          firstName: selectedRecipient.firstName,
+          lastName: selectedRecipient.lastName,
+          phone: selectedRecipient.phone,
+          country: selectedRecipient.country,
+          street: selectedRecipient.street,
+          houseNumber: selectedRecipient.houseNumber,
+          neighborhood: selectedRecipient.neighborhood,
+          city: selectedRecipient.city,
+          state: selectedRecipient.state,
+          postalCode: selectedRecipient.postalCode,
+        },
+      });
+
+      if (!shipmentResult.ok) {
+        setStockMessage(`Stock descontado, pero el envio no se registro: ${shipmentResult.error}`);
+        return;
+      }
+
+      void reloadHistory();
+    }
+
+    setShowInvoice(false);
+
+    if (isSupabaseConfigured()) {
+      const nextInvoice = await allocateInvoiceNumberAction();
+
+      if (nextInvoice.ok) {
+        setInvoiceNumber(nextInvoice.data.invoiceNumber);
+        const match = nextInvoice.data.invoiceNumber.match(/(\d+)$/);
+
+        if (match) {
+          setInvoiceSequence(Number(match[1]));
+        }
+      }
+    } else {
+      setInvoiceSequence((current) => current + 1);
+    }
+
+    setStockMessage("Cobro confirmado, stock descontado y envio registrado.");
   }
 
   function deliverySummary(action: string, scheduleMode: string, scheduleAt: string) {
@@ -1930,27 +1704,110 @@ export default function VentaPage() {
     setActiveCopyGroup(null);
   }
 
-  useEffect(() => {
-    setShellConfig({
-      compactContent:
-        mode === "sale" || mode === "clients" ? (
-          <SaleFlowNav
-            activeStep={activeStep}
-            activeStepIndex={activeStepIndex}
-            completedStepIndex={completedStepIndex}
-            maxUnlockedStepIndex={maxUnlockedStepIndex}
-            canOpenStep={canOpenStep}
-            openStep={openStep}
-            goStep={goStep}
-            variant="panel"
-          />
-        ) : null,
-      compactNavFocusKey: `${activeStep}-${completedStepIndex}`,
-    });
+  function editContextTarget() {
+    if (!contextMenu) {
+      return;
+    }
 
-    return () => setShellConfig({});
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- step nav helpers are stable for shell sync
-  }, [activeStep, activeStepIndex, completedStepIndex, maxUnlockedStepIndex, mode, setShellConfig]);
+    if (contextMenu.type === "remitente") {
+      const senderKey = contextMenu.targetKey.replace(/^sender:/, "");
+      const sender = senderList.find((item) => senderPhoneKey(item) === senderKey);
+
+      if (!sender) {
+        return;
+      }
+
+      setEditingCustomerId(sender.id || null);
+      setNewClientFirstName(sender.firstName);
+      setNewClientLastName(sender.lastName);
+      setNewClientPhones(sender.phones.length ? sender.phones : [""]);
+      setNewClientEmail(sender.email || "");
+      setNewClientStreet(sender.street || "");
+      setNewClientHouse(sender.houseNumber || "");
+      setNewClientNeighborhood(sender.neighborhood || "");
+      setNewClientCity(sender.city || "");
+      setNewClientState(sender.state || "");
+      setNewClientPostalCode(sender.postalCode || "");
+      setClientAddressSearch(fullAddress());
+      setClientAddressSuggestions([]);
+      setClientAddressValidation({ status: "valid", message: "Direccion cargada" });
+      setMode("new-client");
+      setActiveStep("client");
+      setContextMenu(null);
+      setActiveCopyGroup(null);
+      return;
+    }
+
+    if (contextMenu.type === "destinatario" && selectedSender) {
+      const recipientKey = contextMenu.targetKey.replace(/^recipient:/, "");
+      const recipient = selectedSender.recipients.find(
+        (item) => recipientIdentityKey(item) === recipientKey,
+      );
+
+      if (!recipient) {
+        return;
+      }
+
+      setEditingRecipientId(recipient.id || null);
+      setNewRecipientFirstName(recipient.firstName);
+      setNewRecipientLastName(recipient.lastName);
+      setNewRecipientPhone(recipient.phone);
+      setNewRecipientCountry(recipient.country);
+      setNewRecipientStreet(recipient.street || "");
+      setNewRecipientHouse(recipient.houseNumber || "");
+      setNewRecipientNeighborhood(recipient.neighborhood || "");
+      setNewRecipientCity(recipient.city || "");
+      setNewRecipientState(recipient.state || "");
+      setNewRecipientPostalCode(recipient.postalCode || "");
+      setRecipientAddressSearch(fullAddress());
+      setRecipientAddressSuggestions([]);
+      setRecipientAddressValidation({ status: "valid", message: "Direccion cargada" });
+      setMode("new-recipient");
+      setActiveStep("recipient");
+      setContextMenu(null);
+      setActiveCopyGroup(null);
+    }
+  }
+
+  const ventaNavTitle = useMemo(() => {
+    if (mode === "new-client") {
+      return editingCustomerId ? "Editar remitente" : "Nuevo remitente";
+    }
+
+    if (mode === "new-recipient") {
+      return "Nuevo destinatario";
+    }
+
+    if (mode === "history") {
+      return "Historial";
+    }
+
+    return null;
+  }, [editingCustomerId, mode]);
+
+  const handleVentaNavBack = useCallback(() => {
+    if (mode === "new-client") {
+      resetNewClientForm();
+      setMode("sale");
+      return;
+    }
+
+    if (mode === "new-recipient") {
+      resetNewRecipientForm();
+      setMode("sale");
+      return;
+    }
+
+    if (mode === "history") {
+      setMode("sale");
+    }
+  }, [mode]);
+
+  useContextNav({
+    title: ventaNavTitle ?? "Nueva venta",
+    onBack: handleVentaNavBack,
+    enabled: ventaNavTitle !== null,
+  });
 
   return (
     <>
@@ -1967,88 +1824,152 @@ export default function VentaPage() {
           setActiveCopyGroup(null);
         }}
       >
-      <div className="min-w-0">
+      <div className={`min-w-0 ${flowPageShellWideClass}`}>
 
       {mode === "clients" || mode === "sale" ? (
-        <div
-          ref={clientRef}
-          className={stepShellClass("client")}
-        >
-        <Panel title="Clientes">
-          <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 h-6 w-6 -translate-y-1/2 text-slate-500" />
-              <input
-                className={`${inputClass} w-full pl-12`}
-                placeholder="Buscar remitente o telefono"
-                value={senderQuery}
-                onChange={(event) => {
-                  setSenderQuery(event.target.value);
+        <>
+        <div className="overflow-x-auto rounded-xl border border-black bg-[#1b241f] px-3 py-2 shadow-[0_8px_20px_rgba(0,0,0,0.24)]">
+          <div className="flex min-w-max items-stretch gap-2">
+          {saleSteps.map((step, index) => {
+            const isActive = activeStep === step.id;
+            const isDone = index < completedStepIndex;
+            const isUnlocked = canOpenStep(step.id);
+            const stepNumberClass = isActive
+              ? "border-black bg-slate-950 text-emerald-300"
+              : isDone
+                ? "border-emerald-700 bg-emerald-400 text-slate-950"
+                : isUnlocked
+                  ? "border-sky-700 bg-sky-300 text-slate-950"
+                  : "border-black bg-surface-card text-slate-500";
+            const value =
+              step.id === "client"
+                ? selectedSender
+                  ? personFullName(selectedSender)
+                  : "Seleccionar"
+                : step.id === "recipient"
+                  ? selectedRecipient
+                    ? personFullName(selectedRecipient)
+                    : "Seleccionar"
+                  : step.id === "box"
+                    ? selectedBox
+                      ? `Caja ${selectedBox[0]}`
+                      : "Seleccionar"
+                    : step.id === "delivery"
+                      ? deliveryComplete
+                        ? deliverySummary(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt)
+                        : "Pendiente"
+                      : deliveryComplete
+                        ? "Cobrar"
+                        : "Pendiente";
+            const detail =
+              step.id === "client"
+                ? selectedSender
+                  ? senderPhonesLabel(selectedSender)
+                  : "Remitente"
+                : step.id === "recipient"
+                  ? ""
+                  : step.id === "box"
+                    ? selectedBox
+                      ? `${selectedBox[1]} - ${selectedBox[3]}`
+                      : ""
+                    : step.id === "delivery"
+                      ? deliveryComplete
+                        ? "Entrega lista"
+                        : "Ruta"
+                      : deliveryComplete
+                        ? nextInvoiceNumber
+                        : "";
+            const stepCountry =
+              step.id === "client" && selectedSender
+                ? "USA"
+                : step.id === "recipient" && selectedRecipient
+                  ? selectedRecipient.country
+                  : "";
+            return (
+              <button
+                key={step.id}
+                type="button"
+                disabled={!isUnlocked}
+                onClick={() => openStep(step.id)}
+                className={`flex h-[4.5rem] w-40 shrink-0 items-center gap-2 rounded-lg border px-2 text-left transition ${
+                  isActive
+                    ? "border-black bg-emerald-400/10 text-[#f8fafc]"
+                    : isDone
+                      ? "border-emerald-700 bg-[#202c27] text-[#f8fafc]"
+                      : isUnlocked
+                        ? "border-black bg-surface-card text-slate-300 hover:bg-white/5"
+                        : "cursor-not-allowed border-black bg-surface-inset text-slate-600"
+                }`}
+              >
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-black ${
+                    isActive || isDone
+                      ? "border-emerald-300 bg-emerald-400 text-slate-950"
+                      : stepNumberClass
+                  }`}>
+                    {index + 1}
+                </span>
+                <span className="min-w-0 flex-1 leading-tight">
+                  <span className={`block truncate text-sm font-black ${isActive ? "text-emerald-300" : ""}`}>
+                    {step.label}
+                  </span>
+                  <span className="block truncate text-xs font-black opacity-90">{value}</span>
+                  {detail ? (
+                    <span className="block truncate text-[10px] font-bold opacity-60">{detail}</span>
+                  ) : null}
+                  {stepCountry ? (
+                    <span className="mt-1 flex max-w-full items-center gap-1 text-[10px] font-black text-slate-300">
+                      <Flag country={stepCountry} />
+                      <span className="truncate">{stepCountry}</span>
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            );
+          })}
+          </div>
+        </div>
+        <div ref={clientRef} className={stepShellClass("client")}>
+        {!selectedSender || activeStep === "client" ? (
+        <div className="w-full space-y-3">
+            <>
+              {!isSupabaseConfigured() ? (
+                <div className="mb-4">
+                  <SupabaseRequiredBanner detail="Los remitentes no se guardaran hasta configurar Supabase." />
+                </div>
+              ) : null}
+              {customersError ? (
+                <p className="mb-4 rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
+                  {customersError}
+                </p>
+              ) : null}
+              <SaleSenderList
+                query={senderQuery}
+                matchingSenders={filteredSenders}
+                filteredCount={filteredSenders.length}
+                visibleSenders={visibleSenders}
+                safePage={safeSenderPage}
+                pageCount={senderPageCount}
+                onQueryChange={(value) => {
+                  setSenderQuery(value);
                   setSenderPage(0);
                 }}
-              />
-            </div>
-            <button
-              onClick={() => setMode("new-client")}
-              className="flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 text-sm font-black text-slate-950"
-            >
-              <UserPlus className="h-6 w-6" />
-              Nuevo cliente
-            </button>
-          </div>
-
-          <div className="relative">
-            <div className="mb-3 flex justify-start">
-              <div className="flex shrink-0 items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setSenderPage((current) => Math.max(0, current - 1))}
-                  disabled={safeSenderPage === 0 || filteredSenders.length === 0}
-                  className="flex h-8 w-8 items-center justify-center rounded-md border border-black bg-emerald-400 text-slate-950 disabled:cursor-not-allowed disabled:border-black disabled:bg-[#1a211e] disabled:text-slate-600"
-                  aria-label="Remitentes anteriores"
-                  title="Anterior"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <span className="min-w-[3.25rem] rounded-md border border-black bg-surface-card px-2 py-1 text-center text-xs font-black text-[#f8fafc]">
-                  {filteredSenders.length ? safeSenderPage + 1 : 0}/{filteredSenders.length ? senderPageCount : 0}
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSenderPage((current) => Math.min(senderPageCount - 1, current + 1))
-                  }
-                  disabled={
-                    filteredSenders.length === 0 || safeSenderPage >= senderPageCount - 1
-                  }
-                  className="flex h-8 w-8 items-center justify-center rounded-md border border-black bg-emerald-400 text-slate-950 disabled:cursor-not-allowed disabled:border-black disabled:bg-[#1a211e] disabled:text-slate-600"
-                  aria-label="Remitentes siguientes"
-                  title="Siguiente"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-            {visibleSenders.length ? visibleSenders.map((sender) => (
-              <button
-                key={senderPhoneKey(sender)}
-                data-sale-context-key={`sender:${senderPhoneKey(sender)}`}
-                data-sale-context-type="remitente"
-                data-sale-context-title={personFullName(sender)}
-                data-sale-context-first-name={sender.firstName}
-                data-sale-context-last-name={sender.lastName}
-                data-sale-context-phones={sender.phones.join("|")}
-                data-sale-context-street={sender.street}
-                data-sale-context-house={sender.houseNumber}
-                data-sale-context-neighborhood={sender.neighborhood}
-                data-sale-context-city={sender.city}
-                data-sale-context-state={sender.state}
-                data-sale-context-postal-code={sender.postalCode}
-                data-sale-context-country="USA"
-                onClick={() => chooseSender(sender)}
-                onContextMenu={(event) =>
+                onPageChange={setSenderPage}
+                onNewClient={() => setMode("new-client")}
+                onAddReferral={addReferralClient}
+                onChoose={chooseSender}
+                getReferralCount={(sender) =>
+                  senderList.filter((item) => item.referredByCustomerId === sender.id).length
+                }
+                getCardClass={(sender) =>
+                  contextCardClass(
+                    "remitente",
+                    `sender:${senderPhoneKey(sender)}`,
+                    false,
+                    senderCardClass,
+                    false,
+                  )
+                }
+                onOpenContextMenu={(event, sender) =>
                   openContextMenu(
                     event,
                     personFullName(sender),
@@ -2068,563 +1989,169 @@ export default function VentaPage() {
                     sender.lastName,
                   )
                 }
-                className={`relative overflow-hidden rounded-xl border p-4 text-left shadow-none transition-all ${
-                  contextCardClass(
-                    "remitente",
-                    `sender:${senderPhoneKey(sender)}`,
-                    selectedSender !== null && senderPhoneKey(selectedSender) === senderPhoneKey(sender),
-                    senderCardClass,
-                    selectedSender !== null,
-                  )
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3 pl-1">
-                  <div>
-                    <p className="text-2xl font-black">{personFullName(sender)}</p>
-                    <p className="font-bold text-slate-400">
-                      {senderPhonesLabel(sender)}
-                    </p>
-                    {sender.email ? (
-                      <p className="text-sm font-bold text-slate-400">{sender.email}</p>
-                    ) : null}
-                  </div>
-                  <CountryBadge country="USA" />
-                </div>
-                <AddressTags
-                  items={[
-                    ["Calle", sender.street],
-                    ["Casa", sender.houseNumber],
-                    ["Colonia", sender.neighborhood],
-                    ["Ciudad", sender.city],
-                    ["Estado", sender.state],
-                    ["CP", sender.postalCode],
-                  ]}
-                />
-                <p className="mt-3 rounded-lg border border-black bg-surface-inset px-3 py-2 font-black text-[#f8fafc]">
-                  {sender.recipients.length} destinatarios
-                </p>
-              </button>
-            )) : (
-              <div className="rounded-xl border border-black bg-surface-card p-4 text-xl font-black border-black bg-surface-card">
-                Sin clientes
-              </div>
-            )}
-            </div>
-          </div>
-        </Panel>
+              />
+            </>
         </div>
+        ) : null}
+        </div>
+        </>
+      ) : null}
+
+      {mode === "history" ? (
+        <>
+          <FlowPageHeader
+            title="Historial"
+            description="Ventas, remitentes y destinatarios registrados."
+          />
+          <Panel
+            hideHeader
+            title="Historial"
+            contentClassName={flowPanelContentClass}
+          >
+            <div className={flowStepBodyClass}>
+              {!isSupabaseConfigured() ? (
+                <SupabaseRequiredBanner detail="El historial se guarda en Supabase." />
+              ) : null}
+              {historyError ? (
+                <p className="rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
+                  {historyError}
+                </p>
+              ) : null}
+              {!historyLoading && !historyRows.length ? (
+                <div className="rounded-xl border border-black bg-surface-card p-4 text-xl font-black">
+                  Sin movimientos
+                </div>
+              ) : null}
+              <div className="grid gap-3">
+                {historyRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="rounded-xl border border-black bg-surface-card p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-lg font-black text-[#f8fafc]">{row.title}</p>
+                        {row.description ? (
+                          <p className="mt-1 text-sm font-bold text-slate-400">{row.description}</p>
+                        ) : null}
+                      </div>
+                      <span className="rounded-lg border border-black bg-surface-inset px-3 py-1 text-xs font-black text-slate-300">
+                        {historyDateLabel(row.createdAt)}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-xs font-bold uppercase text-slate-500">
+                      {row.actorName} - {row.entityType}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Panel>
+        </>
       ) : null}
 
       {mode === "new-client" ? (
-        <div className="grid w-full items-stretch gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.85fr)]">
-        <section className="rounded-xl border border-black bg-surface-panel p-5 shadow-md sm:p-6">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-black pb-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <h3 className="truncate text-2xl font-black">
-                {editingClientPhone ? "Editar remitente" : "Nuevo cliente"}
-              </h3>
-              <span
-                className={`rounded-lg border px-3 py-1 text-xs font-black uppercase ${
-                  clientAddressValidation.status === "valid"
-                    ? "border-black bg-surface-inset text-slate-200"
-                    : clientAddressValidation.status === "invalid"
-                      ? "border-amber-600 bg-amber-400 text-slate-950"
-                      : "border-black bg-surface-card text-slate-300"
-                }`}
-              >
-                {clientAddressValidation.status === "valid"
-                  ? "Google OK"
-                  : clientAddressValidation.status === "invalid" && clientAddressValidation.message
-                    ? "Error direccion"
-                    : "Sin validar"}
-              </span>
-            </div>
-            <div className="flex gap-2">
+        <>
+        <div className={`${flowPageShellWideClass} w-full`}>
+        <Panel
+          clipContent={false}
+          contentClassName="p-4 sm:p-5"
+          title={
+            <span className="flex min-w-0 items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
                   resetNewClientForm();
                   setMode("sale");
                 }}
-                className="h-11 rounded-lg border border-black bg-surface-card px-4 text-sm font-black text-[#f8fafc]"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={createClient}
-                disabled={
-                  !newClientPhoneList.length ||
-                  (!duplicateClient &&
-                    (!newClientFirstName.trim() ||
-                      !newClientLastName.trim() ||
-                      clientAddressValidation.status !== "valid"))
-                }
-                className="h-11 rounded-lg bg-emerald-400 px-5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {editingClientPhone ? "Guardar" : duplicateClient ? "Usar existente" : "Crear cliente"}
-              </button>
-            </div>
-          </div>
-
-          <form
-            className="relative grid gap-4 xl:grid-cols-2 xl:items-start"
-            autoComplete="off"
-            onSubmit={(event) => event.preventDefault()}
-          >
-            <div
-              className="pointer-events-none absolute -left-[9999px] h-0 w-0 overflow-hidden opacity-0"
-              aria-hidden
-            >
-              <input tabIndex={-1} name="fake-street" autoComplete="street-address" readOnly />
-              <input tabIndex={-1} name="fake-city" autoComplete="address-level2" readOnly />
-            </div>
-            <div className="flex flex-col self-start overflow-hidden rounded-xl border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
-              <div className={cardHeaderClass}>
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-inset text-slate-300">
-                  <UserPlus className="h-4 w-4" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-black uppercase tracking-wide text-[#f8fafc]">Remitente</p>
-                  <p className="text-xs font-bold text-slate-400">Nombre, correo y telefonos</p>
-                </div>
-              </div>
-              <div className="space-y-3 p-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="grid gap-1.5">
-                    <span className={clientFormLabelClass}>Nombre</span>
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-client-first-name"
-                      className={clientFormInputClass}
-                      placeholder="Carlos"
-                      value={newClientFirstName}
-                      onChange={(event) => setNewClientFirstName(event.target.value)}
-                    />
-                  </label>
-                  <label className="grid gap-1.5">
-                    <span className={clientFormLabelClass}>Apellido</span>
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-client-last-name"
-                      className={clientFormInputClass}
-                      placeholder="Diaz"
-                      value={newClientLastName}
-                      onChange={(event) => setNewClientLastName(event.target.value)}
-                    />
-                  </label>
-                </div>
-
-                <label className="grid gap-1.5">
-                  <span className={clientFormLabelClass}>Correo</span>
-                  <div className="relative">
-                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-client-email"
-                      type="email"
-                      className={`${clientFormInputClass} pl-10`}
-                      placeholder="cliente@correo.com"
-                      value={newClientEmail}
-                      onChange={(event) => setNewClientEmail(event.target.value)}
-                    />
-                  </div>
-                </label>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={clientFormLabelClass}>Telefonos</span>
-                    <button
-                      type="button"
-                      onClick={addClientPhone}
-                      className="inline-flex h-8 items-center gap-1 rounded-md border border-black bg-emerald-400 px-2.5 text-xs font-black text-slate-950"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Agregar
-                    </button>
-                  </div>
-                  {newClientPhones.map((phone, index) => (
-                    <div key={`client-phone-${index}`} className="flex gap-2">
-                      <div className="relative min-w-0 flex-1">
-                        <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                        <input
-                          {...noBrowserAutocomplete}
-                          name={`paquemas-client-phone-${index}`}
-                          type="tel"
-                          className={`${clientFormInputClass} pl-10`}
-                          placeholder={index === 0 ? "(305) 555-0000" : "Otro telefono"}
-                          value={phone}
-                          onChange={(event) => updateClientPhone(index, event.target.value)}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        title="Quitar telefono"
-                        aria-label="Quitar telefono"
-                        disabled={newClientPhones.length === 1}
-                        onClick={() => removeClientPhone(index)}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-black bg-[#3A1818] text-rose-100 disabled:cursor-not-allowed disabled:opacity-35"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                {duplicateClient ? (
-                  <div className="rounded-lg border border-amber-600 bg-amber-400 px-3 py-2.5 text-slate-950">
-                    <p className="text-xs font-black uppercase text-amber-200">Telefono ya registrado</p>
-                    <p className="truncate text-sm font-black text-[#f8fafc]">
-                      {personFullName(duplicateClient)}
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
-              <div className={cardHeaderClass}>
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-inset text-slate-300">
-                  <MapPin className="h-4 w-4" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-black uppercase tracking-wide text-[#f8fafc]">Direccion USA</p>
-                  <p className="text-xs font-bold text-slate-400">Buscar y validar en Google</p>
-                </div>
-              </div>
-              <div className="space-y-3 p-4">
-                <label className="grid gap-1.5">
-                  <span className={clientFormLabelClass}>Busqueda</span>
-                  <div className="relative">
-                  <input
-                    {...noBrowserAutocomplete}
-                    name="paquemas-client-gmaps-query"
-                    type="search"
-                    role="combobox"
-                    aria-autocomplete="list"
-                    aria-controls="client-address-suggestions-listbox"
-                    aria-expanded={clientAddressSuggestions.length > 0}
-                    className={clientFormInputClass}
-                    placeholder="Buscar calle o lugar en Google"
-                    value={clientAddressSearch}
-                    onChange={(event) => {
-                      const nextSearch = event.target.value;
-                      setClientAddressSearch(nextSearch);
-                      if (nextSearch.trim().length < 3) {
-                        setClientAddressSuggestions([]);
-                      }
-                      setClientAddressValidation({ status: "idle", message: "" });
-                    }}
-                  />
-                  {clientAddressSuggestions.length ? (
-                    <div
-                      id="client-address-suggestions-listbox"
-                      role="listbox"
-                      className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-lg border border-black bg-[#101820] shadow-2xl"
-                    >
-                      {clientAddressSuggestions.map((suggestion) => (
-                        <button
-                          key={suggestion.placeId}
-                          type="button"
-                          onClick={() => void selectAddressSuggestion("client", suggestion)}
-                          className="grid w-full gap-0.5 border-b border-black px-4 py-3 text-left last:border-b-0 hover:bg-surface-card-header"
-                        >
-                          <span className="truncate text-sm font-black text-[#f8fafc]">
-                            {suggestion.mainText}
-                          </span>
-                          <span className="truncate text-xs font-bold text-slate-300">
-                            {suggestion.secondaryText}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                </label>
-
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1.5fr)_6.5rem_5.5rem]">
-                  <label className="grid min-w-0 gap-1.5">
-                    <span className={clientFormLabelClass}>Calle</span>
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-client-line-1"
-                      className={clientFormInputClass}
-                      placeholder="Calle"
-                      value={newClientStreet}
-                      onChange={(event) => {
-                        touchClientAddressField(() => setNewClientStreet(event.target.value));
-                      }}
-                    />
-                  </label>
-                  <label className="grid gap-1.5">
-                    <span className={clientFormLabelClass}>Unidad</span>
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-client-line-2"
-                      className={clientFormInputClass}
-                      placeholder="511"
-                      value={newClientHouse}
-                      onChange={(event) => {
-                        touchClientAddressField(() => setNewClientHouse(event.target.value));
-                      }}
-                    />
-                  </label>
-                  <label className="grid gap-1.5">
-                    <span className={clientFormLabelClass}>CP</span>
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-client-zip"
-                      className={clientFormInputClass}
-                      placeholder="CP"
-                      value={newClientPostalCode}
-                      onChange={(event) => {
-                        touchClientAddressField(() => setNewClientPostalCode(event.target.value));
-                      }}
-                    />
-                  </label>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4.5rem]">
-                  <label className="grid min-w-0 gap-1.5">
-                    <span className={clientFormLabelClass}>Colonia</span>
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-client-zone"
-                      className={clientFormInputClass}
-                      placeholder="Colonia"
-                      value={newClientNeighborhood}
-                      onChange={(event) => {
-                        touchClientAddressField(() => setNewClientNeighborhood(event.target.value));
-                      }}
-                    />
-                  </label>
-                  <label className="grid min-w-0 gap-1.5">
-                    <span className={clientFormLabelClass}>Ciudad</span>
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-client-city"
-                      className={clientFormInputClass}
-                      placeholder="Ciudad"
-                      value={newClientCity}
-                      onChange={(event) => {
-                        touchClientAddressField(() => setNewClientCity(event.target.value));
-                      }}
-                    />
-                  </label>
-                  <label className="grid gap-1.5">
-                    <span className={clientFormLabelClass}>Estado</span>
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-client-region"
-                      className={clientFormInputClass}
-                      placeholder="FL"
-                      value={newClientState}
-                      onChange={(event) => {
-                        touchClientAddressField(() => setNewClientState(event.target.value));
-                      }}
-                    />
-                  </label>
-                </div>
-
-                <p
-                  className={`rounded-lg border px-3.5 py-2.5 text-sm font-bold leading-snug break-words ${
-                    clientAddressValidation.status === "valid"
-                      ? "border-black bg-surface-inset text-slate-300"
-                      : clientAddressValidation.status === "invalid"
-                        ? "border-amber-600 bg-amber-400 text-slate-950"
-                        : "border-black bg-surface-inset text-slate-500"
-                  }`}
-                >
-                  {clientAddressValidation.formattedAddress || clientAddressValidation.message || "Elige una sugerencia de Google"}
-                </p>
-              </div>
-            </div>
-          </form>
-        </section>
-        <section className="flex min-h-0 flex-col rounded-lg border border-black bg-surface-panel p-3 shadow-md">
-          <div className="-mx-3 -mt-3 mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-black bg-surface-card-header px-3 py-2.5 sm:-mx-3">
-            <div className="min-w-0">
-              <h3 className="text-base font-black text-[#f8fafc]">Ultimos remitentes</h3>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setRecentSenderPage((current) => Math.max(0, current - 1))}
-                disabled={safeRecentSenderPage === 0 || senderList.length === 0}
-                className="flex h-8 w-8 items-center justify-center rounded-md border border-black bg-emerald-400 text-slate-950 disabled:cursor-not-allowed disabled:border-black disabled:bg-[#1a211e] disabled:text-slate-600"
-                aria-label="Remitentes anteriores"
-                title="Anterior"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black bg-surface-inset text-slate-100 hover:bg-surface-card-hover"
+                aria-label="Volver"
+                title="Volver"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
-              <span className="min-w-[3.25rem] rounded-md border border-black bg-surface-card px-2 py-1 text-center text-xs font-black text-[#f8fafc]">
-                {senderList.length ? safeRecentSenderPage + 1 : 0}/{senderList.length ? recentSenderPageCount : 0}
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  setRecentSenderPage((current) =>
-                    Math.min(recentSenderPageCount - 1, current + 1),
-                  )
-                }
-                disabled={
-                  senderList.length === 0 || safeRecentSenderPage >= recentSenderPageCount - 1
-                }
-                className="flex h-8 w-8 items-center justify-center rounded-md border border-black bg-emerald-400 text-slate-950 disabled:cursor-not-allowed disabled:border-black disabled:bg-[#1a211e] disabled:text-slate-600"
-                aria-label="Remitentes siguientes"
-                title="Siguiente"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={resetNewClientForm}
-                className="h-8 rounded-md border border-black bg-surface-card px-3 text-xs font-black text-[#f8fafc]"
-              >
-                Nuevo
-              </button>
-            </div>
-          </div>
-
-          <div className="flex min-h-[320px] flex-1 flex-col gap-2">
-            {visibleRecentSenders.length ? visibleRecentSenders.map((sender) => (
-              <div
-                key={`${senderPhoneKey(sender)}-${sender.firstName}-${sender.lastName}`}
-                className="group relative flex min-h-0 flex-1 flex-col rounded-lg border border-black bg-surface-card p-3 shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:border-black hover:bg-surface-card-hover"
-              >
-                <div className="absolute bottom-2 left-2 z-10 flex w-[8.25rem] gap-1.5">
-                  {deleteConfirmPhone === senderPhoneKey(sender) ? (
-                    <>
-                      <button
-                        type="button"
-                        title="Cancelar"
-                        aria-label="Cancelar"
-                        onClick={() => setDeleteConfirmPhone(null)}
-                        className="flex h-10 min-w-0 flex-1 items-center justify-center rounded-md border border-black bg-[#101820] text-[#f8fafc]"
-                      >
-                        <X className="h-5 w-5" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Confirmar borrar"
-                        aria-label="Confirmar borrar"
-                        onClick={() => deleteSender(sender)}
-                        className="flex h-10 min-w-0 flex-1 items-center justify-center rounded-md border border-black bg-[#7F1D1D] text-rose-100"
-                      >
-                        <Check className="h-5 w-5" />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        title="Editar"
-                        aria-label="Editar"
-                        onClick={() => {
-                          setDeleteConfirmPhone(null);
-                          editSender(sender);
-                        }}
-                        className="flex h-10 min-w-0 flex-1 items-center justify-center rounded-md border border-black bg-[#101820] text-[#f8fafc]"
-                      >
-                        <Edit3 className="h-5 w-5" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Borrar"
-                        aria-label="Borrar"
-                        onClick={() => setDeleteConfirmPhone(senderPhoneKey(sender))}
-                        className="flex h-10 min-w-0 flex-1 items-center justify-center rounded-md border border-black bg-[#3A1818] text-rose-100"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                    </>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeleteConfirmPhone(null);
-                    chooseSender(sender);
-                    setMode("sale");
-                  }}
-                  className="flex h-full min-h-0 w-full flex-col justify-between rounded-md pb-14 pr-1 pt-1 text-left shadow-none outline-none transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-card"
-                >
-                  <div className="min-w-0 space-y-1">
-                    <p className="truncate text-base font-black leading-tight">{personFullName(sender)}</p>
-                    <p className="truncate text-sm font-bold text-slate-300">
-                      {senderPhonesLabel(sender)} · {sender.recipients.length} dest.
-                    </p>
-                    {sender.email ? (
-                      <p className="truncate text-xs font-bold text-slate-400">{sender.email}</p>
-                    ) : null}
-                  </div>
-                  <p className="line-clamp-3 text-sm font-bold leading-snug text-slate-300">
-                    {[sender.houseNumber, sender.street, sender.city, sender.state, sender.postalCode]
-                      .filter(Boolean)
-                      .join(", ")}
-                  </p>
-                </button>
-              </div>
-            )) : (
-              <div className="flex flex-1 items-center justify-center rounded-lg border border-black bg-surface-card p-4 text-center text-sm font-black text-slate-300">
-                Sin remitentes
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="grid gap-3 xl:col-span-2 xl:grid-cols-[1fr_1fr_1fr_1.4fr]">
-          {[
-            ["Remitentes", String(senderList.length)],
-            ["Destinatarios", String(totalRecipients)],
-            ["Sin destino", String(sendersWithoutRecipients)],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-lg border border-black bg-surface-panel p-3 shadow-md"
-            >
-              <p className="text-[11px] font-black uppercase text-slate-500">{label}</p>
-              <p className="mt-1 text-3xl font-black text-[#f8fafc]">{value}</p>
-            </div>
-          ))}
-
-          <div className="rounded-lg border border-black bg-surface-panel p-3 shadow-md">
-            <p className="mb-2 text-[11px] font-black uppercase text-slate-500">
-              Destinos frecuentes
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {topDestinationCountries.length ? topDestinationCountries.map(([country, total]) => (
-                <div
-                  key={country}
-                  className="flex items-center justify-between gap-3 rounded-md border border-black bg-surface-inset px-3 py-2"
-                >
-                  <span className="truncate text-sm font-black">{country}</span>
-                  <span className="rounded-md bg-emerald-400 px-2 py-1 text-xs font-black text-slate-950">
-                    {total}
-                  </span>
-                </div>
-              )) : (
-                <div className="rounded-md border border-black bg-surface-inset px-3 py-2 text-sm font-black text-slate-300">
-                  Sin destinos
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
+              <FlowStepTitle
+                stepNumber={1}
+                label={editingCustomerId ? "Editar datos" : "Datos del remitente"}
+              />
+            </span>
+          }
+        >
+          <SaleClientForm
+            form={{
+              firstName: newClientFirstName,
+              lastName: newClientLastName,
+              phones: newClientPhones,
+              phoneList: newClientPhoneList,
+              email: newClientEmail,
+              street: newClientStreet,
+              house: newClientHouse,
+              neighborhood: newClientNeighborhood,
+              city: newClientCity,
+              state: newClientState,
+              postalCode: newClientPostalCode,
+              setFirstName: setNewClientFirstName,
+              setLastName: setNewClientLastName,
+              setEmail: setNewClientEmail,
+              setStreet: setNewClientStreet,
+              setHouse: setNewClientHouse,
+              setNeighborhood: setNewClientNeighborhood,
+              setCity: setNewClientCity,
+              setState: setNewClientState,
+              setPostalCode: setNewClientPostalCode,
+            }}
+            address={{
+              search: clientAddressSearch,
+              suggestions: clientAddressSuggestions,
+              validation: clientAddressValidation,
+              setSearch: setClientAddressSearch,
+              setSuggestions: setClientAddressSuggestions,
+              setValidation: setClientAddressValidation,
+              onSelectSuggestion: (suggestion) => selectAddressSuggestion("client", suggestion),
+              touchField: touchClientAddressField,
+            }}
+            actions={{
+              onCancel: () => {
+                resetNewClientForm();
+                setMode("sale");
+              },
+              onSubmit: createClient,
+              onAddPhone: addClientPhone,
+              onUpdatePhone: updateClientPhone,
+              onRemovePhone: removeClientPhone,
+            }}
+            meta={{
+              editingCustomerId,
+              duplicateClient: duplicateClient ?? null,
+            }}
+          />
+        </Panel>
         </div>
+        </>
       ) : null}
 
       {selectedSender &&
-      (mode === "clients" || mode === "sale" || mode === "new-recipient") ? (
+      (mode === "clients" || mode === "sale" || mode === "new-recipient") &&
+      (activeStep !== "client" || mode === "new-recipient") ? (
         <div
           ref={recipientsRef}
-          className="mt-5 grid gap-5 xl:grid-cols-[0.8fr_1.2fr]"
+          className="mt-3 grid gap-3"
         >
+          {activeStep === "recipient" || mode === "new-recipient" ? (
           <Panel
+            hideHeader
+            contentClassName={flowPanelContentClass}
             title={
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <span>Destinatarios de {personFullName(selectedSender)}</span>
-                <span className="flex items-center gap-3">
+              <FlowStepTitle
+                stepNumber={saleStepNumber("recipient")}
+                done={completedStepIndex >= 2}
+                label="Destinatarios"
+              />
+            }
+          >
+            <div className={flowStepBodyClass}>
+            <div className="flex justify-end">
+                <span className="flex items-center gap-3 sm:shrink-0">
                   <button
                     onClick={() => setRecipientPage((current) => Math.max(0, current - 1))}
                     disabled={safeRecipientPage === 0}
@@ -2652,12 +2179,39 @@ export default function VentaPage() {
                   </button>
                 </span>
               </div>
-            }
-          >
           <div
             className={stepShellClass("recipient")}
           >
-            <div className="mb-4 flex flex-wrap gap-3">
+            <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_auto]">
+              <InlineSearchCombobox
+                value={recipientQuery}
+                onChange={(value) => {
+                  setRecipientQuery(value);
+                  setRecipientPage(0);
+                }}
+                options={recipientSearchOptions}
+                placeholder="Buscar destinatario, telefono o pais"
+                emptyLabel="Sin destinatarios"
+                ariaLabel="Buscar destinatarios"
+                leadingIcon={<Search className="h-4 w-4" aria-hidden />}
+                className="min-w-0 w-full"
+                minWidthClass="w-full min-w-0"
+                onSelectOption={(option) => {
+                  if (!selectedSender) {
+                    return;
+                  }
+
+                  const recipient = selectedSender.recipients.find(
+                    (entry) => recipientIdentityKey(entry) === option.value,
+                  );
+
+                  if (recipient) {
+                    setRecipientQuery(personFullName(recipient));
+                    setRecipientPage(0);
+                    chooseRecipient(recipient);
+                  }
+                }}
+              />
               <button
                 onClick={() => setMode("new-recipient")}
                 className="flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 text-sm font-black text-slate-950"
@@ -2665,371 +2219,128 @@ export default function VentaPage() {
                 <Plus className="h-6 w-6" />
                 Nuevo destinatario
               </button>
-              <button className="h-10 rounded-lg border border-black bg-surface-card px-3 text-sm font-black text-[#f8fafc] hover:border-black">
-                Pendiente
-              </button>
-            </div>
-
-            <div className="relative mb-4">
-              <Search className="absolute left-4 top-1/2 h-6 w-6 -translate-y-1/2 text-slate-500" />
-              <input
-                className={`${inputClass} w-full pl-12`}
-                placeholder="Buscar destinatario, telefono o pais"
-                value={recipientQuery}
-                onChange={(event) => {
-                  setRecipientQuery(event.target.value);
-                  setRecipientPage(0);
-                }}
-              />
             </div>
 
             {mode === "new-recipient" ? (
-              <form
-                className="relative mb-4 rounded-xl border border-black bg-surface-card p-4"
-                autoComplete="off"
-                onSubmit={(event) => event.preventDefault()}
-              >
-                <div
-                  className="pointer-events-none absolute -left-[9999px] h-0 w-0 overflow-hidden opacity-0"
-                  aria-hidden
-                >
-                  <input tabIndex={-1} name="fake-street" autoComplete="street-address" readOnly />
-                  <input tabIndex={-1} name="fake-city" autoComplete="address-level2" readOnly />
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="grid gap-2">
-                    <span className="font-black">Nombre</span>
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-recipient-first-name"
-                      className={inputClass}
-                      placeholder="Nombre"
-                      value={newRecipientFirstName}
-                      onChange={(event) => setNewRecipientFirstName(event.target.value)}
-                    />
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="font-black">Apellido</span>
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-recipient-last-name"
-                      className={inputClass}
-                      placeholder="Apellido"
-                      value={newRecipientLastName}
-                      onChange={(event) => setNewRecipientLastName(event.target.value)}
-                    />
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="font-black">Telefono</span>
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-recipient-phone"
-                      type="tel"
-                      className={inputClass}
-                      placeholder="+52 55 0000 0000"
-                      value={newRecipientPhone}
-                      onChange={(event) => setNewRecipientPhone(event.target.value)}
-                    />
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="font-black">Pais obligatorio</span>
-                    <select
-                      {...noBrowserAutocomplete}
-                      name="paquemas-recipient-country"
-                      className={inputClass}
-                      value={newRecipientCountry}
-                      onChange={(event) => {
-                        setNewRecipientCountry(event.target.value);
-                        setRecipientAddressSuggestions([]);
-                        setRecipientAddressValidation({ status: "idle", message: "" });
-                      }}
-                    >
-                      <option value="">Elegir pais</option>
-                      {countries.map((country) => (
-                        <option key={country} value={country}>
-                          {country}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                <div className="mt-3 rounded-xl border border-black bg-surface-panel p-3">
-                  <div className="mb-3 grid gap-2 lg:grid-cols-[auto_1fr] lg:items-center">
-                    <p className="text-base font-black">Direccion destino</p>
-                    <div className="relative">
-                      <input
-                        {...noBrowserAutocomplete}
-                        name="paquemas-recipient-gmaps-query"
-                        type="search"
-                        role="combobox"
-                        aria-autocomplete="list"
-                        aria-controls="recipient-address-suggestions-listbox"
-                        aria-expanded={recipientAddressSuggestions.length > 0}
-                        className={`${inputClass} w-full`}
-                        placeholder={
-                          newRecipientCountry
-                            ? "Buscar calle o lugar en Google"
-                            : "Elige pais primero"
-                        }
-                        value={recipientAddressSearch}
-                        onChange={(event) => {
-                          const nextSearch = event.target.value;
-                          setRecipientAddressSearch(nextSearch);
-                          if (nextSearch.trim().length < 3) {
-                            setRecipientAddressSuggestions([]);
-                          }
-                          setRecipientAddressValidation({ status: "idle", message: "" });
-                        }}
-                        disabled={!newRecipientCountry}
-                      />
-                      {recipientAddressSuggestions.length ? (
-                        <div
-                          id="recipient-address-suggestions-listbox"
-                          role="listbox"
-                          className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-md border border-black bg-[#101820] shadow-2xl"
-                        >
-                          {recipientAddressSuggestions.map((suggestion) => (
-                            <button
-                              key={suggestion.placeId}
-                              type="button"
-                              onClick={() => void selectAddressSuggestion("recipient", suggestion)}
-                              className="grid w-full gap-0.5 border-b border-black px-3 py-2 text-left last:border-b-0 hover:bg-surface-card-header"
-                            >
-                              <span className="truncate text-sm font-black text-[#f8fafc]">
-                                {suggestion.mainText}
-                              </span>
-                              <span className="truncate text-xs font-bold text-slate-300">
-                                {suggestion.secondaryText}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-recipient-line-1"
-                      className={inputClass}
-                      placeholder="Calle"
-                      value={newRecipientStreet}
-                      onChange={(event) => {
-                        touchRecipientAddressField(() => setNewRecipientStreet(event.target.value));
-                      }}
-                    />
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-recipient-line-2"
-                      className={inputClass}
-                      placeholder="Unidad / apt (Ej. 511)"
-                      value={newRecipientHouse}
-                      onChange={(event) => {
-                        touchRecipientAddressField(() => setNewRecipientHouse(event.target.value));
-                      }}
-                    />
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-recipient-zone"
-                      className={inputClass}
-                      placeholder="Colonia"
-                      value={newRecipientNeighborhood}
-                      onChange={(event) => {
-                        touchRecipientAddressField(() => setNewRecipientNeighborhood(event.target.value));
-                      }}
-                    />
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-recipient-city"
-                      className={inputClass}
-                      placeholder="Ciudad"
-                      value={newRecipientCity}
-                      onChange={(event) => {
-                        touchRecipientAddressField(() => setNewRecipientCity(event.target.value));
-                      }}
-                    />
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-recipient-region"
-                      className={inputClass}
-                      placeholder="Estado"
-                      value={newRecipientState}
-                      onChange={(event) => {
-                        touchRecipientAddressField(() => setNewRecipientState(event.target.value));
-                      }}
-                    />
-                    <input
-                      {...noBrowserAutocomplete}
-                      name="paquemas-recipient-zip"
-                      className={inputClass}
-                      placeholder="CP"
-                      value={newRecipientPostalCode}
-                      onChange={(event) => {
-                        touchRecipientAddressField(() => setNewRecipientPostalCode(event.target.value));
-                      }}
-                    />
-                  </div>
-                  <div className="mt-3 flex min-h-9 items-center rounded-md border border-black bg-[#101820] px-3">
-                    <p
-                      className={`text-sm font-black ${
-                        recipientAddressValidation.status === "valid"
-                          ? "text-slate-400"
-                          : recipientAddressValidation.status === "invalid"
-                            ? "text-amber-200"
-                            : "text-slate-300"
-                      }`}
-                    >
-                      {recipientAddressValidation.formattedAddress || recipientAddressValidation.message || "Valida antes de guardar"}
-                    </p>
-                  </div>
-                </div>
-
-                {duplicateRecipient ? (
-                  <div className="mt-3 rounded-lg border border-amber-600 bg-amber-400 p-3 font-black text-slate-950">
-                    Ese destinatario ya existe para este cliente.
-                  </div>
-                ) : null}
-
-                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:justify-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetNewRecipientForm();
-                      setMode("sale");
-                    }}
-                    className="h-10 rounded-lg border border-black bg-surface-card px-3 text-sm font-black text-[#f8fafc] hover:border-black"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={createRecipient}
-                    disabled={
-                      !newRecipientFirstName.trim() ||
-                      !newRecipientLastName.trim() ||
-                      !newRecipientPhone.trim() ||
-                      !newRecipientCountry ||
-                      (!duplicateRecipient && recipientAddressValidation.status !== "valid")
-                    }
-                    className="h-10 rounded-lg bg-emerald-400 px-3 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {duplicateRecipient ? "Usar existente" : "Guardar destinatario"}
-                  </button>
-                </div>
-              </form>
+              <SaleRecipientForm
+                form={{
+                  firstName: newRecipientFirstName,
+                  lastName: newRecipientLastName,
+                  phone: newRecipientPhone,
+                  country: newRecipientCountry,
+                  street: newRecipientStreet,
+                  house: newRecipientHouse,
+                  neighborhood: newRecipientNeighborhood,
+                  city: newRecipientCity,
+                  state: newRecipientState,
+                  postalCode: newRecipientPostalCode,
+                  setFirstName: setNewRecipientFirstName,
+                  setLastName: setNewRecipientLastName,
+                  setPhone: setNewRecipientPhone,
+                  setCountry: setNewRecipientCountry,
+                  setStreet: setNewRecipientStreet,
+                  setHouse: setNewRecipientHouse,
+                  setNeighborhood: setNewRecipientNeighborhood,
+                  setCity: setNewRecipientCity,
+                  setState: setNewRecipientState,
+                  setPostalCode: setNewRecipientPostalCode,
+                }}
+                address={{
+                  search: recipientAddressSearch,
+                  suggestions: recipientAddressSuggestions,
+                  validation: recipientAddressValidation,
+                  setSearch: setRecipientAddressSearch,
+                  setSuggestions: setRecipientAddressSuggestions,
+                  setValidation: setRecipientAddressValidation,
+                  onSelectSuggestion: (suggestion) => selectAddressSuggestion("recipient", suggestion),
+                  touchField: touchRecipientAddressField,
+                }}
+                actions={{
+                  onCancel: () => {
+                    resetNewRecipientForm();
+                    setMode("sale");
+                  },
+                  onSubmit: createRecipient,
+                }}
+                meta={{
+                  countries,
+                  duplicateRecipient: duplicateRecipient ?? null,
+                }}
+              />
             ) : null}
 
-            <div className="grid gap-2">
-              {filteredRecipients.length ? (
-                <>
-              {visibleRecipients.map((recipient) => (
-                <button
-                  key={recipientIdentityKey(recipient)}
-                  data-sale-context-key={`recipient:${recipientIdentityKey(recipient)}`}
-                  data-sale-context-type="destinatario"
-                  data-sale-context-title={personFullName(recipient)}
-                  data-sale-context-first-name={recipient.firstName}
-                  data-sale-context-last-name={recipient.lastName}
-                  data-sale-context-phones={recipient.phone}
-                  data-sale-context-street={recipient.street}
-                  data-sale-context-house={recipient.houseNumber}
-                  data-sale-context-neighborhood={recipient.neighborhood}
-                  data-sale-context-city={recipient.city}
-                  data-sale-context-state={recipient.state}
-                  data-sale-context-postal-code={recipient.postalCode}
-                  data-sale-context-country={recipient.country}
-                  onClick={() => chooseRecipient(recipient)}
-                  onContextMenu={(event) =>
-                    openContextMenu(
-                      event,
-                      personFullName(recipient),
-                      "destinatario",
-                      `recipient:${recipientIdentityKey(recipient)}`,
-                      [recipient.phone],
-                      {
-                        street: recipient.street,
-                        houseNumber: recipient.houseNumber,
-                        neighborhood: recipient.neighborhood,
-                        city: recipient.city,
-                        state: recipient.state,
-                        postalCode: recipient.postalCode,
-                        country: recipient.country,
-                      },
-                      recipient.firstName,
-                      recipient.lastName,
-                    )
-                  }
-                  className={`relative overflow-hidden rounded-xl border px-4 py-3 text-left transition-all hover:-translate-y-0.5 ${
-                    contextCardClass(
-                      "destinatario",
-                      `recipient:${recipientIdentityKey(recipient)}`,
-                      Boolean(
-                        selectedRecipient &&
-                          recipientIdentityKey(selectedRecipient) === recipientIdentityKey(recipient),
-                      ),
-                      recipientCardClass,
-                      selectedRecipient !== null,
-                    )
-                    }`}
-                >
-                    <span className="flex items-center justify-between gap-3">
-                      <span className="text-xl font-black">{personFullName(recipient)}</span>
-                      <CountryBadge country={recipient.country} />
-                    </span>
-                    <span className="mt-1 block text-sm font-bold text-slate-400">
-                      {recipient.phone}
-                    </span>
-                    <AddressTags
-                      items={[
-                        ["Calle", recipient.street],
-                        ["Casa", recipient.houseNumber],
-                        ["Colonia", recipient.neighborhood],
-                        ["Ciudad", recipient.city],
-                        ["Estado", recipient.state || "-"],
-                        ["CP", recipient.postalCode],
-                      ]}
-                    />
-                  </button>
-              ))}
-              {Array.from({ length: emptyRecipientSlots }).map((_, index) => (
-                  <button
-                    key={`empty-recipient-${safeRecipientPage}-${index}`}
-                    onClick={() => setMode("new-recipient")}
-                    className="flex min-h-[218px] flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-black bg-surface-card text-slate-300 transition hover:border-black hover:bg-surface-panel hover:text-slate-300"
-                  >
-                    <Plus className="h-10 w-10" />
-                    <span className="text-lg font-black">Agregar destinatario</span>
-                  </button>
-              ))}
-                </>
-              ) : (
-                <div className="rounded-xl border border-black bg-surface-card p-4 text-xl font-black border-black bg-surface-card">
-                  Sin destinatarios
-                </div>
-              )}
-            </div>
+            <SaleRecipientList
+              filteredCount={filteredRecipients.length}
+              visibleRecipients={visibleRecipients}
+              emptySlots={emptyRecipientSlots}
+              safePage={safeRecipientPage}
+              onChoose={chooseRecipient}
+              onNewRecipient={() => setMode("new-recipient")}
+              getCardClass={(recipient) =>
+                contextCardClass(
+                  "destinatario",
+                  `recipient:${recipientIdentityKey(recipient)}`,
+                  Boolean(
+                    selectedRecipient &&
+                      recipientIdentityKey(selectedRecipient) === recipientIdentityKey(recipient),
+                  ),
+                  recipientCardClass,
+                  selectedRecipient !== null,
+                )
+              }
+              onOpenContextMenu={(event, recipient) =>
+                openContextMenu(
+                  event,
+                  personFullName(recipient),
+                  "destinatario",
+                  `recipient:${recipientIdentityKey(recipient)}`,
+                  [recipient.phone],
+                  {
+                    street: recipient.street,
+                    houseNumber: recipient.houseNumber,
+                    neighborhood: recipient.neighborhood,
+                    city: recipient.city,
+                    state: recipient.state,
+                    postalCode: recipient.postalCode,
+                    country: recipient.country,
+                  },
+                  recipient.firstName,
+                  recipient.lastName,
+                )
+              }
+            />
           </div>
+            </div>
           </Panel>
+          ) : null}
 
           {selectedRecipient ? (
+            !selectedBox || activeStep === "box" ? (
             <div
               ref={boxesRef}
               className={stepShellClass("box")}
             >
             <Panel
+              contentClassName={flowPanelContentClass}
               title={
-                selectedRecipient
-                  ? `Cajas para ${selectedRecipient.country}`
-                  : "Cajas"
+                <FlowStepTitle
+                  stepNumber={saleStepNumber("box")}
+                  done={completedStepIndex >= 3}
+                  label={
+                    selectedRecipient
+                      ? `Cajas - ${selectedRecipient.country}`
+                      : "Cajas"
+                  }
+                />
               }
             >
+              <div className={flowStepBodyClass}>
               {!selectedRecipient ? (
                 <p className="text-xl font-black text-slate-400">
                   Selecciona un destinatario.
                 </p>
               ) : (
-                <div className="grid gap-3">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {boxesForCountry.map((box) => (
                     <button
                       key={box[0]}
@@ -3040,7 +2351,7 @@ export default function VentaPage() {
                       onContextMenu={(event) =>
                         openContextMenu(event, `Caja ${box[0]}`, "caja", `box:${box[0]}`)
                       }
-                      className={`relative grid gap-4 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 lg:grid-cols-[auto_1fr_auto] ${
+                      className={`group flex min-h-[12rem] flex-col items-center justify-between rounded-xl border border-black bg-[#3f4b46] p-4 text-center shadow-[0_8px_18px_rgba(0,0,0,0.26)] transition hover:-translate-y-0.5 hover:bg-[#46544e] ${
                         contextCardClass(
                           "caja",
                           `box:${box[0]}`,
@@ -3050,61 +2361,64 @@ export default function VentaPage() {
                         )
                       }`}
                     >
-                      <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-surface-card shadow-inner bg-surface-panel">
-                        <Package className="h-9 w-9 text-slate-400" />
-                      </div>
-
-                      <div>
-                        <div className="mb-2 flex flex-wrap items-center gap-2">
-                          <p className="text-2xl font-black">Caja {box[0]}</p>
+                      <div className="flex min-w-0 flex-col items-center">
+                        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-400 text-slate-950 shadow-[0_8px_14px_rgba(16,185,129,0.2)]">
+                          <Package className="h-5 w-5" />
+                        </div>
+                        <p className="text-lg font-black leading-tight text-[#f8fafc]">Caja {box[0]}</p>
+                        <div className="mt-2">
                           <CountryBadge country={selectedRecipient.country} />
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <span className="rounded-lg bg-surface-card px-3 py-2 text-sm font-black text-slate-300 bg-surface-panel text-slate-300">
-                            Carrier: {box[3]}
-                          </span>
-                          <span className="rounded-lg bg-surface-card px-3 py-2 text-sm font-black text-slate-300 bg-surface-panel text-slate-300">
-                            Tiempo: {box[4]}
-                          </span>
-                          <span className="rounded-lg bg-surface-card px-3 py-2 text-sm font-black text-slate-300 bg-surface-panel text-slate-300">
-                            Costo: {box[2]}
-                          </span>
-                        </div>
                       </div>
 
-                      <div className="grid min-w-44 grid-cols-2 gap-2">
-                        <div className="rounded-xl border border-black bg-surface-card px-4 py-3 text-right border-black bg-surface-panel">
-                          <p className="text-[11px] font-black uppercase text-slate-400">
-                            Cobra
-                          </p>
-                          <p className="text-2xl font-black">{box[1]}</p>
+                      <div className="my-2 grid w-full grid-cols-3 gap-1.5 border-y border-white/10 py-2 text-xs font-black text-slate-300">
+                        <span className="truncate rounded-md bg-[#202926] px-2 py-1.5">Carrier {box[3]}</span>
+                        <span className="truncate rounded-md bg-[#202926] px-2 py-1.5">{box[4]}</span>
+                        <span className="truncate rounded-md bg-[#202926] px-2 py-1.5">Costo {box[2]}</span>
+                      </div>
+
+                      <div className="grid w-full grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-black/70 bg-[#202926] px-3 py-2">
+                          <p className="text-[10px] font-black uppercase text-slate-400">Cobra</p>
+                          <p className="text-lg font-black">{box[1]}</p>
                         </div>
-                        <div className="rounded-xl border border-black bg-surface-card-header px-4 py-3 text-right text-slate-300">
-                          <p className="text-[11px] font-black uppercase">
-                            Gana
-                          </p>
-                          <p className="text-2xl font-black">{boxProfitDisplay(box)}</p>
+                        <div className="rounded-lg border border-black/70 bg-emerald-400/12 px-3 py-2 text-emerald-200">
+                          <p className="text-[10px] font-black uppercase">Gana</p>
+                          <p className="text-lg font-black">{boxProfitDisplay(box)}</p>
                         </div>
                       </div>
                     </button>
                   ))}
                 </div>
               )}
+              </div>
             </Panel>
             </div>
+            ) : null
           ) : null}
         </div>
       ) : null}
 
       {selectedSender && selectedRecipient && selectedBox ? (
         <div
-          className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-start"
+          className="mt-3 grid gap-3"
         >
+          {!deliveryComplete || activeStep === "delivery" ? (
           <div
             ref={deliveryRef}
             className={`min-w-0 flex-1 ${stepShellClass("delivery")}`}
           >
-          <Panel title="Opciones del envio">
+          <Panel
+            contentClassName={flowPanelContentClass}
+            title={
+              <FlowStepTitle
+                stepNumber={saleStepNumber("delivery")}
+                done={completedStepIndex >= 4}
+                label="Opciones del envio"
+              />
+            }
+          >
+            <div className={flowStepBodyClass}>
             <div className="grid gap-5">
               <div className="flex items-center gap-3">
                 <span className={`h-10 w-10 ${iconWellEmerald}`}>
@@ -3127,14 +2441,14 @@ export default function VentaPage() {
                   <button
                     type="button"
                     onClick={() => selectEmptyBoxMode("Cliente recoge caja vacia en oficina")}
-                    className={`min-h-[5.5rem] rounded-xl border p-4 text-left transition-all ${deliveryModeCardClass(
+                    className={`min-h-[8.5rem] rounded-xl border p-4 text-center shadow-[0_8px_18px_rgba(0,0,0,0.24)] transition-all hover:-translate-y-0.5 ${deliveryModeCardClass(
                       emptyBoxMode === "Cliente recoge caja vacia en oficina",
                       Boolean(emptyBoxMode),
                     )}`}
                   >
-                    <span className="flex items-center gap-3">
+                    <span className="flex flex-col items-center gap-2">
                       <span
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${deliveryModeIconClass(
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${deliveryModeIconClass(
                           emptyBoxMode === "Cliente recoge caja vacia en oficina",
                         )}`}
                       >
@@ -3144,7 +2458,7 @@ export default function VentaPage() {
                         <span className="block text-base font-black leading-tight text-[#f8fafc]">
                           En oficina
                         </span>
-                        <span className="mt-0.5 block text-xs font-bold text-slate-400">
+                        <span className="mt-1 block text-xs font-bold text-slate-400">
                           Cliente recibe la caja aqui
                         </span>
                       </span>
@@ -3153,14 +2467,14 @@ export default function VentaPage() {
                   <button
                     type="button"
                     onClick={() => selectEmptyBoxMode("Programar entrega de caja vacia")}
-                    className={`min-h-[5.5rem] rounded-xl border p-4 text-left transition-all ${deliveryModeCardClass(
+                    className={`min-h-[8.5rem] rounded-xl border p-4 text-center shadow-[0_8px_18px_rgba(0,0,0,0.24)] transition-all hover:-translate-y-0.5 ${deliveryModeCardClass(
                       emptyBoxMode === "Programar entrega de caja vacia",
                       Boolean(emptyBoxMode),
                     )}`}
                   >
-                    <span className="flex items-center gap-3">
+                    <span className="flex flex-col items-center gap-2">
                       <span
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${deliveryModeIconClass(
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${deliveryModeIconClass(
                           emptyBoxMode === "Programar entrega de caja vacia",
                         )}`}
                       >
@@ -3170,7 +2484,7 @@ export default function VentaPage() {
                         <span className="block text-base font-black leading-tight text-[#f8fafc]">
                           Entrega domicilio
                         </span>
-                        <span className="mt-0.5 block text-xs font-bold text-slate-400">
+                        <span className="mt-1 block text-xs font-bold text-slate-400">
                           Llevamos la caja al destino
                         </span>
                       </span>
@@ -3345,14 +2659,26 @@ export default function VentaPage() {
                 <input className={inputClass} placeholder="Instrucciones adicionales (opcional)" />
               </label>
             </div>
+            </div>
           </Panel>
           </div>
+          ) : null}
 
           <div
             ref={finishRef}
-            className={`min-w-0 xl:w-[38%] xl:shrink-0 ${deliveryComplete ? stepShellClass("finish") : "rounded-xl"}`}
+            className={`min-w-0 ${deliveryComplete ? stepShellClass("finish") : "rounded-xl"}`}
           >
-          <Panel title="Finalizar">
+          <Panel
+            contentClassName={flowPanelContentClass}
+            title={
+              <FlowStepTitle
+                stepNumber={saleStepNumber("finish")}
+                done={deliveryComplete}
+                label="Finalizar"
+              />
+            }
+          >
+            <div className={flowStepBodyClass}>
             {deliveryComplete ? (
               <div className="grid gap-3">
             <SaleInvoicePaper
@@ -3385,6 +2711,7 @@ export default function VentaPage() {
                 </div>
               </div>
             )}
+            </div>
           </Panel>
           </div>
         </div>
@@ -3406,6 +2733,37 @@ export default function VentaPage() {
             </p>
             <p className="truncate text-base font-black">{contextMenu.title}</p>
           </div>
+
+          {contextMenu.type !== "caja" ? (
+            <div className="group relative mt-1">
+              <button
+                type="button"
+                onMouseEnter={() => setActiveCopyGroup(null)}
+                className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left font-black hover:bg-surface-card"
+              >
+                <Edit3 className="h-5 w-5" />
+                <span className="flex-1">Editar info</span>
+                <ChevronRight className="h-4 w-4 text-slate-500" />
+              </button>
+
+              <div className="invisible absolute left-[calc(100%-1px)] top-0 z-50 w-64 rounded-xl border border-black bg-surface-panel p-2 opacity-0 shadow-2xl delay-300 duration-150 group-hover:visible group-hover:opacity-100 group-hover:delay-0 border-black bg-surface-panel">
+                <p className="px-3 pb-2 text-xs font-black uppercase text-slate-500">
+                  Editar
+                </p>
+                {editGroups.map((group) => (
+                  <button
+                    key={group.label}
+                    type="button"
+                    className="grid w-full gap-1 rounded-lg border border-transparent px-3 py-2.5 text-left hover:bg-surface-card hover:border-black"
+                    onClick={editContextTarget}
+                  >
+                    <span className="text-sm font-black text-[#f8fafc]">{group.label}</span>
+                    <span className="text-[11px] font-bold text-slate-500">{group.text}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="group relative mt-1">
             <button className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left font-black hover:bg-surface-card hover:bg-surface-card">
@@ -3479,184 +2837,17 @@ export default function VentaPage() {
       ) : null}
 
       {showInvoice && selectedSender && selectedRecipient && selectedBox && deliveryComplete ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#163A2A] p-4">
-          <div className="max-h-[92vh] w-full max-w-4xl overflow-auto rounded-xl border border-black bg-surface-panel p-5 shadow-2xl border-black bg-surface-panel">
-            <div className="mb-5 flex items-start justify-between gap-4 border-b border-black pb-4 border-black">
-              <div>
-                <p className="text-sm font-black uppercase text-slate-400">
-                  Confirmar venta
-                </p>
-                <h3 className="text-3xl font-black">Invoice {invoiceNumber}</h3>
-                <p className="font-bold text-slate-400">
-                  Paquemas - venta correlativa
-                </p>
-              </div>
-              <button
-                onClick={() => setShowInvoice(false)}
-                className="flex h-11 w-11 items-center justify-center rounded-lg border border-black border-black"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="grid gap-5 lg:grid-cols-[1fr_auto]">
-              <div className="grid gap-4">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-xl border border-black bg-surface-card p-4 border-black bg-surface-card">
-                    <p className="text-xs font-black uppercase text-slate-500">
-                      Remitente
-                    </p>
-                    <p className="text-xl font-black">{personFullName(selectedSender)}</p>
-                    <p className="font-bold text-slate-400">{senderPhonesLabel(selectedSender)}</p>
-                    {selectedSender.email ? (
-                      <p className="text-sm font-bold text-slate-300">{selectedSender.email}</p>
-                    ) : null}
-                  </div>
-                  <div className="rounded-xl border border-black bg-surface-card p-4 border-black bg-surface-card">
-                    <p className="text-xs font-black uppercase text-slate-500">
-                      Destinatario
-                    </p>
-                    <p className="text-xl font-black">{personFullName(selectedRecipient)}</p>
-                    <p className="font-bold text-slate-400">
-                      {selectedRecipient.city}, {selectedRecipient.country}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-black p-4 border-black">
-                  <p className="mb-3 text-xl font-black">Detalle</p>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div>
-                      <p className="text-xs font-black uppercase text-slate-500">
-                        Caja
-                      </p>
-                      <p className="font-black">{selectedBox[0]}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-black uppercase text-slate-500">
-                        Carrier
-                      </p>
-                      <p className="font-black">{selectedBox[3]}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-black uppercase text-slate-500">
-                        Tiempo
-                      </p>
-                      <p className="font-black">{selectedBox[4]}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-black uppercase text-slate-500">
-                        Pais
-                      </p>
-                      <p className="font-black">{selectedRecipient.country}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-black uppercase text-slate-500">
-                        Entrega caja vacia
-                      </p>
-                      <p className="font-black">
-                        {deliverySummary(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-xl border border-black bg-surface-card p-4 text-right border-black bg-surface-card">
-                    <p className="text-xs font-black uppercase text-slate-500">
-                      Cliente paga
-                    </p>
-                    <p className="text-3xl font-black">{selectedBox[1]}</p>
-                  </div>
-                  <div className="rounded-xl border border-black bg-surface-card p-4 text-right border-black bg-surface-card">
-                    <p className="text-xs font-black uppercase text-slate-500">
-                      Carrier cobra
-                    </p>
-                    <p className="text-3xl font-black">{selectedBox[2]}</p>
-                  </div>
-                  <div className="rounded-xl border border-black bg-surface-card-header p-4 text-right text-slate-300">
-                    <p className="text-xs font-black uppercase">Ganancia</p>
-                    <p className="text-3xl font-black">{boxProfitDisplay(selectedBox)}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-black bg-surface-card p-4 text-center text-[#f8fafc]">
-                <div className="rounded-lg bg-[#f8fafc] p-3">
-                  <QRCodeSVG
-                    value={`invoice:${invoiceNumber}`}
-                    size={144}
-                    level="M"
-                    marginSize={1}
-                  />
-                </div>
-                <p className="mt-3 text-lg font-black">{invoiceNumber}</p>
-                <p className="text-sm font-bold text-slate-300">
-                  QR del invoice
-                </p>
-              </div>
-            </div>
-
-            {stockMessage ? (
-              <p className="mt-4 rounded-lg border border-black bg-surface-panel px-3 py-2 text-center text-sm font-bold text-emerald-200">
-                {stockMessage}
-              </p>
-            ) : null}
-
-            <div className="mt-5 grid gap-3 border-t border-black pt-4 border-black sm:grid-cols-3">
-              <button
-                onClick={() => setShowInvoice(false)}
-                className="h-14 rounded-lg border border-black text-lg font-black border-black"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="flex h-14 items-center justify-center gap-2 rounded-lg border border-black bg-surface-card text-lg font-black text-[#f8fafc]"
-              >
-                <Printer className="h-6 w-6" />
-                Imprimir
-              </button>
-              <button
-                onClick={() => {
-                  void (async () => {
-                    if (!selectedBox?.[0]) {
-                      return;
-                    }
-
-                    setStockMessage("");
-
-                    const note = `Venta ${invoiceNumber}`;
-
-                    if (!isSupabaseConfigured()) {
-                      setStockMessage(
-                        "Configura Supabase en .env.local para descontar stock en la base de datos.",
-                      );
-                      return;
-                    }
-
-                    const result = await deductStockForBoxSaleAction({
-                      boxLabel: selectedBox[0],
-                      note,
-                    });
-
-                    if (!result.ok) {
-                      setStockMessage(result.error);
-                      return;
-                    }
-
-                    setShowInvoice(false);
-                    setInvoiceSequence((current) => current + 1);
-                    setStockMessage("Cobro confirmado y stock descontado.");
-                  })();
-                }}
-                className="h-14 rounded-lg bg-emerald-400 text-lg font-black text-slate-950"
-              >
-                Confirmar cobro
-              </button>
-            </div>
-          </div>
-        </div>
+        <SaleCheckoutModal
+          invoiceNumber={invoiceNumber}
+          sender={selectedSender}
+          recipient={selectedRecipient}
+          box={selectedBox}
+          deliverySummary={deliverySummary(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt)}
+          stockMessage={stockMessage}
+          onClose={() => setShowInvoice(false)}
+          onPrint={() => window.print()}
+          onConfirmCharge={() => void confirmCharge()}
+        />
       ) : null}
     </>
   );

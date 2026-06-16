@@ -1,7 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { ACT_AS_ORG_COOKIE } from "@/lib/auth/act-as";
+import { APP_SESSION_COOKIE, readAppSessionCookieValue } from "@/lib/auth/app-session-cookie";
 
-const PUBLIC_PATHS = ["/login", "/api/validate-address"];
+const PUBLIC_PATHS = ["/login", "/api/auth/sign-in"];
+
+function copyCookies(source: NextResponse, target: NextResponse) {
+  source.cookies.getAll().forEach((cookie) => {
+    target.cookies.set(cookie.name, cookie.value);
+  });
+}
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -21,7 +29,23 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  let response = NextResponse.next({ request });
+  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  if (isPublic) {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/platform")) {
+    request.cookies.delete(ACT_AS_ORG_COOKIE);
+  }
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-boxario-pathname", pathname);
+
+  const forwardedRequest = { headers: requestHeaders };
+
+  let supabaseResponse = NextResponse.next({
+    request: forwardedRequest,
+  });
 
   const supabase = createServerClient(url, key, {
     cookies: {
@@ -32,9 +56,11 @@ export async function proxy(request: NextRequest) {
         cookiesToSet.forEach(({ name, value }) => {
           request.cookies.set(name, value);
         });
-        response = NextResponse.next({ request });
+        supabaseResponse = NextResponse.next({
+          request: forwardedRequest,
+        });
         cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
+          supabaseResponse.cookies.set(name, value, options);
         });
       },
     },
@@ -42,22 +68,28 @@ export async function proxy(request: NextRequest) {
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
 
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  const fallbackUserId = readAppSessionCookieValue(request.cookies.get(APP_SESSION_COOKIE)?.value);
 
-  if (!user && !isPublic) {
+  if (!user && !fallbackUserId) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
+    }
+
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    copyCookies(supabaseResponse, redirectResponse);
+    return redirectResponse;
   }
 
-  if (user && pathname === "/login") {
-    return NextResponse.redirect(new URL("/", request.url));
+  if (pathname.startsWith("/platform")) {
+    supabaseResponse.cookies.delete(ACT_AS_ORG_COOKIE);
   }
 
-  return response;
+  return supabaseResponse;
 }
 
 export const config = {

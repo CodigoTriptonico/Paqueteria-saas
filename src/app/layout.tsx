@@ -4,8 +4,8 @@ import { getAppSession } from "@/lib/auth/session";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Paquemas",
-  description: "Sistema para paqueterias",
+  title: "Boxario",
+  description: "Cajas e inventario para paqueterías",
 };
 
 export default async function RootLayout({

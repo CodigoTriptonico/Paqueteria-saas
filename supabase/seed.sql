@@ -1,0 +1,2 @@
+-- Seed opcional tras `npx supabase db reset`.
+-- Datos de referencia adicionales: supabase/seed-bootstrap.sql

@@ -2,7 +2,7 @@
 
 import { requireAppSession } from "@/lib/auth/session";
 import { sessionHasPermission } from "@/lib/auth/permissions";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import type { PermissionKey, PermissionRow, RoleRow } from "@/lib/auth/types";
 
@@ -12,6 +12,26 @@ export type RolePermissionState = {
   key: PermissionKey;
   granted: boolean;
 };
+
+function roleSlugFromName(name: string) {
+  return name
+    .trim()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+}
+
+function mapRole(row: { id: string; slug: string; name: string; is_system?: boolean }): RoleRow {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    isSystem: row.is_system ?? true,
+  };
+}
 
 export async function listRolesAndPermissionsAction(): Promise<
   ActionResult<{
@@ -27,7 +47,7 @@ export async function listRolesAndPermissionsAction(): Promise<
       throw new Error("FORBIDDEN");
     }
 
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createScopedSupabase(session);
     if (!supabase) {
       return fail("Supabase no configurado");
     }
@@ -36,7 +56,7 @@ export async function listRolesAndPermissionsAction(): Promise<
       await Promise.all([
         supabase
           .from("roles")
-          .select("id, slug, name")
+          .select("id, slug, name, is_system")
           .eq("organization_id", session.organizationId)
           .order("name"),
         supabase.from("permissions").select("id, key, name, description").order("name"),
@@ -68,10 +88,200 @@ export async function listRolesAndPermissionsAction(): Promise<
     });
 
     return ok({
-      roles: (roles || []) as RoleRow[],
+      roles: (roles || []).map(mapRole),
       permissions: (permissions || []) as PermissionRow[],
       rolePermissions: mapped,
     });
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function createRoleAction(input: {
+  name: string;
+  copyFromRoleId?: string;
+}): Promise<ActionResult<RoleRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!sessionHasPermission(session, "permissions.manage")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const name = input.name.trim();
+    const baseSlug = roleSlugFromName(name);
+
+    if (!name || !baseSlug) {
+      return fail("Nombre de rol requerido");
+    }
+
+    let slug = baseSlug;
+    for (let index = 2; index <= 20; index += 1) {
+      const { data: existing } = await supabase
+        .from("roles")
+        .select("id")
+        .eq("organization_id", session.organizationId)
+        .eq("slug", slug)
+        .maybeSingle();
+
+      if (!existing) {
+        break;
+      }
+
+      slug = `${baseSlug}-${index}`;
+    }
+
+    const { data: role, error } = await supabase
+      .from("roles")
+      .insert({
+        organization_id: session.organizationId,
+        slug,
+        name,
+        is_system: false,
+      })
+      .select("id, slug, name, is_system")
+      .single();
+
+    if (error || !role) {
+      return fail(error?.message || "No se pudo crear el rol");
+    }
+
+    if (input.copyFromRoleId) {
+      const { data: copiedPermissions } = await supabase
+        .from("role_permissions")
+        .select("permission_id, granted")
+        .eq("role_id", input.copyFromRoleId);
+
+      if (copiedPermissions?.length) {
+        const { error: copyError } = await supabase.from("role_permissions").insert(
+          copiedPermissions.map((permission) => ({
+            role_id: role.id,
+            permission_id: permission.permission_id,
+            granted: permission.granted,
+          })),
+        );
+
+        if (copyError) {
+          return fail(copyError.message);
+        }
+      }
+    }
+
+    return ok(mapRole(role));
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function updateRoleAction(input: {
+  roleId: string;
+  name: string;
+}): Promise<ActionResult<RoleRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!sessionHasPermission(session, "permissions.manage")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const name = input.name.trim();
+
+    if (!name) {
+      return fail("Nombre de rol requerido");
+    }
+
+    const { data: current } = await supabase
+      .from("roles")
+      .select("id, is_system")
+      .eq("id", input.roleId)
+      .eq("organization_id", session.organizationId)
+      .maybeSingle();
+
+    if (!current) {
+      return fail("Rol no encontrado");
+    }
+
+    if (current.is_system) {
+      return fail("No puedes renombrar un rol base");
+    }
+
+    const { data, error } = await supabase
+      .from("roles")
+      .update({ name })
+      .eq("id", input.roleId)
+      .eq("organization_id", session.organizationId)
+      .select("id, slug, name, is_system")
+      .single();
+
+    if (error || !data) {
+      return fail(error?.message || "No se pudo actualizar el rol");
+    }
+
+    return ok(mapRole(data));
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function deleteRoleAction(roleId: string): Promise<ActionResult<null>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!sessionHasPermission(session, "permissions.manage")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data: role } = await supabase
+      .from("roles")
+      .select("id, is_system")
+      .eq("id", roleId)
+      .eq("organization_id", session.organizationId)
+      .maybeSingle();
+
+    if (!role) {
+      return fail("Rol no encontrado");
+    }
+
+    if (role.is_system) {
+      return fail("No puedes borrar un rol base");
+    }
+
+    const { data: users } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("role_id", roleId)
+      .limit(1);
+
+    if (users?.length) {
+      return fail("No puedes borrar un rol con usuarios");
+    }
+
+    const { error } = await supabase
+      .from("roles")
+      .delete()
+      .eq("id", roleId)
+      .eq("organization_id", session.organizationId);
+
+    if (error) {
+      return fail(error.message);
+    }
+
+    return ok(null);
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -89,7 +299,7 @@ export async function setRolePermissionAction(
       throw new Error("FORBIDDEN");
     }
 
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createScopedSupabase(session);
     if (!supabase) {
       return fail("Supabase no configurado");
     }
@@ -110,6 +320,55 @@ export async function setRolePermissionAction(
       permission_id: permissionId,
       granted,
     });
+
+    if (error) {
+      return fail(error.message);
+    }
+
+    return ok(null);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function setRolePermissionsBatchAction(
+  roleId: string,
+  updates: { permissionId: string; granted: boolean }[],
+): Promise<ActionResult<null>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!sessionHasPermission(session, "permissions.manage")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    if (!updates.length) {
+      return ok(null);
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data: role } = await supabase
+      .from("roles")
+      .select("id")
+      .eq("id", roleId)
+      .eq("organization_id", session.organizationId)
+      .maybeSingle();
+
+    if (!role) {
+      return fail("Rol no encontrado");
+    }
+
+    const { error } = await supabase.from("role_permissions").upsert(
+      updates.map((update) => ({
+        role_id: roleId,
+        permission_id: update.permissionId,
+        granted: update.granted,
+      })),
+    );
 
     if (error) {
       return fail(error.message);

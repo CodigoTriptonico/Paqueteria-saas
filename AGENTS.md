@@ -1,5 +1,4 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+- Ser directo y corto.
+- Siempre guardar en UTF-8.
+- Este proyecto usa Next.js nuevo. Antes de tocar codigo Next.js, revisar `node_modules/next/dist/docs/`.
+- Antes de tocar UI, leer `UI-STYLE.md` (criterio de gusto, no spec técnica). Implementar mirando componentes existentes.

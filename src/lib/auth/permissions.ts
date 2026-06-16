@@ -1,6 +1,6 @@
 import type { AppSession, PermissionKey, RoleSlug } from "@/lib/auth/types";
 
-const ROLE_ROUTE_ACCESS: Record<RoleSlug, string[]> = {
+const ROLE_ROUTE_ACCESS: Partial<Record<RoleSlug, string[]>> = {
   administrador: ["/", "/venta", "/inventario", "/envios", "/configuracion"],
   vendedor: ["/", "/venta", "/inventario"],
   conductor: ["/", "/envios"],
@@ -13,12 +13,32 @@ const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
   "/envios": ["routes.view"],
 };
 
+function effectiveRoleSlug(session: AppSession): RoleSlug {
+  if (session.isActingAsClient && session.isPlatformAdmin) {
+    return "administrador";
+  }
+  return session.roleSlug;
+}
+
+/** Dueño de Boxario sin paquetería cliente seleccionada (vista operativa bloqueada). */
+export function platformAdminNeedsClientContext(session: AppSession | null): boolean {
+  return Boolean(session?.isPlatformAdmin && !session.isActingAsClient);
+}
+
 export function sessionHasPermission(
   session: AppSession | null,
   permission: PermissionKey,
 ) {
   if (!session) {
     return false;
+  }
+
+  if (
+    session.isActingAsClient &&
+    session.isPlatformAdmin &&
+    session.permissions.includes("all")
+  ) {
+    return true;
   }
 
   if (session.roleSlug === "administrador" || session.permissions.includes("all")) {
@@ -37,10 +57,14 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
     return session.isPlatformAdmin;
   }
 
-  const base = "/" + (pathname.split("/").filter(Boolean)[0] || "");
-  const allowedPrefixes = ROLE_ROUTE_ACCESS[session.roleSlug] || [];
+  if (platformAdminNeedsClientContext(session)) {
+    return false;
+  }
 
-  if (!allowedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+  const base = "/" + (pathname.split("/").filter(Boolean)[0] || "");
+  const allowedPrefixes = ROLE_ROUTE_ACCESS[effectiveRoleSlug(session)];
+
+  if (allowedPrefixes && !allowedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
     return false;
   }
 
@@ -58,7 +82,7 @@ export function canAccessWarehouse(session: AppSession | null, warehouseId: stri
     return false;
   }
 
-  if (session.roleSlug === "administrador" || session.warehouseIds.length === 0) {
+  if (session.isActingAsClient || effectiveRoleSlug(session) === "administrador") {
     return true;
   }
 

@@ -64,8 +64,11 @@ select {
   color: #f8fafc;
 }
 
-input::placeholder {
-  color: #cbd5e1;
+input::placeholder,
+textarea::placeholder {
+  color: #64748b;
+  font-weight: 600;
+  opacity: 1;
 }
 
 @keyframes enter-left {
@@ -91,11 +94,11 @@ input::placeholder {
 }
 
 .motion-enter-left {
-  animation: enter-left 220ms ease-out both;
+  animation: enter-left 80ms ease-out both;
 }
 
 .motion-enter-top {
-  animation: enter-top 220ms ease-out both;
+  animation: enter-top 80ms ease-out both;
 }
 
 ::view-transition-old(.app-fade) {
@@ -104,6 +107,14 @@ input::placeholder {
 
 ::view-transition-new(.app-fade) {
   animation: app-fade-in 80ms ease-out both;
+}
+
+::view-transition-old(.app-slide) {
+  animation: app-slide-out 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+::view-transition-new(.app-slide) {
+  animation: app-slide-in 300ms cubic-bezier(0.22, 1, 0.36, 1) 70ms both;
 }
 
 ::view-transition-old(.inventory-view) {
@@ -158,13 +169,60 @@ input::placeholder {
   }
 }
 
+@keyframes app-slide-out {
+  from {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    filter: blur(2px);
+    opacity: 0;
+    transform: translateX(-22px) scale(0.992);
+  }
+}
+
+@keyframes app-slide-in {
+  from {
+    filter: blur(3px);
+    opacity: 0;
+    transform: translateX(28px) scale(0.992);
+  }
+  to {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.skeleton-card,
+.skeleton-line,
+.skeleton-block {
+  animation: skeleton-breathe 1.2s ease-in-out infinite;
+}
+
+@keyframes skeleton-breathe {
+  0%,
+  100% {
+    opacity: 0.52;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .motion-enter-left,
   .motion-enter-top,
   ::view-transition-old(.app-fade),
   ::view-transition-new(.app-fade),
+  ::view-transition-old(.app-slide),
+  ::view-transition-new(.app-slide),
   ::view-transition-old(.inventory-view),
-  ::view-transition-new(.inventory-view) {
+  ::view-transition-new(.inventory-view),
+  .skeleton-card,
+  .skeleton-line,
+  .skeleton-block {
     animation: none;
   }
 }

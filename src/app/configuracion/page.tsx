@@ -1,13 +1,13 @@
 "use client";
 
 import {
-  ArrowLeft,
   Box,
   Building2,
   ChevronDown,
   ChevronRight,
   Clock,
   DollarSign,
+  Gauge,
   Globe2,
   Palette,
   Plus,
@@ -17,47 +17,36 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CompanySettingsPanel } from "@/components/config/company-settings-panel";
+import { PlanSettingsPanel } from "@/components/config/plan-settings-panel";
 import { InventoryConfigSection as InventoryCategoriesPanel } from "@/components/config/inventory-config-section";
 import { UsersSettingsPanel } from "@/components/config/users-settings-panel";
 import { WarehousesSettingsPanel } from "@/components/config/warehouses-settings-panel";
-import { useInventoryBackend } from "@/hooks/use-inventory-backend";
-import { categoryItems, countInventoryTreeItems } from "@/lib/inventory-tree";
+import { useContextNav } from "@/hooks/use-context-nav";
+import { usePricingBackend } from "@/hooks/use-pricing-backend";
 import { inputClass, Panel } from "@/components/ui-blocks";
+import { InlineSearchCombobox, InlineSearchPicker } from "@/components/inline-search-picker";
 
-type Section = "menu" | "prices" | "distributors" | "inventory" | "deliveries" | "appearance" | "company" | "users";
+const ROUTE_LEAD_TIME_OPTIONS = [
+  { value: "1 dia", label: "1 dia" },
+  { value: "2 dias", label: "2 dias" },
+  { value: "3 dias", label: "3 dias" },
+  { value: "1 semana", label: "1 semana" },
+];
+
+type Section = "menu" | "plan" | "prices" | "distributors" | "inventory" | "deliveries" | "appearance" | "company" | "users";
 type InventoryConfigSection = "menu" | "categories" | "warehouses";
 
-type BoxConfig = {
-  size: string;
-  price: string;
-};
-
-type CountryConfig = {
-  code: string;
-  name: string;
-  deliveryTime: string;
-  boxes: BoxConfig[];
-};
-
-type DistributorConfig = {
-  name: string;
-  contact: string;
-  phone: string;
-  active: boolean;
-};
-
-type DistributorPrices = Record<string, Record<string, BoxConfig[]>>;
-type RouteConfig = {
-  deliveryDays: string[];
-  pickupDays: string[];
-  deliveryRanges: string[];
-  pickupRanges: string[];
-  pendingAllowed: boolean;
-  routeLeadTime: string;
-};
-
 const sections = [
+  {
+    id: "plan" as Section,
+    title: "Plan",
+    text: "Limites de bodegas y usuarios.",
+    icon: Gauge,
+    color: "bg-amber-400",
+  },
   {
     id: "prices" as Section,
     title: "Paises y precios",
@@ -109,10 +98,6 @@ const sections = [
   },
 ];
 
-const initialCountries: CountryConfig[] = [];
-
-const initialDistributors: DistributorConfig[] = [];
-
 const emptyDistributor = {
   name: "",
   contact: "",
@@ -120,17 +105,10 @@ const emptyDistributor = {
 };
 
 const weekDays = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
-const initialRouteConfig: RouteConfig = {
-  deliveryDays: [],
-  pickupDays: [],
-  deliveryRanges: [],
-  pickupRanges: [],
-  pendingAllowed: true,
-  routeLeadTime: "",
-};
 
 const configSections: Section[] = [
   "menu",
+  "plan",
   "prices",
   "distributors",
   "inventory",
@@ -140,19 +118,18 @@ const configSections: Section[] = [
   "users",
 ];
 
-function getConfigStateFromUrl() {
-  if (typeof window === "undefined") {
-    return { section: "menu" as Section, inventorySection: "menu" as InventoryConfigSection };
-  }
-
-  const params = new URLSearchParams(window.location.search);
+function parseConfigUrl(params: URLSearchParams) {
   const open = params.get("open");
   const view = params.get("view");
 
   if (open === "inventory") {
+    const inventory = params.get("inventory");
     return {
       section: "inventory" as Section,
-      inventorySection: "categories" as InventoryConfigSection,
+      inventorySection:
+        inventory === "warehouses"
+          ? ("warehouses" as InventoryConfigSection)
+          : ("categories" as InventoryConfigSection),
     };
   }
 
@@ -438,22 +415,33 @@ function TimeRangeSelect({
 }
 
 export default function ConfiguracionPage() {
-  const [section, setSection] = useState<Section>("menu");
-  const [locationKey, setLocationKey] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const cleanedFromRef = useRef(false);
+  const openedInventoryHashRef = useRef(false);
+  const { section, inventorySection: inventoryConfigSection } = useMemo(
+    () => parseConfigUrl(searchParams),
+    [searchParams],
+  );
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [countryQuery, setCountryQuery] = useState("");
   const [showCountryPicker, setShowCountryPicker] = useState(false);
-  const [countries, setCountries] = useState(initialCountries);
-  const [distributors, setDistributors] = useState(initialDistributors);
+  const {
+    error: pricingError,
+    countries,
+    setCountries,
+    distributors,
+    setDistributors,
+    distributorPrices,
+    setDistributorPrices,
+    routeConfig,
+    setRouteConfig,
+  } = usePricingBackend();
   const [selectedDistributor, setSelectedDistributor] = useState<string | null>(null);
   const [selectedDistributorCountry, setSelectedDistributorCountry] = useState<string | null>(null);
-  const [distributorPrices, setDistributorPrices] = useState<DistributorPrices>({});
   const [showDistributorForm, setShowDistributorForm] = useState(false);
   const [newDistributor, setNewDistributor] = useState(emptyDistributor);
-  const { categoryConfigs } = useInventoryBackend();
-  const [inventoryConfigSection, setInventoryConfigSection] = useState<InventoryConfigSection>("menu");
   const [returnToInventory, setReturnToInventory] = useState(false);
-  const [routeConfig, setRouteConfig] = useState<RouteConfig>(initialRouteConfig);
   const [newDeliveryRange, setNewDeliveryRange] = useState({ start: "", end: "" });
   const [newPickupRange, setNewPickupRange] = useState({ start: "", end: "" });
   const countryOptions = useMemo(() => getCountryOptions(), []);
@@ -484,83 +472,78 @@ export default function ConfiguracionPage() {
       .filter((country) => normalizeText(country.name).includes(query));
   }, [countries, countryOptions, countryQuery]);
 
-  function openConfigSection(nextSection: Section, push = true) {
-    setSection(nextSection);
-    if (nextSection !== "inventory") {
-      setInventoryConfigSection("menu");
-    }
+  const countryPickerSearchOptions = useMemo(() => {
+    const existing = new Set(countries.map((country) => normalizeText(country.name)));
 
-    if (push) {
-      window.history.pushState(null, "", `/configuracion?view=${nextSection}`);
-    }
-  }
+    return countryOptions
+      .filter((country) => !existing.has(normalizeText(country.name)))
+      .map((country) => ({
+        value: country.code || country.name,
+        label: country.name,
+      }));
+  }, [countries, countryOptions]);
 
-  function openInventoryConfigSection(nextSection: InventoryConfigSection, push = true) {
-    setInventoryConfigSection(nextSection);
-    if (push) {
-      window.history.pushState(
-        null,
-        "",
-        `/configuracion?view=inventory&inventory=${nextSection}`,
-      );
-    }
-  }
-
-  useEffect(() => {
-    function syncLocationKey() {
-      setLocationKey(`${window.location.pathname}${window.location.search}${window.location.hash}`);
-    }
-
-    syncLocationKey();
-    const intervalId = window.setInterval(syncLocationKey, 200);
-    window.addEventListener("popstate", syncLocationKey);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("popstate", syncLocationKey);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!locationKey) {
+  function openConfigSection(nextSection: Section) {
+    if (nextSection === "menu") {
+      router.replace("/configuracion", { scroll: false });
       return;
     }
 
-    window.queueMicrotask(() => {
-      const nextState = getConfigStateFromUrl();
-      setSection(nextState.section);
-      setInventoryConfigSection(nextState.inventorySection);
+    router.replace(`/configuracion?view=${nextSection}`, { scroll: false });
+  }
 
-      const params = new URLSearchParams(window.location.search);
-
-      if (params.get("from") === "inventario") {
-        setReturnToInventory(true);
-        window.sessionStorage.setItem("return-to-inventory", "1");
-        params.delete("from");
-        const query = params.toString();
-        window.history.replaceState(
-          null,
-          "",
-          `/configuracion${query ? `?${query}` : ""}`,
-        );
-      }
-    });
-  }, [locationKey]);
+  function openInventoryConfigSection(nextSection: InventoryConfigSection) {
+    router.replace(`/configuracion?view=inventory&inventory=${nextSection}`, { scroll: false });
+  }
 
   useEffect(() => {
-    const shouldOpenInventory =
-      window.location.hash === "#inventory" ||
-      new URLSearchParams(window.location.search).get("open") === "inventory";
+    if (cleanedFromRef.current) {
+      return;
+    }
 
-    if (shouldOpenInventory) {
-      window.queueMicrotask(() => {
-        setSection("inventory");
-        setInventoryConfigSection("categories");
-        window.history.replaceState(null, "", "/configuracion?view=inventory&inventory=categories");
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("from") !== "inventario") {
+      return;
+    }
+
+    cleanedFromRef.current = true;
+    queueMicrotask(() => {
+      setReturnToInventory(true);
+    });
+    window.sessionStorage.setItem("return-to-inventory", "1");
+
+    params.delete("from");
+    const query = params.toString();
+    router.replace(query ? `/configuracion?${query}` : "/configuracion", { scroll: false });
+  }, [router]);
+
+  useEffect(() => {
+    if (openedInventoryHashRef.current) {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const open = params.get("open");
+
+    if (open === "inventory") {
+      openedInventoryHashRef.current = true;
+      queueMicrotask(() => {
         setReturnToInventory(window.sessionStorage.getItem("return-to-inventory") === "1");
       });
+      router.replace("/configuracion?view=inventory&inventory=categories", { scroll: false });
+      return;
     }
-  }, []);
+
+    if (window.location.hash !== "#inventory") {
+      return;
+    }
+
+    openedInventoryHashRef.current = true;
+    queueMicrotask(() => {
+      setReturnToInventory(window.sessionStorage.getItem("return-to-inventory") === "1");
+    });
+    router.replace("/configuracion?view=inventory&inventory=categories", { scroll: false });
+  }, [router]);
 
   function addCountry(country: CountryOption) {
     setCountries((current) => [
@@ -668,7 +651,7 @@ export default function ConfiguracionPage() {
   function goBack() {
     if (returnToInventory && section === "inventory") {
       window.sessionStorage.removeItem("return-to-inventory");
-      window.location.href = "/inventario";
+      router.push("/inventario");
       return;
     }
 
@@ -694,6 +677,92 @@ export default function ConfiguracionPage() {
 
     openConfigSection("menu");
   }
+
+  const configNavTitle = useMemo(() => {
+    if (section === "menu") {
+      return undefined;
+    }
+
+    if (section === "plan") {
+      return "Plan";
+    }
+
+    if (section === "inventory") {
+      if (inventoryConfigSection === "warehouses") {
+        return "Bodegas";
+      }
+
+      if (inventoryConfigSection === "categories") {
+        return "Categorias e items";
+      }
+
+      return "Inventario";
+    }
+
+    if (section === "prices") {
+      if (selectedCountry) {
+        return `${selectedCountry} - tiempos y cajas`;
+      }
+
+      return "Paises y precios";
+    }
+
+    if (section === "distributors") {
+      if (selectedDistributor && selectedDistributorCountry) {
+        return `${selectedDistributor} · ${selectedDistributorCountry}`;
+      }
+
+      if (selectedDistributor) {
+        return `Editando precios para ${selectedDistributorData?.name || selectedDistributor}`;
+      }
+
+      return "Distribuidores globales";
+    }
+
+    if (section === "deliveries") {
+      return "Rutas y horarios";
+    }
+
+    if (section === "appearance") {
+      return "Apariencia";
+    }
+
+    if (section === "company") {
+      return "Empresa";
+    }
+
+    if (section === "users") {
+      return "Usuarios";
+    }
+
+    return "Configuracion";
+  }, [
+    inventoryConfigSection,
+    section,
+    selectedCountry,
+    selectedDistributor,
+    selectedDistributorCountry,
+    selectedDistributorData?.name,
+  ]);
+
+  const handleConfigNavBack = useCallback(() => {
+    goBack();
+  }, [
+    inventoryConfigSection,
+    returnToInventory,
+    section,
+    selectedCountry,
+    selectedDistributor,
+    selectedDistributorCountry,
+  ]);
+
+  useContextNav({
+    title: configNavTitle ?? "Configuracion",
+    onBack: handleConfigNavBack,
+    enabled: Boolean(configNavTitle),
+  });
+
+  const showSidebarNav = section !== "menu";
 
   function toggleRouteDay(key: "deliveryDays" | "pickupDays", day: string) {
     setRouteConfig((current) => {
@@ -734,17 +803,6 @@ export default function ConfiguracionPage() {
     }));
   }
 
-  const backButton =
-    section === "menu" ? null : (
-      <button
-        onClick={goBack}
-        className="flex h-10 items-center gap-2 rounded-lg border border-black bg-surface-panel px-3 text-sm font-black border-black bg-surface-card"
-      >
-        <ArrowLeft className="h-5 w-5" />
-        Volver
-      </button>
-    );
-
   return (
     <>
       {section === "menu" ? (
@@ -752,6 +810,11 @@ export default function ConfiguracionPage() {
           <div className="mb-4 min-w-0">
             <p className="text-xs font-black uppercase text-slate-400">Sistema</p>
             <h3 className="truncate text-2xl font-black">Configuracion</h3>
+            {pricingError ? (
+              <p className="mt-2 rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
+                {pricingError}
+              </p>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
@@ -784,8 +847,14 @@ export default function ConfiguracionPage() {
         </Panel>
       ) : null}
 
+      {section === "plan" ? (
+        <Panel title="Plan" hideHeader={showSidebarNav}>
+          <PlanSettingsPanel />
+        </Panel>
+      ) : null}
+
       {section === "prices" && !selectedCountry ? (
-        <Panel title="Paises y precios" action={backButton}>
+        <Panel title="Paises y precios" hideHeader={showSidebarNav}>
           <div className="mb-5 grid gap-3">
             <button
               onClick={() => setShowCountryPicker((current) => !current)}
@@ -810,16 +879,26 @@ export default function ConfiguracionPage() {
                     <X className="h-5 w-5" />
                   </button>
                 </div>
-                <div className="relative mb-4">
-                  <Search className="absolute left-4 top-1/2 h-6 w-6 -translate-y-1/2 text-slate-500" />
-                  <input
-                    className={`${inputClass} w-full pl-12`}
-                    placeholder="Buscar pais"
-                    value={countryQuery}
-                    onChange={(event) => setCountryQuery(event.target.value)}
-                    autoFocus
-                  />
-                </div>
+                <InlineSearchCombobox
+                  value={countryQuery}
+                  onChange={setCountryQuery}
+                  options={countryPickerSearchOptions}
+                  placeholder="Buscar pais"
+                  emptyLabel="Sin países"
+                  ariaLabel="Buscar país"
+                  leadingIcon={<Search className="h-4 w-4" aria-hidden />}
+                  className="mb-4 w-full"
+                  minWidthClass="w-full min-w-0"
+                  onSelectOption={(option) => {
+                    const country = countryOptions.find(
+                      (entry) => (entry.code || entry.name) === option.value,
+                    );
+
+                    if (country) {
+                      addCountry(country);
+                    }
+                  }}
+                />
                 <div className="grid max-h-96 gap-2 overflow-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredCountryOptions.map((country) => (
                     <button
@@ -881,7 +960,7 @@ export default function ConfiguracionPage() {
 
       {section === "prices" && selectedCountry ? (
         <Panel
-          action={backButton}
+          hideHeader={showSidebarNav}
           title={
             <span className="flex items-center gap-3">
               <CountryFlag code={selectedCountryData?.code || ""} />
@@ -941,7 +1020,7 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {section === "distributors" && !selectedDistributor ? (
-        <Panel title="Distribuidores globales" action={backButton}>
+        <Panel title="Distribuidores globales" hideHeader={showSidebarNav}>
           <div className="mb-5 grid gap-3">
             <button
               onClick={() => setShowDistributorForm((current) => !current)}
@@ -1046,7 +1125,7 @@ export default function ConfiguracionPage() {
 
       {section === "distributors" && selectedDistributor && !selectedDistributorCountry ? (
         <Panel
-          action={backButton}
+          hideHeader={showSidebarNav}
           title={
             <span className="flex flex-wrap items-center gap-3">
               <Truck className="h-7 w-7 text-slate-400" />
@@ -1091,7 +1170,7 @@ export default function ConfiguracionPage() {
 
       {section === "distributors" && selectedDistributor && selectedDistributorCountry ? (
         <Panel
-          action={backButton}
+          hideHeader={showSidebarNav}
           title={
             <span className="flex flex-wrap items-center gap-3">
               <Truck className="h-7 w-7 text-slate-400" />
@@ -1179,6 +1258,7 @@ export default function ConfiguracionPage() {
 
       {section === "inventory" ? (
         <Panel
+          hideHeader={showSidebarNav}
           title={
             inventoryConfigSection === "menu"
               ? "Inventario"
@@ -1186,48 +1266,43 @@ export default function ConfiguracionPage() {
                 ? "Bodegas"
                 : "Categorias e items"
           }
-          action={backButton}
         >
           {inventoryConfigSection === "menu" ? (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,340px))] justify-start gap-4">
               <a
                 href="/configuracion?view=inventory&inventory=categories"
-                className="group rounded-xl border border-black bg-surface-card p-5 text-left shadow-sm transition hover:border-black"
+                className="group flex min-w-0 flex-col rounded-xl border border-black bg-surface-card p-5 text-left shadow-sm transition hover:border-black"
               >
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950 text-slate-400">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950">
                   <Box className="h-7 w-7" />
                 </span>
-                <span className="mt-5 block text-3xl font-black leading-tight">
+                <span className="mt-5 block break-words text-2xl font-black leading-snug sm:text-3xl">
                   Categorias e items
                 </span>
-                <span className="mt-2 block text-base font-bold text-slate-300">
+                <span className="mt-2 block break-words text-base font-bold leading-snug text-slate-300">
                   Subcategorias y objetos del inventario.
                 </span>
-                <span className="mt-5 flex gap-2">
+                <span className="mt-5 flex flex-wrap gap-2">
                   <span className="rounded-lg border border-black bg-surface-panel px-3 py-2 text-sm font-black text-slate-400">
-                    {categoryConfigs.length} categorias
-                  </span>
-                  <span className="rounded-lg border border-black bg-surface-panel px-3 py-2 text-sm font-black text-[#f8fafc]">
-                    {categoryConfigs.reduce((sum, current) => sum + countInventoryTreeItems(categoryItems(current)), 0)} items
+                    Estructura por bodega
                   </span>
                 </span>
               </a>
 
-              <button
-                type="button"
-                onClick={() => openInventoryConfigSection("warehouses")}
-                className="group rounded-xl border border-black bg-surface-card p-5 text-left shadow-sm transition hover:border-black"
+              <Link
+                href="/configuracion?view=inventory&inventory=warehouses"
+                className="group flex min-w-0 flex-col rounded-xl border border-black bg-surface-card p-5 text-left shadow-sm transition hover:border-black"
               >
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950">
                   <Building2 className="h-7 w-7" />
                 </span>
-                <span className="mt-5 block text-3xl font-black leading-tight">
+                <span className="mt-5 block break-words text-2xl font-black leading-snug sm:text-3xl">
                   Bodegas
                 </span>
-                <span className="mt-2 block text-base font-bold text-slate-300">
+                <span className="mt-2 block break-words text-base font-bold leading-snug text-slate-300">
                   Multiples bodegas, copiar catalogo y desactivar.
                 </span>
-              </button>
+              </Link>
             </div>
           ) : null}
 
@@ -1238,7 +1313,7 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {section === "deliveries" ? (
-        <Panel title="Rutas y horarios" action={backButton}>
+        <Panel title="Rutas y horarios" hideHeader={showSidebarNav}>
           <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
             {[
               {
@@ -1379,21 +1454,22 @@ export default function ConfiguracionPage() {
                   <span className="text-xs font-black uppercase text-slate-400">
                     Anticipacion minima
                   </span>
-                  <select
-                    className={inputClass}
+                  <InlineSearchPicker
+                    compact={false}
+                    className="w-full"
+                    minWidthClass="w-full min-w-0"
                     value={routeConfig.routeLeadTime}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setRouteConfig((current) => ({
                         ...current,
-                        routeLeadTime: event.target.value,
+                        routeLeadTime: value,
                       }))
                     }
-                  >
-                    <option>1 dia</option>
-                    <option>2 dias</option>
-                    <option>3 dias</option>
-                    <option>1 semana</option>
-                  </select>
+                    options={ROUTE_LEAD_TIME_OPTIONS}
+                    placeholder="Elegir anticipación"
+                    searchPlaceholder="Buscar…"
+                    ariaLabel="Anticipación mínima"
+                  />
                 </label>
 
                 <button
@@ -1430,7 +1506,7 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {section === "appearance" ? (
-        <Panel title="Apariencia" action={backButton}>
+        <Panel title="Apariencia" hideHeader={showSidebarNav}>
           <div className="rounded-xl border border-black bg-surface-panel p-5 shadow-sm">
             <p className="text-xl font-black">Tema unico</p>
             <p className="mt-2 font-bold text-slate-400">
@@ -1441,23 +1517,12 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {section === "company" ? (
-        <Panel title="Empresa" action={backButton}>
-          <div className="grid gap-4 md:grid-cols-2">
-            {["Nombre empresa", "Telefono", "Direccion", "Moneda"].map((label) => (
-              <label key={label} className="grid gap-2">
-                <span className="text-lg font-black">{label}</span>
-                <input className={inputClass} placeholder={label} />
-              </label>
-            ))}
-          </div>
+        <Panel title="Empresa" hideHeader={showSidebarNav}>
+          <CompanySettingsPanel />
         </Panel>
       ) : null}
 
-      {section === "users" ? (
-        <Panel title="Usuarios" action={backButton}>
-          <UsersSettingsPanel />
-        </Panel>
-      ) : null}
+      {section === "users" ? <UsersSettingsPanel /> : null}
     </>
   );
 }

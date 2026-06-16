@@ -1,27 +1,82 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { loadWarehouseInventoryAction, saveWarehouseInventoryAction } from "@/app/actions/inventory";
+import {
+  loadWarehouseInventoryCoreAction,
+  loadWarehouseInventoryHistoryAction,
+  saveWarehouseInventoryAction,
+} from "@/app/actions/inventory";
 import { listWarehousesAction } from "@/app/actions/warehouses";
 import { getCurrentSessionAction } from "@/app/actions/session";
-import type { InventoryMovement } from "@/lib/inventory-types";
+import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
 import type { CategoryConfig } from "@/lib/inventory-tree";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { sessionHasPermission } from "@/lib/auth/permissions";
 
-export function useInventoryBackend() {
+export type InventoryBackendInitialData = {
+  warehouses: { id: string; name: string; is_active: boolean; is_default: boolean }[];
+  warehouseId: string;
+  multiWarehouse: boolean;
+  canManageWarehouses?: boolean;
+  categoryConfigs: CategoryConfig[];
+  items: InventoryStockItem[];
+  movements: InventoryMovement[];
+  assignments: InventoryAssignment[];
+};
+
+type InventorySavePayload = {
+  warehouseId: string;
+  categoryConfigs: CategoryConfig[];
+  items: InventoryStockItem[];
+};
+
+function snapshotInventoryPayload(payload: InventorySavePayload) {
+  return JSON.stringify(payload);
+}
+
+export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
   const enabled = isSupabaseConfigured();
   const [warehouses, setWarehouses] = useState<
     { id: string; name: string; is_active: boolean; is_default: boolean }[]
-  >([]);
-  const [warehouseId, setWarehouseId] = useState("");
-  const [multiWarehouse, setMultiWarehouse] = useState(false);
-  const [categoryConfigs, setCategoryConfigs] = useState<CategoryConfig[]>([]);
-  const [inventoryItems, setInventoryItems] = useState<InventoryStockItem[]>([]);
-  const [movements, setMovements] = useState<InventoryMovement[]>([]);
-  const [loaded, setLoaded] = useState(!enabled);
+  >(initialData?.warehouses || []);
+  const [warehouseId, setWarehouseId] = useState(initialData?.warehouseId || "");
+  const [multiWarehouse, setMultiWarehouse] = useState(Boolean(initialData?.multiWarehouse));
+  const [canManageWarehouses, setCanManageWarehouses] = useState(
+    Boolean(initialData?.canManageWarehouses),
+  );
+  const [categoryConfigs, setCategoryConfigs] = useState<CategoryConfig[]>(
+    initialData?.categoryConfigs || [],
+  );
+  const [inventoryItems, setInventoryItems] = useState<InventoryStockItem[]>(
+    initialData?.items || [],
+  );
+  const [movements, setMovements] = useState<InventoryMovement[]>(initialData?.movements || []);
+  const [assignments, setAssignments] = useState<InventoryAssignment[]>(
+    initialData?.assignments || [],
+  );
+  const [loaded, setLoaded] = useState(!enabled || Boolean(initialData));
   const [error, setError] = useState("");
+  const inventoryHydratedRef = useRef(
+    Boolean(
+      initialData?.warehouseId &&
+        (initialData.categoryConfigs.length > 0 || initialData.items.length > 0),
+    ),
+  );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastLoadedWarehouse = useRef(initialData?.warehouseId || "");
+  const initialHistoryLoadedRef = useRef(
+    Boolean(initialData?.movements.length || initialData?.assignments.length),
+  );
+  const lastSavedSnapshotRef = useRef(
+    initialData
+      ? snapshotInventoryPayload({
+          warehouseId: initialData.warehouseId,
+          categoryConfigs: initialData.categoryConfigs,
+          items: initialData.items,
+        })
+      : "",
+  );
 
   const activeWarehouses = useMemo(
     () => warehouses.filter((warehouse) => warehouse.is_active),
@@ -29,22 +84,63 @@ export function useInventoryBackend() {
   );
 
   const loadRemote = useCallback(async (targetWarehouseId: string) => {
-    const result = await loadWarehouseInventoryAction(targetWarehouseId);
+    const coreResult = await loadWarehouseInventoryCoreAction(targetWarehouseId);
 
-    if (!result.ok) {
-      setError(result.error);
+    if (!coreResult.ok) {
+      setError(coreResult.error);
       setLoaded(true);
+      inventoryHydratedRef.current = false;
       return;
     }
 
-    setCategoryConfigs(result.data.categoryConfigs);
-    setInventoryItems(result.data.items);
-    setMovements(result.data.movements);
+    const payload = {
+      warehouseId: targetWarehouseId,
+      categoryConfigs: coreResult.data.categoryConfigs,
+      items: coreResult.data.items,
+    };
+
+    lastSavedSnapshotRef.current = snapshotInventoryPayload(payload);
+    setCategoryConfigs(coreResult.data.categoryConfigs);
+    setInventoryItems(coreResult.data.items);
+    lastLoadedWarehouse.current = targetWarehouseId;
+    inventoryHydratedRef.current = true;
     setLoaded(true);
+
+    void loadWarehouseInventoryHistoryAction(targetWarehouseId).then((historyResult) => {
+      if (!historyResult.ok) {
+        setError(historyResult.error);
+        return;
+      }
+
+      setMovements(historyResult.data.movements);
+      setAssignments(historyResult.data.assignments);
+    });
   }, []);
 
   useEffect(() => {
-    if (!enabled) {
+    if (
+      !enabled ||
+      !warehouseId ||
+      initialHistoryLoadedRef.current ||
+      !initialData?.warehouseId
+    ) {
+      return;
+    }
+
+    initialHistoryLoadedRef.current = true;
+
+    void loadWarehouseInventoryHistoryAction(warehouseId).then((result) => {
+      if (!result.ok) {
+        return;
+      }
+
+      setMovements(result.data.movements);
+      setAssignments(result.data.assignments);
+    });
+  }, [enabled, initialData?.warehouseId, warehouseId]);
+
+  useEffect(() => {
+    if (!enabled || initialData) {
       return;
     }
 
@@ -63,12 +159,21 @@ export function useInventoryBackend() {
       const active = warehousesResult.data.filter((warehouse) => warehouse.is_active);
       setWarehouses(active);
 
-      if (sessionResult.ok && sessionResult.data) {
-        setMultiWarehouse(sessionResult.data.multiWarehouseEnabled);
+      const session = sessionResult.ok ? sessionResult.data : null;
+
+      if (session) {
+        setMultiWarehouse(session.multiWarehouseEnabled);
+        setCanManageWarehouses(
+          sessionHasPermission(session, "warehouses.manage"),
+        );
       }
 
       const defaultWarehouse =
-        active.find((warehouse) => warehouse.is_default) || active[0] || null;
+        (session?.preferredWarehouseId &&
+          active.find((warehouse) => warehouse.id === session.preferredWarehouseId)) ||
+        active.find((warehouse) => warehouse.is_default) ||
+        active[0] ||
+        null;
 
       if (!defaultWarehouse) {
         setLoaded(true);
@@ -82,10 +187,10 @@ export function useInventoryBackend() {
     queueMicrotask(() => {
       void bootstrap();
     });
-  }, [enabled, loadRemote]);
+  }, [enabled, initialData, loadRemote]);
 
   useEffect(() => {
-    if (!enabled || !warehouseId) {
+    if (!enabled || !warehouseId || warehouseId === lastLoadedWarehouse.current) {
       return;
     }
 
@@ -95,7 +200,22 @@ export function useInventoryBackend() {
   }, [enabled, warehouseId, loadRemote]);
 
   useEffect(() => {
-    if (!enabled || !loaded || !warehouseId) {
+    if (!enabled || !loaded || !warehouseId || !inventoryHydratedRef.current) {
+      return;
+    }
+
+    if (categoryConfigs.length === 0 && inventoryItems.length === 0) {
+      return;
+    }
+
+    const payload = {
+      warehouseId,
+      categoryConfigs,
+      items: inventoryItems,
+    };
+    const snapshot = snapshotInventoryPayload(payload);
+
+    if (snapshot === lastSavedSnapshotRef.current) {
       return;
     }
 
@@ -104,10 +224,10 @@ export function useInventoryBackend() {
     }
 
     saveTimer.current = setTimeout(() => {
-      void saveWarehouseInventoryAction({
-        warehouseId,
-        categoryConfigs,
-        items: inventoryItems,
+      void saveWarehouseInventoryAction(payload).then((result) => {
+        if (result.ok) {
+          lastSavedSnapshotRef.current = snapshot;
+        }
       });
     }, 600);
 
@@ -123,7 +243,9 @@ export function useInventoryBackend() {
     loaded,
     error,
     multiWarehouse,
+    canManageWarehouses,
     warehouses: activeWarehouses,
+    setWarehouses,
     warehouseId,
     setWarehouseId,
     categoryConfigs,
@@ -132,5 +254,7 @@ export function useInventoryBackend() {
     setInventoryItems,
     movements,
     setMovements,
+    assignments,
+    setAssignments,
   };
 }

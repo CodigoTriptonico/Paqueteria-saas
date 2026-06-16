@@ -1,5 +1,9 @@
 import { redirect } from "next/navigation";
-import { canAccessPath, sessionHasPermission } from "@/lib/auth/permissions";
+import {
+  canAccessPath,
+  platformAdminNeedsClientContext,
+  sessionHasPermission,
+} from "@/lib/auth/permissions";
 import { getAppSession } from "@/lib/auth/session";
 import type { PermissionKey } from "@/lib/auth/types";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -34,6 +38,9 @@ export async function requirePathAccess(pathname: string) {
   }
 
   if (!canAccessPath(session, pathname)) {
+    if (platformAdminNeedsClientContext(session)) {
+      redirect("/platform");
+    }
     redirect("/");
   }
 

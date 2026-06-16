@@ -1,46 +1,114 @@
 "use client";
 
+import {
+  Loader2,
+  Search,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   listOrgUsersAction,
   inviteOrgUserAction,
   updateOrgUserAction,
   type OrgUserRow,
 } from "@/app/actions/users";
-import { listRolesAndPermissionsAction, setRolePermissionAction } from "@/app/actions/roles";
+import { listRolesAndPermissionsAction, type RolePermissionState } from "@/app/actions/roles";
+import { getOrganizationPlanLimitsAction } from "@/app/actions/organization";
+import { PlanUsageLink } from "@/components/config/plan-usage-link";
+import { UserTeamCard } from "@/components/config/user-team-card";
+import { UserWarehouseAccessEditor } from "@/components/config/user-warehouse-access-editor";
+import { RolesPermissionsPanel } from "@/components/config/roles-permissions-panel";
+import {
+  InlineSearchCombobox,
+  InlineSearchPicker,
+} from "@/components/inline-search-picker";
 import { listWarehousesAction } from "@/app/actions/warehouses";
-import type { RoleSlug } from "@/lib/auth/types";
+import { PageLoading } from "@/components/page-loading";
+import type { PermissionRow, RoleRow, RoleSlug } from "@/lib/auth/types";
 import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import { useNotify } from "@/hooks/use-notify";
 
-const ROLE_OPTIONS: { slug: RoleSlug; label: string }[] = [
-  { slug: "administrador", label: "Administrador" },
-  { slug: "vendedor", label: "Vendedor" },
-  { slug: "conductor", label: "Conductor" },
-];
+type UsersTab = "team" | "roles";
+
+const fieldLabelClass = "grid gap-1.5 text-[11px] font-black uppercase text-slate-400";
+const sectionClass =
+  "overflow-hidden rounded-xl border border-black bg-surface-card shadow-[0_8px_22px_rgba(0,0,0,0.18)]";
+const sectionHeaderClass =
+  "flex flex-wrap items-center justify-between gap-3 border-b border-black bg-surface-card-header px-4 py-3";
+const sectionTitleClass = "flex items-center gap-2 text-base font-black text-[#f8fafc]";
+const iconBoxClass =
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black bg-emerald-400 text-slate-950";
+const compactInputClass = `${inputClass} h-10`;
+
+function generateTemporaryPassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  let password = "";
+
+  for (let index = 0; index < 10; index += 1) {
+    password += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+
+  return password;
+}
+
+function tabButtonClass(active: boolean) {
+  return `border-b-2 pb-2.5 text-sm font-black transition ${
+    active
+      ? "border-emerald-400 text-[#f8fafc]"
+      : "border-transparent text-slate-300 hover:border-slate-600 hover:text-slate-100"
+  }`;
+}
+
+function warehouseAccessHint(roleSlug: RoleSlug) {
+  if (roleSlug === "administrador") {
+    return "Acceso total por rol. No requiere asignación.";
+  }
+
+  return "Activa el acceso y elige una favorita si tiene varias.";
+}
 
 export function UsersSettingsPanel() {
+  const notify = useNotify();
+  const [loaded, setLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState<UsersTab>("team");
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [userQuery, setUserQuery] = useState("");
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [warehouseDraft, setWarehouseDraft] = useState<string[]>([]);
+  const [preferredWarehouseDraft, setPreferredWarehouseDraft] = useState<string | null>(
+    null,
+  );
+  const [savingUserId, setSavingUserId] = useState("");
+  const [inviteSaving, setInviteSaving] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
   const [users, setUsers] = useState<OrgUserRow[]>([]);
-  const [roles, setRoles] = useState<{ id: string; slug: RoleSlug; name: string }[]>([]);
-  const [permissions, setPermissions] = useState<{ id: string; key: string; name: string }[]>([]);
-  const [rolePermissions, setRolePermissions] = useState<
-    { roleId: string; permissionId: string; key: string; granted: boolean }[]
+  const [roles, setRoles] = useState<RoleRow[]>([]);
+  const [permissions, setPermissions] = useState<PermissionRow[]>([]);
+  const [rolePermissions, setRolePermissions] = useState<RolePermissionState[]>([]);
+  const [warehouses, setWarehouses] = useState<
+    { id: string; name: string; is_default: boolean }[]
   >([]);
-  const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState("");
-  const [message, setMessage] = useState("");
+  const [planMaxUsers, setPlanMaxUsers] = useState<number | null>(null);
   const [invite, setInvite] = useState({
     email: "",
-    password: "",
+    password: generateTemporaryPassword(),
     fullName: "",
     roleSlug: "vendedor" as RoleSlug,
     warehouseIds: [] as string[],
+    preferredWarehouseId: null as string | null,
   });
 
   async function reload() {
-    const [usersResult, rolesResult, warehousesResult] = await Promise.all([
+    const [usersResult, rolesResult, warehousesResult, planResult] = await Promise.all([
       listOrgUsersAction(),
       listRolesAndPermissionsAction(),
       listWarehousesAction(),
+      getOrganizationPlanLimitsAction(),
     ]);
 
     if (usersResult.ok) {
@@ -57,6 +125,12 @@ export function UsersSettingsPanel() {
     if (warehousesResult.ok) {
       setWarehouses(warehousesResult.data.filter((row) => row.is_active));
     }
+
+    if (planResult.ok) {
+      setPlanMaxUsers(planResult.data.maxUsers);
+    }
+
+    setLoaded(true);
   }
 
   useEffect(() => {
@@ -65,240 +139,443 @@ export function UsersSettingsPanel() {
     });
   }, []);
 
-  const selectedRolePermissions = useMemo(
-    () => rolePermissions.filter((row) => row.roleId === selectedRoleId),
-    [rolePermissions, selectedRoleId],
+  useEffect(() => {
+    queueMicrotask(() => {
+      setMounted(true);
+    });
+  }, []);
+
+  const extraUserCount = Math.max(0, users.length - 1);
+  const atUserLimit = planMaxUsers !== null && extraUserCount >= planMaxUsers;
+  const remainingUsers =
+    planMaxUsers !== null ? Math.max(0, planMaxUsers - extraUserCount) : null;
+
+  const filteredUsers = useMemo(() => {
+    const query = userQuery.trim().toLowerCase();
+
+    if (!query) {
+      return users;
+    }
+
+    return users.filter((user) => {
+      const haystack = [user.full_name, user.email, user.role.name, user.role.slug]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [userQuery, users]);
+
+  const userSearchOptions = useMemo(
+    () =>
+      users.map((user) => ({
+        value: user.id,
+        label: user.full_name || user.email,
+        searchText: [user.full_name, user.email, user.role.name, user.role.slug]
+          .filter(Boolean)
+          .join(" "),
+      })),
+    [users],
+  );
+
+  const rolePickerOptions = useMemo(
+    () =>
+      roles.map((role) => ({
+        value: role.slug,
+        label: role.name,
+      })),
+    [roles],
   );
 
   async function handleInvite(event: React.FormEvent) {
     event.preventDefault();
-    setMessage("");
+    setInviteSaving(true);
 
-    const result = await inviteOrgUserAction(invite);
+    const result = await inviteOrgUserAction({
+      email: invite.email,
+      password: invite.password,
+      fullName: invite.fullName,
+      roleSlug: invite.roleSlug,
+      warehouseIds: invite.roleSlug === "administrador" ? [] : invite.warehouseIds,
+      defaultWarehouseId: invite.preferredWarehouseId,
+    });
+
+    setInviteSaving(false);
 
     if (!result.ok) {
-      setMessage(result.error);
+      notify.error(result.error);
       return;
     }
 
     setInvite({
       email: "",
-      password: "",
+      password: generateTemporaryPassword(),
       fullName: "",
       roleSlug: "vendedor",
       warehouseIds: [],
+      preferredWarehouseId: null,
     });
-    setMessage("Usuario creado");
+    setShowInviteForm(false);
+    notify.success("Usuario creado");
     await reload();
   }
 
-  async function togglePermission(permissionId: string, granted: boolean) {
-    if (!selectedRoleId) {
+  function openWarehouseEditor(user: OrgUserRow) {
+    if (expandedUserId === user.id) {
+      setExpandedUserId(null);
       return;
     }
 
-    const result = await setRolePermissionAction(selectedRoleId, permissionId, granted);
-
-    if (!result.ok) {
-      setMessage(result.error);
-      return;
-    }
-
-    setRolePermissions((current) =>
-      current.map((row) =>
-        row.roleId === selectedRoleId && row.permissionId === permissionId
-          ? { ...row, granted }
-          : row,
-      ),
-    );
+    setExpandedUserId(user.id);
+    setWarehouseDraft(user.warehouses.map((warehouse) => warehouse.id));
+    setPreferredWarehouseDraft(user.defaultWarehouseId);
   }
 
-  return (
-    <div className="grid gap-6">
-      <form className="grid gap-3 rounded-xl border border-black bg-surface-card p-4" onSubmit={handleInvite}>
-        <p className="text-lg font-black">Invitar / crear usuario</p>
-        <div className="grid gap-3 md:grid-cols-2">
-          <input
-            className={inputClass}
-            placeholder="Correo"
-            type="email"
-            value={invite.email}
-            onChange={(event) => setInvite((current) => ({ ...current, email: event.target.value }))}
-            required
-          />
-          <input
-            className={inputClass}
-            placeholder="Contrasena temporal"
-            type="password"
-            value={invite.password}
-            onChange={(event) => setInvite((current) => ({ ...current, password: event.target.value }))}
-            required
-          />
-          <input
-            className={inputClass}
-            placeholder="Nombre"
-            value={invite.fullName}
-            onChange={(event) => setInvite((current) => ({ ...current, fullName: event.target.value }))}
-          />
-          <select
-            className={inputClass}
-            value={invite.roleSlug}
-            onChange={(event) =>
-              setInvite((current) => ({ ...current, roleSlug: event.target.value as RoleSlug }))
-            }
+  async function saveWarehouseAccess(userId: string, isAdmin: boolean) {
+    setSavingUserId(userId);
+
+    const result = await updateOrgUserAction({
+      userId,
+      warehouseIds: isAdmin ? undefined : warehouseDraft,
+      defaultWarehouseId: isAdmin ? undefined : preferredWarehouseDraft,
+    });
+
+    setSavingUserId("");
+
+    if (!result.ok) {
+      notify.error(result.error);
+      return;
+    }
+
+    notify.success("Acceso a bodegas actualizado");
+    setExpandedUserId(null);
+    await reload();
+  }
+
+  if (!loaded) {
+    return <PageLoading />;
+  }
+
+  const inviteModal = showInviteForm ? (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
+      onClick={() => setShowInviteForm(false)}
+    >
+      <form
+        className="max-h-[min(90dvh,40rem)] w-full max-w-2xl overflow-y-auto rounded-xl border border-black bg-surface-card shadow-[0_18px_45px_rgba(0,0,0,0.45)]"
+        onSubmit={handleInvite}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-black bg-surface-card-header px-5 py-4">
+          <p className="text-sm font-black text-[#f8fafc]">Nuevo usuario</p>
+          <button
+            type="button"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-black bg-surface-inset text-slate-400"
+            onClick={() => setShowInviteForm(false)}
+            aria-label="Cerrar formulario"
           >
-            {ROLE_OPTIONS.map((role) => (
-              <option key={role.slug} value={role.slug}>
-                {role.label}
-              </option>
-            ))}
-          </select>
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        {warehouses.length ? (
-          <div className="grid gap-2">
-            <p className="text-sm font-black uppercase text-slate-400">Bodegas permitidas</p>
-            <div className="flex flex-wrap gap-2">
-              {warehouses.map((warehouse) => {
-                const checked = invite.warehouseIds.includes(warehouse.id);
-
-                return (
-                  <label
-                    key={warehouse.id}
-                    className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold ${
-                      checked ? "border-emerald-600 bg-emerald-400 text-slate-950" : "border-black"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={checked}
-                      onChange={() =>
-                        setInvite((current) => ({
-                          ...current,
-                          warehouseIds: checked
-                            ? current.warehouseIds.filter((id) => id !== warehouse.id)
-                            : [...current.warehouseIds, warehouse.id],
-                        }))
-                      }
-                    />
-                    {warehouse.name}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-
-        <button type="submit" className={primaryButtonClass}>
-          Crear usuario
-        </button>
-      </form>
-
-      <div className="grid gap-3">
-        <p className="text-lg font-black">Usuarios de la empresa</p>
-        {users?.map((user) => (
-          <div
-            key={user.id}
-            className="grid gap-3 rounded-xl border border-black bg-surface-card p-4 md:grid-cols-[1fr_auto_auto]"
-          >
-            <div>
-              <p className="text-lg font-black">{user.full_name || user.email}</p>
-              <p className="text-sm text-slate-400">{user.email}</p>
-              <p className="text-sm font-bold text-emerald-300">{user.role.name}</p>
-              {user.warehouses.length ? (
-                <p className="mt-1 text-xs text-slate-400">
-                  Bodegas: {user.warehouses.map((warehouse) => warehouse.name).join(", ")}
-                </p>
-              ) : (
-                <p className="mt-1 text-xs text-slate-500">Todas las bodegas activas</p>
-              )}
-            </div>
-
-            <select
-              className={inputClass}
-              value={user.role.slug}
-              onChange={async (event) => {
-                const result = await updateOrgUserAction({
-                  userId: user.id,
-                  roleSlug: event.target.value as RoleSlug,
-                });
-
-                if (!result.ok) {
-                  setMessage(result.error);
-                  return;
+        <div className="p-5">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className={fieldLabelClass}>
+              Correo
+              <input
+                className={compactInputClass}
+                placeholder="correo@empresa.com"
+                type="email"
+                value={invite.email}
+                onChange={(event) =>
+                  setInvite((current) => ({ ...current, email: event.target.value }))
                 }
+                required
+              />
+            </label>
+            <label className={fieldLabelClass}>
+              Contrasena temporal
+              <div className="flex gap-2">
+                <input
+                  className={`${compactInputClass} min-w-0 flex-1 font-mono text-sm`}
+                  type="text"
+                  value={invite.password}
+                  onChange={(event) =>
+                    setInvite((current) => ({ ...current, password: event.target.value }))
+                  }
+                  required
+                />
+                <button
+                  type="button"
+                  className={secondaryButtonClass}
+                  onClick={() =>
+                    setInvite((current) => ({
+                      ...current,
+                      password: generateTemporaryPassword(),
+                    }))
+                  }
+                >
+                  Nueva
+                </button>
+              </div>
+            </label>
+            <label className={fieldLabelClass}>
+              Nombre
+              <input
+                className={compactInputClass}
+                placeholder="Nombre completo"
+                value={invite.fullName}
+                onChange={(event) =>
+                  setInvite((current) => ({ ...current, fullName: event.target.value }))
+                }
+              />
+            </label>
+            <label className={fieldLabelClass}>
+              Rol
+              <InlineSearchPicker
+                compact={false}
+                className="w-full"
+                minWidthClass="w-full min-w-0"
+                value={invite.roleSlug}
+                onChange={(slug) =>
+                  setInvite((current) => ({
+                    ...current,
+                    roleSlug: slug as RoleSlug,
+                  }))
+                }
+                options={rolePickerOptions}
+                placeholder="Elegir rol"
+                searchPlaceholder="Buscar rol…"
+                ariaLabel="Rol del usuario"
+              />
+            </label>
+          </div>
 
-                await reload();
-              }}
+          {warehouses.length ? (
+            <div className="mt-3 grid gap-2">
+              <p className="text-[11px] font-black uppercase text-slate-400">
+                Acceso a bodegas
+              </p>
+              <p className="text-xs font-bold text-slate-500">
+                {warehouseAccessHint(invite.roleSlug)}
+              </p>
+              <UserWarehouseAccessEditor
+                warehouses={warehouses}
+                selectedIds={invite.warehouseIds}
+                preferredId={invite.preferredWarehouseId}
+                isAdmin={invite.roleSlug === "administrador"}
+                onSelectedChange={(warehouseIds) =>
+                  setInvite((current) => ({ ...current, warehouseIds }))
+                }
+                onPreferredChange={(preferredWarehouseId) =>
+                  setInvite((current) => ({ ...current, preferredWarehouseId }))
+                }
+              />
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={atUserLimit || inviteSaving}
+              className={`${primaryButtonClass} gap-2`}
             >
-              {ROLE_OPTIONS.map((role) => (
-                <option key={role.slug} value={role.slug}>
-                  {role.label}
-                </option>
-              ))}
-            </select>
-
+              {inviteSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <UserPlus className="h-4 w-4" />
+              )}
+              Crear usuario
+            </button>
             <button
               type="button"
               className={secondaryButtonClass}
-              onClick={async () => {
-                const result = await updateOrgUserAction({
-                  userId: user.id,
-                  isActive: !user.is_active,
-                });
-
-                if (!result.ok) {
-                  setMessage(result.error);
-                  return;
-                }
-
-                await reload();
-              }}
+              onClick={() => setShowInviteForm(false)}
             >
-              {user.is_active ? "Desactivar" : "Activar"}
+              Cancelar
             </button>
           </div>
-        ))}
-      </div>
-
-      <div className="grid gap-3 rounded-xl border border-black bg-surface-card p-4">
-        <p className="text-lg font-black">Permisos por rol</p>
-        <select
-          className={inputClass}
-          value={selectedRoleId}
-          onChange={(event) => setSelectedRoleId(event.target.value)}
-        >
-          {roles.map((role) => (
-            <option key={role.id} value={role.id}>
-              {role.name}
-            </option>
-          ))}
-        </select>
-
-        <div className="grid gap-2">
-          {permissions.map((permission) => {
-            const state = selectedRolePermissions.find((row) => row.key === permission.key);
-            const granted = state?.granted ?? false;
-
-            return (
-              <label
-                key={permission.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-black bg-surface-panel px-3 py-2"
-              >
-                <span className="font-bold">{permission.name}</span>
-                <input
-                  type="checkbox"
-                  checked={granted}
-                  onChange={(event) => void togglePermission(permission.id, event.target.checked)}
-                />
-              </label>
-            );
-          })}
         </div>
+      </form>
+    </div>
+  ) : null;
+
+  return (
+    <>
+    <div className="grid w-full gap-4">
+      <div className="flex flex-wrap gap-6 border-b border-black/80 pb-0">
+        <button
+          type="button"
+          className={tabButtonClass(activeTab === "team")}
+          onClick={() => setActiveTab("team")}
+        >
+          Equipo
+        </button>
+        <button
+          type="button"
+          className={tabButtonClass(activeTab === "roles")}
+          onClick={() => setActiveTab("roles")}
+        >
+          Roles y permisos
+        </button>
       </div>
 
-      {message ? <p className="text-sm font-bold text-emerald-300">{message}</p> : null}
+      {activeTab === "team" ? (
+        <>
+          <section className={sectionClass}>
+            <div className={`${sectionHeaderClass} flex-col items-stretch gap-3 sm:flex-row sm:items-center`}>
+              <div className="min-w-0">
+                <p className={sectionTitleClass}>
+                  <span className={iconBoxClass}>
+                    <Users className="h-4 w-4" />
+                  </span>
+                  Usuarios ({users.length})
+                </p>
+              </div>
+              <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-xl sm:flex-row sm:items-center">
+                <InlineSearchCombobox
+                  value={userQuery}
+                  onChange={setUserQuery}
+                  options={userSearchOptions}
+                  placeholder="Buscar por nombre, correo o rol"
+                  emptyLabel="Sin usuarios"
+                  ariaLabel="Buscar usuarios"
+                  leadingIcon={<Search className="h-4 w-4" aria-hidden />}
+                  className="min-w-0 flex-1"
+                  minWidthClass="w-full min-w-0"
+                  onSelectOption={(option) => {
+                    const user = users.find((entry) => entry.id === option.value);
+                    if (user) {
+                      setUserQuery(user.full_name || user.email);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className={`${primaryButtonClass} h-10 shrink-0 gap-1.5 px-5`}
+                  disabled={atUserLimit}
+                  onClick={() => setShowInviteForm(true)}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Agregar usuario
+                </button>
+              </div>
+            </div>
+
+            {atUserLimit ? (
+              <p className="border-b border-black/80 px-4 py-2.5 text-xs font-bold text-amber-200/90">
+                Límite del plan alcanzado. No puedes crear más usuarios hasta ampliar el contrato.
+              </p>
+            ) : remainingUsers === 1 ? (
+              <p className="border-b border-black/80 px-4 py-2.5 text-xs font-bold text-slate-400">
+                Queda 1 usuario adicional disponible en el plan.
+              </p>
+            ) : null}
+
+            <div className="p-4 sm:p-5">
+              {filteredUsers.length ? (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+                  {filteredUsers.map((user) => (
+                    <UserTeamCard
+                      key={user.id}
+                      user={user}
+                      roles={roles}
+                      warehouses={warehouses}
+                      isExpanded={expandedUserId === user.id}
+                      warehouseDraft={warehouseDraft}
+                      preferredWarehouseDraft={preferredWarehouseDraft}
+                      savingUserId={savingUserId}
+                      onToggleWarehouses={() => openWarehouseEditor(user)}
+                      onCloseWarehouses={() => setExpandedUserId(null)}
+                      onWarehouseDraftChange={setWarehouseDraft}
+                      onPreferredChange={setPreferredWarehouseDraft}
+                      onSaveWarehouses={() => void saveWarehouseAccess(user.id, false)}
+                      onRoleChange={async (roleSlug) => {
+                        const result = await updateOrgUserAction({
+                          userId: user.id,
+                          roleSlug,
+                        });
+
+                        if (!result.ok) {
+                          notify.error(result.error);
+                          return;
+                        }
+
+                        notify.success("Rol actualizado");
+                        await reload();
+                      }}
+                      onToggleActive={async () => {
+                        const result = await updateOrgUserAction({
+                          userId: user.id,
+                          isActive: !user.is_active,
+                        });
+
+                        if (!result.ok) {
+                          notify.error(result.error);
+                          return;
+                        }
+
+                        notify.success(
+                          user.is_active ? "Usuario desactivado" : "Usuario activado",
+                        );
+                        await reload();
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-black bg-surface-inset px-6 py-14 text-center">
+                  <Users className="mx-auto h-12 w-12 text-slate-600" />
+                  <p className="mt-4 text-xl font-black text-[#f8fafc]">
+                    {userQuery.trim() ? "Sin coincidencias" : "Solo el dueño por ahora"}
+                  </p>
+                  <p className="mx-auto mt-2 max-w-md text-sm font-bold text-slate-400">
+                    {userQuery.trim()
+                      ? "Prueba otro término de búsqueda."
+                      : "Agrega empleados para que operen ventas, inventario o rutas."}
+                  </p>
+                  {!userQuery.trim() && !showInviteForm && !atUserLimit ? (
+                    <button
+                      type="button"
+                      className={`${primaryButtonClass} mt-5 gap-2`}
+                      onClick={() => setShowInviteForm(true)}
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      Agregar usuario
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-black/80 px-4 py-3 text-sm font-bold text-slate-400">
+              <span className={atUserLimit ? "text-amber-300" : undefined}>
+                {planMaxUsers === null
+                  ? `${extraUserCount} adicionales · sin límite`
+                  : `${extraUserCount} / ${planMaxUsers} adicionales`}
+              </span>
+              <span className="text-slate-600">·</span>
+              <PlanUsageLink />
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {activeTab === "roles" ? (
+        <RolesPermissionsPanel
+          users={users}
+          roles={roles}
+          permissions={permissions}
+          rolePermissions={rolePermissions}
+          selectedRoleId={selectedRoleId}
+          onSelectRole={(roleId) => setSelectedRoleId(roleId)}
+          onRolePermissionsChange={setRolePermissions}
+          onReload={reload}
+        />
+      ) : null}
     </div>
+    {mounted && inviteModal ? createPortal(inviteModal, document.body) : null}
+    </>
   );
 }

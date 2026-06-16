@@ -8,14 +8,17 @@ import {
   type ShipmentStatus,
 } from "@/app/actions/shipments";
 import { getCurrentSessionAction } from "@/app/actions/session";
+import { PageLoading } from "@/components/page-loading";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
+import { useNotify } from "@/hooks/use-notify";
+import {
+  InlineSearchCombobox,
+  InlineSearchPicker,
+} from "@/components/inline-search-picker";
 import {
   cardClass,
-  inputClass,
-  labelMutedClass,
   Panel,
   primaryButtonClass,
-  StatCard,
   textMutedClass,
 } from "@/components/ui-blocks";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -29,21 +32,27 @@ const STATUS_OPTIONS: ShipmentStatus[] = [
   "Entregado",
 ];
 
-export function EnviosClient() {
+export function EnviosClient({
+  initialShipments,
+  initialRoleSlug,
+}: {
+  initialShipments?: ShipmentRow[];
+  initialRoleSlug?: string;
+}) {
+  const notify = useNotify();
   const supabaseReady = isSupabaseConfigured();
-  const [shipments, setShipments] = useState<ShipmentRow[]>([]);
-  const [roleSlug, setRoleSlug] = useState<string>("administrador");
+  const [shipments, setShipments] = useState<ShipmentRow[]>(initialShipments || []);
+  const [roleSlug, setRoleSlug] = useState<string>(initialRoleSlug || "administrador");
   const [query, setQuery] = useState("");
   const [carrier, setCarrier] = useState("");
   const [country, setCountry] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [message, setMessage] = useState("");
-  const [loaded, setLoaded] = useState(!supabaseReady);
+  const [loaded, setLoaded] = useState(!supabaseReady || Boolean(initialShipments));
 
   const isConductor = roleSlug === "conductor";
 
   useEffect(() => {
-    if (!supabaseReady) {
+    if (!supabaseReady || initialShipments) {
       return;
     }
 
@@ -61,13 +70,13 @@ export function EnviosClient() {
         if (result.ok) {
           setShipments(result.data);
         } else {
-          setMessage(result.error);
+          notify.error(result.error);
         }
 
         setLoaded(true);
       })();
     });
-  }, [supabaseReady]);
+  }, [initialShipments, supabaseReady]);
 
   const filteredShipments = useMemo(() => {
     const cleanQuery = query.trim().toLowerCase();
@@ -88,40 +97,69 @@ export function EnviosClient() {
     });
   }, [carrier, country, query, shipments, statusFilter]);
 
-  async function changeStatus(shipmentId: string, status: ShipmentStatus) {
-    setMessage("");
+  const shipmentSearchOptions = useMemo(
+    () =>
+      shipments.map((row) => ({
+        value: row.id,
+        label: `${row.code} · ${row.customer_name}`,
+        searchText: [row.code, row.customer_name, row.carrier, row.country].join(" "),
+      })),
+    [shipments],
+  );
 
+  const carrierFilterOptions = useMemo(() => {
+    const values = [...new Set(shipments.map((row) => row.carrier).filter(Boolean))];
+
+    return values.map((value) => ({ value, label: value }));
+  }, [shipments]);
+
+  const countryFilterOptions = useMemo(() => {
+    const values = [...new Set(shipments.map((row) => row.country).filter(Boolean))];
+
+    return values.map((value) => ({ value, label: value }));
+  }, [shipments]);
+
+  const statusFilterOptions = useMemo(
+    () => STATUS_OPTIONS.map((status) => ({ value: status, label: status })),
+    [],
+  );
+
+  const statusPickerOptions = useMemo(
+    () => STATUS_OPTIONS.map((status) => ({ value: status, label: status })),
+    [],
+  );
+
+  async function changeStatus(shipmentId: string, status: ShipmentStatus) {
     const result = await updateShipmentStatusAction(shipmentId, status);
 
     if (!result.ok) {
-      setMessage(result.error);
+      notify.error(result.error);
       return;
     }
 
     setShipments((current) =>
       current.map((row) => (row.id === shipmentId ? result.data : row)),
     );
+    notify.success(`Estado actualizado a ${status}`);
   }
 
   if (!loaded) {
-    return null;
+    return (
+      <Panel title="Envios" hideHeader>
+        <PageLoading inline />
+      </Panel>
+    );
   }
 
   return (
     <Panel title="Envios" hideHeader>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className={labelMutedClass}>
-            {isConductor ? "Rutas asignadas" : "Gestion de envios"}
-          </p>
-          <h3 className="truncate text-2xl font-black text-[#f8fafc]">Envios</h3>
-        </div>
-        {!isConductor ? (
+      {!isConductor ? (
+        <div className="mb-4 flex justify-end">
           <Link href="/venta" className={primaryButtonClass}>
             Nuevo envio
           </Link>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {!supabaseReady ? (
         <SupabaseRequiredBanner detail="Los envios se listan desde la tabla shipments en Supabase. Sin credenciales no hay datos que mostrar." />
@@ -135,49 +173,55 @@ export function EnviosClient() {
 
       {supabaseReady ? (
         <>
-          <div className="mb-4 grid gap-3 sm:grid-cols-4">
-            <StatCard label="Hoy" value={String(filteredShipments.length)} tone="text-slate-400" />
-            <StatCard
-              label="En transito"
-              value={String(filteredShipments.filter((row) => row.status === "Enviado").length)}
-              tone="text-slate-400"
-            />
-            <StatCard
-              label="Pendientes"
-              value={String(filteredShipments.filter((row) => row.status === "Pendiente").length)}
-              tone="text-slate-400"
-            />
-            <StatCard
-              label="Ganancia"
-              value={`$${filteredShipments.reduce((sum, row) => sum + Number(row.profit), 0)}`}
-              tone="text-slate-400"
-            />
-          </div>
-
           <div className="mb-4 grid gap-3 md:grid-cols-4">
-            <input
-              className={inputClass}
-              placeholder="Buscar cliente"
+            <InlineSearchCombobox
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={setQuery}
+              options={shipmentSearchOptions}
+              placeholder="Buscar cliente"
+              emptyLabel="Sin envíos"
+              ariaLabel="Buscar envíos"
+              className="w-full"
+              minWidthClass="w-full min-w-0"
+              onSelectOption={(option) => {
+                const row = shipments.find((entry) => entry.id === option.value);
+                if (row) {
+                  setQuery(row.customer_name);
+                }
+              }}
             />
-            <input
-              className={inputClass}
-              placeholder="Carrier"
+            <InlineSearchCombobox
               value={carrier}
-              onChange={(event) => setCarrier(event.target.value)}
+              onChange={setCarrier}
+              options={carrierFilterOptions}
+              placeholder="Carrier"
+              emptyLabel="Sin carriers"
+              ariaLabel="Filtrar carrier"
+              className="w-full"
+              minWidthClass="w-full min-w-0"
+              onSelectOption={(option) => setCarrier(option.label)}
             />
-            <input
-              className={inputClass}
-              placeholder="Pais"
+            <InlineSearchCombobox
               value={country}
-              onChange={(event) => setCountry(event.target.value)}
+              onChange={setCountry}
+              options={countryFilterOptions}
+              placeholder="País"
+              emptyLabel="Sin países"
+              ariaLabel="Filtrar país"
+              className="w-full"
+              minWidthClass="w-full min-w-0"
+              onSelectOption={(option) => setCountry(option.label)}
             />
-            <input
-              className={inputClass}
-              placeholder="Estado"
+            <InlineSearchCombobox
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={setStatusFilter}
+              options={statusFilterOptions}
+              placeholder="Estado"
+              emptyLabel="Sin estados"
+              ariaLabel="Filtrar estado"
+              className="w-full"
+              minWidthClass="w-full min-w-0"
+              onSelectOption={(option) => setStatusFilter(option.label)}
             />
           </div>
 
@@ -192,19 +236,19 @@ export function EnviosClient() {
                       <p className={textMutedClass}>{row.country}</p>
                     </div>
                     <p className="font-black text-slate-300">{row.carrier}</p>
-                    <select
-                      className={inputClass}
+                    <InlineSearchPicker
+                      compact={false}
+                      className="w-full min-w-[10rem]"
+                      minWidthClass="w-full min-w-0"
                       value={row.status}
-                      onChange={(event) =>
-                        void changeStatus(row.id, event.target.value as ShipmentStatus)
+                      onChange={(status) =>
+                        void changeStatus(row.id, status as ShipmentStatus)
                       }
-                    >
-                      {STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
+                      options={statusPickerOptions}
+                      placeholder="Estado"
+                      searchPlaceholder="Buscar estado…"
+                      ariaLabel={`Estado de ${row.code}`}
+                    />
                   </div>
                   <div className="grid gap-3 px-3 py-3 lg:grid-cols-[1fr_auto] lg:items-center">
                     <p className="text-xl font-black text-[#f8fafc]">Cobrado: ${row.paid}</p>
@@ -223,7 +267,6 @@ export function EnviosClient() {
         </>
       ) : null}
 
-      {message ? <p className="mt-3 text-sm font-bold text-rose-300">{message}</p> : null}
     </Panel>
   );
 }

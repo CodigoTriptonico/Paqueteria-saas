@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { requirePathAccess } from "@/lib/auth/require";
 
 export default async function ConfiguracionLayout({
@@ -6,5 +7,5 @@ export default async function ConfiguracionLayout({
   children: React.ReactNode;
 }) {
   await requirePathAccess("/configuracion");
-  return children;
+  return <Suspense fallback={null}>{children}</Suspense>;
 }

@@ -1,6 +1,10 @@
+import { redirect } from "next/navigation";
 import { ClipboardList, PackagePlus, Truck, Users } from "lucide-react";
+import { DashboardSummary } from "@/components/dashboard-summary";
 import { BigAction, labelMutedClass, Panel } from "@/components/ui-blocks";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
+import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
+import { getAppSession } from "@/lib/auth/session";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 const actions = [
@@ -34,8 +38,13 @@ const actions = [
   },
 ];
 
-export default function Home() {
-  const supabaseReady = isSupabaseConfigured();
+export default async function Home() {
+  const session = await getAppSession();
+  if (session && platformAdminNeedsClientContext(session)) {
+    redirect("/platform");
+  }
+
+  const supabaseReady = isSupabaseConfigured() && Boolean(session);
 
   return (
     <>
@@ -47,14 +56,11 @@ export default function Home() {
           </div>
         </div>
 
-        {!supabaseReady ? (
+        {!isSupabaseConfigured() ? (
           <SupabaseRequiredBanner detail="El panel de resumen mostrará métricas cuando existan ventas y envíos en Supabase." />
-        ) : (
-          <p className="mb-4 rounded-lg border border-black bg-surface-card px-4 py-3 text-sm font-bold text-slate-300">
-            Sin métricas agregadas aún. Los datos de actividad vendrán de ventas y envíos registrados en la base de
-            datos.
-          </p>
-        )}
+        ) : supabaseReady ? (
+          <DashboardSummary />
+        ) : null}
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {actions.map((action) => (

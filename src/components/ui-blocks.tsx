@@ -2,7 +2,7 @@ import { LucideIcon } from "lucide-react";
 import Link from "next/link";
 
 export const inputClass =
-  "h-11 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc] outline-none focus:border-black";
+  "h-11 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc] outline-none placeholder:font-semibold placeholder:text-slate-500 focus:border-black";
 
 export const primaryButtonClass =
   "inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 text-sm font-black text-slate-950";
@@ -21,6 +21,26 @@ export const cardClass =
 
 export const cardHoverClass =
   "transition-colors hover:border-black hover:bg-surface-card-hover";
+
+/** Selección en tarjetas/listas: borde neutro, estado en el fondo. */
+export const unselectedDimClass =
+  "opacity-45 saturate-[0.85] transition-opacity hover:opacity-75 hover:saturate-100";
+
+export const selectionShellClass =
+  "border border-black shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors";
+
+export const selectionActiveClass = "border-black bg-emerald-400/10 hover:bg-emerald-400/15";
+
+export const selectionIdleClass =
+  "border-black bg-surface-card hover:bg-surface-card-hover";
+
+export function selectionSurfaceClass(selected: boolean, dimmed = false) {
+  if (selected) {
+    return `${selectionShellClass} ${selectionActiveClass}`;
+  }
+
+  return `${selectionShellClass} ${selectionIdleClass}${dimmed ? ` ${unselectedDimClass}` : ""}`;
+}
 
 export const accentEmeraldSolid =
   "border border-emerald-600 bg-emerald-400 text-slate-950";
@@ -112,6 +132,7 @@ export function Panel({
   children,
   className,
   contentClassName,
+  clipContent = true,
 }: {
   title: React.ReactNode;
   action?: React.ReactNode;
@@ -119,10 +140,14 @@ export function Panel({
   children: React.ReactNode;
   className?: string;
   contentClassName?: string;
+  /** false permite menús desplegables (p. ej. selector de país) sin recortar */
+  clipContent?: boolean;
 }) {
   return (
     <section
-      className={`overflow-hidden rounded-xl border border-black bg-surface-panel shadow-md ${className ?? ""}`}
+      className={`rounded-xl border border-black bg-surface-panel shadow-md ${
+        clipContent ? "overflow-hidden" : "overflow-visible"
+      } ${className ?? ""}`}
     >
       {hideHeader ? null : (
         <div className={`flex flex-wrap items-center gap-3 sm:px-5 ${cardHeaderClass}`}>

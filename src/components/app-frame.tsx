@@ -1,8 +1,10 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { NotificationProvider } from "@/components/notifications/notification-provider";
+import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
 import type { AppSession } from "@/lib/auth/types";
 
 type ShellConfig = {
@@ -12,6 +14,8 @@ type ShellConfig = {
   onCompactNavClick?: () => void;
   hideCompactNavHeader?: boolean;
   compactNavSettingsHref?: string;
+  contextNavLabel?: string;
+  onContextNavBack?: () => void;
 };
 
 const ShellConfigContext = createContext<((config: ShellConfig) => void) | null>(null);
@@ -48,15 +52,39 @@ export function AppFrame({
   session: AppSession | null;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [config, setConfig] = useState<ShellConfig>({});
   const active = useMemo(() => activeFromPath(pathname), [pathname]);
 
+  const defaultContextNav = useMemo(() => {
+    if (pathname === "/" || pathname.startsWith("/login")) {
+      return null;
+    }
+
+    const homeHref =
+      session && platformAdminNeedsClientContext(session) ? "/platform" : "/";
+
+    return {
+      contextNavLabel: activeFromPath(pathname),
+      onContextNavBack: () => router.push(homeHref),
+    };
+  }, [pathname, router, session]);
+
+  const contextNavLabel = config.contextNavLabel ?? defaultContextNav?.contextNavLabel;
+  const onContextNavBack =
+    config.onContextNavBack ?? defaultContextNav?.onContextNavBack;
+
   if (pathname.startsWith("/login")) {
-    return <>{children}</>;
+    return (
+      <NotificationProvider>
+        {children}
+      </NotificationProvider>
+    );
   }
 
   return (
-    <ShellConfigContext.Provider value={setConfig}>
+    <NotificationProvider>
+      <ShellConfigContext.Provider value={setConfig}>
       <AppShell
         session={session}
         active={active}
@@ -67,10 +95,13 @@ export function AppFrame({
         onCompactNavClick={config.onCompactNavClick}
         hideCompactNavHeader={config.hideCompactNavHeader}
         compactNavSettingsHref={config.compactNavSettingsHref}
+        contextNavLabel={contextNavLabel}
+        onContextNavBack={onContextNavBack}
       >
         {children}
       </AppShell>
     </ShellConfigContext.Provider>
+    </NotificationProvider>
   );
 }
 

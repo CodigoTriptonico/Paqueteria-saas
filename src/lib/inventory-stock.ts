@@ -14,6 +14,8 @@ export type InventoryStockItem = {
   size?: string;
   stock: number;
   reserved: number;
+  assigned: number;
+  unavailable: number;
   minStock: number;
   location?: string;
   unit?: string;
@@ -26,6 +28,28 @@ export const stockBadgeToneClass: Record<StockLevel, string> = {
   low: "border-amber-600 bg-amber-400 text-slate-950",
   empty: "border-rose-600 bg-rose-400 text-slate-950",
   neutral: "border-black bg-surface-inset text-slate-300",
+};
+
+/** Fondo sólido de tarjeta por estado (misma lógica que badges, tono surface-card). */
+export const stockCardClass: Record<StockLevel, string> = {
+  ok: "border-black bg-[#3a4842] hover:bg-[#425048]",
+  low: "border-black bg-[#484239] hover:bg-[#524a40]",
+  empty: "border-black bg-[#483942] hover:bg-[#524248]",
+  neutral: "border-black bg-surface-card hover:bg-surface-card-hover",
+};
+
+export const stockValueToneClass: Record<StockLevel, string> = {
+  ok: "text-emerald-300",
+  low: "text-amber-300",
+  empty: "text-rose-300",
+  neutral: "text-slate-200",
+};
+
+export const stockStatusLabel: Record<StockLevel, string> = {
+  ok: "En stock",
+  low: "Stock bajo",
+  empty: "Sin stock",
+  neutral: "Sin datos",
 };
 
 export function stockLevelForItem(
@@ -60,6 +84,40 @@ export function worstStockLevel(levels: StockLevel[]): StockLevel {
 
 export function sumStock(items: InventoryStockItem[]) {
   return items.reduce((total, item) => total + item.stock, 0);
+}
+
+export function sumAssigned(items: InventoryStockItem[]) {
+  return items.reduce((total, item) => total + (item.assigned ?? 0), 0);
+}
+
+export function sumUnavailable(items: InventoryStockItem[]) {
+  return items.reduce((total, item) => total + (item.unavailable ?? 0), 0);
+}
+
+export type LeafStockMetrics = {
+  warehouse: number;
+  assigned: number;
+  unavailable: number;
+  reserved: number;
+  minStock: number;
+  level: StockLevel;
+};
+
+export function leafStockMetrics(items: InventoryStockItem[]): LeafStockMetrics {
+  const warehouse = sumStock(items);
+  const assigned = sumAssigned(items);
+  const unavailable = sumUnavailable(items);
+  const reserved = items.reduce((total, item) => total + item.reserved, 0);
+  const minStock = Math.max(...items.map((item) => item.minStock || 0), 0);
+
+  return {
+    warehouse,
+    assigned,
+    unavailable,
+    reserved,
+    minStock,
+    level: stockLevelForItem({ stock: warehouse, minStock }),
+  };
 }
 
 function sameCategory(item: InventoryStockItem, categoryName: string) {
@@ -188,6 +246,8 @@ export function mergeTreeIntoInventoryItems(
         subcategory: leaf.subcategory,
         stock: 0,
         reserved: 0,
+        assigned: 0,
+        unavailable: 0,
         minStock: 2,
       });
       existing.add(key);
@@ -215,6 +275,8 @@ export function resolveCategoryStockItems(
     subcategory: leaf.subcategory,
     stock: 0,
     reserved: 0,
+    assigned: 0,
+    unavailable: 0,
     minStock: 2,
   }));
 }
@@ -250,6 +312,8 @@ export function resolveSubcategoryStockItems(
       subcategory: leaf.subcategory,
       stock: 0,
       reserved: 0,
+      assigned: 0,
+      unavailable: 0,
       minStock: 2,
     }));
 }

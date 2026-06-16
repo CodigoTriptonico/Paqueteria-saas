@@ -1,4 +1,4 @@
--- Multi-tenant RBAC + warehouses + inventory (Paquemas)
+-- Multi-tenant RBAC + warehouses + inventory (Boxario)
 
 create extension if not exists "pgcrypto";
 

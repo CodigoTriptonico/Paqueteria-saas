@@ -78,6 +78,29 @@ function normalizeAddress(result: GoogleGeocodeResult) {
   };
 }
 
+async function getPlacePostalCode(placeId: string, apiKey: string) {
+  const params = new URLSearchParams({
+    place_id: placeId,
+    fields: "address_components",
+    key: apiKey,
+  });
+
+  const response = await fetch(
+    `https://maps.googleapis.com/maps/api/place/details/json?${params.toString()}`,
+    { cache: "no-store" },
+  );
+  const data = (await response.json()) as {
+    status: string;
+    result?: Pick<GoogleGeocodeResult, "address_components">;
+  };
+
+  if (!response.ok || data.status !== "OK" || !data.result) {
+    return "";
+  }
+
+  return firstComponent(data.result.address_components, ["postal_code"])?.long_name || "";
+}
+
 export async function POST(request: Request) {
   try {
     const apiKey = process.env.GOOGLE_MAPS_API_KEY;
@@ -127,14 +150,19 @@ export async function POST(request: Request) {
         });
       }
 
-      return Response.json({
-        ok: true,
-        suggestions: (data.predictions || []).slice(0, 5).map((prediction) => ({
+      const suggestions = await Promise.all(
+        (data.predictions || []).slice(0, 5).map(async (prediction) => ({
           placeId: prediction.place_id,
           description: prediction.description,
           mainText: prediction.structured_formatting?.main_text || prediction.description,
           secondaryText: prediction.structured_formatting?.secondary_text || "",
+          postalCode: await getPlacePostalCode(prediction.place_id, apiKey),
         })),
+      );
+
+      return Response.json({
+        ok: true,
+        suggestions,
       });
     }
 

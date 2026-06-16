@@ -1,106 +1,157 @@
 /**
- * Applies supabase/migrations/*.sql to your remote Postgres.
+ * Applies supabase/migrations/*.sql (local o remoto según .env.local).
  *
- * Required in .env.local:
- *   NEXT_PUBLIC_SUPABASE_URL=https://XXXX.supabase.co
- *   SUPABASE_DB_PASSWORD=your-database-password
- *
- * Optional (for app runtime):
- *   NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+ * Local: DATABASE_MODE=local + Supabase CLI (`npm run supabase:start`)
+ * Remoto: NEXT_PUBLIC_SUPABASE_URL=https://XXXX.supabase.co + SUPABASE_DB_PASSWORD
  */
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-import pg from "pg";
+import { connectPg, projectRoot } from "./lib/db-connection.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.join(__dirname, "..");
-
-function loadEnvLocal() {
-  const envPath = path.join(root, ".env.local");
-  if (!fs.existsSync(envPath)) return;
-  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const value = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
-    if (!process.env[key]) process.env[key] = value;
-  }
-}
-
-function projectRefFromUrl(url) {
-  const m = url.match(/https:\/\/([a-z0-9-]+)\.supabase\.co/i);
-  return m?.[1] ?? null;
-}
+const root = projectRoot;
 
 const MIGRATIONS = [
   "001_roles_permissions_warehouses.sql",
   "002_shipments.sql",
   "003_platform_admin.sql",
+  "004_organization_kind.sql",
+  "005_customers.sql",
+  "006_pricing.sql",
+  "007_shipments_sales.sql",
+  "008_profile_phone.sql",
+  "009_bootstrap_phone_overload.sql",
+  "010_profile_recovery_phones.sql",
+  "011_enable_rls_app_schema_migrations.sql",
+  "012_activity_history.sql",
+  "013_custom_roles.sql",
+  "014_customer_referrals.sql",
+  "015_repair_plan_limits.sql",
+  "016_warehouse_access_explicit.sql",
+  "017_profile_default_warehouse.sql",
+  "018_profile_phones_org_manage.sql",
+  "019_inventory_assignments.sql",
 ];
 
+async function ensureMigrationsTable(client) {
+  await client.query(`
+    create table if not exists public.app_schema_migrations (
+      name text primary key,
+      applied_at timestamptz not null default now()
+    );
+
+    alter table public.app_schema_migrations enable row level security;
+  `);
+}
+
+async function isMigrationApplied(client, name) {
+  const { rows } = await client.query(
+    `select 1 from public.app_schema_migrations where name = $1 limit 1`,
+    [name],
+  );
+  return rows.length > 0;
+}
+
+async function markMigrationApplied(client, name) {
+  await client.query(
+    `insert into public.app_schema_migrations (name) values ($1) on conflict (name) do nothing`,
+    [name],
+  );
+}
+
+async function tableExists(client, tableName) {
+  const { rows } = await client.query(
+    `
+    select 1
+    from information_schema.tables
+    where table_schema = 'public' and table_name = $1
+    limit 1
+  `,
+    [tableName],
+  );
+  return rows.length > 0;
+}
+
+/** Mark legacy migrations as applied when DB was created before tracking table existed. */
+async function bootstrapLegacyMigrations(client) {
+  const legacyMarkers = [
+    { file: "001_roles_permissions_warehouses.sql", table: "organizations" },
+    { file: "002_shipments.sql", table: "shipments" },
+    { file: "003_platform_admin.sql", table: "platform_admins" },
+    { file: "004_organization_kind.sql", table: "organizations" },
+    { file: "005_customers.sql", table: "customers" },
+    { file: "006_pricing.sql", table: "pricing_countries" },
+    { file: "007_shipments_sales.sql", table: "organization_invoice_counters" },
+    { file: "008_profile_phone.sql", table: "profiles" },
+    { file: "009_bootstrap_phone_overload.sql", table: "profiles" },
+    { file: "010_profile_recovery_phones.sql", table: "profile_phones" },
+    { file: "011_enable_rls_app_schema_migrations.sql", table: "app_schema_migrations" },
+    { file: "012_activity_history.sql", table: "activity_history" },
+    { file: "013_custom_roles.sql", table: "roles" },
+  ];
+
+  for (const { file, table } of legacyMarkers) {
+    if (await isMigrationApplied(client, file)) {
+      continue;
+    }
+
+    if (await tableExists(client, table)) {
+      await markMigrationApplied(client, file);
+      console.log("Marked as already applied:", file);
+    }
+  }
+}
+
 async function main() {
-  loadEnvLocal();
+  const { client, label } = await connectPg();
+  console.log("Connected to", label);
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const dbPassword = process.env.SUPABASE_DB_PASSWORD;
-
-  if (!supabaseUrl || supabaseUrl.includes("your-project")) {
-    console.error("Missing NEXT_PUBLIC_SUPABASE_URL in .env.local");
-    console.error("Supabase → Project Settings → API → Project URL");
-    process.exit(1);
-  }
-
-  if (!dbPassword) {
-    console.error("Missing SUPABASE_DB_PASSWORD in .env.local");
-    console.error("Same password you set when creating the Supabase project.");
-    process.exit(1);
-  }
-
-  const ref = projectRefFromUrl(supabaseUrl);
-  if (!ref) {
-    console.error("Invalid NEXT_PUBLIC_SUPABASE_URL:", supabaseUrl);
-    process.exit(1);
-  }
-
-  const connectionString = `postgresql://postgres:${encodeURIComponent(dbPassword)}@db.${ref}.supabase.co:5432/postgres`;
-
-  const client = new pg.Client({
-    connectionString,
-    ssl: { rejectUnauthorized: false },
-  });
-
-  await client.connect();
-  console.log("Connected to", ref);
+  await ensureMigrationsTable(client);
+  await bootstrapLegacyMigrations(client);
 
   for (const file of MIGRATIONS) {
+    if (await isMigrationApplied(client, file)) {
+      console.log("Skip", file, "(already applied)");
+      continue;
+    }
+
     const fullPath = path.join(root, "supabase", "migrations", file);
     if (!fs.existsSync(fullPath)) {
       console.error("Missing migration file:", fullPath);
       process.exit(1);
     }
+
     const sql = fs.readFileSync(fullPath, "utf8");
     console.log("Applying", file, "...");
-    await client.query(sql);
-    console.log("OK", file);
+
+    try {
+      await client.query(sql);
+      await markMigrationApplied(client, file);
+      console.log("OK", file);
+    } catch (error) {
+      console.error("Failed", file, ":", error.message || error);
+      process.exit(1);
+    }
   }
 
   const { rows } = await client.query(`
     select table_name
     from information_schema.tables
     where table_schema = 'public'
-      and table_name in ('organizations', 'shipments', 'platform_admins', 'inventory_stock')
+      and table_name in (
+        'customers',
+        'customer_recipients',
+        'pricing_countries',
+        'pricing_country_boxes',
+        'distributors',
+        'organization_route_settings',
+        'organization_invoice_counters',
+        'activity_history'
+      )
     order by table_name
   `);
 
-  console.log("\nTables found:", rows.map((r) => r.table_name).join(", ") || "(none)");
-  if (rows.length < 4) {
-    console.warn("Expected 4 core tables; check Supabase dashboard if something failed.");
-  } else {
-    console.log("Migrations applied successfully.");
-  }
+  console.log("\nNew tables:", rows.map((r) => r.table_name).join(", ") || "(none)");
+  console.log("Done.");
 
   await client.end();
 }

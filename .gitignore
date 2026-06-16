@@ -34,12 +34,11 @@ next-live-debug.log
 
 # env files (can opt-in for committing if needed)
 .env*
-
-# vercel
-.vercel
+!.env.example
+!.env.local.template
+!.env.remote.example
+.next-dev.log
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-.vercel

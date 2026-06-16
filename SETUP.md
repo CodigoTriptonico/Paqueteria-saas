@@ -1,133 +1,83 @@
-# Paquemas — Configuración Supabase
+# Boxario - setup local
 
-## 1. Crear proyecto Supabase
+## 1. Requisitos
 
-1. Entra en [https://supabase.com/dashboard](https://supabase.com/dashboard) y crea un proyecto.
-2. En **Project Settings → API**, copia:
-   - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
-   - `anon` `public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (solo servidor, nunca en el cliente)
+- Node.js 20+
+- Docker Desktop corriendo
 
-## 2. Variables de entorno
+## 2. Instalar
 
-Copia `.env.example` a `.env.local` en la raíz del proyecto y pega tus valores:
-
-```bash
-cp .env.example .env.local
-```
-
-## 3. Auth
-
-En Supabase → **Authentication → Providers**, habilita **Email** con contraseña.
-
-## 4. Migraciones SQL
-
-En **SQL Editor**, ejecuta en orden:
-
-1. `supabase/migrations/001_roles_permissions_warehouses.sql`
-2. `supabase/migrations/002_shipments.sql`
-3. `supabase/migrations/003_platform_admin.sql`
-
-Opcional: `supabase/seed-bootstrap.sql` si necesitas datos de referencia adicionales.
-
-Verifica localmente:
-
-```bash
-npm run db:check
-```
-
-## 5. Arrancar la app
-
-```bash
+```powershell
 npm install
+npm run env:local
+```
+
+## 3. Base local
+
+```powershell
+npm run supabase:start
+npm run db:apply
+```
+
+Ver estado:
+
+```powershell
+npm run supabase:status
+```
+
+## 4. Arrancar app
+
+```powershell
 npm run dev
 ```
 
-Abre [http://localhost:3000/login](http://localhost:3000/login).
+Abre:
 
-- **Primera cuenta:** usa “Crear cuenta nueva” (registra empresa + usuario administrador vía `bootstrap_organization`).
-- **Usuarios extra:** Configuración → Usuarios (requiere rol administrador).
+```text
+http://localhost:3000/login
+```
 
-## 6. Prueba manual por rol
+## 5. Primera cuenta
+
+- En `/login`, usa `Crear cuenta nueva`.
+- Crea empresa + usuario administrador.
+- Si quieres super-admin, define `PLATFORM_OWNER_EMAIL` en `.env.local` antes de registrar.
+
+## 6. Roles
 
 | Rol | Rutas esperadas |
-|-----|-----------------|
-| Administrador | Todo + Configuración |
+| --- | --- |
+| Administrador | Todo + Configuracion |
 | Vendedor | Inicio, Venta, Inventario |
-| Conductor | Inicio, Envíos (solo asignados, cambio de estado) |
+| Conductor | Inicio, Envios |
 
-### Inventario
+## 7. Pruebas manuales
 
-1. Configuración → Inventario → Bodegas: activar multi-bodega, crear bodega, copiar catálogo.
-2. Inventario: selector de bodega, stock y tabla de movimientos.
-3. Los datos se guardan solo en Postgres (Supabase).
+Inventario:
 
-### Venta
+1. Configuracion -> Inventario -> Bodegas.
+2. Crear bodega o usar principal.
+3. Revisar stock y movimientos.
 
-1. Completar venta hasta **Confirmar cobro**.
-2. Debe registrarse movimiento `salida` en inventario (requiere item de caja con stock en la bodega principal).
+Venta:
 
-### Envíos
+1. Completar venta.
+2. Confirmar cobro.
+3. Debe crear envio y descontar stock.
 
-1. Conductor: solo ve envíos con `assigned_to` = su usuario.
-2. Cambiar estado en el selector de cada tarjeta.
+Envios:
 
-## 7. Super-admin de plataforma (dueño del SaaS)
-
-Dos niveles separados:
-
-| Nivel | Quién | Rutas |
-|-------|--------|--------|
-| Admin de empresa | Rol `administrador` dentro de una paquetería | `/configuracion`, inventario, etc. (solo su `organization_id`) |
-| Admin de plataforma | Fila en `platform_admins` | `/platform` (todas las empresas) |
-
-### Cómo convertirte en super-admin
-
-**Opción A — al crear tu cuenta**
-
-1. En `.env.local` define `PLATFORM_OWNER_EMAIL=tu@correo.com` (mismo email que usarás al registrarte).
-2. Reinicia `npm run dev`.
-3. En `/login` → “Crear cuenta nueva”. Tras el registro quedarás en `platform_admins`.
-
-**Opción B — SQL manual (cuenta ya existente)**
-
-En Supabase SQL Editor (sustituye el UUID por el de `auth.users`):
-
-```sql
-select public.grant_platform_admin('00000000-0000-0000-0000-000000000000');
-```
-
-O:
-
-```sql
-insert into public.platform_admins (user_id)
-select id from auth.users where email = 'tu@correo.com'
-on conflict do nothing;
-```
-
-### Panel `/platform`
-
-- Lista todas las paqueterías (`organizations`): nombre, slug, activa, conteos de usuarios y bodegas.
-- Crear paquetería nueva (org + usuario administrador inicial).
-- Ver usuarios por empresa, crear usuarios, activar/desactivar empresa y usuarios.
-- En el menú lateral aparece **Plataforma** solo si eres super-admin.
-
-La **Configuración** habitual sigue limitada a la empresa de tu perfil (no es panel “dios”).
-
-### Prueba rápida
-
-1. Promoción a platform admin (opción A o B).
-2. Inicia sesión → menú **Plataforma** → crear segunda empresa de prueba.
-3. Cierra sesión e inicia con el admin de esa empresa: no debe ver `/platform`.
-4. Ese admin solo ve datos de su org en Configuración e Inventario.
+1. Conductor solo ve envios asignados.
+2. Puede cambiar estado.
 
 ## 8. Calidad
 
-```bash
+```powershell
+npm test
 npm run lint
 npm run build
 ```
 
-## Único bloqueo externo
+## Nota
 
-Sin proyecto Supabase y las variables en `.env.local`, la app muestra avisos y listas vacías (sin datos inventados). Para el SaaS multiempresa completo necesitas credenciales reales del dashboard de Supabase.
+Todo corre local. No hay hosting configurado en este flujo.

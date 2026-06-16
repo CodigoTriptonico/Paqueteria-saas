@@ -1,18 +1,17 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
 const migrationsDir = join(root, "supabase", "migrations");
 
-const requiredMigrations = [
-  "001_roles_permissions_warehouses.sql",
-  "002_shipments.sql",
-  "003_platform_admin.sql",
-];
+const requiredMigrations = readdirSync(migrationsDir)
+  .filter((file) => /^\d{3}_.+\.sql$/.test(file))
+  .sort();
 
 const requiredTables = [
   "organizations",
   "profiles",
+  "profile_phones",
   "roles",
   "permissions",
   "role_permissions",
@@ -22,8 +21,19 @@ const requiredTables = [
   "inventory_items",
   "inventory_stock",
   "inventory_movements",
+  "inventory_assignments",
   "shipments",
   "platform_admins",
+  "customers",
+  "customer_recipients",
+  "pricing_countries",
+  "pricing_country_boxes",
+  "distributors",
+  "distributor_country_boxes",
+  "organization_route_settings",
+  "organization_invoice_counters",
+  "activity_history",
+  "app_schema_migrations",
 ];
 
 let failed = false;
@@ -34,19 +44,6 @@ for (const file of requiredMigrations) {
     console.error(`Falta migración: ${file}`);
     failed = true;
     continue;
-  }
-
-  const sql = readFileSync(path, "utf8");
-  for (const table of requiredTables) {
-    if (!sql.includes(`public.${table}`) && !sql.includes(` ${table} `)) {
-      // shipments only in 002
-      if (file === "001_roles_permissions_warehouses.sql" && table === "shipments") {
-        continue;
-      }
-      if (file === "002_shipments.sql" && table !== "shipments") {
-        continue;
-      }
-    }
   }
 
   console.log(`OK ${file}`);
@@ -72,8 +69,15 @@ if (!existsSync(join(root, ".env.example"))) {
   console.log("OK .env.example");
 }
 
+if (!existsSync(join(root, ".env.local.template"))) {
+  console.error("Falta .env.local.template");
+  failed = true;
+} else {
+  console.log("OK .env.local.template");
+}
+
 if (failed) {
   process.exit(1);
 }
 
-console.log("\nSchema local validado. Ejecuta las migraciones en Supabase SQL Editor.");
+console.log("\nSchema validado. Ejecuta: npm run db:apply");

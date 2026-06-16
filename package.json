@@ -9,12 +9,20 @@
     "lint": "eslint",
     "db:check": "node scripts/check-schema.mjs",
     "db:apply": "node scripts/apply-migrations.mjs",
-    "publish:online": "powershell -ExecutionPolicy Bypass -File scripts/publish-online.ps1",
-    "publish:gui": "powershell -ExecutionPolicy Bypass -File scripts/publish-gui.ps1"
+    "db:wipe": "node scripts/wipe-database.mjs",
+    "db:restore-owner": "node scripts/restore-platform-owner.mjs",
+    "db:local:reset": "npx supabase db reset",
+    "supabase:start": "npx supabase start",
+    "supabase:stop": "npx supabase stop",
+    "supabase:status": "npx supabase status",
+    "env:local": "powershell -ExecutionPolicy Bypass -File scripts/use-local-env.ps1",
+    "env:remote": "powershell -ExecutionPolicy Bypass -File scripts/use-remote-env.ps1",
+    "test": "tsx --test src/lib/**/*.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.106.2",
+    "country-kit": "^1.1.0",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "qrcode.react": "^4.2.0",
@@ -30,6 +38,7 @@
     "eslint-config-next": "16.2.6",
     "pg": "^8.21.0",
     "tailwindcss": "^4",
+    "tsx": "^4.20.3",
     "typescript": "^5"
   }
 }
