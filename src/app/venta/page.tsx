@@ -12,7 +12,6 @@ import {
   Plus,
   Search,
   MapPin,
-  X,
 } from "lucide-react";
 import { type MouseEvent, type RefObject, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
@@ -31,7 +30,6 @@ import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import { iconWellEmerald, Panel } from "@/components/ui-blocks";
 import { customerRowToSender } from "@/lib/customers/mappers";
 import {
-  flowIntroClass,
   flowPageShellWideClass,
   flowPanelContentClass,
   flowStepBodyClass,
@@ -264,7 +262,6 @@ export default function VentaPage() {
       newRecipientCity,
       newRecipientState,
       newRecipientPostalCode,
-      newRecipientCountry,
     ],
   );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);

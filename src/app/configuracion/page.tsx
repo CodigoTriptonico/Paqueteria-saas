@@ -483,18 +483,18 @@ export default function ConfiguracionPage() {
       }));
   }, [countries, countryOptions]);
 
-  function openConfigSection(nextSection: Section) {
+  const openConfigSection = useCallback((nextSection: Section) => {
     if (nextSection === "menu") {
       router.replace("/configuracion", { scroll: false });
       return;
     }
 
     router.replace(`/configuracion?view=${nextSection}`, { scroll: false });
-  }
+  }, [router]);
 
-  function openInventoryConfigSection(nextSection: InventoryConfigSection) {
+  const openInventoryConfigSection = useCallback((nextSection: InventoryConfigSection) => {
     router.replace(`/configuracion?view=inventory&inventory=${nextSection}`, { scroll: false });
-  }
+  }, [router]);
 
   useEffect(() => {
     if (cleanedFromRef.current) {
@@ -648,7 +648,7 @@ export default function ConfiguracionPage() {
     });
   }
 
-  function goBack() {
+  const goBack = useCallback(() => {
     if (returnToInventory && section === "inventory") {
       window.sessionStorage.removeItem("return-to-inventory");
       router.push("/inventario");
@@ -676,7 +676,17 @@ export default function ConfiguracionPage() {
     }
 
     openConfigSection("menu");
-  }
+  }, [
+    inventoryConfigSection,
+    openConfigSection,
+    openInventoryConfigSection,
+    returnToInventory,
+    router,
+    section,
+    selectedCountry,
+    selectedDistributor,
+    selectedDistributorCountry,
+  ]);
 
   const configNavTitle = useMemo(() => {
     if (section === "menu") {
@@ -745,20 +755,9 @@ export default function ConfiguracionPage() {
     selectedDistributorData?.name,
   ]);
 
-  const handleConfigNavBack = useCallback(() => {
-    goBack();
-  }, [
-    inventoryConfigSection,
-    returnToInventory,
-    section,
-    selectedCountry,
-    selectedDistributor,
-    selectedDistributorCountry,
-  ]);
-
   useContextNav({
     title: configNavTitle ?? "Configuracion",
-    onBack: handleConfigNavBack,
+    onBack: goBack,
     enabled: Boolean(configNavTitle),
   });
 

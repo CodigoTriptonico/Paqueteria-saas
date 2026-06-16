@@ -18,10 +18,9 @@ import { InlineSearchPicker } from "@/components/inline-search-picker";
 import type { RoleRow, RoleSlug } from "@/lib/auth/types";
 import { formatPhoneForInput } from "@/lib/phone/format-input";
 import { normalizePhoneDigits } from "@/lib/phone/normalize";
-import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 
 const fieldLabelClass = "grid gap-1.5 text-[11px] font-black uppercase text-slate-400";
-const compactInputClass = `${inputClass} h-10`;
 
 const ROLE_ICONS: Partial<Record<RoleSlug, typeof Shield>> = {
   administrador: Shield,

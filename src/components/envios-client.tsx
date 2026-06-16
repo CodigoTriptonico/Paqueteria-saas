@@ -76,7 +76,7 @@ export function EnviosClient({
         setLoaded(true);
       })();
     });
-  }, [initialShipments, supabaseReady]);
+  }, [initialShipments, notify, supabaseReady]);
 
   const filteredShipments = useMemo(() => {
     const cleanQuery = query.trim().toLowerCase();

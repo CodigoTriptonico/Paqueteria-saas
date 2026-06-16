@@ -300,7 +300,7 @@ export async function closeInventoryAssignmentAction(input: {
       .eq("id", input.assignmentId)
       .maybeSingle();
 
-    const { data, error } = await supabase.rpc("close_inventory_assignment", {
+    const { error } = await supabase.rpc("close_inventory_assignment", {
       p_assignment_id: input.assignmentId,
       p_outcome: input.outcome,
       p_qty_returned: input.qtyReturned ?? 0,

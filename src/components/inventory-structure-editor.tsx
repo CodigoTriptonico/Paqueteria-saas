@@ -51,7 +51,6 @@ import {
   resolveSubcategoryStockItems,
   stockBadgeToneClass,
   stockCardClass,
-  stockLevelForItem,
   stockStatusLabel,
   stockValueToneClass,
   type InventoryStockItem,
@@ -480,18 +479,21 @@ export function InventoryStructureEditor({
     return resolveCategoryStockItems(inventoryItems, category);
   }
 
-  function subcategoryStockItems(
-    category: CategoryConfig,
-    subcategoryName: string,
-    childKindNames: string[],
-  ) {
-    return resolveSubcategoryStockItems(
-      inventoryItems,
-      category,
-      subcategoryName,
-      childKindNames,
-    );
-  }
+  const subcategoryStockItems = useCallback(
+    (
+      category: CategoryConfig,
+      subcategoryName: string,
+      childKindNames: string[],
+    ) => {
+      return resolveSubcategoryStockItems(
+        inventoryItems,
+        category,
+        subcategoryName,
+        childKindNames,
+      );
+    },
+    [inventoryItems],
+  );
 
   function pushInventoryItem(item: InventoryStockItem) {
     onInventoryItemsChange?.([...inventoryItems, item]);
@@ -1041,13 +1043,6 @@ export function InventoryStructureEditor({
     const stockItem = leafStockItems[0];
     const metrics = leafStockMetrics(leafStockItems);
     const stockLevel = metrics.level;
-    const itemAssignments = assignments.filter(
-      (row) =>
-        row.status === "open" &&
-        (row.itemId === stockItem.id ||
-          row.itemName === item.name ||
-          row.itemName === stockItem.name),
-    );
 
     return (
       <article
@@ -1715,7 +1710,7 @@ export function InventoryStructureEditor({
         ),
       })),
     ];
-  }, [selectedCategoryData, subcategories, inventoryItems, warehouseId]);
+  }, [selectedCategoryData, subcategories, subcategoryStockItems]);
 
   const embeddedItemOptions = useMemo(() => {
     if (!selectedCategoryData) {
