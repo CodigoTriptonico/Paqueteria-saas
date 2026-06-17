@@ -1,10 +1,23 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, MapPin, Phone, Plus, Search, User, UserPlus } from "lucide-react";
+import { Plus, Search, UserPlus } from "lucide-react";
 import { type MouseEvent, useMemo } from "react";
 import { InlineSearchCombobox } from "@/components/inline-search-picker";
 import {
-  Flag,
+  flowPagerClass,
+  flowPersonCardGridClass,
+  flowPersonListSectionClass,
+  flowPersonToolbarClass,
+  flowToolbarCreateButtonClass,
+} from "@/components/flow-form-styles";
+import {
+  SalePersonActionButton,
+  SalePersonCard,
+  salePersonCardEmptyClass,
+  SalePersonPager,
+  SalePersonStatBadge,
+} from "@/components/sale/sale-person-card";
+import {
   personFullName,
   type Sender,
   senderPhoneKey,
@@ -64,8 +77,8 @@ export function SaleSenderList({
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className={flowPersonListSectionClass}>
+      <div className={flowPersonToolbarClass}>
         <InlineSearchCombobox
           value={query}
           onChange={onQueryChange}
@@ -74,8 +87,8 @@ export function SaleSenderList({
           emptyLabel="Sin remitentes"
           ariaLabel="Buscar remitentes"
           leadingIcon={<Search className="h-4 w-4" aria-hidden />}
-          className="min-w-0 flex-1 lg:max-w-md"
-          minWidthClass="w-full min-w-[18rem]"
+          className="min-w-0 w-full"
+          minWidthClass="w-full min-w-0"
           onSelectOption={(option) => {
             const sender = matchingSenders.find(
               (entry) => senderPhoneKey(entry) === option.value,
@@ -86,137 +99,85 @@ export function SaleSenderList({
             }
           }}
         />
-        <div className="flex flex-wrap items-center gap-3">
-          {filteredCount ? (
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => onPageChange((current) => Math.max(0, current - 1))}
-                disabled={safePage === 0}
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-400 text-slate-950 disabled:cursor-not-allowed disabled:bg-[#1a211e] disabled:text-slate-600"
-                aria-label="Remitentes anteriores"
-                title="Anterior"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <span className="min-w-[3.25rem] px-2 py-1 text-center text-xs font-black text-[#f8fafc]">
-                {safePage + 1}/{pageCount}
-              </span>
-              <button
-                type="button"
-                onClick={() => onPageChange((current) => Math.min(pageCount - 1, current + 1))}
-                disabled={safePage >= pageCount - 1}
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-400 text-slate-950 disabled:cursor-not-allowed disabled:bg-[#1a211e] disabled:text-slate-600"
-                aria-label="Remitentes siguientes"
-                title="Siguiente"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-            </div>
-          ) : null}
-          <button
-            onClick={onNewClient}
-            className="flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 text-sm font-black text-slate-950"
-          >
-            <UserPlus className="h-6 w-6" />
-            Nuevo remitente
-          </button>
-        </div>
+        <button type="button" onClick={onNewClient} className={`${flowToolbarCreateButtonClass} justify-self-end`}>
+          <UserPlus className="h-4 w-4" />
+          <span className="hidden sm:inline">Nuevo remitente</span>
+          <span className="sm:hidden">Nuevo</span>
+        </button>
       </div>
 
-      <div className="flex flex-wrap gap-3">
-          {visibleSenders.length ? (
-            visibleSenders.map((sender) => (
-              <div
-                key={senderPhoneKey(sender)}
-                role="button"
-                tabIndex={0}
-                data-sale-context-key={`sender:${senderPhoneKey(sender)}`}
-                data-sale-context-type="remitente"
-                data-sale-context-title={personFullName(sender)}
-                data-sale-context-first-name={sender.firstName}
-                data-sale-context-last-name={sender.lastName}
-                data-sale-context-phones={sender.phones.join("|")}
-                data-sale-context-street={sender.street}
-                data-sale-context-house={sender.houseNumber}
-                data-sale-context-neighborhood={sender.neighborhood}
-                data-sale-context-city={sender.city}
-                data-sale-context-state={sender.state}
-                data-sale-context-postal-code={sender.postalCode}
-                data-sale-context-country="USA"
-                onClick={() => onChoose(sender)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onChoose(sender);
-                  }
-                }}
-                onContextMenu={(event) => onOpenContextMenu(event, sender)}
-                style={{ width: "min(100%, 34rem)" }}
-                className={`group relative flex min-h-[8.25rem] flex-col items-center justify-center rounded-xl border border-black bg-[#3f4b46] p-3 text-center shadow-[0_8px_18px_rgba(0,0,0,0.26)] transition hover:-translate-y-0.5 hover:bg-[#46544e] ${getCardClass(sender)}`}
-              >
-                <div className="flex min-w-0 flex-col items-center">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-400 text-slate-950 shadow-[0_8px_14px_rgba(16,185,129,0.2)]">
-                    <User className="h-5 w-5" />
-                  </span>
-                  <span className="mt-1.5 min-w-0">
-                    <p className="line-clamp-1 text-xl font-black leading-tight text-[#f8fafc]">
-                      {personFullName(sender)}
-                    </p>
-                    <p className="mt-1 flex min-w-0 justify-center gap-1.5 text-sm font-bold text-slate-300">
-                      <Phone className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{senderPhonesLabel(sender)}</span>
-                    </p>
-                    {sender.email ? (
-                      <p className="truncate text-sm font-bold text-slate-500">{sender.email}</p>
-                    ) : null}
-                  </span>
-                </div>
-
-                <p className="my-1.5 flex w-full min-w-0 justify-center gap-2 border-y border-white/10 py-1">
-                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-base font-black text-[#f8fafc]">
-                      {[sender.street, sender.houseNumber].filter(Boolean).join(" ")}
-                    </span>
-                    <span className="mt-1 block truncate text-sm font-bold text-slate-400">
-                      {[sender.city, sender.state, sender.postalCode].filter(Boolean).join(", ")}
-                    </span>
-                  </span>
-                </p>
-
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <span className="inline-flex h-8 items-center gap-2 rounded-md border border-black/70 bg-[#202926] px-2.5 text-xs font-black text-[#f8fafc]">
-                    <Flag country="USA" />
-                    USA
-                  </span>
-                  <span className="inline-flex h-8 items-center rounded-md border border-black/70 bg-emerald-400/12 px-2.5 text-xs font-black text-emerald-200">
-                    {sender.recipients.length} dest.
-                  </span>
-                  <span className="inline-flex h-8 items-center rounded-md border border-black/70 bg-emerald-400/12 px-2.5 text-xs font-black text-emerald-200">
-                    {getReferralCount(sender)} ref.
-                  </span>
-                  <button
-                    type="button"
+      <div className={flowPersonCardGridClass}>
+        {visibleSenders.length ? (
+          visibleSenders.map((sender) => (
+            <SalePersonCard
+              key={senderPhoneKey(sender)}
+              name={personFullName(sender)}
+              phone={senderPhonesLabel(sender)}
+              location={[sender.city, sender.state].filter(Boolean).join(", ") || "USA"}
+              country="USA"
+              className={getCardClass(sender)}
+              contextProps={{
+                "data-sale-context-key": `sender:${senderPhoneKey(sender)}`,
+                "data-sale-context-type": "remitente",
+                "data-sale-context-title": personFullName(sender),
+                "data-sale-context-first-name": sender.firstName,
+                "data-sale-context-last-name": sender.lastName,
+                "data-sale-context-phones": sender.phones.join("|"),
+                "data-sale-context-street": sender.street,
+                "data-sale-context-house": sender.houseNumber,
+                "data-sale-context-neighborhood": sender.neighborhood,
+                "data-sale-context-city": sender.city,
+                "data-sale-context-state": sender.state,
+                "data-sale-context-postal-code": sender.postalCode,
+                "data-sale-context-country": "USA",
+              }}
+              onClick={() => onChoose(sender)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onChoose(sender);
+                }
+              }}
+              onContextMenu={(event) => onOpenContextMenu(event, sender)}
+              footer={
+                <>
+                  {sender.recipients.length > 0 ? (
+                    <SalePersonStatBadge>{sender.recipients.length} dest.</SalePersonStatBadge>
+                  ) : null}
+                  {getReferralCount(sender) > 0 ? (
+                    <SalePersonStatBadge>{getReferralCount(sender)} ref.</SalePersonStatBadge>
+                  ) : null}
+                  <SalePersonActionButton
                     title="Agregar referido"
-                    aria-label="Agregar referido"
+                    variant="ghost"
                     onClick={(event) => {
                       event.stopPropagation();
                       onAddReferral(sender);
                     }}
-                    className="inline-flex h-8 items-center gap-1 rounded-md bg-emerald-400 px-2.5 text-xs font-black text-slate-950 transition hover:bg-emerald-300"
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-3 w-3" />
                     Ref.
-                  </button>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="col-span-full flex min-h-24 items-center justify-center rounded-xl border border-white/10 bg-[#3f4b46] p-4 text-center text-xl font-black">
-              Sin remitentes
-            </div>
-          )}
+                  </SalePersonActionButton>
+                </>
+              }
+            />
+          ))
+        ) : (
+          <div className={salePersonCardEmptyClass}>
+            {filteredCount === 0 ? "Sin remitentes" : "Sin resultados"}
+          </div>
+        )}
+      </div>
+
+      <div className={flowPagerClass}>
+        <SalePersonPager
+          page={safePage}
+          pageCount={pageCount}
+          onPrev={() => onPageChange((current) => Math.max(0, current - 1))}
+          onNext={() => onPageChange((current) => Math.min(pageCount - 1, current + 1))}
+          prevLabel="Remitentes anteriores"
+          nextLabel="Remitentes siguientes"
+        />
       </div>
     </div>
   );

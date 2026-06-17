@@ -26,6 +26,12 @@ import {
   useInventoryBackend,
   type InventoryBackendInitialData,
 } from "@/hooks/use-inventory-backend";
+import { ProductCountriesModal } from "@/components/product-countries-modal";
+import { usePricingBackend } from "@/hooks/use-pricing-backend";
+import {
+  catalogProductFromLeaf,
+  type InventoryCatalogProduct,
+} from "@/lib/pricing-catalog";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
 import { mergeTreeIntoInventoryItems } from "@/lib/inventory-stock";
 
@@ -64,6 +70,11 @@ export function InventarioClient({
     assignments,
     setAssignments,
   } = useInventoryBackend(initialData);
+  const {
+    countries: pricingCountries,
+    setCountries: setPricingCountries,
+    reload: reloadPricing,
+  } = usePricingBackend();
   const [newWarehouseName, setNewWarehouseName] = useState("");
   const [warehouseSaving, setWarehouseSaving] = useState(false);
   const [assignDraft, setAssignDraft] = useState<AssignDraft | null>(null);
@@ -72,6 +83,8 @@ export function InventarioClient({
     null,
   );
   const [closingAssignmentId, setClosingAssignmentId] = useState("");
+  const [productCountriesDraft, setProductCountriesDraft] =
+    useState<InventoryCatalogProduct | null>(null);
 
   const activeWarehouseName =
     warehouses.find((warehouse) => warehouse.id === warehouseId)?.name || "";
@@ -350,6 +363,17 @@ export function InventarioClient({
             },
           });
         }}
+        onManageProductCountries={(context) => {
+          void reloadPricing();
+          setProductCountriesDraft(
+            catalogProductFromLeaf({
+              category: context.categoryName,
+              kind: context.treeItem.name,
+              subcategory: context.subcategoryName,
+              name: context.treeItem.name,
+            }),
+          );
+        }}
         onViewItemAssignments={(itemId) => setAssignmentDrawerItemId(itemId)}
         showCategoryCreate
         headerSlot={
@@ -423,6 +447,14 @@ export function InventarioClient({
           setAssignDraft(null);
           notify.success("Item asignado");
         }}
+      />
+
+      <ProductCountriesModal
+        open={Boolean(productCountriesDraft)}
+        product={productCountriesDraft}
+        countries={pricingCountries}
+        onClose={() => setProductCountriesDraft(null)}
+        onSave={setPricingCountries}
       />
     </div>
   );

@@ -11,12 +11,15 @@
     "db:apply": "node scripts/apply-migrations.mjs",
     "db:wipe": "node scripts/wipe-database.mjs",
     "db:restore-owner": "node scripts/restore-platform-owner.mjs",
+    "db:seed:senders": "node scripts/seed-scgs-senders.mjs",
+    "db:seed:mx-recipients": "node scripts/seed-scgs-mexico-recipients.mjs",
+    "db:seed:mx-products": "node scripts/seed-scgs-mexico-products.mjs",
+    "db:reset:catalog": "node scripts/reset-scgs-catalog.mjs",
     "db:local:reset": "npx supabase db reset",
     "supabase:start": "npx supabase start",
     "supabase:stop": "npx supabase stop",
     "supabase:status": "npx supabase status",
     "env:local": "powershell -ExecutionPolicy Bypass -File scripts/use-local-env.ps1",
-    "env:remote": "powershell -ExecutionPolicy Bypass -File scripts/use-remote-env.ps1",
     "test": "tsx --test src/lib/**/*.test.ts"
   },
   "dependencies": {

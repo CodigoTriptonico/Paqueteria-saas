@@ -10,6 +10,8 @@ import {
   type PricingDistributorPrices,
   type PricingRouteConfig,
 } from "@/app/actions/pricing";
+import { compareCountriesByCatalogOrder } from "@/lib/country-options";
+import type { InventoryCatalogProduct } from "@/lib/pricing-catalog";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 const emptyRouteConfig: PricingRouteConfig = {
@@ -21,9 +23,19 @@ const emptyRouteConfig: PricingRouteConfig = {
   routeLeadTime: "",
 };
 
+function snapshotPayload(payload: {
+  countries: PricingCountryConfig[];
+  distributors: PricingDistributorConfig[];
+  distributorPrices: PricingDistributorPrices;
+  routeConfig: PricingRouteConfig;
+}) {
+  return JSON.stringify(payload);
+}
+
 export function usePricingBackend() {
   const enabled = isSupabaseConfigured();
   const [countries, setCountries] = useState<PricingCountryConfig[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<InventoryCatalogProduct[]>([]);
   const [distributors, setDistributors] = useState<PricingDistributorConfig[]>([]);
   const [distributorPrices, setDistributorPrices] = useState<PricingDistributorPrices>({});
   const [routeConfig, setRouteConfig] = useState<PricingRouteConfig>(emptyRouteConfig);
@@ -32,10 +44,6 @@ export function usePricingBackend() {
   const [error, setError] = useState("");
   const lastSavedSnapshotRef = useRef("");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function snapshotPayload(payload: PricingConfigPayload) {
-    return JSON.stringify(payload);
-  }
 
   const loadRemote = useCallback(async () => {
     if (!enabled) {
@@ -52,15 +60,17 @@ export function usePricingBackend() {
       return;
     }
 
-    const payload = {
-      countries: result.data.countries,
+    const sortedCountries = [...result.data.countries].sort(compareCountriesByCatalogOrder);
+    const saveable = {
+      countries: sortedCountries,
       distributors: result.data.distributors,
       distributorPrices: result.data.distributorPrices,
       routeConfig: result.data.routeConfig,
     };
 
-    lastSavedSnapshotRef.current = snapshotPayload(payload);
-    setCountries(result.data.countries);
+    lastSavedSnapshotRef.current = snapshotPayload(saveable);
+    setCountries(sortedCountries);
+    setCatalogProducts(result.data.catalogProducts);
     setDistributors(result.data.distributors);
     setDistributorPrices(result.data.distributorPrices);
     setRouteConfig(result.data.routeConfig);
@@ -74,13 +84,21 @@ export function usePricingBackend() {
   }, [loadRemote]);
 
   const persist = useCallback(
-    async (payload: PricingConfigPayload) => {
+    async (saveable: {
+      countries: PricingCountryConfig[];
+      distributors: PricingDistributorConfig[];
+      distributorPrices: PricingDistributorPrices;
+      routeConfig: PricingRouteConfig;
+    }) => {
       if (!enabled) {
         return;
       }
 
       setSaving(true);
-      const result = await savePricingConfigAction(payload);
+      const result = await savePricingConfigAction({
+        ...saveable,
+        catalogProducts,
+      });
       setSaving(false);
 
       if (!result.ok) {
@@ -88,9 +106,9 @@ export function usePricingBackend() {
         return;
       }
 
-      lastSavedSnapshotRef.current = snapshotPayload(payload);
+      lastSavedSnapshotRef.current = snapshotPayload(saveable);
     },
-    [enabled],
+    [catalogProducts, enabled],
   );
 
   useEffect(() => {
@@ -98,15 +116,15 @@ export function usePricingBackend() {
       return;
     }
 
-    const payload = {
+    const saveable = {
       countries,
       distributors,
       distributorPrices,
       routeConfig,
     };
-    const snapshot = snapshotPayload(payload);
+    const currentSnapshot = snapshotPayload(saveable);
 
-    if (snapshot === lastSavedSnapshotRef.current) {
+    if (currentSnapshot === lastSavedSnapshotRef.current) {
       return;
     }
 
@@ -115,7 +133,7 @@ export function usePricingBackend() {
     }
 
     saveTimerRef.current = setTimeout(() => {
-      void persist(payload);
+      void persist(saveable);
     }, 900);
 
     return () => {
@@ -132,6 +150,8 @@ export function usePricingBackend() {
     error,
     countries,
     setCountries,
+    catalogProducts,
+    setCatalogProducts,
     distributors,
     setDistributors,
     distributorPrices,

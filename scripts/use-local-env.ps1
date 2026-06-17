@@ -3,42 +3,56 @@ $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $root
 
 $localPath = Join-Path $root ".env.local"
-$remotePath = Join-Path $root ".env.remote"
 $templatePath = Join-Path $root ".env.local.template"
-
-if (Test-Path $localPath) {
-  $current = Get-Content $localPath -Raw
-  if ($current -match "supabase\.co" -and -not (Test-Path $remotePath)) {
-    Copy-Item $localPath $remotePath
-    Write-Host "Respaldo de la nube guardado en .env.remote"
-  }
-}
 
 if (-not (Test-Path $templatePath)) {
   Write-Error "Falta .env.local.template"
 }
 
-$lines = Get-Content $templatePath
-$extras = @()
-if (Test-Path $remotePath) {
-  foreach ($line in Get-Content $remotePath) {
-    if ($line -match "^(GOOGLE_MAPS_API_KEY|PLATFORM_OWNER_EMAIL|DEFAULT_PHONE_COUNTRY_CODE)=") {
-      $extras += $line
+$preserveKeys = @(
+  "PLATFORM_OWNER_EMAIL",
+  "PLATFORM_OWNER_PASSWORD",
+  "GOOGLE_MAPS_API_KEY",
+  "DEFAULT_PHONE_COUNTRY_CODE"
+)
+$preserved = @{}
+
+if (Test-Path $localPath) {
+  foreach ($line in Get-Content $localPath) {
+    foreach ($key in $preserveKeys) {
+      if ($line -match "^$key=") {
+        $preserved[$key] = $line
+      }
     }
   }
 }
 
-if ($extras.Count -gt 0) {
+$lines = Get-Content $templatePath
+if ($preserved.Count -gt 0) {
+  $lines = $lines | Where-Object {
+    $trimmed = $_.Trim()
+    if (-not $trimmed -or $trimmed.StartsWith("#")) {
+      return $true
+    }
+    $key = $trimmed.Split("=", 2)[0]
+    -not $preserved.ContainsKey($key)
+  }
   $lines += ""
-  $lines += "# Conservado desde .env.remote"
-  $lines += $extras
+  $lines += "# Conservado de tu .env.local anterior"
+  foreach ($key in $preserveKeys) {
+    if ($preserved.ContainsKey($key)) {
+      $lines += $preserved[$key]
+    }
+  }
 }
 
-Set-Content -Path $localPath -Value $lines -Encoding utf8
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllLines($localPath, $lines, $utf8NoBom)
 
 Write-Host ""
 Write-Host "Listo: .env.local apunta a Supabase LOCAL (127.0.0.1)."
-Write-Host "1. Instala y abre Docker Desktop"
+Write-Host "1. Docker Desktop en marcha"
 Write-Host "2. npm run supabase:start"
 Write-Host "3. npm run db:apply"
-Write-Host "4. npm run dev"
+Write-Host "4. npm run db:restore-owner"
+Write-Host "5. npm run dev"

@@ -1,9 +1,11 @@
 "use client";
 
+import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { PhoneCountryInput } from "@/components/phone-country-input";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
 import { flowFormStackClass, flowIntroClass } from "@/components/flow-form-styles";
-import { MapPin, UserPlus } from "lucide-react";
+import { MapPin, Plus, UserPlus } from "lucide-react";
 import {
   type AddressSuggestion,
   type AddressValidation,
@@ -12,6 +14,9 @@ import {
   noBrowserAutocomplete,
   type Recipient,
 } from "@/components/sale/venta-parts";
+
+const CREATE_COUNTRY_OPTION_VALUE = "__create_country__";
+import { configPricesCountryHref } from "@/lib/country-options";
 
 type SaleRecipientFormProps = {
   form: {
@@ -57,6 +62,27 @@ type SaleRecipientFormProps = {
 };
 
 export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipientFormProps) {
+  const router = useRouter();
+
+  const countryOptions = useMemo(() => {
+    if (!meta.countries.length) {
+      return [
+        {
+          value: CREATE_COUNTRY_OPTION_VALUE,
+          label: "Crear pais",
+          searchText: "crear pais nuevo agregar",
+          icon: <Plus className="h-4 w-4" aria-hidden />,
+          action: true,
+        },
+      ];
+    }
+
+    return meta.countries.map((country) => ({
+      value: country,
+      label: country,
+    }));
+  }, [meta.countries]);
+
   const saveDisabled =
     !form.firstName.trim() ||
     !form.lastName.trim() ||
@@ -185,12 +211,17 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                     address.setSuggestions([]);
                     address.setValidation({ status: "idle", message: "" });
                   }}
-                  options={meta.countries.map((country) => ({
-                    value: country,
-                    label: country,
-                  }))}
-                  placeholder="Elegir pais"
+                  onSelectOption={(option) => {
+                    if (option.value === CREATE_COUNTRY_OPTION_VALUE || option.action) {
+                      router.push(configPricesCountryHref(form.country));
+                    }
+                  }}
+                  options={countryOptions}
+                  placeholder={
+                    meta.countries.length ? "Elegir pais" : "Sin paises — crear uno"
+                  }
                   searchPlaceholder="Buscar pais…"
+                  emptyLabel="Sin paises configurados"
                   ariaLabel="Pais del destinatario"
                 />
               </label>

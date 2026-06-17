@@ -20,7 +20,10 @@ export function useContextNav({ title, onBack, enabled = true }: UseContextNavOp
     if (!enabled) {
       if (lastAppliedRef.current !== null) {
         lastAppliedRef.current = null;
-        setShellConfig({});
+        setShellConfig({
+          contextNavLabel: undefined,
+          onContextNavBack: undefined,
+        });
       }
       return;
     }
@@ -41,7 +44,10 @@ export function useContextNav({ title, onBack, enabled = true }: UseContextNavOp
   useEffect(() => {
     return () => {
       lastAppliedRef.current = null;
-      setShellConfig({});
+      setShellConfig({
+        contextNavLabel: undefined,
+        onContextNavBack: undefined,
+      });
     };
   }, [setShellConfig]);
 }

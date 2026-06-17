@@ -207,7 +207,8 @@ export async function saveInventoryCategoriesAction(
 
     if (
       !sessionHasPermission(session, "settings.manage") &&
-      !sessionHasPermission(session, "warehouses.manage")
+      !sessionHasPermission(session, "warehouses.manage") &&
+      !sessionHasPermission(session, "inventory.adjust")
     ) {
       throw new Error("FORBIDDEN");
     }
@@ -382,6 +383,44 @@ async function ensureItemsForWarehouse(
     } else {
       await supabase.from("inventory_stock").insert(stockPayload);
     }
+  }
+}
+
+export async function saveWarehouseStockAction(input: {
+  warehouseId: string;
+  categoryConfigs: CategoryConfig[];
+  items: InventoryStockItem[];
+}): Promise<ActionResult<null>> {
+  try {
+    const session = await requireAppSession();
+
+    if (
+      !sessionHasPermission(session, "inventory.adjust") &&
+      !sessionHasPermission(session, "inventory.reserve")
+    ) {
+      throw new Error("FORBIDDEN");
+    }
+
+    if (!canAccessWarehouse(session, input.warehouseId)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    await ensureItemsForWarehouse(
+      supabase,
+      session.organizationId,
+      input.warehouseId,
+      input.categoryConfigs,
+      input.items,
+    );
+
+    return ok(null);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
   }
 }
 

@@ -1,8 +1,7 @@
 /**
- * Applies supabase/migrations/*.sql (local o remoto según .env.local).
+ * Applies supabase/migrations/*.sql against local Postgres (Supabase CLI).
  *
- * Local: DATABASE_MODE=local + Supabase CLI (`npm run supabase:start`)
- * Remoto: NEXT_PUBLIC_SUPABASE_URL=https://XXXX.supabase.co + SUPABASE_DB_PASSWORD
+ * Requires: DATABASE_MODE=local + `npm run supabase:start`
  */
 import fs from "fs";
 import path from "path";
@@ -30,6 +29,8 @@ const MIGRATIONS = [
   "017_profile_default_warehouse.sql",
   "018_profile_phones_org_manage.sql",
   "019_inventory_assignments.sql",
+  "020_pricing_catalog_key.sql",
+  "021_inventory_categories_adjust_write.sql",
 ];
 
 async function ensureMigrationsTable(client) {

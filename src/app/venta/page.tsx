@@ -3,16 +3,17 @@
 import {
   CalendarDays,
   ChevronRight,
-  ChevronLeft,
   Check,
   Clock,
   Copy,
   Edit3,
+  Box,
   Package,
   Plus,
   Search,
   MapPin,
 } from "lucide-react";
+import Link from "next/link";
 import { type MouseEvent, type RefObject, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   createCustomerAction,
@@ -26,22 +27,32 @@ import { deductStockForBoxSaleAction } from "@/app/actions/inventory";
 import { allocateInvoiceNumberAction, loadSaleCountryBoxesAction } from "@/app/actions/pricing";
 import { createShipmentAction } from "@/app/actions/shipments";
 import { useContextNav } from "@/hooks/use-context-nav";
+import { useSetShellConfig } from "@/components/app-frame";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
-import { iconWellEmerald, Panel } from "@/components/ui-blocks";
+import { iconWellEmerald, Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { customerRowToSender } from "@/lib/customers/mappers";
 import {
+  flowCardGridClass,
   flowPageShellWideClass,
   flowPanelContentClass,
+  flowPanelFlushClass,
   flowStepBodyClass,
+  flowPersonStepBodyClass,
+  flowPersonToolbarClass,
+  flowPersonListShellClass,
+  flowPersonListSectionClass,
+  flowPagerClass,
+  flowToolbarCreateButtonClass,
 } from "@/components/flow-form-styles";
 import { FlowPageHeader } from "@/components/flow-page-header";
-import { FlowStepTitle } from "@/components/flow-step-title";
 import { InlineSearchCombobox } from "@/components/inline-search-picker";
 import { SaleCheckoutModal } from "@/components/sale/sale-checkout-modal";
 import { SaleClientForm } from "@/components/sale/sale-client-form";
 import { SaleRecipientForm } from "@/components/sale/sale-recipient-form";
+import { SalePersonPager } from "@/components/sale/sale-person-card";
 import { SaleRecipientList } from "@/components/sale/sale-recipient-list";
 import { SaleSenderList } from "@/components/sale/sale-sender-list";
+import { configPricesCountryHref } from "@/lib/country-options";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 let activeSaleScrollFrame: number | null = null;
@@ -108,7 +119,6 @@ import {
   deliveryModeCardClass,
   deliveryModeIconClass,
   deliverySegmentClass,
-  Flag,
   formatDateInput,
   historyDateLabel,
   inputClass,
@@ -118,7 +128,8 @@ import {
   recipientCardClass,
   recipientIdentityKey,
   type Recipient,
-  saleStepNumber,
+  SaleStepBar,
+  type SaleStepBarItem,
   saleSteps,
   type SaleStep,
   selectedCardClass,
@@ -167,9 +178,35 @@ function formatValidatedAddress(
   return [streetLine, cityLine, address.country].filter(Boolean).join(", ");
 }
 
+function normalizeCountryKey(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+function resolveCountryBoxes(
+  countryBoxes: Record<string, string[][]>,
+  country: string,
+) {
+  const direct = countryBoxes[country];
+
+  if (direct?.length) {
+    return direct;
+  }
+
+  const match = Object.entries(countryBoxes).find(
+    ([name]) => normalizeCountryKey(name) === normalizeCountryKey(country),
+  );
+
+  return match?.[1] || [];
+}
+
 export default function VentaPage() {
   const localIdPrefix = useId();
   const localIdCounterRef = useRef(0);
+  const setShellConfig = useSetShellConfig();
   const [mode, setMode] = useState<"sale" | "clients" | "history" | "new-client" | "new-recipient">("sale");
   const [activeStep, setActiveStep] = useState<SaleStep>("client");
   const [senderList, setSenderList] = useState<Sender[]>([]);
@@ -383,6 +420,11 @@ export default function VentaPage() {
     },
     [],
   );
+
+  useEffect(() => {
+    setShellConfig({ contentEdgeToEdge: true });
+    return () => setShellConfig({ contentEdgeToEdge: undefined });
+  }, [setShellConfig]);
 
   useEffect(() => {
     function openSaleCardMenu(event: globalThis.MouseEvent) {
@@ -614,7 +656,7 @@ export default function VentaPage() {
   const boxesForCountry = useMemo(
     () =>
       selectedRecipient
-        ? countryBoxes[selectedRecipient.country as keyof typeof countryBoxes] || []
+        ? resolveCountryBoxes(countryBoxes, selectedRecipient.country)
         : [],
     [countryBoxes, selectedRecipient],
   );
@@ -1806,6 +1848,85 @@ export default function VentaPage() {
     enabled: ventaNavTitle !== null,
   });
 
+  const saleStepBarItems = useMemo((): SaleStepBarItem[] => {
+    return saleSteps.map((step, index) => {
+      const isActive = activeStep === step.id;
+      const isDone = index < completedStepIndex;
+      const isUnlocked = index <= maxUnlockedStepIndex;
+
+      const value =
+        step.id === "client"
+          ? selectedSender
+            ? personFullName(selectedSender)
+            : "Seleccionar"
+          : step.id === "recipient"
+            ? selectedRecipient
+              ? personFullName(selectedRecipient)
+              : "Seleccionar"
+            : step.id === "box"
+              ? selectedBox
+                ? `Caja ${selectedBox[0]}`
+                : "Seleccionar"
+              : step.id === "delivery"
+                ? deliveryComplete
+                  ? deliverySummary(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt)
+                  : "Pendiente"
+                : deliveryComplete
+                  ? "Cobrar"
+                  : "Pendiente";
+
+      const detail =
+        step.id === "client"
+          ? selectedSender
+            ? senderPhonesLabel(selectedSender)
+            : ""
+          : step.id === "recipient"
+            ? ""
+            : step.id === "box"
+              ? selectedBox
+                ? `${selectedBox[1]} - ${selectedBox[3]}`
+                : ""
+              : step.id === "delivery"
+                ? deliveryComplete
+                  ? "Entrega lista"
+                  : "Ruta"
+                : deliveryComplete
+                  ? nextInvoiceNumber
+                  : "";
+
+      const country =
+        step.id === "client" && selectedSender
+          ? "USA"
+          : step.id === "recipient" && selectedRecipient
+            ? selectedRecipient.country
+            : "";
+
+      return {
+        id: step.id,
+        label: step.label,
+        value,
+        detail: detail || undefined,
+        country: country || undefined,
+        isActive,
+        isDone,
+        isUnlocked,
+        index,
+      };
+    });
+  }, [
+    activeStep,
+    completedStepIndex,
+    maxUnlockedStepIndex,
+    selectedSender,
+    selectedRecipient,
+    selectedBox,
+    deliveryComplete,
+    emptyBoxMode,
+    emptyBoxScheduleMode,
+    emptyBoxScheduleAt,
+    nextInvoiceNumber,
+  ]);
+
   return (
     <>
       <div
@@ -1823,174 +1944,129 @@ export default function VentaPage() {
       >
       <div className={`min-w-0 ${flowPageShellWideClass}`}>
 
-      {mode === "clients" || mode === "sale" ? (
+      {mode === "clients" ||
+      mode === "sale" ||
+      mode === "new-client" ||
+      mode === "new-recipient" ? (
         <>
-        <div className="overflow-x-auto rounded-xl border border-black bg-[#1b241f] px-3 py-2 shadow-[0_8px_20px_rgba(0,0,0,0.24)]">
-          <div className="flex min-w-max items-stretch gap-2">
-          {saleSteps.map((step, index) => {
-            const isActive = activeStep === step.id;
-            const isDone = index < completedStepIndex;
-            const isUnlocked = canOpenStep(step.id);
-            const stepNumberClass = isActive
-              ? "border-black bg-slate-950 text-emerald-300"
-              : isDone
-                ? "border-emerald-700 bg-emerald-400 text-slate-950"
-                : isUnlocked
-                  ? "border-sky-700 bg-sky-300 text-slate-950"
-                  : "border-black bg-surface-card text-slate-500";
-            const value =
-              step.id === "client"
-                ? selectedSender
-                  ? personFullName(selectedSender)
-                  : "Seleccionar"
-                : step.id === "recipient"
-                  ? selectedRecipient
-                    ? personFullName(selectedRecipient)
-                    : "Seleccionar"
-                  : step.id === "box"
-                    ? selectedBox
-                      ? `Caja ${selectedBox[0]}`
-                      : "Seleccionar"
-                    : step.id === "delivery"
-                      ? deliveryComplete
-                        ? deliverySummary(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt)
-                        : "Pendiente"
-                      : deliveryComplete
-                        ? "Cobrar"
-                        : "Pendiente";
-            const detail =
-              step.id === "client"
-                ? selectedSender
-                  ? senderPhonesLabel(selectedSender)
-                  : "Remitente"
-                : step.id === "recipient"
-                  ? ""
-                  : step.id === "box"
-                    ? selectedBox
-                      ? `${selectedBox[1]} - ${selectedBox[3]}`
-                      : ""
-                    : step.id === "delivery"
-                      ? deliveryComplete
-                        ? "Entrega lista"
-                        : "Ruta"
-                      : deliveryComplete
-                        ? nextInvoiceNumber
-                        : "";
-            const stepCountry =
-              step.id === "client" && selectedSender
-                ? "USA"
-                : step.id === "recipient" && selectedRecipient
-                  ? selectedRecipient.country
-                  : "";
-            return (
-              <button
-                key={step.id}
-                type="button"
-                disabled={!isUnlocked}
-                onClick={() => openStep(step.id)}
-                className={`flex h-[4.5rem] w-40 shrink-0 items-center gap-2 rounded-lg border px-2 text-left transition ${
-                  isActive
-                    ? "border-black bg-emerald-400/10 text-[#f8fafc]"
-                    : isDone
-                      ? "border-emerald-700 bg-[#202c27] text-[#f8fafc]"
-                      : isUnlocked
-                        ? "border-black bg-surface-card text-slate-300 hover:bg-white/5"
-                        : "cursor-not-allowed border-black bg-surface-inset text-slate-600"
-                }`}
-              >
-                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-black ${
-                    isActive || isDone
-                      ? "border-emerald-300 bg-emerald-400 text-slate-950"
-                      : stepNumberClass
-                  }`}>
-                    {index + 1}
-                </span>
-                <span className="min-w-0 flex-1 leading-tight">
-                  <span className={`block truncate text-sm font-black ${isActive ? "text-emerald-300" : ""}`}>
-                    {step.label}
-                  </span>
-                  <span className="block truncate text-xs font-black opacity-90">{value}</span>
-                  {detail ? (
-                    <span className="block truncate text-[10px] font-bold opacity-60">{detail}</span>
-                  ) : null}
-                  {stepCountry ? (
-                    <span className="mt-1 flex max-w-full items-center gap-1 text-[10px] font-black text-slate-300">
-                      <Flag country={stepCountry} />
-                      <span className="truncate">{stepCountry}</span>
-                    </span>
-                  ) : null}
-                </span>
-              </button>
-            );
-          })}
-          </div>
-        </div>
-        <div ref={clientRef} className={stepShellClass("client")}>
-        {!selectedSender || activeStep === "client" ? (
-        <div className="w-full space-y-3">
-            <>
+        <SaleStepBar steps={saleStepBarItems} onOpenStep={openStep} />
+        {mode === "new-client" || !selectedSender || activeStep === "client" ? (
+        <div ref={clientRef} className={flowPersonListShellClass}>
               {!isSupabaseConfigured() ? (
-                <div className="mb-4">
+                <div className="mb-3">
                   <SupabaseRequiredBanner detail="Los remitentes no se guardaran hasta configurar Supabase." />
                 </div>
               ) : null}
               {customersError ? (
-                <p className="mb-4 rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
+                <p className="mb-3 rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
                   {customersError}
                 </p>
               ) : null}
-              <SaleSenderList
-                query={senderQuery}
-                matchingSenders={filteredSenders}
-                filteredCount={filteredSenders.length}
-                visibleSenders={visibleSenders}
-                safePage={safeSenderPage}
-                pageCount={senderPageCount}
-                onQueryChange={(value) => {
-                  setSenderQuery(value);
-                  setSenderPage(0);
-                }}
-                onPageChange={setSenderPage}
-                onNewClient={() => setMode("new-client")}
-                onAddReferral={addReferralClient}
-                onChoose={chooseSender}
-                getReferralCount={(sender) =>
-                  senderList.filter((item) => item.referredByCustomerId === sender.id).length
-                }
-                getCardClass={(sender) =>
-                  contextCardClass(
-                    "remitente",
-                    `sender:${senderPhoneKey(sender)}`,
-                    false,
-                    senderCardClass,
-                    false,
-                  )
-                }
-                onOpenContextMenu={(event, sender) =>
-                  openContextMenu(
-                    event,
-                    personFullName(sender),
-                    "remitente",
-                    `sender:${senderPhoneKey(sender)}`,
-                    sender.phones,
-                    {
-                      street: sender.street,
-                      houseNumber: sender.houseNumber,
-                      neighborhood: sender.neighborhood,
-                      city: sender.city,
-                      state: sender.state,
-                      postalCode: sender.postalCode,
-                      country: "USA",
+              {mode === "new-client" ? (
+                <SaleClientForm
+                  form={{
+                    firstName: newClientFirstName,
+                    lastName: newClientLastName,
+                    phones: newClientPhones,
+                    phoneList: newClientPhoneList,
+                    email: newClientEmail,
+                    street: newClientStreet,
+                    house: newClientHouse,
+                    neighborhood: newClientNeighborhood,
+                    city: newClientCity,
+                    state: newClientState,
+                    postalCode: newClientPostalCode,
+                    setFirstName: setNewClientFirstName,
+                    setLastName: setNewClientLastName,
+                    setEmail: setNewClientEmail,
+                    setStreet: setNewClientStreet,
+                    setHouse: setNewClientHouse,
+                    setNeighborhood: setNewClientNeighborhood,
+                    setCity: setNewClientCity,
+                    setState: setNewClientState,
+                    setPostalCode: setNewClientPostalCode,
+                  }}
+                  address={{
+                    search: clientAddressSearch,
+                    suggestions: clientAddressSuggestions,
+                    validation: clientAddressValidation,
+                    setSearch: setClientAddressSearch,
+                    setSuggestions: setClientAddressSuggestions,
+                    setValidation: setClientAddressValidation,
+                    onSelectSuggestion: (suggestion) => selectAddressSuggestion("client", suggestion),
+                    touchField: touchClientAddressField,
+                  }}
+                  actions={{
+                    onCancel: () => {
+                      resetNewClientForm();
+                      setMode("sale");
                     },
-                    sender.firstName,
-                    sender.lastName,
-                  )
-                }
-              />
-            </>
+                    onSubmit: createClient,
+                    onAddPhone: addClientPhone,
+                    onUpdatePhone: updateClientPhone,
+                    onRemovePhone: removeClientPhone,
+                  }}
+                  meta={{
+                    editingCustomerId,
+                    duplicateClient: duplicateClient ?? null,
+                  }}
+                />
+              ) : (
+                <SaleSenderList
+                  query={senderQuery}
+                  matchingSenders={filteredSenders}
+                  filteredCount={filteredSenders.length}
+                  visibleSenders={visibleSenders}
+                  safePage={safeSenderPage}
+                  pageCount={senderPageCount}
+                  onQueryChange={(value) => {
+                    setSenderQuery(value);
+                    setSenderPage(0);
+                  }}
+                  onPageChange={setSenderPage}
+                  onNewClient={() => {
+                    resetNewClientForm();
+                    setMode("new-client");
+                    setActiveStep("client");
+                  }}
+                  onAddReferral={addReferralClient}
+                  onChoose={chooseSender}
+                  getReferralCount={(sender) =>
+                    senderList.filter((item) => item.referredByCustomerId === sender.id).length
+                  }
+                  getCardClass={(sender) =>
+                    contextCardClass(
+                      "remitente",
+                      `sender:${senderPhoneKey(sender)}`,
+                      false,
+                      senderCardClass,
+                      false,
+                    )
+                  }
+                  onOpenContextMenu={(event, sender) =>
+                    openContextMenu(
+                      event,
+                      personFullName(sender),
+                      "remitente",
+                      `sender:${senderPhoneKey(sender)}`,
+                      sender.phones,
+                      {
+                        street: sender.street,
+                        houseNumber: sender.houseNumber,
+                        neighborhood: sender.neighborhood,
+                        city: sender.city,
+                        state: sender.state,
+                        postalCode: sender.postalCode,
+                        country: "USA",
+                      },
+                      sender.firstName,
+                      sender.lastName,
+                    )
+                  }
+                />
+              )}
         </div>
         ) : null}
-        </div>
         </>
       ) : null}
 
@@ -2002,6 +2078,7 @@ export default function VentaPage() {
           />
           <Panel
             hideHeader
+            className={flowPanelFlushClass}
             title="Historial"
             contentClassName={flowPanelContentClass}
           >
@@ -2047,140 +2124,22 @@ export default function VentaPage() {
         </>
       ) : null}
 
-      {mode === "new-client" ? (
-        <>
-        <div className={`${flowPageShellWideClass} w-full`}>
-        <Panel
-          clipContent={false}
-          contentClassName="p-4 sm:p-5"
-          title={
-            <span className="flex min-w-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  resetNewClientForm();
-                  setMode("sale");
-                }}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black bg-surface-inset text-slate-100 hover:bg-surface-card-hover"
-                aria-label="Volver"
-                title="Volver"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <FlowStepTitle
-                stepNumber={1}
-                label={editingCustomerId ? "Editar datos" : "Datos del remitente"}
-              />
-            </span>
-          }
-        >
-          <SaleClientForm
-            form={{
-              firstName: newClientFirstName,
-              lastName: newClientLastName,
-              phones: newClientPhones,
-              phoneList: newClientPhoneList,
-              email: newClientEmail,
-              street: newClientStreet,
-              house: newClientHouse,
-              neighborhood: newClientNeighborhood,
-              city: newClientCity,
-              state: newClientState,
-              postalCode: newClientPostalCode,
-              setFirstName: setNewClientFirstName,
-              setLastName: setNewClientLastName,
-              setEmail: setNewClientEmail,
-              setStreet: setNewClientStreet,
-              setHouse: setNewClientHouse,
-              setNeighborhood: setNewClientNeighborhood,
-              setCity: setNewClientCity,
-              setState: setNewClientState,
-              setPostalCode: setNewClientPostalCode,
-            }}
-            address={{
-              search: clientAddressSearch,
-              suggestions: clientAddressSuggestions,
-              validation: clientAddressValidation,
-              setSearch: setClientAddressSearch,
-              setSuggestions: setClientAddressSuggestions,
-              setValidation: setClientAddressValidation,
-              onSelectSuggestion: (suggestion) => selectAddressSuggestion("client", suggestion),
-              touchField: touchClientAddressField,
-            }}
-            actions={{
-              onCancel: () => {
-                resetNewClientForm();
-                setMode("sale");
-              },
-              onSubmit: createClient,
-              onAddPhone: addClientPhone,
-              onUpdatePhone: updateClientPhone,
-              onRemovePhone: removeClientPhone,
-            }}
-            meta={{
-              editingCustomerId,
-              duplicateClient: duplicateClient ?? null,
-            }}
-          />
-        </Panel>
-        </div>
-        </>
-      ) : null}
-
       {selectedSender &&
       (mode === "clients" || mode === "sale" || mode === "new-recipient") &&
       (activeStep !== "client" || mode === "new-recipient") ? (
         <div
           ref={recipientsRef}
-          className="mt-3 grid gap-3"
+          className={
+            activeStep === "recipient" || mode === "new-recipient"
+              ? flowPersonListShellClass
+              : `${flowPersonListShellClass} border-t border-black/80`
+          }
         >
           {activeStep === "recipient" || mode === "new-recipient" ? (
-          <Panel
-            hideHeader
-            contentClassName={flowPanelContentClass}
-            title={
-              <FlowStepTitle
-                stepNumber={saleStepNumber("recipient")}
-                done={completedStepIndex >= 2}
-                label="Destinatarios"
-              />
-            }
-          >
-            <div className={flowStepBodyClass}>
-            <div className="flex justify-end">
-                <span className="flex items-center gap-3 sm:shrink-0">
-                  <button
-                    onClick={() => setRecipientPage((current) => Math.max(0, current - 1))}
-                    disabled={safeRecipientPage === 0}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-black bg-emerald-400 text-slate-950 shadow-sm disabled:border-black disabled:bg-[#1a211e] disabled:text-slate-600 disabled:cursor-not-allowed"
-                    aria-label="Pagina anterior"
-                    title="Pagina anterior"
-                  >
-                    <ChevronLeft className="h-7 w-7" />
-                  </button>
-                  <span className="min-w-20 rounded-lg border border-black bg-surface-card px-3 py-2 text-center text-base font-black text-[#f8fafc]">
-                    {safeRecipientPage + 1}/{recipientPageCount}
-                  </span>
-                  <button
-                    onClick={() =>
-                      setRecipientPage((current) =>
-                        Math.min(recipientPageCount - 1, current + 1),
-                      )
-                    }
-                    disabled={safeRecipientPage >= recipientPageCount - 1}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-black bg-emerald-400 text-slate-950 shadow-sm disabled:border-black disabled:bg-[#1a211e] disabled:text-slate-600 disabled:cursor-not-allowed"
-                    aria-label="Pagina siguiente"
-                    title="Pagina siguiente"
-                  >
-                    <ChevronRight className="h-7 w-7" />
-                  </button>
-                </span>
-              </div>
-          <div
-            className={stepShellClass("recipient")}
-          >
-            <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_auto]">
-              <InlineSearchCombobox
+          <div className={flowPersonListSectionClass}>
+            {mode !== "new-recipient" ? (
+            <div className={flowPersonToolbarClass}>
+            <InlineSearchCombobox
                 value={recipientQuery}
                 onChange={(value) => {
                   setRecipientQuery(value);
@@ -2210,13 +2169,20 @@ export default function VentaPage() {
                 }}
               />
               <button
-                onClick={() => setMode("new-recipient")}
-                className="flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 text-sm font-black text-slate-950"
+                type="button"
+                onClick={() => {
+                  resetNewRecipientForm();
+                  setMode("new-recipient");
+                  setActiveStep("recipient");
+                }}
+                className={`${flowToolbarCreateButtonClass} justify-self-end`}
               >
-                <Plus className="h-6 w-6" />
-                Nuevo destinatario
+                  <Plus className="h-4 w-4" />
+                  <span className="hidden sm:inline">Nuevo destinatario</span>
+                  <span className="sm:hidden">Nuevo</span>
               </button>
             </div>
+            ) : null}
 
             {mode === "new-recipient" ? (
               <SaleRecipientForm
@@ -2264,51 +2230,69 @@ export default function VentaPage() {
                   duplicateRecipient: duplicateRecipient ?? null,
                 }}
               />
-            ) : null}
-
-            <SaleRecipientList
-              filteredCount={filteredRecipients.length}
-              visibleRecipients={visibleRecipients}
-              emptySlots={emptyRecipientSlots}
-              safePage={safeRecipientPage}
-              onChoose={chooseRecipient}
-              onNewRecipient={() => setMode("new-recipient")}
-              getCardClass={(recipient) =>
-                contextCardClass(
-                  "destinatario",
-                  `recipient:${recipientIdentityKey(recipient)}`,
-                  Boolean(
-                    selectedRecipient &&
-                      recipientIdentityKey(selectedRecipient) === recipientIdentityKey(recipient),
-                  ),
-                  recipientCardClass,
-                  selectedRecipient !== null,
-                )
-              }
-              onOpenContextMenu={(event, recipient) =>
-                openContextMenu(
-                  event,
-                  personFullName(recipient),
-                  "destinatario",
-                  `recipient:${recipientIdentityKey(recipient)}`,
-                  [recipient.phone],
-                  {
-                    street: recipient.street,
-                    houseNumber: recipient.houseNumber,
-                    neighborhood: recipient.neighborhood,
-                    city: recipient.city,
-                    state: recipient.state,
-                    postalCode: recipient.postalCode,
-                    country: recipient.country,
-                  },
-                  recipient.firstName,
-                  recipient.lastName,
-                )
-              }
-            />
-          </div>
+            ) : (
+              <>
+                <SaleRecipientList
+                  filteredCount={filteredRecipients.length}
+                  visibleRecipients={visibleRecipients}
+                  emptySlots={emptyRecipientSlots}
+                  safePage={safeRecipientPage}
+                  onChoose={chooseRecipient}
+                  onNewRecipient={() => {
+                    resetNewRecipientForm();
+                    setMode("new-recipient");
+                    setActiveStep("recipient");
+                  }}
+                  getCardClass={(recipient) =>
+                    contextCardClass(
+                      "destinatario",
+                      `recipient:${recipientIdentityKey(recipient)}`,
+                      Boolean(
+                        selectedRecipient &&
+                          recipientIdentityKey(selectedRecipient) === recipientIdentityKey(recipient),
+                      ),
+                      recipientCardClass,
+                      selectedRecipient !== null,
+                    )
+                  }
+                  onOpenContextMenu={(event, recipient) =>
+                    openContextMenu(
+                      event,
+                      personFullName(recipient),
+                      "destinatario",
+                      `recipient:${recipientIdentityKey(recipient)}`,
+                      [recipient.phone],
+                      {
+                        street: recipient.street,
+                        houseNumber: recipient.houseNumber,
+                        neighborhood: recipient.neighborhood,
+                        city: recipient.city,
+                        state: recipient.state,
+                        postalCode: recipient.postalCode,
+                        country: recipient.country,
+                      },
+                      recipient.firstName,
+                      recipient.lastName,
+                    )
+                  }
+                />
+                <div className={flowPagerClass}>
+                  <SalePersonPager
+                    page={safeRecipientPage}
+                    pageCount={recipientPageCount}
+                    onPrev={() => setRecipientPage((current) => Math.max(0, current - 1))}
+                    onNext={() =>
+                      setRecipientPage((current) =>
+                        Math.min(recipientPageCount - 1, current + 1),
+                      )
+                    }
+                    prevLabel="Destinatarios anteriores"
+                    nextLabel="Destinatarios siguientes"
+                  />
+                </div>
+              </>
+            )}
             </div>
-          </Panel>
           ) : null}
 
           {selectedRecipient ? (
@@ -2318,37 +2302,55 @@ export default function VentaPage() {
               className={stepShellClass("box")}
             >
             <Panel
+              className={flowPanelFlushClass}
               contentClassName={flowPanelContentClass}
-              title={
-                <FlowStepTitle
-                  stepNumber={saleStepNumber("box")}
-                  done={completedStepIndex >= 3}
-                  label={
-                    selectedRecipient
-                      ? `Cajas - ${selectedRecipient.country}`
-                      : "Cajas"
-                  }
-                />
-              }
+              hideHeader
+              title="Cajas"
             >
               <div className={flowStepBodyClass}>
               {!selectedRecipient ? (
-                <p className="text-xl font-black text-slate-400">
+                <p className="text-center text-xl font-black text-slate-400">
                   Selecciona un destinatario.
                 </p>
+              ) : boxesForCountry.length === 0 ? (
+                <section className="rounded-xl border border-dashed border-slate-600/60 p-5">
+                  <div className="mx-auto flex max-w-xl flex-col items-center text-center">
+                    <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-400">
+                      <Box className="h-7 w-7" />
+                    </span>
+                    <h3 className="mt-4 text-xl font-black text-[#f8fafc]">
+                      Aún no hay productos para {selectedRecipient.country}.
+                    </h3>
+                    <p className="mt-2 text-sm font-bold text-slate-400">
+                      Asigna productos del catálogo a este destino en Configuración.
+                    </p>
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                      <Link
+                        href={configPricesCountryHref(selectedRecipient.country)}
+                        className={primaryButtonClass}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Configurar productos
+                      </Link>
+                      <Link href="/inventario" className={secondaryButtonClass}>
+                        Ir a Inventario
+                      </Link>
+                    </div>
+                  </div>
+                </section>
               ) : (
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className={flowCardGridClass}>
                   {boxesForCountry.map((box) => (
                     <button
                       key={box[0]}
                       data-sale-context-key={`box:${box[0]}`}
                       data-sale-context-type="caja"
-                      data-sale-context-title={`Caja ${box[0]}`}
+                      data-sale-context-title={box[0]}
                       onClick={() => chooseBox(box)}
                       onContextMenu={(event) =>
-                        openContextMenu(event, `Caja ${box[0]}`, "caja", `box:${box[0]}`)
+                        openContextMenu(event, box[0], "caja", `box:${box[0]}`)
                       }
-                      className={`group flex min-h-[12rem] flex-col items-center justify-between rounded-xl border border-black bg-[#3f4b46] p-4 text-center shadow-[0_8px_18px_rgba(0,0,0,0.26)] transition hover:-translate-y-0.5 hover:bg-[#46544e] ${
+                      className={`group flex min-h-[12rem] w-full flex-col items-center justify-between rounded-xl border border-black bg-[#3f4b46] p-4 text-center shadow-[0_8px_18px_rgba(0,0,0,0.26)] transition hover:-translate-y-0.5 hover:bg-[#46544e] ${
                         contextCardClass(
                           "caja",
                           `box:${box[0]}`,
@@ -2362,15 +2364,19 @@ export default function VentaPage() {
                         <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-400 text-slate-950 shadow-[0_8px_14px_rgba(16,185,129,0.2)]">
                           <Package className="h-5 w-5" />
                         </div>
-                        <p className="text-lg font-black leading-tight text-[#f8fafc]">Caja {box[0]}</p>
+                        <p className="text-lg font-black leading-tight text-[#f8fafc]">{box[0]}</p>
                         <div className="mt-2">
                           <CountryBadge country={selectedRecipient.country} />
                         </div>
                       </div>
 
                       <div className="my-2 grid w-full grid-cols-3 gap-1.5 border-y border-white/10 py-2 text-xs font-black text-slate-300">
-                        <span className="truncate rounded-md bg-[#202926] px-2 py-1.5">Carrier {box[3]}</span>
-                        <span className="truncate rounded-md bg-[#202926] px-2 py-1.5">{box[4]}</span>
+                        <span className="truncate rounded-md bg-[#202926] px-2 py-1.5">
+                          {box[3] ? `Carrier ${box[3]}` : "Carrier —"}
+                        </span>
+                        <span className="truncate rounded-md bg-[#202926] px-2 py-1.5">
+                          {box[4] || "Tiempo —"}
+                        </span>
                         <span className="truncate rounded-md bg-[#202926] px-2 py-1.5">Costo {box[2]}</span>
                       </div>
 
@@ -2406,18 +2412,14 @@ export default function VentaPage() {
             className={`min-w-0 flex-1 ${stepShellClass("delivery")}`}
           >
           <Panel
+            className={flowPanelFlushClass}
             contentClassName={flowPanelContentClass}
-            title={
-              <FlowStepTitle
-                stepNumber={saleStepNumber("delivery")}
-                done={completedStepIndex >= 4}
-                label="Opciones del envio"
-              />
-            }
+            hideHeader
+            title="Opciones del envio"
           >
             <div className={flowStepBodyClass}>
-            <div className="grid gap-5">
-              <div className="flex items-center gap-3">
+            <div className="w-full space-y-4">
+              <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:text-left">
                 <span className={`h-10 w-10 ${iconWellEmerald}`}>
                   <Package className="h-5 w-5" />
                 </span>
@@ -2666,18 +2668,14 @@ export default function VentaPage() {
             className={`min-w-0 ${deliveryComplete ? stepShellClass("finish") : "rounded-xl"}`}
           >
           <Panel
+            className={flowPanelFlushClass}
             contentClassName={flowPanelContentClass}
-            title={
-              <FlowStepTitle
-                stepNumber={saleStepNumber("finish")}
-                done={deliveryComplete}
-                label="Finalizar"
-              />
-            }
+            hideHeader
+            title="Finalizar"
           >
             <div className={flowStepBodyClass}>
             {deliveryComplete ? (
-              <div className="grid gap-3">
+              <div className="w-full space-y-3">
             <SaleInvoicePaper
               invoiceNumber={nextInvoiceNumber}
               sender={selectedSender}

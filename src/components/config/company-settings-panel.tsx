@@ -89,13 +89,13 @@ export function CompanySettingsPanel() {
     <form className="grid gap-4" onSubmit={handleSave}>
       {!canEdit ? (
         <p className="rounded-xl border border-black bg-surface-inset px-4 py-3 text-sm font-bold text-slate-400">
-          Solo lectura. Pide a un administrador permiso de configuracion para editar.
+          Solo lectura. Pide a un administrador permiso de configuración para editar.
         </p>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">
         <label className="grid gap-2">
-          <span className={fieldLabelClass}>Nombre empresa</span>
+          <span className={fieldLabelClass}>Nombre de la empresa</span>
           <input
             className={inputClass}
             value={form.name}
@@ -109,7 +109,7 @@ export function CompanySettingsPanel() {
         </label>
 
         <label className="grid gap-2">
-          <span className={fieldLabelClass}>Telefono</span>
+          <span className={fieldLabelClass}>Teléfono</span>
           <input
             className={inputClass}
             value={form.phone}
@@ -122,7 +122,7 @@ export function CompanySettingsPanel() {
         </label>
 
         <label className="grid gap-2 md:col-span-2">
-          <span className={fieldLabelClass}>Direccion</span>
+          <span className={fieldLabelClass}>Dirección</span>
           <input
             className={inputClass}
             value={form.address}

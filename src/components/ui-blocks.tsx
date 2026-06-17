@@ -155,7 +155,7 @@ export function Panel({
           <h3 className="min-w-0 text-xl font-black tracking-tight text-[#f8fafc] sm:text-2xl">{title}</h3>
         </div>
       )}
-      <div className={`p-4 sm:p-5 ${contentClassName ?? ""}`}>{children}</div>
+      <div className={contentClassName ?? "p-4 sm:p-5"}>{children}</div>
     </section>
   );
 }

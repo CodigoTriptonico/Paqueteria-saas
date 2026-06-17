@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   loadWarehouseInventoryCoreAction,
   loadWarehouseInventoryHistoryAction,
-  saveWarehouseInventoryAction,
+  saveInventoryCategoriesAction,
+  saveWarehouseStockAction,
 } from "@/app/actions/inventory";
 import { listWarehousesAction } from "@/app/actions/warehouses";
 import { getCurrentSessionAction } from "@/app/actions/session";
@@ -25,14 +26,14 @@ export type InventoryBackendInitialData = {
   assignments: InventoryAssignment[];
 };
 
-type InventorySavePayload = {
-  warehouseId: string;
-  categoryConfigs: CategoryConfig[];
-  items: InventoryStockItem[];
-};
+const SAVE_DEBOUNCE_MS = 600;
 
-function snapshotInventoryPayload(payload: InventorySavePayload) {
-  return JSON.stringify(payload);
+function snapshotCategories(categoryConfigs: CategoryConfig[]) {
+  return JSON.stringify(categoryConfigs);
+}
+
+function snapshotStock(warehouseId: string, items: InventoryStockItem[]) {
+  return JSON.stringify({ warehouseId, items });
 }
 
 export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
@@ -57,30 +58,120 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
   );
   const [loaded, setLoaded] = useState(!enabled || Boolean(initialData));
   const [error, setError] = useState("");
-  const inventoryHydratedRef = useRef(
-    Boolean(
-      initialData?.warehouseId &&
-        (initialData.categoryConfigs.length > 0 || initialData.items.length > 0),
-    ),
-  );
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inventoryHydratedRef = useRef(Boolean(initialData?.warehouseId));
+  const categorySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stockSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLoadedWarehouse = useRef(initialData?.warehouseId || "");
   const initialHistoryLoadedRef = useRef(
     Boolean(initialData?.movements.length || initialData?.assignments.length),
   );
-  const lastSavedSnapshotRef = useRef(
+  const lastSavedCategoriesRef = useRef(
+    snapshotCategories(initialData?.categoryConfigs || []),
+  );
+  const lastSavedStockRef = useRef(
     initialData
-      ? snapshotInventoryPayload({
-          warehouseId: initialData.warehouseId,
-          categoryConfigs: initialData.categoryConfigs,
-          items: initialData.items,
-        })
+      ? snapshotStock(initialData.warehouseId, initialData.items)
       : "",
   );
+  const categoryConfigsRef = useRef(categoryConfigs);
+  const inventoryItemsRef = useRef(inventoryItems);
+  const warehouseIdRef = useRef(warehouseId);
+  const inflightSaveRef = useRef<Promise<void> | null>(null);
+
+  categoryConfigsRef.current = categoryConfigs;
+  inventoryItemsRef.current = inventoryItems;
+  warehouseIdRef.current = warehouseId;
 
   const activeWarehouses = useMemo(
     () => warehouses.filter((warehouse) => warehouse.is_active),
     [warehouses],
+  );
+
+  const clearSaveTimers = useCallback(() => {
+    if (categorySaveTimer.current) {
+      clearTimeout(categorySaveTimer.current);
+      categorySaveTimer.current = null;
+    }
+
+    if (stockSaveTimer.current) {
+      clearTimeout(stockSaveTimer.current);
+      stockSaveTimer.current = null;
+    }
+  }, []);
+
+  const persistCategories = useCallback(async (configs: CategoryConfig[]) => {
+    const snapshot = snapshotCategories(configs);
+    const result = await saveInventoryCategoriesAction(configs);
+
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+
+    lastSavedCategoriesRef.current = snapshot;
+    return true;
+  }, []);
+
+  const persistStock = useCallback(
+    async (targetWarehouseId: string, items: InventoryStockItem[]) => {
+      const snapshot = snapshotStock(targetWarehouseId, items);
+      const result = await saveWarehouseStockAction({
+        warehouseId: targetWarehouseId,
+        categoryConfigs: categoryConfigsRef.current,
+        items,
+      });
+
+      if (!result.ok) {
+        setError(result.error);
+        return false;
+      }
+
+      if (warehouseIdRef.current === targetWarehouseId) {
+        lastSavedStockRef.current = snapshot;
+      }
+
+      return true;
+    },
+    [],
+  );
+
+  const flushSaves = useCallback(
+    async (stockWarehouseId?: string) => {
+      clearSaveTimers();
+
+      const run = async () => {
+        const categoriesSnapshot = snapshotCategories(categoryConfigsRef.current);
+        const stockTarget = stockWarehouseId ?? warehouseIdRef.current;
+
+        if (
+          categoriesSnapshot !== lastSavedCategoriesRef.current &&
+          categoryConfigsRef.current.length > 0
+        ) {
+          await persistCategories(categoryConfigsRef.current);
+        }
+
+        if (stockTarget) {
+          const stockSnapshot = snapshotStock(stockTarget, inventoryItemsRef.current);
+
+          if (stockSnapshot !== lastSavedStockRef.current) {
+            await persistStock(stockTarget, inventoryItemsRef.current);
+          }
+        }
+      };
+
+      const pending = inflightSaveRef.current
+        ? inflightSaveRef.current.then(() => run())
+        : run();
+
+      inflightSaveRef.current = pending.finally(() => {
+        if (inflightSaveRef.current === pending) {
+          inflightSaveRef.current = null;
+        }
+      });
+
+      await pending;
+    },
+    [clearSaveTimers, persistCategories, persistStock],
   );
 
   const loadRemote = useCallback(async (targetWarehouseId: string) => {
@@ -93,13 +184,8 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
       return;
     }
 
-    const payload = {
-      warehouseId: targetWarehouseId,
-      categoryConfigs: coreResult.data.categoryConfigs,
-      items: coreResult.data.items,
-    };
-
-    lastSavedSnapshotRef.current = snapshotInventoryPayload(payload);
+    lastSavedCategoriesRef.current = snapshotCategories(coreResult.data.categoryConfigs);
+    lastSavedStockRef.current = snapshotStock(targetWarehouseId, coreResult.data.items);
     setCategoryConfigs(coreResult.data.categoryConfigs);
     setInventoryItems(coreResult.data.items);
     lastLoadedWarehouse.current = targetWarehouseId;
@@ -194,49 +280,106 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
       return;
     }
 
+    const previousWarehouse = lastLoadedWarehouse.current;
+
     queueMicrotask(() => {
-      void loadRemote(warehouseId);
+      void (async () => {
+        if (previousWarehouse) {
+          await flushSaves(previousWarehouse);
+        }
+
+        await loadRemote(warehouseId);
+      })();
     });
-  }, [enabled, warehouseId, loadRemote]);
+  }, [enabled, flushSaves, loadRemote, warehouseId]);
+
+  useEffect(() => {
+    if (!enabled || !loaded || !inventoryHydratedRef.current) {
+      return;
+    }
+
+    if (categoryConfigs.length === 0) {
+      return;
+    }
+
+    const categoriesSnapshot = snapshotCategories(categoryConfigs);
+
+    if (categoriesSnapshot === lastSavedCategoriesRef.current) {
+      return;
+    }
+
+    if (categorySaveTimer.current) {
+      clearTimeout(categorySaveTimer.current);
+    }
+
+    categorySaveTimer.current = setTimeout(() => {
+      categorySaveTimer.current = null;
+      void persistCategories(categoryConfigsRef.current);
+    }, SAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (categorySaveTimer.current) {
+        clearTimeout(categorySaveTimer.current);
+        categorySaveTimer.current = null;
+      }
+    };
+  }, [categoryConfigs, enabled, loaded, persistCategories]);
 
   useEffect(() => {
     if (!enabled || !loaded || !warehouseId || !inventoryHydratedRef.current) {
       return;
     }
 
-    if (categoryConfigs.length === 0 && inventoryItems.length === 0) {
+    if (inventoryItems.length === 0 && categoryConfigs.length === 0) {
       return;
     }
 
-    const payload = {
-      warehouseId,
-      categoryConfigs,
-      items: inventoryItems,
-    };
-    const snapshot = snapshotInventoryPayload(payload);
+    const stockSnapshot = snapshotStock(warehouseId, inventoryItems);
 
-    if (snapshot === lastSavedSnapshotRef.current) {
+    if (stockSnapshot === lastSavedStockRef.current) {
       return;
     }
 
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
+    if (stockSaveTimer.current) {
+      clearTimeout(stockSaveTimer.current);
     }
 
-    saveTimer.current = setTimeout(() => {
-      void saveWarehouseInventoryAction(payload).then((result) => {
-        if (result.ok) {
-          lastSavedSnapshotRef.current = snapshot;
-        }
-      });
-    }, 600);
+    const targetWarehouseId = warehouseId;
+
+    stockSaveTimer.current = setTimeout(() => {
+      stockSaveTimer.current = null;
+
+      if (warehouseIdRef.current !== targetWarehouseId) {
+        return;
+      }
+
+      void persistStock(targetWarehouseId, inventoryItemsRef.current);
+    }, SAVE_DEBOUNCE_MS);
 
     return () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
+      if (stockSaveTimer.current) {
+        clearTimeout(stockSaveTimer.current);
+        stockSaveTimer.current = null;
       }
     };
-  }, [categoryConfigs, enabled, inventoryItems, loaded, warehouseId]);
+  }, [categoryConfigs.length, enabled, inventoryItems, loaded, persistStock, warehouseId]);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    function handleBeforeUnload() {
+      void flushSaves();
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      void flushSaves();
+    };
+  }, [enabled, flushSaves]);
 
   return {
     enabled,

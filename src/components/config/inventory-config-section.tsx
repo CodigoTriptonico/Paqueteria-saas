@@ -49,7 +49,7 @@ export function InventoryConfigSection({
 
   if (!enabled) {
     return (
-      <SupabaseRequiredBanner detail="La estructura de inventario se guarda en Supabase (inventory_categories e items por bodega)." />
+      <SupabaseRequiredBanner detail="El catálogo de inventario se guarda en Supabase. Las categorías e ítems son compartidos; el stock es por bodega." />
     );
   }
 

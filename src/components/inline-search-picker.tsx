@@ -19,6 +19,8 @@ export type InlineSearchPickerOption = {
   searchText?: string;
   icon?: ReactNode;
   trailing?: ReactNode;
+  /** No cambia el valor; solo dispara onSelectOption (p. ej. ir a crear país). */
+  action?: boolean;
 };
 
 type PanelPosition = {
@@ -75,6 +77,7 @@ export type InlineSearchPickerProps = {
   ariaLabel?: string;
   minWidthClass?: string;
   disabled?: boolean;
+  onSelectOption?: (option: InlineSearchPickerOption) => void;
   formatSelectedLabel?: (
     option: InlineSearchPickerOption | undefined,
     placeholder: string,
@@ -94,6 +97,7 @@ export function InlineSearchPicker({
   ariaLabel,
   minWidthClass = "min-w-[11rem] sm:min-w-[14rem]",
   disabled = false,
+  onSelectOption,
   formatSelectedLabel,
 }: InlineSearchPickerProps) {
   const listboxId = useId();
@@ -160,11 +164,18 @@ export function InlineSearchPicker({
   }, []);
 
   const selectOption = useCallback(
-    (nextValue: string) => {
-      onChange(nextValue);
+    (option: InlineSearchPickerOption) => {
+      if (option.action) {
+        onSelectOption?.(option);
+        close();
+        return;
+      }
+
+      onChange(option.value);
+      onSelectOption?.(option);
       close();
     },
-    [close, onChange],
+    [close, onChange, onSelectOption],
   );
 
   useEffect(() => {
@@ -244,11 +255,13 @@ export function InlineSearchPicker({
                     role="option"
                     aria-selected={selected}
                     onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => selectOption(option.value)}
+                    onClick={() => selectOption(option)}
                     className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-bold transition ${
-                      selected
-                        ? "bg-emerald-400/15 text-emerald-100"
-                        : "text-slate-200 hover:bg-surface-card-header/80"
+                      option.action
+                        ? "text-emerald-300 hover:bg-emerald-400/10"
+                        : selected
+                          ? "bg-emerald-400/15 text-emerald-100"
+                          : "text-slate-200 hover:bg-surface-card-header/80"
                     }`}
                   >
                     {option.icon ? (
@@ -302,7 +315,7 @@ export function InlineSearchPicker({
             onKeyDown={(event) => {
               if (event.key === "Enter" && filteredOptions[0]) {
                 event.preventDefault();
-                selectOption(filteredOptions[0].value);
+                selectOption(filteredOptions[0]);
               }
             }}
           />
@@ -349,6 +362,8 @@ export type InlineSearchComboboxProps = {
   ariaLabel?: string;
   minWidthClass?: string;
   disabled?: boolean;
+  /** Mantiene el input visible al perder foco (filtros en toolbar). */
+  persistent?: boolean;
   onSelectOption?: (option: InlineSearchPickerOption) => void;
 };
 
@@ -364,6 +379,7 @@ export function InlineSearchCombobox({
   ariaLabel,
   minWidthClass = "min-w-[11rem] sm:min-w-[14rem]",
   disabled = false,
+  persistent = false,
   onSelectOption,
 }: InlineSearchComboboxProps) {
   const listboxId = useId();
@@ -486,7 +502,8 @@ export function InlineSearchCombobox({
     ? `${shellBaseClass} ${minWidthClass}`
     : `${shellBaseClass} h-11 w-full min-w-[12rem] max-w-xs px-3`;
 
-  const isActive = open || value.trim().length > 0;
+  const isActive = persistent || open || value.trim().length > 0;
+  const showInput = persistent || open || value.trim().length > 0;
 
   const panel =
     open && panelPosition && mounted ? (
@@ -542,7 +559,7 @@ export function InlineSearchCombobox({
         {leadingIcon ? (
           <span className="shrink-0 text-slate-500">{leadingIcon}</span>
         ) : null}
-        {open ? (
+        {showInput ? (
           <input
             ref={searchRef}
             type="text"
@@ -552,10 +569,15 @@ export function InlineSearchCombobox({
             aria-label={ariaLabel}
             disabled={disabled}
             aria-controls={listboxId}
-            aria-expanded
+            aria-expanded={open}
             aria-autocomplete="list"
             role="combobox"
             onChange={(event) => onChange(event.target.value)}
+            onFocus={() => {
+              if (!disabled) {
+                openCombobox();
+              }
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && filteredOptions[0]) {
                 event.preventDefault();

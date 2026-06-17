@@ -1,5 +1,10 @@
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, History, RefreshCw } from "lucide-react";
+import {
+  flowStepBarPaddingClass,
+  flowStepBarShellClass,
+} from "@/components/flow-form-styles";
 import { cardHoverClass, selectionActiveClass, selectionShellClass, unselectedDimClass } from "@/components/ui-blocks";
+import { resolveCountryCode } from "@/lib/country-options";
 import type { SaleRecipient, SaleSender } from "@/lib/customers/mappers";
 
 export function saleStepButtonClass(isActive: boolean, isUnlocked: boolean) {
@@ -321,69 +326,25 @@ export function CountryBadge({ country }: { country: string }) {
 }
 
 export function Flag({ country }: { country: string }) {
-  const base = "h-[18px] w-[30px] overflow-hidden rounded-[5px] border border-black shadow-[0_1px_0_rgba(255,255,255,0.12),0_6px_12px_rgba(0,0,0,0.22)]";
+  const code = resolveCountryCode({ code: "", name: country }) || countryCodes[country] || "";
+  const base =
+    "inline-block h-[18px] w-[30px] shrink-0 overflow-hidden rounded-[5px] border border-black bg-slate-700 shadow-[0_1px_0_rgba(255,255,255,0.12),0_6px_12px_rgba(0,0,0,0.22)]";
 
-  if (country === "Mexico") {
+  if (!code) {
     return (
-      <span className={`${base} grid grid-cols-3 bg-white`}>
-        <span className="bg-[#07865f]" />
-        <span className="relative bg-[#f8fafc]">
-          <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#9a6b2f]" />
-        </span>
-        <span className="bg-[#d6262f]" />
-      </span>
-    );
-  }
-
-  if (country === "Guatemala") {
-    return (
-      <span className={`${base} grid grid-cols-3 bg-white`}>
-        <span className="bg-[#1597d3]" />
-        <span className="relative bg-[#f8fafc]">
-          <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#88a45c]" />
-        </span>
-        <span className="bg-[#1597d3]" />
-      </span>
-    );
-  }
-
-  if (country === "Colombia") {
-    return (
-      <span className={`${base} grid grid-rows-4`}>
-        <span className="row-span-2 bg-yellow-400" />
-        <span className="bg-blue-600" />
-        <span className="bg-red-600" />
-      </span>
-    );
-  }
-
-  if (country === "Honduras") {
-    return (
-      <span className={`${base} grid grid-rows-3 bg-white`}>
-        <span className="bg-[#1f9bd7]" />
-        <span className="relative bg-[#f8fafc]">
-          <span className="absolute left-[10px] top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-[#1f9bd7]" />
-          <span className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1f9bd7]" />
-          <span className="absolute right-[10px] top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-[#1f9bd7]" />
-        </span>
-        <span className="bg-[#1f9bd7]" />
-      </span>
-    );
-  }
-
-  if (country === "USA") {
-    return (
-      <span className={`${base} relative bg-red-600`}>
-        <span className="absolute inset-0 bg-[repeating-linear-gradient(to_bottom,#b91c1c_0_2px,#fff_2px_4px)]" />
-        <span className="absolute left-0 top-0 h-2.5 w-3.5 bg-blue-700" />
+      <span className={`${base} flex items-center justify-center text-[9px] font-black text-slate-300`}>
+        --
       </span>
     );
   }
 
   return (
-    <span className={`${base} flex items-center justify-center bg-slate-300 text-[9px]`}>
-      {countryCodes[country] || "--"}
-    </span>
+    <span
+      className={`${base} bg-cover bg-center`}
+      style={{ backgroundImage: `url(https://flagcdn.com/w80/${code.toLowerCase()}.png)` }}
+      role="img"
+      aria-label={country}
+    />
   );
 }
 
@@ -410,11 +371,12 @@ export function AddressTags({ items }: { items: [string, string][] }) {
 export const contextActiveClass = selectedBorderClass;
 export const selectedCardClass = selectedBorderClass;
 export const senderCardClass =
-  "border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-surface-card-hover";
+  "w-full border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-surface-card-hover";
 export const recipientCardClass =
-  "border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-surface-card-hover";
+  "w-full border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-surface-card-hover";
 export const boxCardClass =
-  "border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-surface-card-hover";
+  "w-full border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-surface-card-hover";
+
 export const saleSteps: { id: SaleStep; label: string }[] = [
   { id: "client", label: "Remitente" },
   { id: "recipient", label: "Destinatario" },
@@ -422,6 +384,131 @@ export const saleSteps: { id: SaleStep; label: string }[] = [
   { id: "delivery", label: "Entrega" },
   { id: "finish", label: "Final" },
 ];
+
+export type SaleStepBarItem = {
+  id: SaleStep;
+  label: string;
+  value: string;
+  detail?: string;
+  country?: string;
+  isActive: boolean;
+  isDone: boolean;
+  isUnlocked: boolean;
+  index: number;
+};
+
+function saleStepBarButtonClass(item: SaleStepBarItem) {
+  if (item.isActive) {
+    return "border-emerald-500/60 bg-emerald-500/10 text-[#f8fafc] shadow-[inset_0_1px_0_rgba(52,211,153,0.12)] ring-1 ring-emerald-500/25";
+  }
+
+  if (item.isDone) {
+    return "border-emerald-800/80 bg-[#1c2822] text-[#f8fafc] hover:border-emerald-700 hover:bg-[#223028]";
+  }
+
+  if (item.isUnlocked) {
+    return "border-black bg-surface-card text-slate-300 hover:border-black hover:bg-surface-card-hover";
+  }
+
+  return "cursor-not-allowed border-black/80 bg-surface-inset text-slate-600";
+}
+
+function saleStepBarBadgeClass(item: SaleStepBarItem) {
+  if (item.isActive || item.isDone) {
+    return "border-emerald-300 bg-emerald-400 text-slate-950";
+  }
+
+  if (item.isUnlocked) {
+    return "border-sky-700/80 bg-sky-300 text-slate-950";
+  }
+
+  return "border-black bg-surface-card text-slate-500";
+}
+
+export function SaleStepBar({
+  steps,
+  onOpenStep,
+}: {
+  steps: SaleStepBarItem[];
+  onOpenStep: (step: SaleStep) => void;
+}) {
+  return (
+    <nav aria-label="Pasos de venta" className="w-full">
+      <div className={`${flowStepBarShellClass} ${flowStepBarPaddingClass}`}>
+        <ol className="flex w-full items-stretch gap-0">
+          {steps.map((step, index) => {
+            const connectorDone =
+              index > 0 && (steps[index - 1]?.isDone || steps[index - 1]?.isActive);
+
+            return (
+              <li key={step.id} className="contents">
+                {index > 0 ? (
+                  <div
+                    aria-hidden
+                    className="flex w-1 shrink-0 items-center self-center sm:w-1.5 lg:w-2"
+                  >
+                    <span
+                      className={`block h-0.5 w-full rounded-full ${
+                        connectorDone ? "bg-emerald-500/75" : "bg-black/80"
+                      }`}
+                    />
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={!step.isUnlocked}
+                  onClick={() => onOpenStep(step.id)}
+                  title={`${step.label}: ${step.value}`}
+                  className={`min-w-0 flex-1 basis-0 rounded-md border px-1.5 py-1.5 text-left transition sm:px-2 sm:py-2 lg:rounded-lg lg:px-2.5 lg:py-2 ${saleStepBarButtonClass(
+                    step,
+                  )}`}
+                >
+                  <div className="flex min-h-[3.35rem] flex-col justify-center gap-0.5 sm:min-h-[3.6rem] lg:min-h-[3.75rem] lg:gap-1">
+                    <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
+                      <span
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-black sm:h-7 sm:w-7 sm:text-[11px] lg:h-8 lg:w-8 lg:text-xs ${saleStepBarBadgeClass(
+                          step,
+                        )}`}
+                      >
+                        {step.isDone ? (
+                          <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5 lg:h-4 lg:w-4" />
+                        ) : (
+                          step.index + 1
+                        )}
+                      </span>
+                      <span
+                        className={`min-w-0 truncate text-[10px] font-black uppercase leading-snug tracking-wide sm:text-[11px] lg:text-xs ${
+                          step.isActive ? "text-emerald-300" : ""
+                        }`}
+                      >
+                        {step.label}
+                      </span>
+                    </div>
+                    <span
+                      className={`flex min-w-0 items-center gap-1.5 pl-7 sm:pl-8 lg:pl-9 ${
+                        step.isActive ? "text-emerald-100/90" : "text-slate-400"
+                      }`}
+                    >
+                      {step.country ? <Flag country={step.country} /> : null}
+                      <span className="min-w-0 truncate text-[10px] font-bold leading-snug sm:text-[11px] lg:text-xs">
+                        {step.value}
+                      </span>
+                    </span>
+                    {step.detail && step.isActive ? (
+                      <span className="hidden truncate pl-7 text-[10px] font-semibold text-slate-500 lg:pl-9 xl:block">
+                        {step.detail}
+                      </span>
+                    ) : null}
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </nav>
+  );
+}
 
 export function saleStepNumber(step: SaleStep) {
   const index = saleSteps.findIndex((item) => item.id === step);

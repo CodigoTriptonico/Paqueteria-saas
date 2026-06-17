@@ -31,77 +31,65 @@ export function loadEnvLocal(root = projectRoot) {
   }
 }
 
-export function isLocalDatabaseMode() {
-  loadEnvLocal();
-
-  const mode = process.env.DATABASE_MODE?.trim().toLowerCase();
-  if (mode === "local") {
-    return true;
-  }
-  if (mode === "remote") {
-    return false;
+export function assertLocalSupabaseUrl(url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "") {
+  if (!url) {
+    throw new Error("Falta NEXT_PUBLIC_SUPABASE_URL en .env.local");
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  return (
-    supabaseUrl.includes("127.0.0.1") ||
-    supabaseUrl.includes("localhost") ||
-    supabaseUrl.startsWith("http://")
-  );
+  if (url.includes("supabase.co")) {
+    throw new Error(
+      "Este proyecto solo usa Supabase local. Ejecuta: npm run env:local (y npm run supabase:start).",
+    );
+  }
+
+  if (
+    !url.includes("127.0.0.1") &&
+    !url.includes("localhost")
+  ) {
+    throw new Error(
+      `NEXT_PUBLIC_SUPABASE_URL debe apuntar a Supabase local (127.0.0.1:54321). Valor actual: ${url}`,
+    );
+  }
 }
 
-function projectRefFromUrl(url) {
-  const match = url.match(/https:\/\/([a-z0-9-]+)\.supabase\.co/i);
-  return match?.[1] ?? null;
+export function isLocalDatabaseMode() {
+  loadEnvLocal();
+  return true;
+}
+
+export function isLocalSupabase() {
+  loadEnvLocal();
+  assertLocalSupabaseUrl();
+  return true;
 }
 
 export function resolvePgConnectionConfig() {
   loadEnvLocal();
+  assertLocalSupabaseUrl();
 
   const explicitUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
   if (explicitUrl) {
+    if (explicitUrl.includes("supabase.co")) {
+      throw new Error("SUPABASE_DB_URL remota no permitida. Usa Supabase local.");
+    }
+
     return {
       connectionString: explicitUrl,
-      ssl: explicitUrl.includes("supabase.co"),
-      label: "custom database URL",
-      mode: isLocalDatabaseMode() ? "local" : "remote",
-    };
-  }
-
-  if (isLocalDatabaseMode()) {
-    const host = process.env.SUPABASE_DB_HOST || "127.0.0.1";
-    const port = process.env.SUPABASE_DB_PORT || "54322";
-    const password = process.env.SUPABASE_DB_PASSWORD || "postgres";
-
-    return {
-      connectionString: `postgresql://postgres:${encodeURIComponent(password)}@${host}:${port}/postgres`,
       ssl: false,
-      label: `local postgres @ ${host}:${port}`,
+      label: "custom local database URL",
       mode: "local",
     };
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const dbPassword = process.env.SUPABASE_DB_PASSWORD;
-
-  if (!supabaseUrl || supabaseUrl.includes("your-project")) {
-    throw new Error("Falta NEXT_PUBLIC_SUPABASE_URL en .env.local");
-  }
-
-  if (!dbPassword) {
-    throw new Error("Falta SUPABASE_DB_PASSWORD en .env.local");
-  }
-
-  const ref = projectRefFromUrl(supabaseUrl);
-  if (!ref) {
-    throw new Error(`URL de Supabase remota no válida: ${supabaseUrl}`);
-  }
+  const host = process.env.SUPABASE_DB_HOST || "127.0.0.1";
+  const port = process.env.SUPABASE_DB_PORT || "55322";
+  const password = process.env.SUPABASE_DB_PASSWORD || "postgres";
 
   return {
-    connectionString: `postgresql://postgres:${encodeURIComponent(dbPassword)}@db.${ref}.supabase.co:5432/postgres`,
-    ssl: { rejectUnauthorized: false },
-    label: `supabase cloud (${ref})`,
-    mode: "remote",
+    connectionString: `postgresql://postgres:${encodeURIComponent(password)}@${host}:${port}/postgres`,
+    ssl: false,
+    label: `local postgres @ ${host}:${port}`,
+    mode: "local",
   };
 }
 

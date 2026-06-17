@@ -4,11 +4,17 @@ import { requireAppSession } from "@/lib/auth/session";
 import { sessionHasPermission } from "@/lib/auth/permissions";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
+import { resolveCountryCode } from "@/lib/country-options";
+import { categoriesToConfig, type DbCategory } from "@/lib/inventory-backend";
+import type { CategoryConfig } from "@/lib/inventory-tree";
+import { listCatalogProducts, type InventoryCatalogProduct } from "@/lib/pricing-catalog";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type PricingBoxConfig = {
   size: string;
   price: string;
   cost?: string;
+  catalogKey?: string;
 };
 
 export type PricingCountryConfig = {
@@ -41,6 +47,7 @@ export type PricingConfigPayload = {
   distributors: PricingDistributorConfig[];
   distributorPrices: PricingDistributorPrices;
   routeConfig: PricingRouteConfig;
+  catalogProducts: InventoryCatalogProduct[];
 };
 
 const emptyRouteConfig: PricingRouteConfig = {
@@ -52,6 +59,13 @@ const emptyRouteConfig: PricingRouteConfig = {
   routeLeadTime: "",
 };
 
+type DbPricingCountryBox = {
+  size: string;
+  price: string;
+  cost: string | null;
+  catalog_key?: string | null;
+};
+
 function canReadPricing(session: Awaited<ReturnType<typeof requireAppSession>>) {
   return (
     sessionHasPermission(session, "settings.manage") ||
@@ -61,6 +75,27 @@ function canReadPricing(session: Awaited<ReturnType<typeof requireAppSession>>) 
 
 function canWritePricing(session: Awaited<ReturnType<typeof requireAppSession>>) {
   return sessionHasPermission(session, "settings.manage");
+}
+
+async function loadInventoryCategoryConfigs(
+  supabase: SupabaseClient,
+  orgId: string,
+): Promise<CategoryConfig[]> {
+  const { data, error } = await supabase
+    .from("inventory_categories")
+    .select("id, name, tree_data")
+    .eq("organization_id", orgId)
+    .order("name");
+
+  if (error) {
+    if (error.code === "42P01") {
+      return [];
+    }
+
+    throw new Error(error.message);
+  }
+
+  return categoriesToConfig((data || []) as DbCategory[]);
 }
 
 export async function loadPricingConfigAction(): Promise<ActionResult<PricingConfigPayload>> {
@@ -78,11 +113,13 @@ export async function loadPricingConfigAction(): Promise<ActionResult<PricingCon
 
     const orgId = session.organizationId;
 
-    const [countriesResult, distributorsResult, distributorBoxesResult, routeResult] =
+    const [countriesResult, distributorsResult, distributorBoxesResult, routeResult, categoryConfigs] =
       await Promise.all([
         supabase
           .from("pricing_countries")
-          .select("id, code, name, delivery_time, sort_order, pricing_country_boxes(size, price, cost)")
+          .select(
+            "id, code, name, delivery_time, sort_order, pricing_country_boxes(size, price, cost, catalog_key)",
+          )
           .eq("organization_id", orgId)
           .order("sort_order")
           .order("name"),
@@ -102,7 +139,10 @@ export async function loadPricingConfigAction(): Promise<ActionResult<PricingCon
           )
           .eq("organization_id", orgId)
           .maybeSingle(),
+        loadInventoryCategoryConfigs(supabase, orgId),
       ]);
+
+    const catalogProducts = listCatalogProducts(categoryConfigs);
 
     if (countriesResult.error?.code === "42P01") {
       return ok({
@@ -110,6 +150,7 @@ export async function loadPricingConfigAction(): Promise<ActionResult<PricingCon
         distributors: [],
         distributorPrices: {},
         routeConfig: emptyRouteConfig,
+        catalogProducts,
       });
     }
 
@@ -122,16 +163,17 @@ export async function loadPricingConfigAction(): Promise<ActionResult<PricingCon
     }
 
     const countries: PricingCountryConfig[] = (countriesResult.data || []).map((row) => {
-      const boxes = (row.pricing_country_boxes as PricingBoxConfig[] | null) || [];
+      const boxes = (row.pricing_country_boxes as DbPricingCountryBox[] | null) || [];
 
       return {
-        code: row.code,
+        code: resolveCountryCode({ code: row.code || "", name: row.name }),
         name: row.name,
         deliveryTime: row.delivery_time || "",
         boxes: boxes.map((box) => ({
           size: box.size,
           price: box.price,
           cost: box.cost || "$0",
+          catalogKey: box.catalog_key || undefined,
         })),
       };
     });
@@ -184,7 +226,7 @@ export async function loadPricingConfigAction(): Promise<ActionResult<PricingCon
         }
       : emptyRouteConfig;
 
-    return ok({ countries, distributors, distributorPrices, routeConfig });
+    return ok({ countries, distributors, distributorPrices, routeConfig, catalogProducts });
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -241,6 +283,7 @@ export async function savePricingConfigAction(
             size: box.size,
             price: box.price,
             cost: box.cost || "$0",
+            catalog_key: box.catalogKey || null,
           })),
         );
 

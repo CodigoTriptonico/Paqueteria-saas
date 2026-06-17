@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { NotificationProvider } from "@/components/notifications/notification-provider";
@@ -16,9 +16,12 @@ type ShellConfig = {
   compactNavSettingsHref?: string;
   contextNavLabel?: string;
   onContextNavBack?: () => void;
+  contentEdgeToEdge?: boolean;
 };
 
-const ShellConfigContext = createContext<((config: ShellConfig) => void) | null>(null);
+type ShellConfigPatch = (patch: ShellConfig) => void;
+
+const ShellConfigContext = createContext<ShellConfigPatch | null>(null);
 
 function activeFromPath(pathname: string) {
   if (pathname.startsWith("/venta")) {
@@ -54,6 +57,9 @@ export function AppFrame({
   const pathname = usePathname();
   const router = useRouter();
   const [config, setConfig] = useState<ShellConfig>({});
+  const mergeShellConfig = useCallback((patch: ShellConfig) => {
+    setConfig((current) => ({ ...current, ...patch }));
+  }, []);
   const active = useMemo(() => activeFromPath(pathname), [pathname]);
 
   const defaultContextNav = useMemo(() => {
@@ -84,7 +90,7 @@ export function AppFrame({
 
   return (
     <NotificationProvider>
-      <ShellConfigContext.Provider value={setConfig}>
+      <ShellConfigContext.Provider value={mergeShellConfig}>
       <AppShell
         session={session}
         active={active}
@@ -97,6 +103,7 @@ export function AppFrame({
         compactNavSettingsHref={config.compactNavSettingsHref}
         contextNavLabel={contextNavLabel}
         onContextNavBack={onContextNavBack}
+        contentEdgeToEdge={config.contentEdgeToEdge}
       >
         {children}
       </AppShell>

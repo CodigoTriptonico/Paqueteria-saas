@@ -42,6 +42,7 @@ type AppShellProps = {
   compactNavSettingsHref?: string;
   contextNavLabel?: string;
   onContextNavBack?: () => void;
+  contentEdgeToEdge?: boolean;
   children: React.ReactNode;
 };
 
@@ -246,6 +247,7 @@ export function AppShell({
   contextNavLabel,
   onContextNavBack,
   onActiveClick,
+  contentEdgeToEdge = false,
 }: AppShellProps & { session: AppSession | null }) {
   const [navCollapsed, setNavCollapsed] = useState(false);
   const needsClientSelection = platformAdminNeedsClientContext(session);
@@ -307,7 +309,13 @@ export function AppShell({
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-surface-shell text-[#f8fafc]">
-      <div className="flex h-full min-h-0 w-full gap-4 bg-surface-shell p-3 sm:gap-5 sm:p-5">
+      <div
+        className={`flex h-full min-h-0 w-full bg-surface-shell ${
+          contentEdgeToEdge
+            ? "gap-3 py-3 pl-3 pr-0 sm:gap-4 sm:py-4 sm:pl-4"
+            : "gap-4 p-3 sm:gap-5 sm:p-5"
+        }`}
+      >
         <aside className="hidden w-72 shrink-0 overflow-visible rounded-xl border border-black bg-surface-panel p-4 shadow-md transition-all duration-300 ease-out lg:sticky lg:top-5 lg:z-[100] lg:flex lg:max-h-[calc(100vh-2.5rem)] lg:min-h-[calc(100vh-2.5rem)] lg:flex-col">
           {showContextNav ? (
             <div className="mb-4">

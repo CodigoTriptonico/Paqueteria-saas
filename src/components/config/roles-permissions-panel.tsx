@@ -42,7 +42,7 @@ const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   },
   { title: "Rutas", keys: ["routes.view", "routes.update_status"] },
   {
-    title: "Administracion",
+    title: "Administración",
     keys: ["users.manage", "permissions.manage", "settings.manage"],
   },
 ];

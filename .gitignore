@@ -36,7 +36,6 @@ next-live-debug.log
 .env*
 !.env.example
 !.env.local.template
-!.env.remote.example
 .next-dev.log
 
 # typescript

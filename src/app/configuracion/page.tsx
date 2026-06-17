@@ -12,13 +12,24 @@ import {
   Palette,
   Plus,
   Search,
+  Trash2,
   Truck,
   Users,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { CompanySettingsPanel } from "@/components/config/company-settings-panel";
 import { PlanSettingsPanel } from "@/components/config/plan-settings-panel";
 import { InventoryConfigSection as InventoryCategoriesPanel } from "@/components/config/inventory-config-section";
@@ -26,8 +37,22 @@ import { UsersSettingsPanel } from "@/components/config/users-settings-panel";
 import { WarehousesSettingsPanel } from "@/components/config/warehouses-settings-panel";
 import { useContextNav } from "@/hooks/use-context-nav";
 import { usePricingBackend } from "@/hooks/use-pricing-backend";
-import { inputClass, Panel } from "@/components/ui-blocks";
+import { inputClass, iconWellEmerald, Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import { flowToolbarCreateButtonClass } from "@/components/flow-form-styles";
 import { InlineSearchCombobox, InlineSearchPicker } from "@/components/inline-search-picker";
+import {
+  COUNTRY_OPTIONS,
+  compareCountriesByCatalogOrder,
+  findCountryByNormalizedName,
+  isCountryAlreadyConfigured,
+  resolveCountryCode,
+  type CountryOption,
+} from "@/lib/country-options";
+import {
+  addProductToCountry,
+  removeProductFromCountry,
+  type InventoryCatalogProduct,
+} from "@/lib/pricing-catalog";
 
 const ROUTE_LEAD_TIME_OPTIONS = [
   { value: "1 dia", label: "1 dia" },
@@ -43,60 +68,88 @@ const sections = [
   {
     id: "plan" as Section,
     title: "Plan",
-    text: "Limites de bodegas y usuarios.",
+    text: "Límites de bodegas y usuarios del plan.",
     icon: Gauge,
-    color: "bg-amber-400",
   },
   {
     id: "prices" as Section,
-    title: "Paises y precios",
-    text: "Paises, tiempos y productos.",
+    title: "Países y precios",
+    text: "Destinos, tiempos de entrega y productos.",
     icon: Globe2,
-    color: "bg-[#34D399]",
   },
   {
     id: "distributors" as Section,
     title: "Distribuidores",
-    text: "Base global de proveedores.",
+    text: "Proveedores y costos por país.",
     icon: Truck,
-    color: "bg-emerald-500",
   },
   {
     id: "inventory" as Section,
     title: "Inventario",
-    text: "Categorias e items.",
+    text: "Catálogo de categorías, ítems y bodegas.",
     icon: Box,
-    color: "bg-emerald-300",
   },
   {
     id: "deliveries" as Section,
     title: "Rutas y horarios",
-    text: "Entregas, recolecciones y dias.",
+    text: "Horarios de entrega y recolección.",
     icon: Clock,
-    color: "bg-emerald-400",
   },
   {
     id: "appearance" as Section,
     title: "Apariencia",
-    text: "Visual del sistema.",
+    text: "Tema visual del sistema.",
     icon: Palette,
-    color: "bg-emerald-400",
   },
   {
     id: "company" as Section,
     title: "Empresa",
-    text: "Nombre, telefono y direccion.",
+    text: "Nombre, teléfono y dirección.",
     icon: Building2,
-    color: "bg-emerald-400",
   },
   {
     id: "users" as Section,
     title: "Usuarios",
-    text: "Dueno y empleados.",
+    text: "Dueño, equipo y permisos.",
     icon: Users,
-    color: "bg-emerald-400",
   },
 ];
+
+const configNavCardClass =
+  "group flex min-h-[10.5rem] min-w-0 flex-col rounded-xl border border-black bg-surface-card p-5 text-left shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition hover:border-emerald-700/35 hover:bg-surface-card-hover";
+
+function ConfigNavCard({
+  href,
+  title,
+  text,
+  icon: Icon,
+  badge,
+}: {
+  href: string;
+  title: string;
+  text: string;
+  icon: LucideIcon;
+  badge?: string;
+}) {
+  return (
+    <Link href={href} className={configNavCardClass}>
+      <span className={`h-12 w-12 shrink-0 ${iconWellEmerald}`}>
+        <Icon className="h-7 w-7" />
+      </span>
+      <span className="mt-5 block break-words text-2xl font-black leading-snug text-[#f8fafc]">
+        {title}
+      </span>
+      <span className="mt-2 block flex-1 break-words text-sm font-bold leading-snug text-slate-300 sm:text-base">
+        {text}
+      </span>
+      {badge ? (
+        <span className="mt-4 inline-flex w-fit rounded-lg border border-black bg-surface-panel px-3 py-1.5 text-xs font-black uppercase tracking-wide text-slate-400">
+          {badge}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
 
 const emptyDistributor = {
   name: "",
@@ -148,76 +201,26 @@ const dayOptions = Array.from({ length: 31 }, (_, index) => index + 1);
 const weekOptions = Array.from({ length: 12 }, (_, index) => index + 1);
 type TimeUnit = "dias" | "semanas";
 
-const countryFallbacks = [
-  "Mexico",
-  "Guatemala",
-  "Colombia",
-  "Honduras",
-  "El Salvador",
-  "Nicaragua",
-  "Costa Rica",
-  "Panama",
-  "Republica Dominicana",
-  "Ecuador",
-  "Peru",
-  "Chile",
-  "Argentina",
-  "Brasil",
-  "Uruguay",
-  "Paraguay",
-  "Bolivia",
-  "Venezuela",
-  "Estados Unidos",
-  "Canada",
-  "Espana",
-];
-
-const latinAmericaCodes = [
-  "MX", "GT", "HN", "SV", "NI", "CR", "PA", "DO", "CU", "PR", "CO", "VE",
-  "EC", "PE", "BO", "CL", "AR", "PY", "UY", "BR", "GF", "GY", "SR", "BZ",
-];
-
-const countryCodes = [
-  "AF", "AL", "DE", "AD", "AO", "AI", "AQ", "AG", "SA", "DZ", "AR", "AM",
-  "AW", "AU", "AT", "AZ", "BS", "BH", "BD", "BB", "BE", "BZ", "BJ", "BM",
-  "BY", "BO", "BA", "BW", "BR", "BN", "BG", "BF", "BI", "BT", "CV", "KH",
-  "CM", "CA", "BQ", "QA", "TD", "CL", "CN", "CY", "CO", "KM", "CG", "CD",
-  "KP", "KR", "CI", "CR", "HR", "CU", "CW", "DK", "DM", "EC", "EG", "SV",
-  "AE", "ER", "SK", "SI", "ES", "US", "EE", "SZ", "ET", "PH", "FI", "FJ",
-  "FR", "GA", "GM", "GE", "GH", "GI", "GD", "GR", "GL", "GP", "GU", "GT",
-  "GF", "GG", "GN", "GQ", "GW", "GY", "HT", "HN", "HK", "HU", "IN", "ID",
-  "IQ", "IR", "IE", "IM", "IS", "KY", "CK", "FO", "FK", "MP", "MH", "SB",
-  "TC", "VG", "VI", "IL", "IT", "JM", "JP", "JE", "JO", "KZ", "KE", "KG",
-  "KI", "KW", "LA", "LS", "LV", "LB", "LR", "LY", "LI", "LT", "LU", "MO",
-  "MG", "MY", "MW", "MV", "ML", "MT", "MA", "MQ", "MU", "MR", "YT", "MX",
-  "FM", "MD", "MC", "MN", "ME", "MS", "MZ", "MM", "NA", "NR", "NP", "NI",
-  "NE", "NG", "NU", "NO", "NC", "NZ", "OM", "NL", "PK", "PW", "PS", "PA",
-  "PG", "PY", "PE", "PF", "PL", "PT", "PR", "GB", "CF", "CZ", "DO", "RE",
-  "RW", "RO", "RU", "EH", "WS", "AS", "BL", "KN", "SM", "MF", "PM", "VC",
-  "SH", "LC", "ST", "SN", "RS", "SC", "SL", "SG", "SX", "SY", "SO", "LK",
-  "ZA", "SD", "SS", "SE", "CH", "SR", "SJ", "TH", "TW", "TZ", "TJ", "IO",
-  "TF", "TL", "TG", "TK", "TO", "TT", "TN", "TM", "TR", "TV", "UA", "UG",
-  "UY", "UZ", "VU", "VA", "VE", "VN", "WF", "YE", "DJ", "ZM", "ZW",
-];
-
 const normalizeText = (value: string) =>
   value
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
 
-type CountryOption = {
+function CountryFlag({
+  code,
+  size = "sm",
+}: {
   code: string;
-  name: string;
-};
+  size?: "sm" | "md" | "lg";
+}) {
+  const sizeClass =
+    size === "lg" ? "h-12 w-16 text-sm" : size === "md" ? "h-10 w-14 text-xs" : "h-5 w-8 text-[10px]";
 
-function CountryFlag({ code, large = false }: { code: string; large?: boolean }) {
   if (!code) {
     return (
       <span
-        className={`flex items-center justify-center rounded-md bg-surface-card font-black text-slate-300 ${
-          large ? "h-12 w-16 text-sm" : "h-5 w-8 text-[10px]"
-        }`}
+        className={`flex items-center justify-center rounded-md bg-surface-card font-black text-slate-300 ${sizeClass}`}
       >
         --
       </span>
@@ -226,37 +229,12 @@ function CountryFlag({ code, large = false }: { code: string; large?: boolean })
 
   return (
     <span
-      className={`block overflow-hidden rounded-md border border-black bg-cover bg-center shadow-sm ${
-        large ? "h-12 w-16" : "h-5 w-8"
-      }`}
+      className={`block overflow-hidden rounded-md border border-black bg-cover bg-center shadow-sm ${sizeClass}`}
       style={{
         backgroundImage: `url(https://flagcdn.com/w80/${code.toLowerCase()}.png)`,
       }}
     />
   );
-}
-
-function getCountryOptions() {
-  try {
-    const displayNames = new Intl.DisplayNames(["es"], { type: "region" });
-    const countryByCode = new Map<string, CountryOption>(
-      countryCodes
-        .map((code) => [code, { code, name: displayNames.of(code) || code }] as const)
-        .filter((entry) => Boolean(entry[1].name)),
-    );
-    const latinCountries = latinAmericaCodes
-      .map((code) => countryByCode.get(code))
-      .filter((country): country is CountryOption => Boolean(country));
-    const otherCountries = countryCodes
-      .filter((code) => !latinAmericaCodes.includes(code))
-      .map((code) => countryByCode.get(code))
-      .filter((country): country is CountryOption => Boolean(country))
-      .sort((a, b) => a.name.localeCompare(b.name, "es"));
-
-    return [...latinCountries, ...otherCountries];
-  } catch {
-    return countryFallbacks.map((name) => ({ code: "", name }));
-  }
 }
 
 function parseDeliveryTime(value: string) {
@@ -309,11 +287,18 @@ function TimeRangeSelect({
   large?: boolean;
 }) {
   const [openPicker, setOpenPicker] = useState<"start" | "end" | "unit" | null>(null);
+  const [panelPosition, setPanelPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+  const startRef = useRef<HTMLButtonElement>(null);
+  const endRef = useRef<HTMLButtonElement>(null);
+  const unitRef = useRef<HTMLButtonElement>(null);
   const range = parseDeliveryTime(value);
   const numbers = range.unit === "dias" ? dayOptions : weekOptions;
-  const controlSize = large ? "h-12 text-xl" : "h-10 text-base";
+  const controlSize = large ? "h-12 text-xl" : "h-11 text-lg";
   const numberWidth = large ? "w-14" : "w-12";
-  const unitWidth = large ? "w-28" : "w-24";
 
   function updateRange(nextRange: Partial<typeof range>) {
     const next = { ...range, ...nextRange };
@@ -335,84 +320,196 @@ function TimeRangeSelect({
   function pickNumber(key: "start" | "end", number: number) {
     updateRange({ [key]: number });
     setOpenPicker(null);
+    setPanelPosition(null);
   }
 
   function pickUnit(unit: TimeUnit) {
     updateRange({ unit });
     setOpenPicker(null);
+    setPanelPosition(null);
   }
 
+  const openPickerAt = useCallback(
+    (key: "start" | "end" | "unit") => {
+      const trigger =
+        key === "start" ? startRef.current : key === "end" ? endRef.current : unitRef.current;
+
+      if (!trigger) {
+        return;
+      }
+
+      if (openPicker === key) {
+        setOpenPicker(null);
+        setPanelPosition(null);
+        return;
+      }
+
+      const rect = trigger.getBoundingClientRect();
+
+      setPanelPosition({
+        top: rect.bottom + 6,
+        left: rect.left,
+        width: key === "unit" ? 132 : 196,
+      });
+      setOpenPicker(key);
+    },
+    [openPicker],
+  );
+
+  useEffect(() => {
+    if (!openPicker) {
+      return;
+    }
+
+    const updatePosition = () => {
+      const trigger =
+        openPicker === "start"
+          ? startRef.current
+          : openPicker === "end"
+            ? endRef.current
+            : unitRef.current;
+
+      if (!trigger) {
+        return;
+      }
+
+      const rect = trigger.getBoundingClientRect();
+
+      setPanelPosition({
+        top: rect.bottom + 6,
+        left: rect.left,
+        width: openPicker === "unit" ? 132 : 196,
+      });
+    };
+
+    const close = (event: PointerEvent) => {
+      const target = event.target;
+
+      if (target instanceof Element && target.closest("[data-time-range-panel]")) {
+        return;
+      }
+
+      setOpenPicker(null);
+      setPanelPosition(null);
+    };
+
+    updatePosition();
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [openPicker]);
+
+  const triggerClass = `flex ${controlSize} items-center justify-center gap-1 rounded-lg border border-black bg-surface-panel px-2 font-black text-[#f8fafc] transition hover:bg-surface-card-hover`;
+
   return (
-    <div className={`relative flex ${controlSize} w-fit max-w-full items-center gap-2`}>
-      {[
-        ["start", range.start],
-        ["end", range.end],
-      ].map(([key, currentValue], index) => (
-        <div key={index} className="flex items-center gap-1">
-          {index === 1 ? (
-            <span className="text-base font-black text-slate-400 text-slate-400">a</span>
-          ) : null}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setOpenPicker(openPicker === key ? null : (key as "start" | "end"))}
-              className={`flex h-full ${numberWidth} items-center justify-center gap-1 rounded-lg border border-black bg-surface-panel px-2 font-black text-[#f8fafc] hover:border-black`}
-            >
-              {currentValue as number}
-              <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-            </button>
-            {openPicker === key ? (
-              <div className="absolute left-0 top-full z-50 mt-2 grid w-48 grid-cols-4 gap-1 rounded-lg border border-black bg-surface-card p-2 shadow-xl">
-                {numbers.map((number) => (
+    <>
+      <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-black bg-[#1a221f] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+        <button
+          ref={startRef}
+          type="button"
+          onClick={() => openPickerAt("start")}
+          className={`${triggerClass} ${numberWidth}`}
+          aria-expanded={openPicker === "start"}
+        >
+          {range.start}
+          <ChevronDown
+            className={`h-3.5 w-3.5 text-slate-400 transition ${openPicker === "start" ? "rotate-180" : ""}`}
+          />
+        </button>
+        <span className="px-0.5 text-sm font-black text-slate-500">a</span>
+        <button
+          ref={endRef}
+          type="button"
+          onClick={() => openPickerAt("end")}
+          className={`${triggerClass} ${numberWidth}`}
+          aria-expanded={openPicker === "end"}
+        >
+          {range.end}
+          <ChevronDown
+            className={`h-3.5 w-3.5 text-slate-400 transition ${openPicker === "end" ? "rotate-180" : ""}`}
+          />
+        </button>
+        <button
+          ref={unitRef}
+          type="button"
+          onClick={() => openPickerAt("unit")}
+          className={`${triggerClass} min-w-[5.5rem] px-3`}
+          aria-expanded={openPicker === "unit"}
+        >
+          {range.unit}
+          <ChevronDown
+            className={`h-3.5 w-3.5 text-slate-400 transition ${openPicker === "unit" ? "rotate-180" : ""}`}
+          />
+        </button>
+      </div>
+
+      {openPicker && panelPosition ? (
+        <div
+          data-time-range-panel
+          className="fixed z-[120] overflow-hidden rounded-lg border border-black bg-surface-card shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+          style={{
+            top: panelPosition.top,
+            left: panelPosition.left,
+            width: panelPosition.width,
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {openPicker === "unit" ? (
+            <div className="grid gap-1 p-2">
+              {(["dias", "semanas"] as TimeUnit[]).map((unit) => (
+                <button
+                  key={unit}
+                  type="button"
+                  onClick={() => pickUnit(unit)}
+                  className={`h-10 rounded-md px-3 text-left text-sm font-black transition ${
+                    unit === range.unit
+                      ? "bg-emerald-400 text-slate-950"
+                      : "bg-surface-panel text-[#f8fafc] hover:bg-surface-card-hover"
+                  }`}
+                >
+                  {unit}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="grid max-h-52 grid-cols-4 gap-1 overflow-y-auto p-2">
+              {numbers.map((number) => {
+                const currentValue = openPicker === "start" ? range.start : range.end;
+
+                return (
                   <button
                     key={number}
                     type="button"
-                    onClick={() => pickNumber(key as "start" | "end", number)}
-                    className={`h-9 rounded-md text-sm font-black hover:bg-[#34D399] hover:text-[#f8fafc] ${
+                    onClick={() => pickNumber(openPicker, number)}
+                    className={`h-9 rounded-md text-sm font-black transition ${
                       number === currentValue
-                        ? "bg-[#34D399] text-[#f8fafc]"
-                        : "bg-surface-panel text-[#f8fafc]"
+                        ? "bg-emerald-400 text-slate-950"
+                        : "bg-surface-panel text-[#f8fafc] hover:bg-surface-card-hover"
                     }`}
                   >
                     {number}
                   </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      ))}
-      <div className={`relative flex ${unitWidth} items-center`}>
-        <button
-          type="button"
-          onClick={() => setOpenPicker(openPicker === "unit" ? null : "unit")}
-          className="flex h-full w-full items-center justify-center gap-2 rounded-lg border border-black bg-surface-panel px-3 font-black text-[#f8fafc] hover:border-black"
-        >
-          {range.unit}
-          <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-        </button>
-        {openPicker === "unit" ? (
-          <div className="absolute left-3 top-full z-50 mt-2 grid w-32 gap-1 rounded-lg border border-black bg-surface-card p-2 shadow-xl">
-            {(["dias", "semanas"] as TimeUnit[]).map((unit) => (
-              <button
-                key={unit}
-                type="button"
-                onClick={() => pickUnit(unit)}
-                className={`h-9 rounded-md px-3 text-left text-sm font-black hover:bg-[#34D399] hover:text-[#f8fafc] ${
-                  unit === range.unit
-                    ? "bg-[#34D399] text-[#f8fafc]"
-                    : "bg-surface-panel text-[#f8fafc]"
-                }`}
-              >
-                {unit}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </div>
+      ) : null}
+    </>
   );
 }
+
+type CountryContextMenu = {
+  name: string;
+  x: number;
+  y: number;
+};
 
 export default function ConfiguracionPage() {
   const router = useRouter();
@@ -426,17 +523,43 @@ export default function ConfiguracionPage() {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [countryQuery, setCountryQuery] = useState("");
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [countryContextMenu, setCountryContextMenu] = useState<CountryContextMenu | null>(null);
+  const [showCountryProductPicker, setShowCountryProductPicker] = useState(false);
+  const [countryProductQuery, setCountryProductQuery] = useState("");
   const {
     error: pricingError,
+    loaded: pricingLoaded,
     countries,
     setCountries,
+    catalogProducts,
     distributors,
     setDistributors,
     distributorPrices,
     setDistributorPrices,
     routeConfig,
     setRouteConfig,
+    reload: reloadPricing,
   } = usePricingBackend();
+  const countryFromUrl = searchParams.get("country");
+  const appliedCountryFromUrlRef = useRef<string | null>(null);
+  const impliedCountryFromUrl = useMemo(() => {
+    if (!countryFromUrl?.trim() || !pricingLoaded) {
+      return null;
+    }
+
+    const requestedCountry = countryFromUrl.trim();
+    const configured = findCountryByNormalizedName(requestedCountry, countries);
+    if (configured) {
+      return configured.name;
+    }
+
+    const option = findCountryByNormalizedName(requestedCountry, COUNTRY_OPTIONS);
+    return option?.name ?? null;
+  }, [countryFromUrl, countries, pricingLoaded]);
+  const activeCountry = selectedCountry ?? impliedCountryFromUrl;
+  const pendingCountryFromUrl = Boolean(
+    section === "prices" && countryFromUrl?.trim() && !pricingLoaded,
+  );
   const [selectedDistributor, setSelectedDistributor] = useState<string | null>(null);
   const [selectedDistributorCountry, setSelectedDistributorCountry] = useState<string | null>(null);
   const [showDistributorForm, setShowDistributorForm] = useState(false);
@@ -444,10 +567,37 @@ export default function ConfiguracionPage() {
   const [returnToInventory, setReturnToInventory] = useState(false);
   const [newDeliveryRange, setNewDeliveryRange] = useState({ start: "", end: "" });
   const [newPickupRange, setNewPickupRange] = useState({ start: "", end: "" });
-  const countryOptions = useMemo(() => getCountryOptions(), []);
+  const countryOptions = COUNTRY_OPTIONS;
+  const sortedCountries = useMemo(
+    () => [...countries].sort(compareCountriesByCatalogOrder),
+    [countries],
+  );
   const selectedCountryData = useMemo(
-    () => countries.find((country) => country.name === selectedCountry),
-    [countries, selectedCountry],
+    () => countries.find((country) => country.name === activeCountry),
+    [countries, activeCountry],
+  );
+  const assignedCountryCatalogKeys = useMemo(
+    () =>
+      new Set(
+        (selectedCountryData?.boxes || [])
+          .map((box) => box.catalogKey)
+          .filter((key): key is string => Boolean(key)),
+      ),
+    [selectedCountryData],
+  );
+  const availableCountryProducts = useMemo(
+    () =>
+      catalogProducts.filter((product) => !assignedCountryCatalogKeys.has(product.catalogKey)),
+    [assignedCountryCatalogKeys, catalogProducts],
+  );
+  const countryProductPickerOptions = useMemo(
+    () =>
+      availableCountryProducts.map((product) => ({
+        value: product.catalogKey,
+        label: product.label,
+        searchText: product.path,
+      })),
+    [availableCountryProducts],
   );
   const selectedDistributorData = useMemo(
     () => distributors.find((distributor) => distributor.name === selectedDistributor),
@@ -464,24 +614,138 @@ export default function ConfiguracionPage() {
         []
       : [];
   const filteredCountryOptions = useMemo(() => {
-    const existing = new Set(countries.map((country) => normalizeText(country.name)));
     const query = normalizeText(countryQuery.trim());
 
     return countryOptions
-      .filter((country) => !existing.has(normalizeText(country.name)))
+      .filter((country) => !isCountryAlreadyConfigured(country, countries))
       .filter((country) => normalizeText(country.name).includes(query));
   }, [countries, countryOptions, countryQuery]);
 
   const countryPickerSearchOptions = useMemo(() => {
-    const existing = new Set(countries.map((country) => normalizeText(country.name)));
-
     return countryOptions
-      .filter((country) => !existing.has(normalizeText(country.name)))
+      .filter((country) => !isCountryAlreadyConfigured(country, countries))
       .map((country) => ({
         value: country.code || country.name,
         label: country.name,
       }));
   }, [countries, countryOptions]);
+
+  useEffect(() => {
+    appliedCountryFromUrlRef.current = null;
+  }, [countryFromUrl]);
+
+  useLayoutEffect(() => {
+    if (section !== "prices" || !countryFromUrl?.trim() || !pricingLoaded) {
+      return;
+    }
+
+    const requestedCountry = countryFromUrl.trim();
+    if (appliedCountryFromUrlRef.current === requestedCountry) {
+      return;
+    }
+
+    const configured = findCountryByNormalizedName(requestedCountry, countries);
+    if (configured) {
+      setSelectedCountry(configured.name);
+      setShowCountryPicker(false);
+      appliedCountryFromUrlRef.current = requestedCountry;
+      return;
+    }
+
+    const option = findCountryByNormalizedName(requestedCountry, COUNTRY_OPTIONS);
+    if (option) {
+      setCountries((current) => {
+        const existing = findCountryByNormalizedName(requestedCountry, current);
+        if (existing) {
+          return current;
+        }
+
+        return [
+          ...current,
+          {
+            code: option.code,
+            name: option.name,
+            deliveryTime: "5-8 dias",
+            boxes: [],
+          },
+        ].sort(compareCountriesByCatalogOrder);
+      });
+      setSelectedCountry(option.name);
+      setShowCountryPicker(false);
+      appliedCountryFromUrlRef.current = requestedCountry;
+      return;
+    }
+
+    setCountryQuery(requestedCountry);
+    setShowCountryPicker(true);
+    appliedCountryFromUrlRef.current = requestedCountry;
+  }, [section, countryFromUrl, countries, pricingLoaded, setCountries]);
+
+  useEffect(() => {
+    if (
+      section === "prices" &&
+      !activeCountry &&
+      countries.length === 0 &&
+      !countryFromUrl?.trim()
+    ) {
+      queueMicrotask(() => setShowCountryPicker(true));
+    }
+  }, [section, activeCountry, countries.length, countryFromUrl]);
+
+  useEffect(() => {
+    if (section === "prices") {
+      return;
+    }
+
+    setSelectedCountry(null);
+    setCountryQuery("");
+    setShowCountryPicker(false);
+    setShowCountryProductPicker(false);
+    setCountryProductQuery("");
+    setCountryContextMenu(null);
+  }, [section]);
+
+  useEffect(() => {
+    if (section === "distributors") {
+      return;
+    }
+
+    setSelectedDistributor(null);
+    setSelectedDistributorCountry(null);
+    setShowDistributorForm(false);
+  }, [section]);
+
+  useEffect(() => {
+    if (!countryContextMenu) {
+      return;
+    }
+
+    const closeMenuOnPointerDown = (event: Event) => {
+      if (event instanceof PointerEvent && event.button === 2) {
+        return;
+      }
+
+      const target = event.target;
+
+      if (target instanceof Element && target.closest("[data-country-context-menu]")) {
+        return;
+      }
+
+      setCountryContextMenu(null);
+    };
+
+    const closeMenuOnScroll = () => {
+      setCountryContextMenu(null);
+    };
+
+    window.addEventListener("pointerdown", closeMenuOnPointerDown);
+    window.addEventListener("scroll", closeMenuOnScroll, true);
+
+    return () => {
+      window.removeEventListener("pointerdown", closeMenuOnPointerDown);
+      window.removeEventListener("scroll", closeMenuOnScroll, true);
+    };
+  }, [countryContextMenu]);
 
   const openConfigSection = useCallback((nextSection: Section) => {
     if (nextSection === "menu") {
@@ -545,16 +809,75 @@ export default function ConfiguracionPage() {
     router.replace("/configuracion?view=inventory&inventory=categories", { scroll: false });
   }, [router]);
 
-  function addCountry(country: CountryOption) {
-    setCountries((current) => [
-      ...current,
-      {
-        code: country.code,
-        name: country.name,
-        deliveryTime: "",
-        boxes: [],
+  function openCountryContextMenu(
+    event: MouseEvent<HTMLElement> | ReactPointerEvent<HTMLElement>,
+    countryName: string,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    setCountryContextMenu({
+      name: countryName,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
+
+  function countryContextMenuProps(countryName: string) {
+    return {
+      onContextMenu: (event: MouseEvent<HTMLElement>) =>
+        openCountryContextMenu(event, countryName),
+      onPointerDown: (event: ReactPointerEvent<HTMLElement>) => {
+        if (event.button !== 2) {
+          return;
+        }
+
+        openCountryContextMenu(event, countryName);
       },
-    ]);
+    };
+  }
+
+  function removeCountry(countryName: string) {
+    setCountries((current) => current.filter((country) => country.name !== countryName));
+    setDistributorPrices((current) => {
+      const next: typeof current = {};
+
+      for (const [distributor, pricesByCountry] of Object.entries(current)) {
+        const { [countryName]: _removed, ...rest } = pricesByCountry;
+        next[distributor] = rest;
+      }
+
+      return next;
+    });
+
+    if (selectedCountry === countryName) {
+      setSelectedCountry(null);
+    }
+
+    if (selectedDistributorCountry === countryName) {
+      setSelectedDistributorCountry(null);
+    }
+
+    setCountryContextMenu(null);
+  }
+
+  function openConfiguredCountry(countryName: string) {
+    setCountryQuery("");
+    setShowCountryPicker(false);
+    setSelectedCountry(countryName);
+  }
+
+  function addCountry(country: CountryOption) {
+    setCountries((current) =>
+      [
+        ...current,
+        {
+          code: country.code,
+          name: country.name,
+          deliveryTime: "5-8 dias",
+          boxes: [],
+        },
+      ].sort(compareCountriesByCatalogOrder),
+    );
     setCountryQuery("");
     setShowCountryPicker(false);
     setSelectedCountry(country.name);
@@ -572,7 +895,7 @@ export default function ConfiguracionPage() {
     );
   }
 
-  function updateCountryBoxPrice(size: string, rawPrice: string) {
+  function updateCountryBoxPrice(catalogKey: string, rawPrice: string) {
     if (!selectedCountry) {
       return;
     }
@@ -586,11 +909,31 @@ export default function ConfiguracionPage() {
           ? {
               ...country,
               boxes: country.boxes.map((box) =>
-                box.size === size ? { ...box, price } : box,
+                (box.catalogKey || box.size) === catalogKey ? { ...box, price } : box,
               ),
             }
           : country,
       ),
+    );
+  }
+
+  function addCountryProduct(product: InventoryCatalogProduct) {
+    if (!selectedCountry) {
+      return;
+    }
+
+    setCountries((current) => addProductToCountry(current, selectedCountry, product));
+    setCountryProductQuery("");
+    setShowCountryProductPicker(false);
+  }
+
+  function removeCountryProduct(catalogKey: string) {
+    if (!selectedCountry) {
+      return;
+    }
+
+    setCountries((current) =>
+      removeProductFromCountry(current, selectedCountry, catalogKey),
     );
   }
 
@@ -606,7 +949,7 @@ export default function ConfiguracionPage() {
       {
         name,
         contact: newDistributor.contact.trim() || "Sin contacto",
-        phone: newDistributor.phone.trim() || "Sin telefono",
+        phone: newDistributor.phone.trim() || "Sin teléfono",
         active: true,
       },
     ]);
@@ -670,20 +1013,25 @@ export default function ConfiguracionPage() {
       return;
     }
 
-    if (selectedCountry) {
+    if (activeCountry) {
+      if (countryFromUrl?.trim()) {
+        router.replace("/configuracion?view=prices", { scroll: false });
+        appliedCountryFromUrlRef.current = null;
+      }
       setSelectedCountry(null);
       return;
     }
 
     openConfigSection("menu");
   }, [
+    activeCountry,
+    countryFromUrl,
     inventoryConfigSection,
     openConfigSection,
     openInventoryConfigSection,
     returnToInventory,
     router,
     section,
-    selectedCountry,
     selectedDistributor,
     selectedDistributorCountry,
   ]);
@@ -703,18 +1051,18 @@ export default function ConfiguracionPage() {
       }
 
       if (inventoryConfigSection === "categories") {
-        return "Categorias e items";
+        return "Categorías e ítems";
       }
 
       return "Inventario";
     }
 
     if (section === "prices") {
-      if (selectedCountry) {
-        return `${selectedCountry} - tiempos y cajas`;
+      if (activeCountry) {
+        return `${activeCountry} · tiempos y productos`;
       }
 
-      return "Paises y precios";
+      return "Países y precios";
     }
 
     if (section === "distributors") {
@@ -723,10 +1071,10 @@ export default function ConfiguracionPage() {
       }
 
       if (selectedDistributor) {
-        return `Editando precios para ${selectedDistributorData?.name || selectedDistributor}`;
+        return `Precios de ${selectedDistributorData?.name || selectedDistributor}`;
       }
 
-      return "Distribuidores globales";
+      return "Distribuidores";
     }
 
     if (section === "deliveries") {
@@ -745,23 +1093,26 @@ export default function ConfiguracionPage() {
       return "Usuarios";
     }
 
-    return "Configuracion";
+    return "Configuración";
   }, [
+    activeCountry,
     inventoryConfigSection,
     section,
-    selectedCountry,
     selectedDistributor,
     selectedDistributorCountry,
     selectedDistributorData?.name,
   ]);
 
   useContextNav({
-    title: configNavTitle ?? "Configuracion",
+    title: configNavTitle ?? "Configuración",
     onBack: goBack,
     enabled: Boolean(configNavTitle),
   });
 
   const showSidebarNav = section !== "menu";
+  const nestedPanelShell = showSidebarNav
+    ? { className: "border-0 bg-transparent shadow-none", contentClassName: "p-0" }
+    : {};
 
   function toggleRouteDay(key: "deliveryDays" | "pickupDays", day: string) {
     setRouteConfig((current) => {
@@ -804,132 +1155,202 @@ export default function ConfiguracionPage() {
 
   return (
     <>
+      {pricingError && section !== "menu" ? (
+        <p className="mb-4 rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
+          {pricingError}
+        </p>
+      ) : null}
+
       {section === "menu" ? (
-        <Panel title="Configuracion" hideHeader>
-          <div className="mb-4 min-w-0">
-            <p className="text-xs font-black uppercase text-slate-400">Sistema</p>
-            <h3 className="truncate text-2xl font-black">Configuracion</h3>
-            {pricingError ? (
-              <p className="mt-2 rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
-                {pricingError}
-              </p>
-            ) : null}
-          </div>
+        <>
+          {pricingError ? (
+            <p className="mb-4 rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
+              {pricingError}
+            </p>
+          ) : null}
 
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
-            {sections.map((item) => {
-              const Icon = item.icon;
-
-              return (
-                <Link
-                  key={item.id}
-                  href={`/configuracion?view=${item.id}`}
-                  className="flex min-w-0 items-center gap-3 rounded-lg border border-black bg-surface-card p-4 text-left shadow-sm transition hover:border-black"
-                >
-                  <span
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-950 ${item.color}`}
-                  >
-                    <Icon className="h-6 w-6" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block break-words text-xl font-black leading-tight">
-                      {item.title}
-                    </span>
-                    <span className="mt-1 block break-words text-sm font-bold leading-snug text-slate-300">
-                      {item.text}
-                    </span>
-                  </span>
-                </Link>
-              );
-            })}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
+            {sections.map((item) => (
+              <ConfigNavCard
+                key={item.id}
+                href={`/configuracion?view=${item.id}`}
+                title={item.title}
+                text={item.text}
+                icon={item.icon}
+              />
+            ))}
           </div>
-        </Panel>
+        </>
       ) : null}
 
       {section === "plan" ? (
-        <Panel title="Plan" hideHeader={showSidebarNav}>
+        <Panel title="Plan" hideHeader={showSidebarNav} {...nestedPanelShell}>
           <PlanSettingsPanel />
         </Panel>
       ) : null}
 
-      {section === "prices" && !selectedCountry ? (
-        <Panel title="Paises y precios" hideHeader={showSidebarNav}>
-          <div className="mb-5 grid gap-3">
-            <button
-              onClick={() => setShowCountryPicker((current) => !current)}
-              className="flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-[#34D399] px-6 text-lg font-black text-[#f8fafc] sm:w-fit"
-            >
-              <Plus className="h-6 w-6" />
-              Crear pais
-            </button>
-            {showCountryPicker ? (
-              <div className="rounded-xl border border-black bg-surface-card p-4">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-xl font-black">Elegir pais</p>
-                  <button
-                    onClick={() => {
-                      setCountryQuery("");
-                      setShowCountryPicker(false);
-                    }}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-black border-black"
-                    aria-label="Cerrar"
-                    title="Cerrar"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-                <InlineSearchCombobox
-                  value={countryQuery}
-                  onChange={setCountryQuery}
-                  options={countryPickerSearchOptions}
-                  placeholder="Buscar pais"
-                  emptyLabel="Sin países"
-                  ariaLabel="Buscar país"
-                  leadingIcon={<Search className="h-4 w-4" aria-hidden />}
-                  className="mb-4 w-full"
-                  minWidthClass="w-full min-w-0"
-                  onSelectOption={(option) => {
-                    const country = countryOptions.find(
-                      (entry) => (entry.code || entry.name) === option.value,
-                    );
+      {section === "prices" && !activeCountry && !pendingCountryFromUrl ? (
+        <Panel
+          title="Países y precios"
+          hideHeader={showSidebarNav}
+          className={
+            showCountryPicker || countries.length === 0
+              ? `${nestedPanelShell.className ?? ""} flex min-h-[calc(100dvh-8.5rem)] flex-col`.trim()
+              : nestedPanelShell.className
+          }
+          contentClassName={
+            showCountryPicker || countries.length === 0
+              ? "flex min-h-0 flex-1 flex-col p-0"
+              : nestedPanelShell.contentClassName
+          }
+        >
+          <div
+            className={`flex min-h-0 flex-1 flex-col ${
+              countries.length > 0 && !showCountryPicker ? "gap-4" : "gap-0"
+            }`}
+          >
+            {countries.length > 0 && !showCountryPicker ? (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowCountryPicker(true)}
+                  className={flowToolbarCreateButtonClass}
+                >
+                  <Plus className="h-4 w-4" />
+                  Agregar país
+                </button>
+              </div>
+            ) : null}
 
-                    if (country) {
-                      addCountry(country);
-                    }
-                  }}
-                />
-                <div className="grid max-h-96 gap-2 overflow-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
-                  {filteredCountryOptions.map((country) => (
+            {showCountryPicker || countries.length === 0 ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black bg-[#1a221f] shadow-[0_8px_24px_rgba(0,0,0,0.22)]">
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-black/80 bg-[#1c2622] px-3 py-2.5 sm:px-4">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className={`h-9 w-9 shrink-0 ${iconWellEmerald}`}>
+                      <Globe2 className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-black uppercase tracking-wide text-[#f8fafc]">
+                        Elegir país
+                      </p>
+                      <p className="text-xs font-bold text-slate-400">
+                        {filteredCountryOptions.length
+                          ? `${filteredCountryOptions.length} disponibles`
+                          : "Sin coincidencias"}
+                      </p>
+                    </div>
+                  </div>
+                  {countries.length > 0 ? (
                     <button
-                      key={country.code || country.name}
-                      onClick={() => addCountry(country)}
-                      className="flex items-center gap-3 rounded-lg border border-black bg-surface-panel px-4 py-3 text-left text-lg font-black hover:border-black hover:bg-surface-card"
+                      type="button"
+                      onClick={() => {
+                        setCountryQuery("");
+                        setShowCountryPicker(false);
+                      }}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300 transition hover:bg-surface-card hover:text-[#f8fafc]"
+                      aria-label="Cerrar"
+                      title="Cerrar"
                     >
-                      <CountryFlag code={country.code} />
-                      <span>{country.name}</span>
+                      <X className="h-4 w-4" />
                     </button>
-                  ))}
-                  {!filteredCountryOptions.length ? (
-                    <div className="rounded-lg border border-black bg-surface-panel px-4 py-3 text-lg font-black border-black bg-surface-panel">
-                      Sin resultados
+                  ) : null}
+                </div>
+
+                <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 sm:p-4">
+                  {sortedCountries.length > 0 ? (
+                    <div className="shrink-0">
+                      <p className="mb-2 text-xs font-black uppercase text-slate-400">
+                        Configurados
+                      </p>
+                      <div className="grid auto-rows-min grid-cols-2 items-start gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                        {sortedCountries.map((country) => (
+                          <button
+                            key={country.name}
+                            type="button"
+                            onClick={() => openConfiguredCountry(country.name)}
+                            {...countryContextMenuProps(country.name)}
+                            className="flex h-full min-h-[6.5rem] w-full cursor-context-menu flex-col items-center justify-center gap-2 rounded-xl border border-emerald-600 bg-emerald-950/25 px-3 py-4 text-center transition hover:bg-emerald-950/40"
+                          >
+                            <CountryFlag code={resolveCountryCode(country)} size="md" />
+                            <span className="line-clamp-2 min-w-0 text-sm font-black leading-snug text-[#f8fafc]">
+                              {country.name}
+                            </span>
+                            <span className="text-[10px] font-black uppercase tracking-wide text-emerald-300">
+                              Configurado
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ) : null}
+
+                  <div className="shrink-0">
+                    <InlineSearchCombobox
+                      value={countryQuery}
+                      onChange={setCountryQuery}
+                      options={countryPickerSearchOptions}
+                      placeholder="Buscar por nombre…"
+                      emptyLabel="Sin países"
+                      ariaLabel="Buscar país"
+                      leadingIcon={<Search className="h-4 w-4" aria-hidden />}
+                      className="w-full"
+                      minWidthClass="w-full min-w-0"
+                      onSelectOption={(option) => {
+                        const country = countryOptions.find(
+                          (entry) => (entry.code || entry.name) === option.value,
+                        );
+
+                        if (country) {
+                          addCountry(country);
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-0.5">
+                    {filteredCountryOptions.length > 0 ? (
+                      <p className="text-xs font-black uppercase text-slate-400">Agregar país</p>
+                    ) : null}
+                    {filteredCountryOptions.length > 0 ? (
+                      <div className="grid auto-rows-min grid-cols-2 items-start gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                        {filteredCountryOptions.map((country) => (
+                          <button
+                            key={country.code || country.name}
+                            type="button"
+                            onClick={() => addCountry(country)}
+                            className="flex h-full min-h-[6.5rem] w-full flex-col items-center justify-center gap-2.5 rounded-xl border border-black bg-[#3a4842] px-3 py-4 text-center transition hover:bg-[#425048]"
+                          >
+                            <CountryFlag code={resolveCountryCode(country)} size="md" />
+                            <span className="line-clamp-2 min-w-0 text-sm font-black leading-snug text-[#f8fafc]">
+                              {country.name}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex min-h-[5rem] items-center justify-center rounded-xl border border-dashed border-white/12 bg-surface-inset/40 px-4 text-center text-sm font-bold text-slate-400">
+                        {countryQuery.trim()
+                          ? "No hay países con ese nombre"
+                          : "Ya agregaste todos los países disponibles"}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : null}
-          </div>
 
-          {!showCountryPicker ? (
+            {!showCountryPicker && countries.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-              {countries.map((country) => (
+              {sortedCountries.map((country) => (
                 <button
                   key={country.name}
                   onClick={() => setSelectedCountry(country.name)}
-                  className="group relative min-h-40 overflow-hidden rounded-xl border border-black bg-surface-panel p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-black hover:shadow-lg border-black bg-surface-card hover:border-black"
+                  {...countryContextMenuProps(country.name)}
+                  className="group relative min-h-40 cursor-context-menu overflow-hidden rounded-xl border border-black bg-surface-card p-5 text-left shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition hover:border-emerald-700/35 hover:bg-surface-card-hover"
                 >
                   <div className="relative flex h-full items-center justify-between gap-5">
                     <div className="flex min-w-0 items-center gap-4">
-                      <CountryFlag code={country.code} large />
+                      <CountryFlag code={resolveCountryCode(country)} size="lg" />
                       <span className="min-w-0">
                         <span className="block truncate text-3xl font-black leading-tight">
                           {country.name}
@@ -937,11 +1358,12 @@ export default function ConfiguracionPage() {
                         <span className="mt-3 flex flex-wrap gap-2">
                           <span className="inline-flex h-9 items-center gap-2 rounded-full border border-black bg-surface-panel px-3 text-sm font-black text-slate-300">
                             <Box className="h-4 w-4 text-slate-400" />
-                            {country.boxes.length} productos
+                            {country.boxes.length}{" "}
+                            {country.boxes.length === 1 ? "producto" : "productos"}
                           </span>
                           <span className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-600 bg-emerald-400 text-slate-950 px-3 text-sm font-black">
                             <Clock className="h-4 w-4" />
-                            {country.deliveryTime}
+                            {country.deliveryTime || "5-8 dias"}
                           </span>
                         </span>
                       </span>
@@ -953,77 +1375,207 @@ export default function ConfiguracionPage() {
                 </button>
               ))}
             </div>
-          ) : null}
+            ) : null}
+          </div>
         </Panel>
       ) : null}
 
-      {section === "prices" && selectedCountry ? (
+      {section === "prices" && activeCountry ? (
         <Panel
           hideHeader={showSidebarNav}
+          {...nestedPanelShell}
+          clipContent={false}
           title={
             <span className="flex items-center gap-3">
-              <CountryFlag code={selectedCountryData?.code || ""} />
-              <span>{selectedCountry} - tiempos y cajas</span>
+              <CountryFlag code={resolveCountryCode(selectedCountryData || { code: "", name: activeCountry || "" })} />
+              <span>{activeCountry} · tiempos y productos</span>
             </span>
           }
         >
-          <div className="mb-5 flex w-fit max-w-full flex-wrap items-center gap-3">
-            <span className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-600 bg-emerald-400 text-slate-950 px-3 text-sm font-black uppercase">
-              <Clock className="h-4 w-4" />
-              Tiempo
-            </span>
+          <div className="mb-6 w-fit max-w-full rounded-xl border border-black bg-surface-card p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className={`h-9 w-9 shrink-0 ${iconWellEmerald}`}>
+                <Clock className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-sm font-black text-[#f8fafc]">Tiempo de entrega</p>
+                <p className="text-xs font-bold text-slate-400">Rango estimado al destino</p>
+              </div>
+            </div>
             <TimeRangeSelect
               value={selectedCountryData?.deliveryTime || "5-8 dias"}
               onChange={updateCountryTime}
             />
           </div>
 
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-4">
-            {(selectedCountryData?.boxes || []).map((box) => (
-              <div
-                key={box.size}
-                className="relative overflow-hidden rounded-lg border border-black bg-surface-card p-4 shadow-[0_14px_34px_rgba(0,0,0,0.34)]"
-              >
-                <div className="mb-3 flex items-center gap-3">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card-header text-slate-400">
-                    <Box className="h-7 w-7" />
-                  </span>
-                  <span className="text-sm font-black uppercase text-slate-400 text-slate-400">
-                    Caja
-                  </span>
+          {(selectedCountryData?.boxes || []).length > 0 ? (
+            <>
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-black text-[#f8fafc]">Productos asignados</h3>
+                  <p className="mt-1 text-xs font-bold text-slate-400">
+                    Elige qué ítems del catálogo vendes a este destino. El precio es por
+                    país.
+                  </p>
                 </div>
-                <p className="mb-5 whitespace-nowrap text-center text-2xl font-black leading-tight text-slate-300">
-                  {box.size}
-                </p>
-
-                <label className="flex h-14 items-center justify-between gap-2 rounded-xl border border-black bg-surface-panel px-3">
-                  <span className="text-sm font-black uppercase text-slate-400 text-slate-400">
-                    Precio publico
-                  </span>
-                  <span className="flex h-10 w-28 items-center justify-center gap-1 text-slate-400">
-                    <DollarSign className="h-5 w-5 shrink-0" />
-                    <input
-                      className="h-10 w-20 rounded-none border-0 bg-transparent px-0 text-center text-2xl font-black leading-10 text-[#f8fafc] outline-none focus:ring-0"
-                      style={{ background: "transparent" }}
-                      value={box.price.replace("$", "")}
-                      onChange={(event) =>
-                        updateCountryBoxPrice(box.size, event.target.value)
-                      }
-                    />
-                  </span>
-                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void reloadPricing();
+                    setShowCountryProductPicker(true);
+                  }}
+                  className={primaryButtonClass}
+                >
+                  <Plus className="h-4 w-4" />
+                  Agregar producto
+                </button>
               </div>
-            ))}
-          </div>
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-4">
+                {(selectedCountryData?.boxes || []).map((box) => {
+                  const boxKey = box.catalogKey || box.size;
+
+                  return (
+                  <div
+                    key={boxKey}
+                    className="relative overflow-hidden rounded-lg border border-black bg-surface-card p-4 shadow-[0_14px_34px_rgba(0,0,0,0.34)]"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => removeCountryProduct(boxKey)}
+                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-rose-400/10 hover:text-rose-300"
+                      aria-label={`Quitar ${box.size}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                    <div className="mb-3 flex items-center gap-3">
+                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card-header text-slate-400">
+                        <Box className="h-7 w-7" />
+                      </span>
+                      <span className="text-sm font-black uppercase text-slate-400 text-slate-400">
+                        Producto
+                      </span>
+                    </div>
+                    <p className="mb-5 whitespace-nowrap text-center text-2xl font-black leading-tight text-slate-300">
+                      {box.size}
+                    </p>
+
+                    <label className="flex h-14 items-center justify-between gap-2 rounded-xl border border-black bg-surface-panel px-3">
+                      <span className="text-sm font-black uppercase text-slate-400">
+                        Precio público
+                      </span>
+                      <span className="flex h-10 w-28 items-center justify-center gap-1 text-slate-400">
+                        <DollarSign className="h-5 w-5 shrink-0" />
+                        <input
+                          className="h-10 w-20 rounded-none border-0 bg-transparent px-0 text-center text-2xl font-black leading-10 text-[#f8fafc] outline-none focus:ring-0"
+                          style={{ background: "transparent" }}
+                          value={box.price.replace("$", "")}
+                          onChange={(event) =>
+                            updateCountryBoxPrice(boxKey, event.target.value)
+                          }
+                        />
+                      </span>
+                    </label>
+                  </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <section className="rounded-xl border border-dashed border-slate-600/60 p-5">
+              <div className="mx-auto flex max-w-xl flex-col items-center text-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-400">
+                  <Box className="h-7 w-7" />
+                </span>
+                <h3 className="mt-4 text-xl font-black text-[#f8fafc]">
+                  Aún no hay productos para {activeCountry}.
+                </h3>
+                <p className="mt-2 text-sm font-bold text-slate-400">
+                  Asigna productos del catálogo que quieras vender a este país.
+                </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void reloadPricing();
+                      setShowCountryProductPicker(true);
+                    }}
+                    className={primaryButtonClass}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Agregar producto
+                  </button>
+                  <Link href="/inventario" className={secondaryButtonClass}>
+                    Ir a Inventario
+                  </Link>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {showCountryProductPicker ? (
+            <div className="mt-5 rounded-xl border border-black bg-surface-card p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-black text-[#f8fafc]">Agregar producto</h4>
+                  <p className="text-xs font-bold text-slate-400">
+                    Elige un ítem del catálogo de inventario.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCountryProductPicker(false);
+                    setCountryProductQuery("");
+                  }}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-surface-card-hover hover:text-[#f8fafc]"
+                  aria-label="Cerrar selector"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {countryProductPickerOptions.length ? (
+                <InlineSearchPicker
+                  options={countryProductPickerOptions}
+                  value={countryProductQuery}
+                  onChange={setCountryProductQuery}
+                  placeholder="Buscar producto…"
+                  searchPlaceholder="Buscar por nombre o categoría…"
+                  emptyLabel="No hay más productos disponibles"
+                  minWidthClass="w-full"
+                  className="w-full"
+                  onSelectOption={(option) => {
+                    const product = availableCountryProducts.find(
+                      (entry) => entry.catalogKey === option.value,
+                    );
+
+                    if (product) {
+                      addCountryProduct(product);
+                    }
+                  }}
+                  formatSelectedLabel={(option, placeholder) =>
+                    option?.searchText ? `${option.label} · ${option.searchText}` : placeholder
+                  }
+                />
+              ) : (
+                <p className="text-sm font-bold text-slate-400">
+                  No hay productos en el catálogo. Créalos en{" "}
+                  <Link href="/inventario" className="text-emerald-400 hover:underline">
+                    Inventario
+                  </Link>{" "}
+                  y vuelve aquí.
+                </p>
+              )}
+            </div>
+          ) : null}
         </Panel>
       ) : null}
 
       {section === "distributors" && !selectedDistributor ? (
-        <Panel title="Distribuidores globales" hideHeader={showSidebarNav}>
+        <Panel title="Distribuidores" hideHeader={showSidebarNav} {...nestedPanelShell}>
           <div className="mb-5 grid gap-3">
             <button
               onClick={() => setShowDistributorForm((current) => !current)}
-              className="flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-6 text-lg font-black text-[#f8fafc] sm:w-fit"
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-5 text-sm font-black text-slate-950 sm:w-fit"
             >
               <Plus className="h-6 w-6" />
               Crear distribuidor
@@ -1035,7 +1587,7 @@ export default function ConfiguracionPage() {
                   {[
                     ["Nombre", "name", "Ej: MGS"],
                     ["Contacto", "contact", "Ej: Operaciones"],
-                    ["Telefono", "phone", "Ej: (305) 000-0000"],
+                    ["Teléfono", "phone", "Ej: (305) 000-0000"],
                   ].map(([label, key, placeholder]) => (
                     <label key={key} className="grid gap-2">
                       <span className="text-sm font-black uppercase text-slate-400 text-slate-400">
@@ -1058,7 +1610,7 @@ export default function ConfiguracionPage() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     onClick={addDistributor}
-                    className="h-11 rounded-lg bg-[#34D399] px-5 font-black text-[#f8fafc]"
+                    className={primaryButtonClass}
                   >
                     Guardar
                   </button>
@@ -1091,7 +1643,7 @@ export default function ConfiguracionPage() {
                 className="relative overflow-hidden rounded-lg border border-black bg-surface-card p-5 shadow-[0_14px_34px_rgba(0,0,0,0.34)] transition hover:bg-surface-card-hover"
               >
                 <div className="flex items-start justify-between gap-4">
-                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950 text-slate-400">
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950">
                     <Truck className="h-8 w-8" />
                   </span>
                   <button
@@ -1105,7 +1657,7 @@ export default function ConfiguracionPage() {
                         : "bg-surface-inset text-slate-300"
                     }`}
                   >
-                    {distributor.active ? "Activo" : "Apagado"}
+                    {distributor.active ? "Activo" : "Inactivo"}
                   </button>
                 </div>
                 <p className="mt-5 text-3xl font-black leading-tight">{distributor.name}</p>
@@ -1125,15 +1677,16 @@ export default function ConfiguracionPage() {
       {section === "distributors" && selectedDistributor && !selectedDistributorCountry ? (
         <Panel
           hideHeader={showSidebarNav}
+          {...nestedPanelShell}
           title={
             <span className="flex flex-wrap items-center gap-3">
               <Truck className="h-7 w-7 text-slate-400" />
-              <span>Editando precios para {selectedDistributorData?.name}</span>
+              <span>Editando precios de {selectedDistributorData?.name}</span>
             </span>
           }
         >
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {countries.map((country) => (
+            {sortedCountries.map((country) => (
               <button
                 key={country.name}
                 onClick={() => setSelectedDistributorCountry(country.name)}
@@ -1141,7 +1694,7 @@ export default function ConfiguracionPage() {
               >
                 <div className="relative flex h-full items-center justify-between gap-5">
                   <div className="flex min-w-0 items-center gap-4">
-                    <CountryFlag code={country.code} large />
+                    <CountryFlag code={resolveCountryCode(country)} size="lg" />
                     <span className="min-w-0">
                       <span className="block truncate text-3xl font-black leading-tight">
                         {country.name}
@@ -1149,7 +1702,8 @@ export default function ConfiguracionPage() {
                       <span className="mt-3 flex flex-wrap gap-2">
                         <span className="inline-flex h-9 items-center gap-2 rounded-full border border-black bg-surface-panel px-3 text-sm font-black text-slate-300">
                           <Box className="h-4 w-4 text-slate-400" />
-                          {country.boxes.length} productos
+                          {country.boxes.length}{" "}
+                          {country.boxes.length === 1 ? "producto" : "productos"}
                         </span>
                         <span className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-600 bg-emerald-400 text-slate-950 px-3 text-sm font-black">
                           Editar precios
@@ -1170,6 +1724,7 @@ export default function ConfiguracionPage() {
       {section === "distributors" && selectedDistributor && selectedDistributorCountry ? (
         <Panel
           hideHeader={showSidebarNav}
+          {...nestedPanelShell}
           title={
             <span className="flex flex-wrap items-center gap-3">
               <Truck className="h-7 w-7 text-slate-400" />
@@ -1209,7 +1764,7 @@ export default function ConfiguracionPage() {
                   <div className="grid gap-3">
                     <div className="flex h-14 items-center justify-between gap-4 rounded-xl border border-black bg-surface-panel px-4">
                       <span className="text-sm font-black uppercase text-slate-400 text-slate-400">
-                        Publico general
+                        Público general
                       </span>
                       <span className="flex h-10 w-28 items-center justify-center gap-1 text-[#f8fafc]">
                         <DollarSign className="h-5 w-5 shrink-0" />
@@ -1258,50 +1813,30 @@ export default function ConfiguracionPage() {
       {section === "inventory" ? (
         <Panel
           hideHeader={showSidebarNav}
+          {...nestedPanelShell}
           title={
             inventoryConfigSection === "menu"
               ? "Inventario"
               : inventoryConfigSection === "warehouses"
                 ? "Bodegas"
-                : "Categorias e items"
+                : "Categorías e ítems"
           }
         >
           {inventoryConfigSection === "menu" ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,340px))] justify-start gap-4">
-              <a
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
+              <ConfigNavCard
                 href="/configuracion?view=inventory&inventory=categories"
-                className="group flex min-w-0 flex-col rounded-xl border border-black bg-surface-card p-5 text-left shadow-sm transition hover:border-black"
-              >
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950">
-                  <Box className="h-7 w-7" />
-                </span>
-                <span className="mt-5 block break-words text-2xl font-black leading-snug sm:text-3xl">
-                  Categorias e items
-                </span>
-                <span className="mt-2 block break-words text-base font-bold leading-snug text-slate-300">
-                  Subcategorias y objetos del inventario.
-                </span>
-                <span className="mt-5 flex flex-wrap gap-2">
-                  <span className="rounded-lg border border-black bg-surface-panel px-3 py-2 text-sm font-black text-slate-400">
-                    Estructura por bodega
-                  </span>
-                </span>
-              </a>
-
-              <Link
+                title="Categorías e ítems"
+                text="Categorías, subcategorías e ítems del catálogo compartido."
+                icon={Box}
+                badge="Catálogo compartido"
+              />
+              <ConfigNavCard
                 href="/configuracion?view=inventory&inventory=warehouses"
-                className="group flex min-w-0 flex-col rounded-xl border border-black bg-surface-card p-5 text-left shadow-sm transition hover:border-black"
-              >
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-emerald-600 bg-emerald-400 text-slate-950">
-                  <Building2 className="h-7 w-7" />
-                </span>
-                <span className="mt-5 block break-words text-2xl font-black leading-snug sm:text-3xl">
-                  Bodegas
-                </span>
-                <span className="mt-2 block break-words text-base font-bold leading-snug text-slate-300">
-                  Multiples bodegas, copiar catalogo y desactivar.
-                </span>
-              </Link>
+                title="Bodegas"
+                text="Crear bodegas, copiar catálogo y desactivar sucursales."
+                icon={Building2}
+              />
             </div>
           ) : null}
 
@@ -1312,20 +1847,20 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {section === "deliveries" ? (
-        <Panel title="Rutas y horarios" hideHeader={showSidebarNav}>
+        <Panel title="Rutas y horarios" hideHeader={showSidebarNav} {...nestedPanelShell}>
           <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
             {[
               {
-                title: "Entrega de caja vacia",
-                text: "Horarios para llevar caja al cliente.",
+                title: "Entrega de caja vacía",
+                text: "Horarios para llevar la caja al cliente.",
                 daysKey: "deliveryDays" as const,
                 rangesKey: "deliveryRanges" as const,
                 newRange: newDeliveryRange,
                 setNewRange: setNewDeliveryRange,
               },
               {
-                title: "Recoleccion de caja llena",
-                text: "Horarios para recoger caja en domicilio.",
+                title: "Recolección de caja llena",
+                text: "Horarios para recoger la caja en domicilio.",
                 daysKey: "pickupDays" as const,
                 rangesKey: "pickupRanges" as const,
                 newRange: newPickupRange,
@@ -1353,7 +1888,7 @@ export default function ConfiguracionPage() {
                 <div className="grid gap-4">
                   <div>
                     <p className="mb-2 text-xs font-black uppercase text-slate-400">
-                      Dias de ruta
+                      Días de ruta
                     </p>
                     <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
                       {weekDays.map((day) => {
@@ -1443,7 +1978,7 @@ export default function ConfiguracionPage() {
                 <span>
                   <span className="block text-xl font-black">Reglas generales</span>
                   <span className="mt-1 block text-sm font-bold text-slate-300">
-                    Opciones que usan entrega y recoleccion.
+                    Opciones que aplican a entrega y recolección.
                   </span>
                 </span>
               </div>
@@ -1451,7 +1986,7 @@ export default function ConfiguracionPage() {
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="grid gap-2">
                   <span className="text-xs font-black uppercase text-slate-400">
-                    Anticipacion minima
+                    Anticipación mínima
                   </span>
                   <InlineSearchPicker
                     compact={false}
@@ -1505,23 +2040,47 @@ export default function ConfiguracionPage() {
       ) : null}
 
       {section === "appearance" ? (
-        <Panel title="Apariencia" hideHeader={showSidebarNav}>
-          <div className="rounded-xl border border-black bg-surface-panel p-5 shadow-sm">
-            <p className="text-xl font-black">Tema unico</p>
+        <Panel title="Apariencia" hideHeader={showSidebarNav} {...nestedPanelShell}>
+          <div className="rounded-xl border border-black bg-surface-card p-5 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
+            <p className="text-xl font-black">Tema único</p>
             <p className="mt-2 font-bold text-slate-400">
-              Una sola paleta activa para todo el sistema.
+              Una sola paleta activa para toda la aplicación.
             </p>
           </div>
         </Panel>
       ) : null}
 
       {section === "company" ? (
-        <Panel title="Empresa" hideHeader={showSidebarNav}>
+        <Panel title="Empresa" hideHeader={showSidebarNav} {...nestedPanelShell}>
           <CompanySettingsPanel />
         </Panel>
       ) : null}
 
       {section === "users" ? <UsersSettingsPanel /> : null}
+
+      {countryContextMenu ? (
+        <div
+          role="menu"
+          data-country-context-menu
+          className="fixed z-50 w-52 overflow-hidden rounded-lg border border-black bg-surface-card shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+          style={{ left: countryContextMenu.x, top: countryContextMenu.y }}
+          onContextMenu={(event) => event.preventDefault()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="border-b border-black px-3 py-2">
+            <p className="truncate text-sm font-black text-[#f8fafc]">{countryContextMenu.name}</p>
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-black text-rose-200 hover:bg-[#3A1818]"
+            onClick={() => removeCountry(countryContextMenu.name)}
+          >
+            <Trash2 className="h-4 w-4" />
+            Eliminar país
+          </button>
+        </div>
+      ) : null}
     </>
   );
 }

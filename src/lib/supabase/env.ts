@@ -1,29 +1,37 @@
-export function isSupabaseConfigured() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
+function supabaseUrl() {
+  return process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 }
 
-/** Supabase CLI en Docker (127.0.0.1), no el proyecto en supabase.co */
-export function isLocalSupabase() {
-  const mode = process.env.DATABASE_MODE?.trim().toLowerCase();
-  if (mode === "local") {
-    return true;
+function assertLocalOnly() {
+  const url = supabaseUrl();
+  if (url.includes("supabase.co")) {
+    throw new Error(
+      "Boxario solo corre con Supabase local. Ejecuta npm run env:local y npm run supabase:start.",
+    );
   }
-  if (mode === "remote") {
+}
+
+export function isSupabaseConfigured() {
+  return Boolean(supabaseUrl() && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+/** Supabase CLI en Docker (127.0.0.1). */
+export function isLocalSupabase() {
+  if (!isSupabaseConfigured()) {
     return false;
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const url = supabaseUrl();
   return url.includes("127.0.0.1") || url.includes("localhost");
 }
 
 export function getSupabaseUrl() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const url = supabaseUrl();
   if (!url) {
     throw new Error("Falta NEXT_PUBLIC_SUPABASE_URL");
   }
+
+  assertLocalOnly();
   return url;
 }
 

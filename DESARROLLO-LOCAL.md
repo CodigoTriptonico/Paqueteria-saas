@@ -1,19 +1,19 @@
 # Desarrollo local
 
-La app usa Supabase local en Docker: Postgres + Auth en `127.0.0.1`.
+La app **solo** usa Supabase local en Docker (Postgres + Auth en `127.0.0.1`). No hay modo nube en este repo.
 
 ## Requisitos
 
 1. Docker Desktop instalado y corriendo.
 2. Node.js 20+.
 
-## Poner modo local
+## Configurar entorno
 
 ```powershell
 npm run env:local
 ```
 
-Eso escribe `.env.local` para usar `http://127.0.0.1:54321`.
+Eso escribe `.env.local` con `http://127.0.0.1:55321` (puertos `55xxx` evitan bloqueos de Windows en el rango `543xx`).
 
 ## Arranque rapido
 
@@ -24,14 +24,11 @@ O terminal:
 ```powershell
 npm run supabase:start
 npm run db:apply
+npm run db:restore-owner
 npm run dev
 ```
 
-Login:
-
-```text
-http://localhost:3000/login
-```
+Login: `http://localhost:3000/login`
 
 ## Comandos utiles
 
@@ -41,17 +38,23 @@ http://localhost:3000/login
 | `npm run supabase:stop` | Detiene Supabase local |
 | `npm run supabase:status` | URLs y keys locales |
 | `npm run db:apply` | Migraciones locales |
+| `npm run db:restore-owner` | Crea dueño de plataforma local |
 | `npm run db:local:reset` | Borra y recrea BD local |
-| `npm run env:local` | Escribe `.env.local` local |
+| `npm run env:local` | Regenera `.env.local` local |
 
-## Datos
+## Puertos
 
-- Los datos viven en Docker.
-- Studio local aparece en `npm run supabase:status`.
-- Postgres directo: `127.0.0.1:54322`, usuario `postgres`, password `postgres`.
+| Servicio | Puerto |
+| --- | --- |
+| API / Auth | `55321` |
+| Postgres | `55322` |
+| Studio | `55323` |
+| Mailpit | `55324` |
+
+Postgres directo: `127.0.0.1:55322`, usuario `postgres`, password `postgres`.
 
 ## Si falla
 
-- Revisa que Docker Desktop este abierto.
-- Ejecuta `docker ps`.
-- Confirma que `NEXT_PUBLIC_SUPABASE_URL` sea `http://127.0.0.1:54321`.
+- Docker Desktop abierto y `docker ps` responde.
+- `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:55321` en `.env.local`.
+- Si un puerto no arranca en Windows, revisa reservas: `netsh interface ipv4 show excludedportrange protocol=tcp`.
