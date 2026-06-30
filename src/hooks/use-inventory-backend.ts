@@ -12,6 +12,7 @@ import { getCurrentSessionAction } from "@/app/actions/session";
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
 import type { CategoryConfig } from "@/lib/inventory-tree";
+import { dispatchOnboardingProgressChanged } from "@/lib/onboarding/refresh";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { sessionHasPermission } from "@/lib/auth/permissions";
 
@@ -78,9 +79,11 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
   const warehouseIdRef = useRef(warehouseId);
   const inflightSaveRef = useRef<Promise<void> | null>(null);
 
-  categoryConfigsRef.current = categoryConfigs;
-  inventoryItemsRef.current = inventoryItems;
-  warehouseIdRef.current = warehouseId;
+  useEffect(() => {
+    categoryConfigsRef.current = categoryConfigs;
+    inventoryItemsRef.current = inventoryItems;
+    warehouseIdRef.current = warehouseId;
+  }, [categoryConfigs, inventoryItems, warehouseId]);
 
   const activeWarehouses = useMemo(
     () => warehouses.filter((warehouse) => warehouse.is_active),
@@ -109,6 +112,7 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
     }
 
     lastSavedCategoriesRef.current = snapshot;
+    dispatchOnboardingProgressChanged();
     return true;
   }, []);
 
@@ -130,6 +134,7 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
         lastSavedStockRef.current = snapshot;
       }
 
+      dispatchOnboardingProgressChanged();
       return true;
     },
     [],

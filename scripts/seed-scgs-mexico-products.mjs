@@ -9,10 +9,11 @@ const SCGS_ORG_ID = "2029bf0c-e766-4840-9d90-f4b252cc3fe9";
 const MEXICO_COUNTRY = "México";
 
 const boxProducts = [
-  { size: "14x14x14", price: "$45", cost: "$28" },
-  { size: "16x16x16", price: "$55", cost: "$34" },
-  { size: "18x18x18", price: "$65", cost: "$40" },
-  { size: "20x20x20", price: "$75", cost: "$46" },
+  { size: "Caja chiquita", price: "$35", cost: "$22" },
+  { size: "Caja mediana", price: "$50", cost: "$31" },
+  { size: "Caja grande", price: "$65", cost: "$40" },
+  { size: "Caja familiar", price: "$85", cost: "$52" },
+  { size: "Caja jumbo", price: "$105", cost: "$65" },
 ];
 
 function normalizeLabel(value) {

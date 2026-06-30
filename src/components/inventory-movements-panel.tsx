@@ -3,6 +3,7 @@
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  BarChart3,
   History,
   Loader2,
   SlidersHorizontal,
@@ -21,12 +22,21 @@ import {
   InlineSearchPicker,
 } from "@/components/inline-search-picker";
 import { inputClass } from "@/components/ui-blocks";
+import { AppTabs, type AppTabDefinition } from "@/components/app-tabs";
+import { InventoryToolbarIconButton } from "@/components/inventory/inventory-toolbar-icon-button";
 import type {
   InventoryAssignment,
   InventoryMovement,
   InventoryMovementType,
 } from "@/lib/inventory-types";
 import { summarizeMovements } from "@/lib/inventory-reports";
+
+type MovementsTab = "history" | "summary";
+
+const movementsTabs: AppTabDefinition<MovementsTab>[] = [
+  { id: "history", label: "Historial", icon: History },
+  { id: "summary", label: "Resumen", icon: BarChart3 },
+];
 
 type InventoryMovementsDrawerProps = {
   warehouseId: string;
@@ -234,7 +244,7 @@ export function InventoryMovementsSidePanel({
   fixedItemId,
   onMovementsChange,
 }: InventoryMovementsSidePanelProps) {
-  const [tab, setTab] = useState<"history" | "summary">("history");
+  const [tab, setTab] = useState<MovementsTab>("history");
   const [members, setMembers] = useState<InventoryMemberRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState(movements);
@@ -395,29 +405,14 @@ export function InventoryMovementsSidePanel({
           </button>
         </header>
 
-        <div className="flex shrink-0 gap-4 border-b border-black/70 px-4">
-          <button
-            type="button"
-            className={`border-b-2 pb-2.5 text-sm font-black ${
-              tab === "history"
-                ? "border-emerald-400 text-[#f8fafc]"
-                : "border-transparent text-slate-400"
-            }`}
-            onClick={() => setTab("history")}
-          >
-            Historial
-          </button>
-          <button
-            type="button"
-            className={`border-b-2 pb-2.5 text-sm font-black ${
-              tab === "summary"
-                ? "border-emerald-400 text-[#f8fafc]"
-                : "border-transparent text-slate-400"
-            }`}
-            onClick={() => setTab("summary")}
-          >
-            Resumen
-          </button>
+        <div className="shrink-0 border-b border-black/70 px-4 py-3">
+          <AppTabs
+            tabs={movementsTabs}
+            value={tab}
+            onChange={setTab}
+            size="compact"
+            ariaLabel="Vistas del historial"
+          />
         </div>
 
         {tab === "history" ? (
@@ -548,36 +543,34 @@ export function InventoryMovementsDrawer({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={
-          iconOnly
-            ? "relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#111827] text-slate-300 transition hover:text-[#f8fafc]"
-            : "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-black bg-[#111827] px-3 text-xs font-black text-slate-300 transition hover:text-[#f8fafc]"
-        }
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        title="Historial de movimientos"
-        aria-label="Historial de movimientos"
-      >
-        <History className="h-4 w-4 text-slate-400" aria-hidden />
-        {iconOnly ? null : (
-          <>
-            <span className="hidden sm:inline">Historial</span>
-            {movements.length ? (
-              <span className="rounded-md border border-black bg-surface-inset px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-400">
-                {movements.length}
-              </span>
-            ) : null}
-          </>
-        )}
-        {iconOnly && movements.length ? (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border border-black bg-surface-inset px-1 text-[9px] font-black tabular-nums text-slate-300">
-            {movements.length}
-          </span>
-        ) : null}
-      </button>
+      {iconOnly ? (
+        <InventoryToolbarIconButton
+          icon={History}
+          label="Historial de movimientos"
+          badge={movements.length || undefined}
+          onClick={() => setOpen(true)}
+          ariaHaspopup="dialog"
+          ariaExpanded={open}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-black bg-[#1a2320] px-3 text-xs font-black text-slate-300 transition hover:bg-[#243029] hover:text-[#f8fafc]"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          title="Historial de movimientos"
+          aria-label="Historial de movimientos"
+        >
+          <History className="h-4 w-4 text-slate-400" aria-hidden />
+          <span className="hidden sm:inline">Historial</span>
+          {movements.length ? (
+            <span className="rounded-md border border-black bg-surface-inset px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-400">
+              {movements.length}
+            </span>
+          ) : null}
+        </button>
+      )}
       {drawer ? createPortal(drawer, document.body) : null}
     </>
   );

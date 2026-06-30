@@ -1,14 +1,31 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { ACT_AS_ORG_COOKIE } from "@/lib/auth/act-as";
-import { APP_SESSION_COOKIE, readAppSessionCookieValue } from "@/lib/auth/app-session-cookie";
+import { clearAuthCookies } from "@/lib/auth/clear-auth-cookies";
+import { resolveAuthUser } from "@/lib/auth/resolve-auth-user";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/sign-in"];
 
-function copyCookies(source: NextResponse, target: NextResponse) {
-  source.cookies.getAll().forEach((cookie) => {
-    target.cookies.set(cookie.name, cookie.value);
-  });
+function redirectToLogin(
+  request: NextRequest,
+  options?: { error?: string; nextPath?: string },
+) {
+  const loginUrl = request.nextUrl.clone();
+  loginUrl.pathname = "/login";
+  loginUrl.searchParams.delete("error");
+  loginUrl.searchParams.delete("next");
+
+  if (options?.error) {
+    loginUrl.searchParams.set("error", options.error);
+  }
+
+  if (options?.nextPath) {
+    loginUrl.searchParams.set("next", options.nextPath);
+  }
+
+  const redirectResponse = NextResponse.redirect(loginUrl);
+  clearAuthCookies(redirectResponse, request);
+  return redirectResponse;
 }
 
 export async function proxy(request: NextRequest) {
@@ -66,23 +83,32 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+  const auth = await resolveAuthUser(() => supabase.auth.getUser());
 
-  const fallbackUserId = readAppSessionCookieValue(request.cookies.get(APP_SESSION_COOKIE)?.value);
-
-  if (!user && !fallbackUserId) {
+  if (auth.status === "unavailable") {
     if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
+      const response = NextResponse.json(
+        { ok: false, error: "Servicio no disponible. Intenta de nuevo." },
+        { status: 503 },
+      );
+      clearAuthCookies(response, request);
+      return response;
     }
 
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("next", pathname);
-    const redirectResponse = NextResponse.redirect(loginUrl);
-    copyCookies(supabaseResponse, redirectResponse);
-    return redirectResponse;
+    return redirectToLogin(request, {
+      error: "No se pudo conectar con el servidor. Inicia sesion cuando este disponible.",
+      nextPath: pathname,
+    });
+  }
+
+  if (auth.status === "unauthenticated") {
+    if (pathname.startsWith("/api/")) {
+      const response = NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
+      clearAuthCookies(response, request);
+      return response;
+    }
+
+    return redirectToLogin(request, { nextPath: pathname });
   }
 
   if (pathname.startsWith("/platform")) {

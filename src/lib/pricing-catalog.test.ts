@@ -5,6 +5,7 @@ import type { CategoryConfig } from "@/lib/inventory-tree";
 import {
   addProductToCountry,
   catalogKeyFromLeaf,
+  isProductAssignedToCountry,
   listCatalogProducts,
   productCountryAssignments,
   removeProductFromCountry,
@@ -68,6 +69,27 @@ describe("pricing-catalog", () => {
 
     const withoutProduct = removeProductFromCountry(withProduct, "México", product.catalogKey);
     assert.equal(withoutProduct[0]?.boxes.length, 0);
+  });
+
+  it("detects assigned products by catalog key or legacy size", () => {
+    const product = listCatalogProducts(sampleTree)[1]!;
+    const withCatalogKey = addProductToCountry([mexicoCountry], "México", product);
+
+    assert.equal(
+      isProductAssignedToCountry(withCatalogKey[0]?.boxes || [], product),
+      true,
+    );
+
+    const legacyCountry: PricingCountryConfig = {
+      ...mexicoCountry,
+      boxes: [{ size: "14x14x14", price: "$10", cost: "$5" }],
+    };
+
+    assert.equal(isProductAssignedToCountry(legacyCountry.boxes, product), true);
+    assert.equal(
+      isProductAssignedToCountry([], listCatalogProducts(sampleTree)[0]!),
+      false,
+    );
   });
 
   it("sets country assignments from inventory modal", () => {

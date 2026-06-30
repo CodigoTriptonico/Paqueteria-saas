@@ -2,10 +2,7 @@
  * Inserta remitentes de prueba para la org SCGS (desarrollo local).
  * Uso: node scripts/seed-scgs-senders.mjs
  */
-import pg from "pg";
-import { loadEnvLocal } from "./lib/db-connection.mjs";
-
-loadEnvLocal();
+import { connectPg } from "./lib/db-connection.mjs";
 
 const SCGS_ORG_ID = "2029bf0c-e766-4840-9d90-f4b252cc3fe9";
 
@@ -132,15 +129,7 @@ const senders = [
   },
 ];
 
-const client = new pg.Client({
-  host: process.env.SUPABASE_DB_HOST || "127.0.0.1",
-  port: Number(process.env.SUPABASE_DB_PORT || 55322),
-  user: "postgres",
-  password: process.env.SUPABASE_DB_PASSWORD || "postgres",
-  database: "postgres",
-});
-
-await client.connect();
+const { client } = await connectPg();
 
 const orgCheck = await client.query(
   "SELECT id, name FROM public.organizations WHERE id = $1",

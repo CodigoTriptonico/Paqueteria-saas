@@ -1,28 +1,22 @@
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies, headers } from "next/headers";
 import { ACT_AS_ORG_COOKIE } from "@/lib/auth/act-as";
-import { APP_SESSION_COOKIE, readAppSessionCookieValue } from "@/lib/auth/app-session-cookie";
+import { resolveAuthUser } from "@/lib/auth/resolve-auth-user";
+import {
+  buildAppSessionFromProfile,
+  extractPermissionKeys,
+  PLATFORM_VIEW_PERMISSIONS,
+  resolveActingContext,
+  type ProfileSessionInput,
+} from "@/lib/auth/session-build";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { isClientOrganization } from "@/lib/organizations/kind";
-import { readMaxWarehouses, type OrganizationSettings } from "@/lib/organizations/settings";
-import type { AppSession, PermissionKey, RoleSlug } from "@/lib/auth/types";
-
-const PLATFORM_VIEW_PERMISSIONS: PermissionKey[] = [
-  "all",
-  "users.manage",
-  "permissions.manage",
-  "warehouses.manage",
-  "settings.manage",
-  "sales.manage",
-  "customers.manage",
-  "inventory.view",
-  "inventory.reserve",
-  "inventory.adjust",
-  "routes.view",
-  "routes.update_status",
-];
+import type { OrganizationSettings } from "@/lib/organizations/settings";
+import { readMaxWarehouses } from "@/lib/organizations/settings";
+import type { AppSession, RoleSlug } from "@/lib/auth/types";
 
 async function loadIsPlatformAdmin(userId: string, reader?: SupabaseClient | null) {
   const db = reader ?? createSupabaseAdminClient();
@@ -132,7 +126,7 @@ async function getDevelopmentPlatformOwnerSession(): Promise<AppSession | null> 
   };
 }
 
-export async function getAppSession(): Promise<AppSession | null> {
+async function resolveAppSessionUncached(): Promise<AppSession | null> {
   if (!isSupabaseConfigured()) {
     return null;
   }
@@ -142,20 +136,14 @@ export async function getAppSession(): Promise<AppSession | null> {
     return null;
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
-
-  const cookieStore = await cookies();
-  const fallbackUserId = readAppSessionCookieValue(cookieStore.get(APP_SESSION_COOKIE)?.value);
-  const userId = user?.id || fallbackUserId;
-  const db = user ? supabase : createSupabaseAdminClient();
-
-  if (!userId || !db) {
+  const auth = await resolveAuthUser(() => supabase.auth.getUser());
+  if (auth.status !== "authenticated") {
     return null;
   }
 
-  const { data: profile, error } = await db
+  const userId = auth.user.id;
+
+  const { data: profile, error } = await supabase
     .from("profiles")
     .select(
       "id, email, full_name, organization_id, role_id, is_active, default_warehouse_id, roles(slug, name), organizations(name, settings, kind)",
@@ -175,92 +163,55 @@ export async function getAppSession(): Promise<AppSession | null> {
     | null;
   const homeOrg = Array.isArray(orgRow) ? orgRow[0] : orgRow;
 
-  const homeOrganizationId = profile.organization_id;
-  const homeOrganizationName = homeOrg?.name || "Empresa";
-
   const [{ data: grantedPerms }, { data: warehouseLinks }, isPlatformAdmin] = await Promise.all([
-    db
+    supabase
       .from("role_permissions")
       .select("permissions(key)")
       .eq("role_id", profile.role_id)
       .eq("granted", true),
-    db.from("profile_warehouses").select("warehouse_id").eq("profile_id", userId),
-    loadIsPlatformAdmin(userId, db),
+    supabase.from("profile_warehouses").select("warehouse_id").eq("profile_id", userId),
+    loadIsPlatformAdmin(userId, supabase),
   ]);
 
-  const basePermissions = (grantedPerms || [])
-    .map((row) => {
-      const perm = row.permissions as { key: PermissionKey } | { key: PermissionKey }[] | null;
-      return Array.isArray(perm) ? perm[0]?.key : perm?.key;
-    })
-    .filter(Boolean) as PermissionKey[];
-
-  let actingOrganizationId: string | null = null;
-  let actingOrganizationName: string | null = null;
-  let isActingAsClient = false;
-  let organizationId = homeOrganizationId;
-  let organizationName = homeOrganizationName;
-  let multiWarehouseEnabled = Boolean(homeOrg?.settings?.multi_warehouse_enabled);
-  let maxWarehouses = readMaxWarehouses(homeOrg?.settings);
-  let roleSlug: RoleSlug = role?.slug || "vendedor";
-  let roleName = role?.name || "Vendedor";
-  let permissions = basePermissions;
-  let warehouseIds = (warehouseLinks || []).map((row) => row.warehouse_id);
-  let preferredWarehouseId = (profile.default_warehouse_id as string | null) || null;
-
-  if (isPlatformAdmin) {
-    const pathname = (await headers()).get("x-boxario-pathname") ?? "";
-    const onPlatformRoute = pathname.startsWith("/platform");
-
-    if (!onPlatformRoute) {
-      const cookieStore = await cookies();
-      const actAsId = cookieStore.get(ACT_AS_ORG_COOKIE)?.value?.trim();
-
-      if (actAsId) {
-        const actingOrg = await loadActingOrganization(actAsId);
-        if (actingOrg) {
-          actingOrganizationId = actingOrg.id;
-          actingOrganizationName = actingOrg.name;
-          isActingAsClient = true;
-          organizationId = actingOrg.id;
-          organizationName = actingOrg.name;
-          multiWarehouseEnabled = Boolean(
-            (actingOrg.settings as OrganizationSettings | null)?.multi_warehouse_enabled,
-          );
-          maxWarehouses = readMaxWarehouses(
-            actingOrg.settings as OrganizationSettings | null,
-          );
-          roleSlug = "administrador";
-          roleName = "Vista plataforma";
-          permissions = PLATFORM_VIEW_PERMISSIONS;
-          warehouseIds = [];
-          preferredWarehouseId = null;
-        }
-      }
-    }
-  }
-
-  return {
+  const homeInput: ProfileSessionInput = {
     userId,
     email: profile.email,
     fullName: profile.full_name,
-    organizationId,
-    organizationName,
-    homeOrganizationId,
-    homeOrganizationName,
-    actingOrganizationId,
-    actingOrganizationName,
-    isActingAsClient,
-    multiWarehouseEnabled,
-    maxWarehouses,
-    roleSlug,
-    roleName,
-    permissions,
-    warehouseIds,
-    preferredWarehouseId,
+    organizationId: profile.organization_id,
+    defaultWarehouseId: (profile.default_warehouse_id as string | null) || null,
+    roleSlug: role?.slug || "vendedor",
+    roleName: role?.name || "Vendedor",
+    homeOrganizationName: homeOrg?.name || "Empresa",
+    homeOrganizationSettings: homeOrg?.settings,
+    permissions: extractPermissionKeys(grantedPerms),
+    warehouseIds: (warehouseLinks || []).map((row) => row.warehouse_id),
     isPlatformAdmin,
   };
+
+  const pathname = (await headers()).get("x-boxario-pathname") ?? "";
+  const onPlatformRoute = pathname.startsWith("/platform");
+  const cookieStore = await cookies();
+  const actAsId = cookieStore.get(ACT_AS_ORG_COOKIE)?.value?.trim() || null;
+  const actingOrg = actAsId ? await loadActingOrganization(actAsId) : null;
+
+  const acting = resolveActingContext({
+    isPlatformAdmin,
+    onPlatformRoute,
+    actAsOrganizationId: actAsId,
+    actingOrg: actingOrg
+      ? {
+          id: actingOrg.id,
+          name: actingOrg.name,
+          settings: actingOrg.settings as OrganizationSettings | null,
+        }
+      : null,
+    home: homeInput,
+  });
+
+  return buildAppSessionFromProfile(homeInput, acting);
 }
+
+export const getAppSession = cache(resolveAppSessionUncached);
 
 export async function requireAppSession() {
   const session = (await getAppSession()) || (await getDevelopmentPlatformOwnerSession());

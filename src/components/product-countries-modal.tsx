@@ -4,6 +4,7 @@ import { Globe2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { PricingCountryConfig } from "@/app/actions/pricing";
 import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import { CountryFlag } from "@/components/country-flag";
 import { resolveCountryCode } from "@/lib/country-options";
 import {
   productCountryAssignments,
@@ -20,25 +21,6 @@ type ProductCountriesModalProps = {
   onSave: (nextCountries: PricingCountryConfig[]) => void;
 };
 
-function CountryFlagMini({ code }: { code: string }) {
-  if (!code) {
-    return (
-      <span className="flex h-5 w-8 items-center justify-center rounded-md bg-surface-card text-[10px] font-black text-slate-300">
-        --
-      </span>
-    );
-  }
-
-  return (
-    <span
-      className="block h-5 w-8 overflow-hidden rounded-md border border-black bg-cover bg-center shadow-sm"
-      style={{
-        backgroundImage: `url(https://flagcdn.com/w80/${code.toLowerCase()}.png)`,
-      }}
-    />
-  );
-}
-
 export function ProductCountriesModal({
   open,
   product,
@@ -53,7 +35,9 @@ export function ProductCountriesModal({
       return;
     }
 
-    setDraft(productCountryAssignments(countries, product.catalogKey));
+    queueMicrotask(() => {
+      setDraft(productCountryAssignments(countries, product.catalogKey));
+    });
   }, [countries, open, product]);
 
   const sortedDraft = useMemo(
@@ -131,7 +115,7 @@ export function ProductCountriesModal({
                       }
                       className="h-4 w-4 accent-emerald-400"
                     />
-                    <CountryFlagMini code={code} />
+                    <CountryFlag code={code} size="sm" />
                     <span className="truncate text-sm font-black text-[#f8fafc]">
                       {entry.countryName}
                     </span>

@@ -1,178 +1,55 @@
 "use server";
 
 import { requireAppSession } from "@/lib/auth/session";
-import { sessionHasPermission } from "@/lib/auth/permissions";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { recordActivityHistory } from "@/lib/activity-history";
+import { isSalePersonCardVariantId } from "@/components/sale/sale-person-card-variants";
+import {
+  canAccessCustomersSession,
+  listCustomersForSession,
+  mapCustomerRow,
+  mapRecipientRow,
+  type CustomerRecipientRow,
+  type CustomerWithRecipientsRow,
+} from "@/lib/customers/load";
+import type { ListCustomersParams } from "@/lib/customers/list-params";
 
-export type CustomerRecipientRow = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  country: string;
-  street: string;
-  houseNumber: string;
-  neighborhood: string;
-  city: string;
-  state: string;
-  postalCode: string;
+export type { CustomerRecipientRow, CustomerWithRecipientsRow } from "@/lib/customers/load";
+
+type CustomerDbRow = Parameters<typeof mapCustomerRow>[0];
+type RecipientDbRow = Parameters<typeof mapRecipientRow>[0];
+
+type GeoAddressInput = {
+  placeId?: string;
+  formattedAddress?: string;
+  lat?: number | null;
+  lng?: number | null;
 };
 
-export type CustomerWithRecipientsRow = {
-  id: string;
-  referredByCustomerId: string;
-  firstName: string;
-  lastName: string;
-  phones: string[];
-  email: string;
-  street: string;
-  houseNumber: string;
-  neighborhood: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  country: string;
-  recipients: CustomerRecipientRow[];
-};
+function geoAddressPatch(input: GeoAddressInput) {
+  const hasGeo =
+    typeof input.lat === "number" &&
+    Number.isFinite(input.lat) &&
+    typeof input.lng === "number" &&
+    Number.isFinite(input.lng);
 
-type CustomerDbRow = {
-  id: string;
-  referred_by_customer_id: string | null;
-  first_name: string;
-  last_name: string;
-  phones: string[] | null;
-  email: string;
-  street: string;
-  house_number: string;
-  neighborhood: string;
-  city: string;
-  state: string;
-  postal_code: string;
-  country: string;
-  customer_recipients: RecipientDbRow[] | null;
-};
-
-type RecipientDbRow = {
-  id: string;
-  first_name: string;
-  last_name: string;
-  phone: string;
-  country: string;
-  street: string;
-  house_number: string;
-  neighborhood: string;
-  city: string;
-  state: string;
-  postal_code: string;
-};
-
-function canAccessCustomers(session: Awaited<ReturnType<typeof requireAppSession>>) {
-  return (
-    sessionHasPermission(session, "sales.manage") ||
-    sessionHasPermission(session, "customers.manage")
-  );
-}
-
-function mapRecipient(row: RecipientDbRow): CustomerRecipientRow {
   return {
-    id: row.id,
-    firstName: row.first_name,
-    lastName: row.last_name,
-    phone: row.phone,
-    country: row.country,
-    street: row.street,
-    houseNumber: row.house_number,
-    neighborhood: row.neighborhood,
-    city: row.city,
-    state: row.state || "",
-    postalCode: row.postal_code,
+    place_id: input.placeId?.trim() || null,
+    formatted_address: input.formattedAddress?.trim() || null,
+    lat: hasGeo ? input.lat : null,
+    lng: hasGeo ? input.lng : null,
+    geo_updated_at: hasGeo ? new Date().toISOString() : null,
   };
 }
 
-function mapCustomer(row: CustomerDbRow): CustomerWithRecipientsRow {
-  const recipients = (row.customer_recipients || [])
-    .filter((recipient) => recipient)
-    .map(mapRecipient);
-
-  return {
-    id: row.id,
-    referredByCustomerId: row.referred_by_customer_id || "",
-    firstName: row.first_name,
-    lastName: row.last_name,
-    phones: row.phones?.length ? row.phones : [""],
-    email: row.email,
-    street: row.street,
-    houseNumber: row.house_number,
-    neighborhood: row.neighborhood,
-    city: row.city,
-    state: row.state,
-    postalCode: row.postal_code,
-    country: row.country,
-    recipients,
-  };
-}
-
-export async function listCustomersWithRecipientsAction(): Promise<
-  ActionResult<CustomerWithRecipientsRow[]>
-> {
+export async function listCustomersWithRecipientsAction(
+  params?: ListCustomersParams,
+): Promise<ActionResult<CustomerWithRecipientsRow[]>> {
   try {
     const session = await requireAppSession();
-
-    if (!canAccessCustomers(session)) {
-      throw new Error("FORBIDDEN");
-    }
-
-    const supabase = await createScopedSupabase(session);
-    if (!supabase) {
-      return fail("Supabase no configurado");
-    }
-
-    const { data, error } = await supabase
-      .from("customers")
-      .select(
-        `
-        id,
-        referred_by_customer_id,
-        first_name,
-        last_name,
-        phones,
-        email,
-        street,
-        house_number,
-        neighborhood,
-        city,
-        state,
-        postal_code,
-        country,
-        customer_recipients (
-          id,
-          first_name,
-          last_name,
-          phone,
-          country,
-          street,
-          house_number,
-          neighborhood,
-          city,
-          state,
-          postal_code
-        )
-      `,
-      )
-      .eq("organization_id", session.organizationId)
-      .eq("is_active", true)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      if (error.code === "42P01") {
-        return ok([]);
-      }
-      return fail(error.message);
-    }
-
-    return ok((data || []).map((row) => mapCustomer(row as CustomerDbRow)));
+    const data = await listCustomersForSession(session, params);
+    return ok(data);
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -191,11 +68,15 @@ export async function createCustomerAction(input: {
   postalCode: string;
   country?: string;
   referredByCustomerId?: string;
+  placeId?: string;
+  formattedAddress?: string;
+  lat?: number | null;
+  lng?: number | null;
 }): Promise<ActionResult<CustomerWithRecipientsRow>> {
   try {
     const session = await requireAppSession();
 
-    if (!canAccessCustomers(session)) {
+    if (!canAccessCustomersSession(session)) {
       throw new Error("FORBIDDEN");
     }
 
@@ -225,9 +106,10 @@ export async function createCustomerAction(input: {
         postal_code: input.postalCode.trim(),
         country: input.country?.trim() || "USA",
         referred_by_customer_id: input.referredByCustomerId || null,
+        ...geoAddressPatch(input),
       })
       .select(
-        "id, referred_by_customer_id, first_name, last_name, phones, email, street, house_number, neighborhood, city, state, postal_code, country",
+        "id, referred_by_customer_id, first_name, last_name, phones, email, street, house_number, neighborhood, city, state, postal_code, country, card_style, place_id, formatted_address, lat, lng",
       )
       .single();
 
@@ -244,7 +126,7 @@ export async function createCustomerAction(input: {
     });
 
     return ok({
-      ...mapCustomer({ ...data, customer_recipients: [] } as CustomerDbRow),
+      ...mapCustomerRow({ ...data, customer_recipients: [] } as CustomerDbRow),
     });
   } catch (error) {
     return fail(actionErrorMessage(error));
@@ -264,11 +146,15 @@ export async function updateCustomerAction(input: {
   state: string;
   postalCode: string;
   country?: string;
+  placeId?: string;
+  formattedAddress?: string;
+  lat?: number | null;
+  lng?: number | null;
 }): Promise<ActionResult<CustomerWithRecipientsRow>> {
   try {
     const session = await requireAppSession();
 
-    if (!canAccessCustomers(session)) {
+    if (!canAccessCustomersSession(session)) {
       throw new Error("FORBIDDEN");
     }
 
@@ -296,6 +182,7 @@ export async function updateCustomerAction(input: {
         state: input.state.trim(),
         postal_code: input.postalCode.trim(),
         country: input.country?.trim() || "USA",
+        ...geoAddressPatch(input),
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.customerId)
@@ -315,6 +202,11 @@ export async function updateCustomerAction(input: {
         state,
         postal_code,
         country,
+        card_style,
+        place_id,
+        formatted_address,
+        lat,
+        lng,
         customer_recipients (
           id,
           first_name,
@@ -326,7 +218,12 @@ export async function updateCustomerAction(input: {
           neighborhood,
           city,
           state,
-          postal_code
+          postal_code,
+          card_style,
+          place_id,
+          formatted_address,
+          lat,
+          lng
         )
       `,
       )
@@ -344,7 +241,89 @@ export async function updateCustomerAction(input: {
       description: phones.join(", "),
     });
 
-    return ok(mapCustomer(data as CustomerDbRow));
+    return ok(mapCustomerRow(data as CustomerDbRow));
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function updateCustomerCardStyleAction(input: {
+  customerId: string;
+  cardStyle: string;
+}): Promise<ActionResult<{ cardStyle: string }>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canAccessCustomersSession(session)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    if (!isSalePersonCardVariantId(input.cardStyle)) {
+      return fail("Estilo de tarjeta no válido");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data, error } = await supabase
+      .from("customers")
+      .update({
+        card_style: input.cardStyle,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.customerId)
+      .eq("organization_id", session.organizationId)
+      .select("id, card_style")
+      .single();
+
+    if (error || !data) {
+      return fail(error?.message || "No se pudo actualizar el estilo");
+    }
+
+    return ok({ cardStyle: data.card_style || input.cardStyle });
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function updateRecipientCardStyleAction(input: {
+  recipientId: string;
+  cardStyle: string;
+}): Promise<ActionResult<{ cardStyle: string }>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canAccessCustomersSession(session)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    if (!isSalePersonCardVariantId(input.cardStyle)) {
+      return fail("Estilo de tarjeta no válido");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data, error } = await supabase
+      .from("customer_recipients")
+      .update({
+        card_style: input.cardStyle,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.recipientId)
+      .eq("organization_id", session.organizationId)
+      .select("id, card_style")
+      .single();
+
+    if (error || !data) {
+      return fail(error?.message || "No se pudo actualizar el estilo");
+    }
+
+    return ok({ cardStyle: data.card_style || input.cardStyle });
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -354,7 +333,7 @@ export async function deactivateCustomerAction(customerId: string): Promise<Acti
   try {
     const session = await requireAppSession();
 
-    if (!canAccessCustomers(session)) {
+    if (!canAccessCustomersSession(session)) {
       throw new Error("FORBIDDEN");
     }
 
@@ -401,11 +380,15 @@ export async function createRecipientAction(input: {
   city: string;
   state?: string;
   postalCode: string;
+  placeId?: string;
+  formattedAddress?: string;
+  lat?: number | null;
+  lng?: number | null;
 }): Promise<ActionResult<CustomerRecipientRow>> {
   try {
     const session = await requireAppSession();
 
-    if (!canAccessCustomers(session)) {
+    if (!canAccessCustomersSession(session)) {
       throw new Error("FORBIDDEN");
     }
 
@@ -429,9 +412,10 @@ export async function createRecipientAction(input: {
         city: input.city.trim(),
         state: input.state?.trim() || "",
         postal_code: input.postalCode.trim(),
+        ...geoAddressPatch(input),
       })
       .select(
-        "id, first_name, last_name, phone, country, street, house_number, neighborhood, city, state, postal_code",
+        "id, first_name, last_name, phone, country, street, house_number, neighborhood, city, state, postal_code, card_style, place_id, formatted_address, lat, lng",
       )
       .single();
 
@@ -448,7 +432,7 @@ export async function createRecipientAction(input: {
       metadata: { customerId: input.customerId },
     });
 
-    return ok(mapRecipient(data as RecipientDbRow));
+    return ok(mapRecipientRow(data as RecipientDbRow));
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -466,11 +450,15 @@ export async function updateRecipientAction(input: {
   city: string;
   state?: string;
   postalCode: string;
+  placeId?: string;
+  formattedAddress?: string;
+  lat?: number | null;
+  lng?: number | null;
 }): Promise<ActionResult<CustomerRecipientRow>> {
   try {
     const session = await requireAppSession();
 
-    if (!canAccessCustomers(session)) {
+    if (!canAccessCustomersSession(session)) {
       throw new Error("FORBIDDEN");
     }
 
@@ -492,12 +480,13 @@ export async function updateRecipientAction(input: {
         city: input.city.trim(),
         state: input.state?.trim() || "",
         postal_code: input.postalCode.trim(),
+        ...geoAddressPatch(input),
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.recipientId)
       .eq("organization_id", session.organizationId)
       .select(
-        "id, first_name, last_name, phone, country, street, house_number, neighborhood, city, state, postal_code",
+        "id, first_name, last_name, phone, country, street, house_number, neighborhood, city, state, postal_code, card_style, place_id, formatted_address, lat, lng",
       )
       .single();
 
@@ -513,7 +502,7 @@ export async function updateRecipientAction(input: {
       description: `${input.country.trim()} · ${input.phone.trim()}`,
     });
 
-    return ok(mapRecipient(data as RecipientDbRow));
+    return ok(mapRecipientRow(data as RecipientDbRow));
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -523,7 +512,7 @@ export async function deleteRecipientAction(recipientId: string): Promise<Action
   try {
     const session = await requireAppSession();
 
-    if (!canAccessCustomers(session)) {
+    if (!canAccessCustomersSession(session)) {
       throw new Error("FORBIDDEN");
     }
 

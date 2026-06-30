@@ -15,6 +15,11 @@ export type SaleRecipient = {
   city: string;
   state?: string;
   postalCode: string;
+  cardStyle: string;
+  placeId: string;
+  formattedAddress: string;
+  lat: number | null;
+  lng: number | null;
 };
 
 export type SaleSender = {
@@ -30,6 +35,11 @@ export type SaleSender = {
   city: string;
   state: string;
   postalCode: string;
+  cardStyle: string;
+  placeId: string;
+  formattedAddress: string;
+  lat: number | null;
+  lng: number | null;
   recipients: SaleRecipient[];
 };
 
@@ -47,6 +57,11 @@ export function customerRowToSender(row: CustomerWithRecipientsRow): SaleSender 
     city: row.city,
     state: row.state,
     postalCode: row.postalCode,
+    cardStyle: row.cardStyle,
+    placeId: row.placeId,
+    formattedAddress: row.formattedAddress,
+    lat: row.lat,
+    lng: row.lng,
     recipients: row.recipients.map(recipientRowToSaleRecipient),
   };
 }
@@ -64,6 +79,11 @@ export function recipientRowToSaleRecipient(row: CustomerRecipientRow): SaleReci
     city: row.city,
     state: row.state,
     postalCode: row.postalCode,
+    cardStyle: row.cardStyle,
+    placeId: row.placeId,
+    formattedAddress: row.formattedAddress,
+    lat: row.lat,
+    lng: row.lng,
   };
 }
 
@@ -80,5 +100,10 @@ export function saleRecipientToRow(recipient: SaleRecipient): CustomerRecipientR
     city: recipient.city,
     state: recipient.state || "",
     postalCode: recipient.postalCode,
+    cardStyle: recipient.cardStyle,
+    placeId: recipient.placeId,
+    formattedAddress: recipient.formattedAddress,
+    lat: recipient.lat,
+    lng: recipient.lng,
   };
 }

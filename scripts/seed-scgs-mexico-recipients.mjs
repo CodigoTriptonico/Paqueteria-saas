@@ -1,5 +1,6 @@
 /**
  * Agrega un destinatario en México a cada remitente SCGS que aún no tenga uno.
+ * Para todos los países (MX, CO, GT, SV, HN, NI) usa: node scripts/seed-scgs-demo-catalog.mjs
  * Uso: node scripts/seed-scgs-mexico-recipients.mjs
  */
 import { connectPg } from "./lib/db-connection.mjs";

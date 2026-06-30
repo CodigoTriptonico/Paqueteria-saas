@@ -6,6 +6,7 @@ export type OrganizationSettings = {
   company_phone?: string;
   company_address?: string;
   currency?: string;
+  onboarding_dismissed?: boolean;
 };
 
 export function parsePlanLimit(value: unknown): number | null {

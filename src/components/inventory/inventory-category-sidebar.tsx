@@ -134,8 +134,6 @@ export function InventoryCategorySidebar({
   showNewItemForm,
   setShowNewItemForm,
   selectedCategoryData,
-  itemInputKey,
-  itemPlaceholder,
   addingSubcategoryForSelectedCategory,
   inventoryItems,
   selectCategory,
@@ -146,7 +144,6 @@ export function InventoryCategorySidebar({
   saveSubcategory,
   deleteSubcategory,
   addCategory,
-  addItem,
   beginAddItem,
   beginAddSubcategory,
   openStructureOptions,
@@ -589,50 +586,7 @@ export function InventoryCategorySidebar({
                     <Plus className="h-3.5 w-3.5" />
                     Agregar item
                   </button>
-                ) : (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-1 rounded-md border border-black bg-surface-card p-1">
-                      <button
-                        type="button"
-                        disabled={!selectedCategoryData}
-                        onClick={() => addItem()}
-                        className={addBtnClass}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                      <input
-                        className={`${inputClass} h-8 min-w-0 flex-1 border-0 bg-transparent text-xs`}
-                        placeholder={itemPlaceholder}
-                        value={newNameByKey[itemInputKey] || ""}
-                        onChange={(event) =>
-                          setNewNameByKey((current) => ({
-                            ...current,
-                            [itemInputKey]: event.target.value,
-                          }))
-                        }
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            addItem();
-                          }
-                        }}
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowNewItemForm(false)}
-                        className={iconBtnClass}
-                        title="Cancelar"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    {!selectedCategoryData ? (
-                      <p className="text-[11px] font-bold text-slate-500">
-                        Elige una categoría para agregar items.
-                      </p>
-                    ) : null}
-                  </div>
-                )}
+                ) : null}
 
                 <p className="text-[11px] font-bold leading-snug text-slate-500">
                   La estructura es compartida entre bodegas.

@@ -23,9 +23,11 @@ type PhoneCountryInputProps = {
   hint?: string;
   hintId?: string;
   className?: string;
+  /** Código de marcación por defecto (p. ej. del país destino del destinatario). */
+  defaultDialCode?: string;
+  inputClassName?: string;
+  pickerShellClassName?: string;
 };
-
-const nationalInputClass = `${inputClass} w-full pl-10`;
 
 export function PhoneCountryInput({
   value,
@@ -36,10 +38,14 @@ export function PhoneCountryInput({
   hint,
   hintId,
   className,
+  defaultDialCode,
+  inputClassName,
+  pickerShellClassName,
 }: PhoneCountryInputProps) {
+  const effectiveDefaultDialCode = defaultDialCode || DEFAULT_PHONE_DIAL_CODE;
   const { dialCode, nationalDigits } = useMemo(
-    () => splitPhoneNumber(value, DEFAULT_PHONE_DIAL_CODE),
-    [value],
+    () => splitPhoneNumber(value, effectiveDefaultDialCode),
+    [effectiveDefaultDialCode, value],
   );
   const country = getPhoneCountryByDialCode(dialCode);
   const nationalDisplay = formatNationalPhoneDigits(dialCode, nationalDigits);
@@ -53,12 +59,15 @@ export function PhoneCountryInput({
     onChange(buildPhoneNumber(dialCode, coerceNationalPhoneInput(dialCode, nextRaw)));
   }
 
+  const nationalClass = inputClassName ?? `${inputClass} w-full pl-10`;
+
   return (
     <div className={className}>
       <div className="flex w-full max-w-full flex-wrap items-start gap-2">
         <PhoneDialCodePicker
           dialCode={dialCode}
           disabled={disabled}
+          shellClassName={pickerShellClassName}
           onDialCodeChange={updateDialCode}
         />
 
@@ -70,7 +79,7 @@ export function PhoneCountryInput({
           <input
             id={id}
             name={name}
-            className={nationalInputClass}
+            className={nationalClass}
             type="tel"
             inputMode="tel"
             autoComplete="tel"

@@ -4,14 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   loadPricingConfigAction,
   savePricingConfigAction,
-  type PricingConfigPayload,
   type PricingCountryConfig,
   type PricingDistributorConfig,
   type PricingDistributorPrices,
   type PricingRouteConfig,
 } from "@/app/actions/pricing";
 import { compareCountriesByCatalogOrder } from "@/lib/country-options";
+import { dispatchOnboardingProgressChanged } from "@/lib/onboarding/refresh";
+import { defaultInvoiceBillingConfig } from "@/lib/invoice-billing";
+import type { PricingPromotionConfig } from "@/lib/pricing-promotions";
 import type { InventoryCatalogProduct } from "@/lib/pricing-catalog";
+import type { PricingConfigPayload } from "@/lib/pricing/types";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 const emptyRouteConfig: PricingRouteConfig = {
@@ -21,10 +24,16 @@ const emptyRouteConfig: PricingRouteConfig = {
   pickupRanges: [],
   pendingAllowed: true,
   routeLeadTime: "",
+  linkedRouteSchedules: false,
+  emptyBoxDeliveryFee: defaultInvoiceBillingConfig.emptyBoxDeliveryFee,
+  fullBoxPickupFee: defaultInvoiceBillingConfig.fullBoxPickupFee,
+  minimumDeposit: defaultInvoiceBillingConfig.minimumDeposit,
+  logisticsFeeMode: defaultInvoiceBillingConfig.logisticsFeeMode,
 };
 
 function snapshotPayload(payload: {
   countries: PricingCountryConfig[];
+  promotions: PricingPromotionConfig[];
   distributors: PricingDistributorConfig[];
   distributorPrices: PricingDistributorPrices;
   routeConfig: PricingRouteConfig;
@@ -32,18 +41,78 @@ function snapshotPayload(payload: {
   return JSON.stringify(payload);
 }
 
-export function usePricingBackend() {
+function emptySaveableState() {
+  return {
+    countries: [] as PricingCountryConfig[],
+    promotions: [] as PricingPromotionConfig[],
+    distributors: [] as PricingDistributorConfig[],
+    distributorPrices: {} as PricingDistributorPrices,
+    routeConfig: emptyRouteConfig,
+  };
+}
+
+function pricingStateFromPayload(payload: PricingConfigPayload) {
+  const sortedCountries = [...payload.countries].sort(compareCountriesByCatalogOrder);
+
+  return {
+    countries: sortedCountries,
+    promotions: payload.promotions,
+    distributors: payload.distributors,
+    distributorPrices: payload.distributorPrices,
+    routeConfig: payload.routeConfig,
+    catalogProducts: payload.catalogProducts,
+  };
+}
+
+export function usePricingBackend(initialData?: PricingConfigPayload) {
   const enabled = isSupabaseConfigured();
-  const [countries, setCountries] = useState<PricingCountryConfig[]>([]);
-  const [catalogProducts, setCatalogProducts] = useState<InventoryCatalogProduct[]>([]);
-  const [distributors, setDistributors] = useState<PricingDistributorConfig[]>([]);
-  const [distributorPrices, setDistributorPrices] = useState<PricingDistributorPrices>({});
-  const [routeConfig, setRouteConfig] = useState<PricingRouteConfig>(emptyRouteConfig);
-  const [loaded, setLoaded] = useState(!enabled);
+  const initialState = initialData ? pricingStateFromPayload(initialData) : null;
+  const [countries, setCountries] = useState<PricingCountryConfig[]>(
+    initialState?.countries ?? [],
+  );
+  const [promotions, setPromotions] = useState<PricingPromotionConfig[]>(
+    initialState?.promotions ?? [],
+  );
+  const [catalogProducts, setCatalogProducts] = useState<InventoryCatalogProduct[]>(
+    initialState?.catalogProducts ?? [],
+  );
+  const [distributors, setDistributors] = useState<PricingDistributorConfig[]>(
+    initialState?.distributors ?? [],
+  );
+  const [distributorPrices, setDistributorPrices] = useState<PricingDistributorPrices>(
+    initialState?.distributorPrices ?? {},
+  );
+  const [routeConfig, setRouteConfig] = useState<PricingRouteConfig>(
+    initialState?.routeConfig ?? emptyRouteConfig,
+  );
+  const [loaded, setLoaded] = useState(!enabled || Boolean(initialData));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const lastSavedSnapshotRef = useRef("");
+  const lastSavedSnapshotRef = useRef(
+    snapshotPayload(
+      initialState ?? {
+        countries: [],
+        promotions: [],
+        distributors: [],
+        distributorPrices: {},
+        routeConfig: emptyRouteConfig,
+      },
+    ),
+  );
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedRef = useRef(loaded);
+  const saveableRef = useRef(emptySaveableState());
+
+  useEffect(() => {
+    loadedRef.current = loaded;
+    saveableRef.current = {
+      countries,
+      promotions,
+      distributors,
+      distributorPrices,
+      routeConfig,
+    };
+  }, [countries, distributors, distributorPrices, loaded, promotions, routeConfig]);
 
   const loadRemote = useCallback(async () => {
     if (!enabled) {
@@ -52,6 +121,7 @@ export function usePricingBackend() {
     }
 
     setError("");
+    const snapshotBeforeLoad = snapshotPayload(saveableRef.current);
     const result = await loadPricingConfigAction();
 
     if (!result.ok) {
@@ -63,29 +133,58 @@ export function usePricingBackend() {
     const sortedCountries = [...result.data.countries].sort(compareCountriesByCatalogOrder);
     const saveable = {
       countries: sortedCountries,
+      promotions: result.data.promotions,
       distributors: result.data.distributors,
       distributorPrices: result.data.distributorPrices,
       routeConfig: result.data.routeConfig,
     };
 
+    setCatalogProducts(result.data.catalogProducts);
+
+    const localChangedDuringLoad =
+      snapshotPayload(saveableRef.current) !== snapshotBeforeLoad;
+    const pendingLocalChanges =
+      loadedRef.current &&
+      snapshotPayload(saveableRef.current) !== lastSavedSnapshotRef.current;
+
+    if (pendingLocalChanges || localChangedDuringLoad) {
+      setLoaded(true);
+      return;
+    }
+
     lastSavedSnapshotRef.current = snapshotPayload(saveable);
     setCountries(sortedCountries);
-    setCatalogProducts(result.data.catalogProducts);
+    setPromotions(result.data.promotions);
     setDistributors(result.data.distributors);
     setDistributorPrices(result.data.distributorPrices);
     setRouteConfig(result.data.routeConfig);
     setLoaded(true);
-  }, [enabled]);
+  }, [
+    enabled,
+    setCatalogProducts,
+    setCountries,
+    setDistributorPrices,
+    setDistributors,
+    setError,
+    setLoaded,
+    setPromotions,
+    setRouteConfig,
+  ]);
 
   useEffect(() => {
+    if (!enabled || initialData) {
+      return;
+    }
+
     queueMicrotask(() => {
       void loadRemote();
     });
-  }, [loadRemote]);
+  }, [enabled, initialData, loadRemote]);
 
   const persist = useCallback(
     async (saveable: {
       countries: PricingCountryConfig[];
+      promotions: PricingPromotionConfig[];
       distributors: PricingDistributorConfig[];
       distributorPrices: PricingDistributorPrices;
       routeConfig: PricingRouteConfig;
@@ -107,9 +206,72 @@ export function usePricingBackend() {
       }
 
       lastSavedSnapshotRef.current = snapshotPayload(saveable);
+      dispatchOnboardingProgressChanged();
     },
-    [catalogProducts, enabled],
+    [catalogProducts, enabled, setError, setSaving],
   );
+  const persistRef = useRef(persist);
+
+  useEffect(() => {
+    persistRef.current = persist;
+  }, [persist]);
+
+  const flushPendingSaveNow = useCallback(async () => {
+    if (!enabled || !loaded) {
+      return;
+    }
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    const saveable = saveableRef.current;
+    const currentSnapshot = snapshotPayload(saveable);
+
+    if (currentSnapshot === lastSavedSnapshotRef.current) {
+      return;
+    }
+
+    await persistRef.current(saveable);
+  }, [enabled, loaded]);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    function flushOnPageHide() {
+      flushPendingSaveNow();
+    }
+
+    window.addEventListener("pagehide", flushOnPageHide);
+
+    return () => {
+      window.removeEventListener("pagehide", flushOnPageHide);
+    };
+  }, [enabled, flushPendingSaveNow]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+
+      if (!enabled || !loadedRef.current) {
+        return;
+      }
+
+      const saveable = saveableRef.current;
+
+      if (snapshotPayload(saveable) === lastSavedSnapshotRef.current) {
+        return;
+      }
+
+      void persistRef.current(saveable);
+    };
+  }, [enabled]);
 
   useEffect(() => {
     if (!enabled || !loaded) {
@@ -118,6 +280,7 @@ export function usePricingBackend() {
 
     const saveable = {
       countries,
+      promotions,
       distributors,
       distributorPrices,
       routeConfig,
@@ -141,7 +304,11 @@ export function usePricingBackend() {
         clearTimeout(saveTimerRef.current);
       }
     };
-  }, [countries, distributors, distributorPrices, routeConfig, enabled, loaded, persist]);
+  }, [countries, promotions, distributors, distributorPrices, routeConfig, enabled, loaded, persist]);
+
+  const flushPendingSave = useCallback(async () => {
+    await flushPendingSaveNow();
+  }, [flushPendingSaveNow]);
 
   return {
     enabled,
@@ -150,6 +317,8 @@ export function usePricingBackend() {
     error,
     countries,
     setCountries,
+    promotions,
+    setPromotions,
     catalogProducts,
     setCatalogProducts,
     distributors,
@@ -159,5 +328,6 @@ export function usePricingBackend() {
     routeConfig,
     setRouteConfig,
     reload: loadRemote,
+    flushPendingSave,
   };
 }

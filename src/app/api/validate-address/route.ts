@@ -1,3 +1,5 @@
+import { resolveGoogleCountryCode } from "@/lib/country-options";
+
 type AddressInput = {
   mode?: "validate" | "suggest" | "details";
   query?: string;
@@ -20,6 +22,12 @@ type GoogleAddressComponent = {
 type GoogleGeocodeResult = {
   address_components: GoogleAddressComponent[];
   formatted_address: string;
+  geometry?: {
+    location?: {
+      lat?: number;
+      lng?: number;
+    };
+  };
   partial_match?: boolean;
   place_id: string;
   types: string[];
@@ -34,15 +42,6 @@ type GooglePlacePrediction = {
   };
 };
 
-const countryCodes: Record<string, string> = {
-  USA: "US",
-  "United States": "US",
-  Mexico: "MX",
-  Guatemala: "GT",
-  Colombia: "CO",
-  Honduras: "HN",
-};
-
 function firstComponent(components: GoogleAddressComponent[], types: string[]) {
   return components.find((component) =>
     types.some((type) => component.types.includes(type)),
@@ -51,6 +50,8 @@ function firstComponent(components: GoogleAddressComponent[], types: string[]) {
 
 function normalizeAddress(result: GoogleGeocodeResult) {
   const components = result.address_components;
+  const lat = result.geometry?.location?.lat;
+  const lng = result.geometry?.location?.lng;
   const streetNumber = firstComponent(components, ["street_number"])?.long_name || "";
   const route = firstComponent(components, ["route"])?.long_name || "";
   const subpremise = firstComponent(components, ["subpremise"])?.long_name || "";
@@ -75,6 +76,8 @@ function normalizeAddress(result: GoogleGeocodeResult) {
     country,
     formattedAddress: result.formatted_address,
     placeId: result.place_id,
+    lat: typeof lat === "number" && Number.isFinite(lat) ? lat : null,
+    lng: typeof lng === "number" && Number.isFinite(lng) ? lng : null,
   };
 }
 
@@ -113,7 +116,7 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as AddressInput;
-    const countryCode = body.country ? countryCodes[body.country] : undefined;
+    const countryCode = resolveGoogleCountryCode(body.country);
 
     if (body.mode === "suggest") {
       const query = body.query?.trim();
@@ -176,7 +179,7 @@ export async function POST(request: Request) {
 
       const params = new URLSearchParams({
         place_id: body.placeId,
-        fields: "address_components,formatted_address,place_id,types",
+        fields: "address_components,formatted_address,geometry,place_id,types",
         key: apiKey,
       });
       const response = await fetch(

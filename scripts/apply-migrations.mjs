@@ -1,37 +1,19 @@
 /**
  * Applies supabase/migrations/*.sql against local Postgres (Supabase CLI).
  *
- * Requires: DATABASE_MODE=local + `npm run supabase:start`
+ * Requires: `npm run supabase:start` and `.env.local` apuntando a Supabase local.
  */
 import fs from "fs";
 import path from "path";
 import { connectPg, projectRoot } from "./lib/db-connection.mjs";
+import { listMigrationFiles } from "./lib/migrations.mjs";
 
 const root = projectRoot;
+const MIGRATIONS = listMigrationFiles(root);
 
-const MIGRATIONS = [
-  "001_roles_permissions_warehouses.sql",
-  "002_shipments.sql",
-  "003_platform_admin.sql",
-  "004_organization_kind.sql",
-  "005_customers.sql",
-  "006_pricing.sql",
-  "007_shipments_sales.sql",
-  "008_profile_phone.sql",
-  "009_bootstrap_phone_overload.sql",
-  "010_profile_recovery_phones.sql",
-  "011_enable_rls_app_schema_migrations.sql",
-  "012_activity_history.sql",
-  "013_custom_roles.sql",
-  "014_customer_referrals.sql",
-  "015_repair_plan_limits.sql",
-  "016_warehouse_access_explicit.sql",
-  "017_profile_default_warehouse.sql",
-  "018_profile_phones_org_manage.sql",
-  "019_inventory_assignments.sql",
-  "020_pricing_catalog_key.sql",
-  "021_inventory_categories_adjust_write.sql",
-];
+const LEGACY_MIGRATION_ALIASES = {
+  "032_shipment_sale_kind.sql": "013_shipment_sale_kind.sql",
+};
 
 async function ensureMigrationsTable(client) {
   await client.query(`
@@ -72,6 +54,21 @@ async function tableExists(client, tableName) {
   return rows.length > 0;
 }
 
+async function columnExists(client, tableName, columnName) {
+  const { rows } = await client.query(
+    `
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = $1
+      and column_name = $2
+    limit 1
+  `,
+    [tableName, columnName],
+  );
+  return rows.length > 0;
+}
+
 /** Mark legacy migrations as applied when DB was created before tracking table existed. */
 async function bootstrapLegacyMigrations(client) {
   const legacyMarkers = [
@@ -98,6 +95,23 @@ async function bootstrapLegacyMigrations(client) {
     if (await tableExists(client, table)) {
       await markMigrationApplied(client, file);
       console.log("Marked as already applied:", file);
+    }
+  }
+
+  for (const [newFile, oldFile] of Object.entries(LEGACY_MIGRATION_ALIASES)) {
+    if (await isMigrationApplied(client, newFile)) {
+      continue;
+    }
+
+    if (await isMigrationApplied(client, oldFile)) {
+      await markMigrationApplied(client, newFile);
+      console.log("Marked as already applied (renamed):", newFile);
+      continue;
+    }
+
+    if (newFile === "032_shipment_sale_kind.sql" && (await columnExists(client, "shipments", "sale_kind"))) {
+      await markMigrationApplied(client, newFile);
+      console.log("Marked as already applied (column exists):", newFile);
     }
   }
 }
@@ -146,7 +160,8 @@ async function main() {
         'distributors',
         'organization_route_settings',
         'organization_invoice_counters',
-        'activity_history'
+        'activity_history',
+        'pricing_promotions'
       )
     order by table_name
   `);

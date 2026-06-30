@@ -2,7 +2,7 @@
 
 import { Check, Plus, X } from "lucide-react";
 import { createPortal } from "react-dom";
-import { secondaryButtonClass } from "@/components/ui-blocks";
+import { secondaryButtonClass, primaryButtonClass } from "@/components/ui-blocks";
 import {
   addBtnClass,
   iconBtnClass,
@@ -17,8 +17,6 @@ export type InventoryStructureOptionsMenuProps = {
   structureMenuPosition: { top: number; left: number } | null;
   structureMenuMounted: boolean;
   structurePanelRef: React.RefObject<HTMLDivElement | null>;
-  showNewItemForm: boolean;
-  setShowNewItemForm: (value: boolean) => void;
   showNewCategoryInput: boolean;
   setShowNewCategoryInput: (value: boolean) => void;
   setOpenSubcategoryInput: (value: string) => void;
@@ -27,11 +25,6 @@ export type InventoryStructureOptionsMenuProps = {
   selectedCategoryData: CategoryConfig | null;
   selectedSubcategory: InventoryTreeItem | null;
   addingSubcategoryForSelectedCategory: boolean;
-  newNameByKey: Record<string, string>;
-  setNewNameByKey: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  itemInputKey: string;
-  itemPlaceholder: string;
-  addItem: () => void;
   addCategory: () => void;
   beginAddItem: () => void;
   beginAddSubcategory: () => void;
@@ -45,21 +38,13 @@ export function InventoryStructureOptionsMenu({
   structureMenuPosition,
   structureMenuMounted,
   structurePanelRef,
-  showNewItemForm,
-  setShowNewItemForm,
   showNewCategoryInput,
   setShowNewCategoryInput,
   setOpenSubcategoryInput,
   newCategoryName,
   setNewCategoryName,
   selectedCategoryData,
-  selectedSubcategory,
   addingSubcategoryForSelectedCategory,
-  newNameByKey,
-  setNewNameByKey,
-  itemInputKey,
-  itemPlaceholder,
-  addItem,
   addCategory,
   beginAddItem,
   beginAddSubcategory,
@@ -89,63 +74,7 @@ export function InventoryStructureOptionsMenu({
       <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-500">
         Estructura
       </p>
-      {showNewItemForm ? (
-        <div className="space-y-1.5">
-          <p className="text-[11px] font-black uppercase tracking-wide text-emerald-300">
-            Nuevo item
-          </p>
-          <div className="flex items-center gap-2 rounded-lg border border-black bg-[#111827] p-2">
-            <button
-              type="button"
-              disabled={!selectedCategoryData}
-              onClick={() => addItem()}
-              className={addBtnClass}
-              title="Agregar item"
-              aria-label="Agregar item"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-            <input
-              className="h-9 min-w-0 flex-1 bg-transparent px-2 text-sm font-black text-[#f8fafc] outline-none placeholder:text-slate-500"
-              placeholder={itemPlaceholder}
-              value={newNameByKey[itemInputKey] || ""}
-              onChange={(event) =>
-                setNewNameByKey((current) => ({
-                  ...current,
-                  [itemInputKey]: event.target.value,
-                }))
-              }
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  addItem();
-                }
-              }}
-              autoFocus
-            />
-            <button
-              type="button"
-              onClick={() => setShowNewItemForm(false)}
-              className={iconBtnClass}
-              title="Cancelar"
-              aria-label="Cancelar"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {!selectedCategoryData ? (
-            <p className="text-[11px] font-bold text-slate-500">
-              Elige una categoría para agregar items.
-            </p>
-          ) : (
-            <p className="text-[11px] font-bold text-slate-500">
-              En{" "}
-              {selectedSubcategory
-                ? `${selectedCategoryData.name} › ${selectedSubcategory.name}`
-                : selectedCategoryData.name}
-            </p>
-          )}
-        </div>
-      ) : addingSubcategoryForSelectedCategory ? (
+      {addingSubcategoryForSelectedCategory ? (
         <div className="space-y-1.5">
           <p className="text-[11px] font-black uppercase tracking-wide text-emerald-300">
             Nueva subcategoría
@@ -157,6 +86,26 @@ export function InventoryStructureOptionsMenu({
         </div>
       ) : (
         <>
+          <button
+            type="button"
+            disabled={!selectedCategoryData}
+            onClick={beginAddItem}
+            className={`${primaryButtonClass} h-9 w-full text-xs disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo item
+          </button>
+
+          <button
+            type="button"
+            disabled={!selectedCategoryData}
+            onClick={beginAddSubcategory}
+            className={`${secondaryButtonClass} h-9 w-full text-xs disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nueva subcategoría
+          </button>
+
           {showNewCategoryInput ? (
             <div className="flex items-center gap-2 rounded-lg border border-black bg-[#111827] p-2">
               <input
@@ -191,7 +140,6 @@ export function InventoryStructureOptionsMenu({
             <button
               type="button"
               onClick={() => {
-                setShowNewItemForm(false);
                 setOpenSubcategoryInput("");
                 setShowNewCategoryInput(true);
               }}
@@ -201,26 +149,6 @@ export function InventoryStructureOptionsMenu({
               Nueva categoría
             </button>
           )}
-
-          <button
-            type="button"
-            disabled={!selectedCategoryData}
-            onClick={beginAddSubcategory}
-            className={`${secondaryButtonClass} h-9 w-full text-xs disabled:cursor-not-allowed disabled:opacity-50`}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Nueva subcategoría
-          </button>
-
-          <button
-            type="button"
-            disabled={!selectedCategoryData}
-            onClick={beginAddItem}
-            className={`${secondaryButtonClass} h-9 w-full text-xs disabled:cursor-not-allowed disabled:opacity-50`}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Nuevo item
-          </button>
         </>
       )}
 

@@ -5,6 +5,7 @@ import { listWarehousesAction } from "@/app/actions/warehouses";
 import { InventarioClient } from "@/components/inventario-client";
 import { requirePathAccess } from "@/lib/auth/require";
 import { sessionHasPermission } from "@/lib/auth/permissions";
+import { loadPricingConfigForSession } from "@/lib/pricing/load-config";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 export default async function InventarioPage() {
@@ -24,10 +25,18 @@ export default async function InventarioPage() {
     warehouses.find((warehouse) => warehouse.is_default) ||
     warehouses[0];
   const canManageWarehouses = sessionHasPermission(session, "warehouses.manage");
+  let initialPricing = undefined;
+
+  try {
+    initialPricing = await loadPricingConfigForSession(session);
+  } catch {
+    initialPricing = undefined;
+  }
 
   if (!defaultWarehouse) {
     return (
       <InventarioClient
+        initialPricing={initialPricing}
         initialData={{
           warehouses,
           warehouseId: "",
@@ -46,6 +55,7 @@ export default async function InventarioPage() {
 
   return (
     <InventarioClient
+      initialPricing={initialPricing}
       initialData={{
         warehouses,
         warehouseId: defaultWarehouse.id,

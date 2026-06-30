@@ -1,11 +1,14 @@
 "use client";
 
 import { History, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { InventoryMovementsSidePanel } from "@/components/inventory-movements-panel";
 import { inputClass } from "@/components/ui-blocks";
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
 import type { ItemContextMenu, MovementDraft } from "@/lib/inventory-structure-utils";
+
+export const INVENTORY_ITEM_CONTEXT_MENU_ATTR = "data-inventory-item-context-menu";
 
 export type InventoryItemContextMenuProps = {
   itemContextMenu: ItemContextMenu | null;
@@ -16,7 +19,7 @@ export type InventoryItemContextMenuProps = {
   stockSaving: boolean;
   warehouseId?: string;
   warehouseName?: string;
-  structureEditingEnabled: boolean;
+  structureMenuActionsEnabled: boolean;
   contextMenuAssignments: InventoryAssignment[];
   itemHistoryContext: ItemContextMenu | null;
   setItemHistoryContext: (value: ItemContextMenu | null) => void;
@@ -42,7 +45,7 @@ export function InventoryItemContextMenu({
   stockSaving,
   warehouseId,
   warehouseName,
-  structureEditingEnabled,
+  structureMenuActionsEnabled,
   contextMenuAssignments,
   itemHistoryContext,
   setItemHistoryContext,
@@ -58,14 +61,63 @@ export function InventoryItemContextMenu({
   onDeleteItem,
   onBeginEditItem,
 }: InventoryItemContextMenuProps) {
-  return (
-    <>
-      {itemContextMenu ? (
-        <div
-          className="fixed z-50 w-56 rounded-lg border border-black bg-[#17211d] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
-          style={{ left: itemContextMenu.x, top: itemContextMenu.y }}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    queueMicrotask(() => setMounted(true));
+  }, []);
+
+  useEffect(() => {
+    if (!itemContextMenu) {
+      return;
+    }
+
+    const closeMenu = () => setItemContextMenu(null);
+
+    const closeMenuOnPointerDown = (event: Event) => {
+      if (event instanceof PointerEvent && event.button === 2) {
+        return;
+      }
+
+      const target = event.target;
+
+      if (
+        target instanceof Element &&
+        target.closest(`[${INVENTORY_ITEM_CONTEXT_MENU_ATTR}]`)
+      ) {
+        return;
+      }
+
+      closeMenu();
+    };
+
+    window.addEventListener("pointerdown", closeMenuOnPointerDown);
+    window.addEventListener("scroll", closeMenu, true);
+
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    }
+
+    window.addEventListener("keydown", handleKey);
+
+    return () => {
+      window.removeEventListener("pointerdown", closeMenuOnPointerDown);
+      window.removeEventListener("scroll", closeMenu, true);
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, [itemContextMenu, setItemContextMenu]);
+
+  const contextMenuPanel =
+    itemContextMenu && mounted ? (
+      <div
+        data-inventory-item-context-menu
+        className="fixed z-[145] w-56 rounded-lg border border-black bg-[#17211d] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+        style={{ left: itemContextMenu.x, top: itemContextMenu.y }}
+        onPointerDown={(event) => event.stopPropagation()}
+        onContextMenu={(event) => event.preventDefault()}
+      >
           <div className="border-b border-white/10 px-2 py-2">
             <p className="truncate text-sm font-black text-[#f8fafc]">
               {itemContextMenu.treeItem.name}
@@ -155,7 +207,7 @@ export function InventoryItemContextMenu({
             </button>
           ) : null}
           <div className="my-1 border-t border-white/10" />
-          {structureEditingEnabled ? (
+          {structureMenuActionsEnabled ? (
             <>
               <button
                 type="button"
@@ -185,18 +237,23 @@ export function InventoryItemContextMenu({
               </button>
             </>
           ) : null}
-        </div>
-      ) : null}
+      </div>
+    ) : null;
 
-      {movementDraft ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setMovementDraft(null);
-            }
-          }}
-        >
+  return (
+    <>
+      {contextMenuPanel ? createPortal(contextMenuPanel, document.body) : null}
+
+      {movementDraft && mounted
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[150] flex items-center justify-center bg-black/45 p-4"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  setMovementDraft(null);
+                }
+              }}
+            >
           <form
             className="w-full max-w-sm rounded-xl border border-black bg-[#17211d] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
             onSubmit={(event) => {
@@ -264,8 +321,10 @@ export function InventoryItemContextMenu({
               </button>
             </div>
           </form>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
 
       {structureMenuMounted && itemHistoryContext
         ? createPortal(

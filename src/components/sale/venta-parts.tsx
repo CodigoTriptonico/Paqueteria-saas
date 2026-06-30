@@ -1,11 +1,15 @@
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, History, RefreshCw } from "lucide-react";
+import { Fragment } from "react";
 import {
   flowStepBarPaddingClass,
   flowStepBarShellClass,
 } from "@/components/flow-form-styles";
-import { cardHoverClass, selectionActiveClass, selectionShellClass, unselectedDimClass } from "@/components/ui-blocks";
-import { resolveCountryCode } from "@/lib/country-options";
+import { cardHoverClass, selectionActiveClass, selectionShellClass } from "@/components/ui-blocks";
+import { CountryFlag } from "@/components/country-flag";
+import type { InvoiceBillingSnapshot } from "@/lib/invoice-billing";
+import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
 import type { SaleRecipient, SaleSender } from "@/lib/customers/mappers";
+import { formatScheduleAtDisplay, scheduleTimeComplete } from "@/components/sale/schedule-time";
 
 export function saleStepButtonClass(isActive: boolean, isUnlocked: boolean) {
   if (isActive) {
@@ -19,22 +23,32 @@ export function saleStepButtonClass(isActive: boolean, isUnlocked: boolean) {
   return "cursor-not-allowed border-black bg-surface-inset text-slate-500";
 }
 
+export function SaleBoxCartQtyBadge({ quantity }: { quantity: number }) {
+  return (
+    <span
+      className="mt-2 inline-flex h-8 min-w-[2.75rem] items-center justify-center rounded-lg border border-amber-500/90 bg-gradient-to-b from-amber-300 via-amber-400 to-orange-500 px-2.5 text-lg font-black leading-none tabular-nums tracking-tight text-slate-950 shadow-[0_6px_18px_rgba(251,146,60,0.42)] ring-1 ring-inset ring-amber-100/50"
+      aria-label={`${quantity} en carrito`}
+    >
+      ×{quantity}
+    </span>
+  );
+}
+
 export { unselectedDimClass } from "@/components/ui-blocks";
 export const selectedBorderClass = `${selectionShellClass} ${selectionActiveClass}`;
 
-export function deliveryModeCardClass(selected: boolean, groupHasSelection: boolean) {
+export function deliveryModeCardClass(selected: boolean) {
   if (selected) {
-    return `relative overflow-hidden ${selectedBorderClass}`;
+    return "relative overflow-hidden border-2 border-emerald-700 bg-emerald-600/40 shadow-[0_8px_24px_rgba(16,185,129,0.22)] ring-1 ring-emerald-500/50";
   }
 
-  const base = `${cardHoverClass} border border-black bg-surface-panel`;
-  return groupHasSelection ? `${base} ${unselectedDimClass}` : base;
+  return `${cardHoverClass} border-2 border-black bg-[#3a4842] hover:bg-[#425048]`;
 }
 
 export function deliveryModeIconClass(selected: boolean) {
   return selected
-    ? "border-emerald-500/50 bg-emerald-400/15 text-emerald-300"
-    : "border-black bg-surface-inset text-slate-400";
+    ? "border-emerald-800 bg-emerald-500 text-slate-950"
+    : "border-black bg-[#2e3834] text-emerald-300";
 }
 
 export function deliverySegmentClass(selected: boolean) {
@@ -59,6 +73,8 @@ export type ContextMenuState = {
   lastName: string;
   type: "remitente" | "destinatario" | "caja";
   targetKey: string;
+  customerId?: string;
+  recipientId?: string;
   phones: string[];
   address: {
     street?: string;
@@ -71,12 +87,101 @@ export type ContextMenuState = {
   };
 };
 
+export function emptyBoxOfficeSummary(handingNow: boolean) {
+  return handingNow
+    ? "Caja vacia entregada en mostrador"
+    : "Cliente recoge caja vacia en oficina (pendiente)";
+}
+
+export function deliverySummary(
+  action: string,
+  scheduleMode: string,
+  scheduleAt: string,
+  emptyBoxHandingNow = true,
+) {
+  if (!action) {
+    return "Pendiente";
+  }
+
+  if (action === EMPTY_BOX_OFFICE_MODE) {
+    return emptyBoxOfficeSummary(emptyBoxHandingNow);
+  }
+
+  if (!action.includes("Programar")) {
+    return action;
+  }
+
+  if (scheduleMode === "pending") {
+    return `${action} - pendiente`;
+  }
+
+  if (scheduleMode !== "scheduled") {
+    return `${action} - falta elegir`;
+  }
+
+  return scheduleAt ? `${action} - ${formatScheduleAtDisplay(scheduleAt)}` : `${action} - falta fecha`;
+}
+
+export const EMPTY_BOX_OFFICE_MODE = "Cliente recoge caja vacia en oficina";
+export const EMPTY_BOX_DRIVER_MODE = "Programar entrega de caja vacia";
+export const FULL_BOX_OFFICE_MODE = "Cliente trae caja llena a oficina";
+export const FULL_BOX_DRIVER_MODE = "Programar recoleccion caja llena";
+
+export function scheduledModeComplete(scheduleMode: string, scheduleAt: string) {
+  const routeDate = scheduleAt.split("T")[0] || "";
+  const routeTime = scheduleAt.split("T")[1] || "";
+
+  return scheduleMode === "pending" || (scheduleMode === "scheduled" && Boolean(routeDate && scheduleTimeComplete(routeTime)));
+}
+
+export function logisticsLegComplete(mode: string, scheduleMode: string, scheduleAt: string) {
+  if (!mode) {
+    return false;
+  }
+
+  if (mode === EMPTY_BOX_OFFICE_MODE || mode === FULL_BOX_OFFICE_MODE) {
+    return true;
+  }
+
+  return scheduledModeComplete(scheduleMode, scheduleAt);
+}
+
+export function logisticsDriverTaskCount(emptyBoxMode: string, fullBoxMode: string) {
+  return Number(emptyBoxMode === EMPTY_BOX_DRIVER_MODE) + Number(fullBoxMode === FULL_BOX_DRIVER_MODE);
+}
+
+export function logisticsSummary(
+  emptyBoxMode: string,
+  emptyBoxScheduleMode: string,
+  emptyBoxScheduleAt: string,
+  fullBoxMode: string,
+  fullBoxScheduleMode: string,
+  fullBoxScheduleAt: string,
+  notes = "",
+  emptyBoxHandingNow = true,
+) {
+  const parts = [
+    `Caja vacia: ${deliverySummary(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt, emptyBoxHandingNow)}`,
+    `Caja llena: ${deliverySummary(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt)}`,
+  ];
+  const cleanNotes = notes.trim();
+
+  if (cleanNotes) {
+    parts.push(`Notas: ${cleanNotes}`);
+  }
+
+  return parts.join(" | ");
+}
+
 export type SaleStep = "client" | "recipient" | "box" | "delivery" | "finish";
 export type AddressFormKind = "client" | "recipient";
 export type AddressValidation = {
   status: "idle" | "checking" | "valid" | "invalid";
   message: string;
   formattedAddress?: string;
+  placeId?: string;
+  lat?: number | null;
+  lng?: number | null;
 };
 export type AddressSuggestion = {
   placeId: string;
@@ -88,6 +193,35 @@ export type AddressSuggestion = {
 
 export function personFullName(person: PersonName) {
   return [person.firstName, person.lastName].filter(Boolean).join(" ").trim();
+}
+
+export type SalePersonAddress = {
+  street?: string;
+  houseNumber?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+};
+
+export function salePersonAddressLines(address: SalePersonAddress) {
+  const streetLine = [address.street?.trim(), address.houseNumber?.trim()].filter(Boolean).join(" ");
+  const cityLine = [
+    address.city?.trim(),
+    [address.state?.trim(), address.postalCode?.trim()].filter(Boolean).join(" "),
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return [
+    streetLine || undefined,
+    address.neighborhood?.trim() || undefined,
+    cityLine || undefined,
+  ].filter((line): line is string => Boolean(line));
+}
+
+export function salePersonAddressSummary(address: SalePersonAddress) {
+  return salePersonAddressLines(address).join(", ");
 }
 
 export function samePersonName(a: PersonName, b: PersonName) {
@@ -109,23 +243,6 @@ export const RECIPIENTS_PER_PAGE = 3;
 export const SENDERS_PER_PAGE = 3;
 export const RECENT_SENDERS_PER_PAGE = 3;
 
-export const countryCodes: Record<string, string> = {
-  USA: "US",
-  Mexico: "MX",
-  Guatemala: "GT",
-  Colombia: "CO",
-  Honduras: "HN",
-};
-
-export function parseMoney(value: string) {
-  return Number(value.replace(/[^\d.-]/g, "")) || 0;
-}
-
-export function boxProfitDisplay(box: string[]) {
-  const profit = parseMoney(box[1] || "0") - parseMoney(box[2] || "0");
-  return `$${Math.max(profit, 0)}`;
-}
-
 export function historyDateLabel(value: string) {
   return new Date(value).toLocaleString("es-MX", {
     day: "2-digit",
@@ -138,98 +255,263 @@ export function historyDateLabel(value: string) {
 export type SaleInvoicePaperProps = {
   invoiceNumber: string;
   sender: Sender;
-  recipient: Recipient;
+  recipient?: Recipient | null;
   box: string[];
   deliveryLine: string;
   className?: string;
+  lineAmount?: string;
+  totalLabel?: string;
+  totalAmount?: string;
+  billing?: InvoiceBillingSnapshot | null;
+  payNowDraft?: string;
+  payNowDraftTouched?: boolean;
+  onPayNowDraftChange?: (value: string) => void;
 };
+
+function invoiceBoxTitle(label: string) {
+  return label.replace(/^Caja\s+/i, "").trim() || label;
+}
+
+function InvoicePartyCard({
+  label,
+  name,
+  phone,
+  addressLines,
+  country,
+}: {
+  label: string;
+  name: string;
+  phone?: string;
+  addressLines: string[];
+  country?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200/90 bg-slate-50/70 px-3.5 py-3">
+      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-1.5 text-sm font-bold leading-snug text-slate-900">{name}</p>
+      {phone ? <p className="mt-1 text-[11px] leading-snug text-slate-700">{phone}</p> : null}
+      {addressLines.map((line) => (
+        <p key={line} className="mt-0.5 text-[11px] leading-snug text-slate-600">
+          {line}
+        </p>
+      ))}
+      {country ? <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-700">{country}</p> : null}
+    </div>
+  );
+}
 
 export function SaleInvoicePaper({
   invoiceNumber,
   sender,
   recipient,
   box,
-  deliveryLine,
   className,
+  lineAmount,
+  totalLabel,
+  totalAmount,
+  billing,
+  payNowDraft,
+  payNowDraftTouched = false,
+  onPayNowDraftChange,
 }: SaleInvoicePaperProps) {
   const issuedAt = new Date().toLocaleDateString("es-MX", {
     day: "2-digit",
     month: "long",
     year: "numeric",
   });
+  const boxTitle = invoiceBoxTitle(box[0] || "Paquete");
+  const deliveryEta = box[4]?.trim();
+  const destinationCountry = recipient?.country?.trim();
+  const amountLabel = lineAmount || box[1];
+  const isPendingAmount = amountLabel?.toLowerCase() === "pendiente" && !billing;
+  const hasBalanceDue = billing ? parseMoneyValue(billing.balanceDue) > 0 : false;
+  const depositEditable = Boolean(billing && onPayNowDraftChange);
+  const showPaymentSplit = billing && (hasBalanceDue || depositEditable);
+  const payNowInputValue = payNowDraftTouched
+    ? payNowDraft ?? ""
+    : payNowDraft || billing?.payNow.replace(/^\$/, "") || "";
+  const invoiceAmountCellClass =
+    "flex min-w-[5.5rem] shrink-0 items-center justify-end font-serif text-xl font-black tabular-nums leading-none text-slate-900";
+  const chargeLines = billing
+    ? [
+        ...(billing.cartLines.length
+          ? billing.cartLines.map((line) => ({
+              key: line.catalogKey || line.label,
+              label: `${line.label}${line.quantity > 1 ? ` × ${line.quantity}` : ""}`,
+              amount: formatMoneyValue(parseMoneyValue(line.unitPrice) * line.quantity),
+            }))
+          : [
+              {
+                key: "box",
+                label: `Caja ${boxTitle}${billing.boxCount > 1 ? ` × ${billing.boxCount}` : ""}`,
+                amount: billing.boxSubtotalBeforeDiscount,
+              },
+            ]),
+        ...(parseMoneyValue(billing.promotionDiscount) > 0
+          ? [
+              {
+                key: "promotion",
+                label: billing.promotion?.name || "Promoción",
+                amount: `-${billing.promotionDiscount}`,
+              },
+            ]
+          : []),
+        ...(parseMoneyValue(billing.emptyBoxDelivery) > 0
+          ? [{ key: "delivery", label: "Entrega a domicilio", amount: billing.emptyBoxDelivery }]
+          : []),
+        ...(parseMoneyValue(billing.fullBoxPickup) > 0
+          ? [{ key: "pickup", label: "Recolección a domicilio", amount: billing.fullBoxPickup }]
+          : []),
+      ]
+    : [];
+  const shipmentLabel = billing
+    ? billing.cartLines.length === 1
+      ? `${billing.cartLines[0]?.label || boxTitle}${
+          billing.boxCount > 1 ? ` × ${billing.boxCount}` : ""
+        }`
+      : `${billing.boxCount} productos`
+    : `Caja ${boxTitle}`;
 
   return (
     <article
-      className={`w-full shrink-0 overflow-hidden rounded-sm border border-slate-300 bg-[#fdfcf8] text-slate-900 shadow-[0_1px_0_rgba(0,0,0,0.06),0_6px_18px_rgba(0,0,0,0.1)] ${className ?? ""}`}
+      className={`sale-invoice-paper mx-auto flex w-full max-w-[210mm] min-h-[297mm] flex-col overflow-hidden rounded-sm border border-slate-300/90 bg-[#fdfcf8] text-slate-900 shadow-[0_1px_0_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.12),0_24px_48px_rgba(0,0,0,0.08)] ${className ?? ""}`}
     >
-      <div className="border-b border-dashed border-slate-300 px-4 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="font-serif text-lg font-black tracking-tight text-slate-900">Boxario</p>
-            <p className="text-[11px] font-medium text-slate-600">Paqueteria y envios internacionales</p>
+      <div className="flex flex-1 flex-col px-8 py-7 sm:px-10 sm:py-9">
+        <header className="flex items-start justify-between gap-6 border-b border-slate-300 pb-5">
+          <div className="min-w-0">
+            <p className="font-serif text-[1.35rem] font-black leading-none tracking-tight text-slate-900">
+              Boxario
+            </p>
+            <p className="mt-1.5 max-w-[12rem] text-[10px] font-medium leading-snug text-slate-600">
+              Paquetería y envíos internacionales
+            </p>
           </div>
-          <div className="text-right">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Factura</p>
-            <p className="font-serif text-xl font-black tabular-nums text-slate-900">{invoiceNumber}</p>
-            <p className="text-[11px] text-slate-600">{issuedAt}</p>
+          <div className="shrink-0 text-right">
+            <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-slate-500">Factura</p>
+            <p className="mt-0.5 font-serif text-lg font-black tabular-nums leading-tight text-slate-900">
+              {invoiceNumber}
+            </p>
+            <p className="mt-1 text-[10px] text-slate-600">{issuedAt}</p>
           </div>
-        </div>
-      </div>
+        </header>
 
-      <div className="grid gap-3 border-b border-slate-200 px-4 py-3 sm:grid-cols-2">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Remitente</p>
-          <p className="mt-0.5 text-sm font-bold text-slate-900">{personFullName(sender)}</p>
-          <p className="text-xs text-slate-700">{senderPhonesLabel(sender)}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Destinatario</p>
-          <p className="mt-0.5 text-sm font-bold text-slate-900">{personFullName(recipient)}</p>
-          <p className="text-xs text-slate-600">
-            {[recipient.city, recipient.country].filter(Boolean).join(", ")}
-          </p>
-        </div>
-      </div>
+        <section className={`mt-5 grid gap-3 ${recipient ? "grid-cols-2" : "grid-cols-1"}`}>
+          <InvoicePartyCard
+            label="Remitente"
+            name={personFullName(sender)}
+            phone={senderPhonesLabel(sender)}
+            addressLines={salePersonAddressLines(sender)}
+          />
+          {recipient ? (
+            <InvoicePartyCard
+              label="Destinatario"
+              name={personFullName(recipient)}
+              phone={recipient.phone.trim() || undefined}
+              addressLines={salePersonAddressLines(recipient)}
+              country={recipient.country.trim() || undefined}
+            />
+          ) : null}
+        </section>
 
-      <div className="px-4 py-3">
-        <table className="w-full border-collapse text-xs">
-          <thead>
-            <tr className="border-b border-slate-800 text-left text-[10px] uppercase tracking-wider text-slate-600">
-              <th className="pb-1.5 font-bold">Concepto</th>
-              <th className="pb-1.5 text-right font-bold">Importe</th>
-            </tr>
-          </thead>
-          <tbody className="text-slate-800">
-            <tr className="border-b border-slate-200">
-              <td className="py-2 pr-2 align-top">
-                <p className="font-bold">Caja {box[0]}</p>
-                <p className="mt-0.5 text-[11px] text-slate-600">
-                  {box[3]} · {box[4]} · {recipient.country}
-                </p>
-              </td>
-              <td className="py-2 text-right align-top font-bold tabular-nums">{box[1]}</td>
-            </tr>
-            <tr>
-              <td className="py-2 pr-2 align-top">
-                <p className="font-bold">Entrega caja vacia</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-slate-600">{deliveryLine}</p>
-              </td>
-              <td className="py-2 text-right align-top tabular-nums text-slate-500">—</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+        <section className="mt-6 flex-1">
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+            {(deliveryEta || (destinationCountry && !recipient)) ? (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {deliveryEta ? (
+                  <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700">
+                    Entrega estimada · {deliveryEta}
+                  </span>
+                ) : null}
+                {destinationCountry && !recipient ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700">
+                    <CountryFlag name={destinationCountry} size="sm" className="h-3.5 w-3.5" />
+                    {destinationCountry}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
 
-      <div className="border-t border-slate-300 bg-slate-100/80 px-4 py-3">
-        <div className="flex items-center justify-between gap-3 text-xs text-slate-700">
-          <span>Costo carrier</span>
-          <span className="font-semibold tabular-nums">{box[2]}</span>
-        </div>
-        <div className="mt-2 flex items-center justify-between gap-3 border-t border-slate-300 pt-2">
-          <span className="text-sm font-black uppercase tracking-wide text-slate-900">Total a cobrar</span>
-          <span className="font-serif text-2xl font-black tabular-nums text-slate-900">{box[1]}</span>
-        </div>
-        <p className="mt-1 text-right text-[11px] text-slate-500">Ganancia: {boxProfitDisplay(box)}</p>
+            {billing ? (
+              <div className="grid gap-3">
+                <div className="grid gap-2">
+                  {chargeLines.map((line) => (
+                    <div key={line.key} className="flex items-center justify-between gap-3 text-[12px]">
+                      <span className="font-semibold text-slate-900">{line.label}</span>
+                      <span className={invoiceAmountCellClass}>{line.amount}</span>
+                    </div>
+                  ))}
+                </div>
+                {showPaymentSplit ? (
+                  <div className="grid gap-2 border-t border-slate-200 pt-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-black text-slate-900">Depósito</p>
+                      {depositEditable ? (
+                        <>
+                          <label className={`${invoiceAmountCellClass} gap-0.5 print:hidden`}>
+                            <span className="text-slate-400">$</span>
+                            <input
+                              className="w-12 bg-transparent text-center outline-none"
+                              value={payNowInputValue}
+                              onChange={(event) =>
+                                onPayNowDraftChange?.(event.target.value.replace(/[^\d]/g, ""))
+                              }
+                              inputMode="numeric"
+                              aria-label="Depósito"
+                            />
+                          </label>
+                          <span className={`${invoiceAmountCellClass} hidden print:flex`}>
+                            {billing?.payNow}
+                          </span>
+                        </>
+                      ) : (
+                        <span className={invoiceAmountCellClass}>{billing?.payNow}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-black text-slate-900">Pendiente</p>
+                      <span className={invoiceAmountCellClass}>{billing?.balanceDue}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-3">
+                    <p className="text-[11px] font-black text-slate-900">Total pagado</p>
+                    <span className="font-serif text-xl font-black tabular-nums text-slate-900">
+                      {billing.quotedTotal}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-end justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Tu envío</p>
+                  <p className="mt-1 font-serif text-xl font-black leading-tight text-slate-900">
+                    {shipmentLabel}
+                  </p>
+                  {isPendingAmount ? (
+                    <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                      Se define al completar el envío
+                    </p>
+                  ) : null}
+                </div>
+                {isPendingAmount ? (
+                  <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                    Abierto
+                  </span>
+                ) : (
+                  <div className="shrink-0 text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                      {totalLabel || "Total"}
+                    </p>
+                    <span className="font-serif text-[1.65rem] font-black leading-none tabular-nums text-slate-900">
+                      {totalAmount || box[1]}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </article>
   );
@@ -265,8 +547,14 @@ export function applyAddressSuggestResult(
 
 export const inputClass =
   "h-11 min-w-0 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc] outline-none placeholder:font-semibold placeholder:text-slate-500 focus:border-black";
+export const clientFormControlShellClass =
+  "rounded-md border-2 border-emerald-400/70 bg-surface-inset shadow-[0_0_0_1px_rgba(16,185,129,0.18),0_8px_18px_rgba(0,0,0,0.22)]";
+
 export const clientFormInputClass =
-  "client-form-field h-11 w-full rounded-md border-2 border-emerald-400/70 bg-[#f8fafc] px-3.5 text-[15px] font-black text-slate-950 shadow-[0_0_0_1px_rgba(16,185,129,0.18),0_8px_18px_rgba(0,0,0,0.22)] outline-none transition placeholder:font-bold placeholder:text-slate-500 focus:border-sky-300 focus:ring-4 focus:ring-sky-300/30";
+  `client-form-field h-11 w-full px-3.5 text-[15px] font-black text-[#f8fafc] outline-none transition placeholder:font-bold placeholder:text-slate-500 focus:border-sky-300 focus:ring-4 focus:ring-sky-300/30 ${clientFormControlShellClass}`;
+
+export const clientFormPickerShellClass =
+  `box-border inline-flex h-11 w-full min-w-0 items-center gap-2 px-3 text-sm font-black text-[#f8fafc] ${clientFormControlShellClass}`;
 export const clientFormLabelClass =
   "text-[11px] font-black uppercase tracking-[0.08em] text-emerald-200";
 export const noBrowserAutocomplete = {
@@ -316,6 +604,19 @@ export function formatDateInput(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+export function minScheduleDateInput() {
+  return formatDateInput(new Date());
+}
+
+export function resolveScheduleDate(date?: string) {
+  const min = minScheduleDateInput();
+  if (!date) {
+    return min;
+  }
+
+  return date < min ? min : date;
+}
+
 export function CountryBadge({ country }: { country: string }) {
   return (
     <span className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-black bg-surface-card-header px-2.5 text-[13px] font-black text-[#f8fafc] shadow-[0_8px_18px_rgba(0,0,0,0.22)]">
@@ -326,26 +627,7 @@ export function CountryBadge({ country }: { country: string }) {
 }
 
 export function Flag({ country }: { country: string }) {
-  const code = resolveCountryCode({ code: "", name: country }) || countryCodes[country] || "";
-  const base =
-    "inline-block h-[18px] w-[30px] shrink-0 overflow-hidden rounded-[5px] border border-black bg-slate-700 shadow-[0_1px_0_rgba(255,255,255,0.12),0_6px_12px_rgba(0,0,0,0.22)]";
-
-  if (!code) {
-    return (
-      <span className={`${base} flex items-center justify-center text-[9px] font-black text-slate-300`}>
-        --
-      </span>
-    );
-  }
-
-  return (
-    <span
-      className={`${base} bg-cover bg-center`}
-      style={{ backgroundImage: `url(https://flagcdn.com/w80/${code.toLowerCase()}.png)` }}
-      role="img"
-      aria-label={country}
-    />
-  );
+  return <CountryFlag name={country} size="sm" />;
 }
 
 export function AddressTags({ items }: { items: [string, string][] }) {
@@ -370,10 +652,8 @@ export function AddressTags({ items }: { items: [string, string][] }) {
 
 export const contextActiveClass = selectedBorderClass;
 export const selectedCardClass = selectedBorderClass;
-export const senderCardClass =
-  "w-full border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-surface-card-hover";
-export const recipientCardClass =
-  "w-full border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-surface-card-hover";
+export const senderCardClass = "w-full";
+export const recipientCardClass = senderCardClass;
 export const boxCardClass =
   "w-full border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-surface-card-hover";
 
@@ -381,7 +661,7 @@ export const saleSteps: { id: SaleStep; label: string }[] = [
   { id: "client", label: "Remitente" },
   { id: "recipient", label: "Destinatario" },
   { id: "box", label: "Caja" },
-  { id: "delivery", label: "Entrega" },
+  { id: "delivery", label: "Logistica" },
   { id: "finish", label: "Final" },
 ];
 
@@ -389,6 +669,7 @@ export type SaleStepBarItem = {
   id: SaleStep;
   label: string;
   value: string;
+  subtitle?: string;
   detail?: string;
   country?: string;
   isActive: boolean;
@@ -399,7 +680,7 @@ export type SaleStepBarItem = {
 
 function saleStepBarButtonClass(item: SaleStepBarItem) {
   if (item.isActive) {
-    return "border-emerald-500/60 bg-emerald-500/10 text-[#f8fafc] shadow-[inset_0_1px_0_rgba(52,211,153,0.12)] ring-1 ring-emerald-500/25";
+    return "border-2 border-emerald-600 bg-emerald-600/35 text-emerald-50 shadow-[0_10px_24px_rgba(16,185,129,0.22)] ring-1 ring-emerald-400/45";
   }
 
   if (item.isDone) {
@@ -425,27 +706,138 @@ function saleStepBarBadgeClass(item: SaleStepBarItem) {
   return "border-black bg-surface-card text-slate-500";
 }
 
+function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boolean }) {
+  return (
+    <div
+      className={`flex flex-col items-center justify-center gap-0.5 lg:gap-1 ${
+        options?.hideDetail
+          ? "min-h-[4.25rem] sm:min-h-[4.5rem] lg:min-h-[4.75rem]"
+          : "min-h-[5.1rem] sm:min-h-[5.35rem] lg:min-h-[5.6rem]"
+      }`}
+    >
+      <div className="flex min-h-[1.75rem] min-w-0 items-center justify-center gap-1 sm:min-h-[2rem] sm:gap-1.5 lg:min-h-[2.125rem]">
+        <span
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-black sm:h-7 sm:w-7 sm:text-[11px] lg:h-8 lg:w-8 lg:text-xs ${saleStepBarBadgeClass(
+            step,
+          )}`}
+        >
+          {step.isDone ? (
+            <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5 lg:h-4 lg:w-4" />
+          ) : (
+            step.index + 1
+          )}
+        </span>
+        <span
+          className={`min-w-0 truncate text-[10px] font-black uppercase leading-snug tracking-wide sm:text-[11px] lg:text-xs ${
+            step.isActive ? "text-emerald-200" : ""
+          }`}
+        >
+          {step.label}
+        </span>
+      </div>
+      <span
+        className={`flex min-h-[1.125rem] min-w-0 items-center justify-center sm:min-h-[1.25rem] ${
+          step.isActive ? "text-emerald-100" : "text-slate-400"
+        }`}
+      >
+        <span
+          className={`min-w-0 truncate leading-snug ${
+            step.id === "box"
+              ? "text-[11px] font-black sm:text-xs"
+              : "text-[10px] font-bold sm:text-[11px] lg:text-xs"
+          }`}
+        >
+          {step.value}
+        </span>
+      </span>
+      <span
+        className={`flex min-h-[1.125rem] min-w-0 items-center justify-center gap-1.5 sm:min-h-[1.25rem] ${
+          step.country || step.subtitle
+            ? step.isActive
+              ? "text-emerald-100"
+              : "text-slate-400"
+            : "invisible"
+        }`}
+        aria-hidden={!step.country && !step.subtitle}
+      >
+        {step.country ? <Flag country={step.country} /> : null}
+        <span className="min-w-0 truncate text-[10px] font-bold leading-snug sm:text-[11px] lg:text-xs">
+          {step.country || step.subtitle || "\u00a0"}
+        </span>
+      </span>
+      {options?.hideDetail ? null : (
+        <span
+          className={`flex min-h-[1.125rem] w-full items-center justify-center truncate text-center sm:min-h-[1.25rem] ${
+            step.detail && (step.isActive || step.isDone)
+              ? step.id === "box"
+                ? step.isActive
+                  ? "text-sm font-black text-emerald-300 sm:text-base"
+                  : "text-sm font-black text-emerald-400/80"
+                : step.isActive
+                  ? "text-[10px] font-semibold text-emerald-200/70"
+                  : "text-[10px] font-semibold text-slate-500"
+              : "invisible"
+          }`}
+          aria-hidden={!step.detail || !(step.isActive || step.isDone)}
+        >
+          {step.detail || "\u00a0"}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function saleStepArrow() {
+  return (
+    <div className="flex h-3 items-start justify-center" aria-hidden>
+      <span className="flex flex-col items-center">
+        <span className="h-0 w-0 border-x-[7px] border-t-[8px] border-x-transparent border-t-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.65)]" />
+        <span className="mt-0.5 h-0.5 w-10 rounded-full bg-emerald-400/90" />
+      </span>
+    </div>
+  );
+}
+
+export type SaleStepPopoverSlot = {
+  open: boolean;
+  trigger: React.ReactNode;
+  content: React.ReactNode;
+};
+
 export function SaleStepBar({
   steps,
   onOpenStep,
+  trailingSlot,
+  stepPopovers,
 }: {
   steps: SaleStepBarItem[];
   onOpenStep: (step: SaleStep) => void;
+  trailingSlot?: React.ReactNode;
+  stepPopovers?: Partial<Record<SaleStep, SaleStepPopoverSlot>>;
 }) {
+  const hasOpenStepPopover = steps.some(
+    (step) => step.isActive && stepPopovers?.[step.id]?.open,
+  );
+
   return (
     <nav aria-label="Pasos de venta" className="w-full">
-      <div className={`${flowStepBarShellClass} ${flowStepBarPaddingClass}`}>
-        <ol className="flex w-full items-stretch gap-0">
+      <div
+        className={`${flowStepBarShellClass} ${flowStepBarPaddingClass} ${
+          hasOpenStepPopover ? "overflow-visible pb-[min(40vh,17rem)]" : "pb-1"
+        }`}
+      >
+        <div className="flex items-start gap-2">
+          <ol className="flex min-w-0 flex-1 items-start gap-0">
           {steps.map((step, index) => {
             const connectorDone =
               index > 0 && (steps[index - 1]?.isDone || steps[index - 1]?.isActive);
 
             return (
-              <li key={step.id} className="contents">
+              <Fragment key={step.id}>
                 {index > 0 ? (
                   <div
                     aria-hidden
-                    className="flex w-1 shrink-0 items-center self-center sm:w-1.5 lg:w-2"
+                    className="mt-7 flex w-1 shrink-0 items-center sm:mt-8 sm:w-1.5 lg:mt-[2.125rem] lg:w-2"
                   >
                     <span
                       className={`block h-0.5 w-full rounded-full ${
@@ -454,57 +846,68 @@ export function SaleStepBar({
                     />
                   </div>
                 ) : null}
-                <button
-                  type="button"
-                  disabled={!step.isUnlocked}
-                  onClick={() => onOpenStep(step.id)}
-                  title={`${step.label}: ${step.value}`}
-                  className={`min-w-0 flex-1 basis-0 rounded-md border px-1.5 py-1.5 text-left transition sm:px-2 sm:py-2 lg:rounded-lg lg:px-2.5 lg:py-2 ${saleStepBarButtonClass(
-                    step,
-                  )}`}
-                >
-                  <div className="flex min-h-[3.35rem] flex-col justify-center gap-0.5 sm:min-h-[3.6rem] lg:min-h-[3.75rem] lg:gap-1">
-                    <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
-                      <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-black sm:h-7 sm:w-7 sm:text-[11px] lg:h-8 lg:w-8 lg:text-xs ${saleStepBarBadgeClass(
-                          step,
-                        )}`}
-                      >
-                        {step.isDone ? (
-                          <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5 lg:h-4 lg:w-4" />
-                        ) : (
-                          step.index + 1
-                        )}
-                      </span>
-                      <span
-                        className={`min-w-0 truncate text-[10px] font-black uppercase leading-snug tracking-wide sm:text-[11px] lg:text-xs ${
-                          step.isActive ? "text-emerald-300" : ""
-                        }`}
-                      >
-                        {step.label}
-                      </span>
-                    </div>
-                    <span
-                      className={`flex min-w-0 items-center gap-1.5 pl-7 sm:pl-8 lg:pl-9 ${
-                        step.isActive ? "text-emerald-100/90" : "text-slate-400"
-                      }`}
+                <li className="relative flex min-w-0 flex-1 flex-col">
+                  {step.isActive && stepPopovers?.[step.id] ? (
+                    <div
+                      className={`min-w-0 w-full overflow-hidden rounded-md border text-center transition sm:rounded-lg ${saleStepBarButtonClass(
+                        step,
+                      )}`}
                     >
-                      {step.country ? <Flag country={step.country} /> : null}
-                      <span className="min-w-0 truncate text-[10px] font-bold leading-snug sm:text-[11px] lg:text-xs">
-                        {step.value}
-                      </span>
-                    </span>
-                    {step.detail && step.isActive ? (
-                      <span className="hidden truncate pl-7 text-[10px] font-semibold text-slate-500 lg:pl-9 xl:block">
-                        {step.detail}
-                      </span>
-                    ) : null}
-                  </div>
-                </button>
-              </li>
+                      <button
+                        type="button"
+                        disabled={!step.isUnlocked}
+                        onClick={() => onOpenStep(step.id)}
+                        title={`${step.label}: ${step.value}`}
+                        aria-current="step"
+                        className="w-full px-1.5 py-1.5 text-center sm:px-2 sm:py-2"
+                      >
+                        {saleStepTileInner(step, { hideDetail: true })}
+                      </button>
+                      <div className="border-t border-black/45 bg-black/15 px-1.5 pb-1.5 pt-1 sm:px-2 sm:pb-2 sm:pt-1.5">
+                        {stepPopovers[step.id]?.trigger}
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!step.isUnlocked}
+                      onClick={() => onOpenStep(step.id)}
+                      title={`${step.label}: ${step.value}`}
+                      aria-current={step.isActive ? "step" : undefined}
+                      className={`min-w-0 w-full rounded-md border px-1.5 py-1.5 text-center transition sm:px-2 sm:py-2 lg:rounded-lg lg:px-2.5 lg:py-2 ${saleStepBarButtonClass(
+                        step,
+                      )}`}
+                    >
+                      {saleStepTileInner(step)}
+                    </button>
+                  )}
+
+                  {step.isActive && stepPopovers?.[step.id]?.open ? (
+                    <>
+                      {saleStepArrow()}
+                      <div className="absolute left-1/2 top-full z-30 mt-1 w-[min(calc(100vw-1.25rem),22rem)] -translate-x-1/2 sm:w-[min(calc(100vw-2rem),24rem)]">
+                        {stepPopovers[step.id]?.content}
+                      </div>
+                    </>
+                  ) : (
+                    <div
+                      className="flex h-3 items-start justify-center"
+                      aria-hidden={!step.isActive}
+                    >
+                      {step.isActive ? saleStepArrow() : null}
+                    </div>
+                  )}
+                </li>
+              </Fragment>
             );
           })}
-        </ol>
+          </ol>
+          {trailingSlot ? (
+            <div className="mt-1.5 shrink-0 self-start sm:mt-2 lg:mt-[0.625rem]">
+              {trailingSlot}
+            </div>
+          ) : null}
+        </div>
       </div>
     </nav>
   );

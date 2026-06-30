@@ -96,6 +96,23 @@ export function findBoxByCatalogKey(boxes: PricingBoxConfig[], catalogKey: strin
   return boxes.find((box) => normalizeLabel(box.catalogKey || "") === target);
 }
 
+export function isProductAssignedToCountry(
+  boxes: PricingBoxConfig[],
+  product: InventoryCatalogProduct,
+) {
+  if (findBoxByCatalogKey(boxes, product.catalogKey)) {
+    return true;
+  }
+
+  const label = normalizeLabel(product.label);
+  const kind = normalizeLabel(product.kind);
+
+  return boxes.some((box) => {
+    const size = normalizeLabel(box.size);
+    return size === label || size === kind;
+  });
+}
+
 export function addProductToCountry(
   countries: PricingCountryConfig[],
   countryName: string,

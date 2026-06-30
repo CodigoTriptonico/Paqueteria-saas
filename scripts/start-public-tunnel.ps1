@@ -1,0 +1,91 @@
+$ErrorActionPreference = "Stop"
+
+$root = Split-Path -Parent $PSScriptRoot
+Set-Location $root
+
+$cloudflared = Join-Path $root "tools\cloudflared.exe"
+$port = 3000
+$localUrl = "http://127.0.0.1:$port"
+$nextOut = Join-Path $root ".next-prod.out.log"
+$nextErr = Join-Path $root ".next-prod.err.log"
+$tunnelOut = Join-Path $root ".cloudflared.out.log"
+$tunnelErr = Join-Path $root ".cloudflared.err.log"
+
+if (-not (Test-Path -LiteralPath $cloudflared)) {
+  throw "Missing tools\cloudflared.exe. Download it first from Cloudflare."
+}
+
+Write-Host "Building Next..."
+npm.cmd run build
+
+Write-Host "Starting local app..."
+$isUp = $false
+try {
+  $response = Invoke-WebRequest -UseBasicParsing $localUrl -TimeoutSec 3
+  $isUp = $response.StatusCode -ge 200 -and $response.StatusCode -lt 500
+} catch {
+  $isUp = $false
+}
+
+if (-not $isUp) {
+  Start-Process -FilePath "npm.cmd" `
+    -ArgumentList "run","start" `
+    -WorkingDirectory $root `
+    -RedirectStandardOutput $nextOut `
+    -RedirectStandardError $nextErr `
+    -WindowStyle Hidden
+}
+
+for ($i = 0; $i -lt 20; $i++) {
+  try {
+    $response = Invoke-WebRequest -UseBasicParsing $localUrl -TimeoutSec 3
+    if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+      $isUp = $true
+      break
+    }
+  } catch {
+    Start-Sleep -Seconds 1
+  }
+}
+
+if (-not $isUp) {
+  throw "Next did not start. Check .next-prod.err.log"
+}
+
+Remove-Item -LiteralPath $tunnelOut,$tunnelErr -Force -ErrorAction SilentlyContinue
+
+Write-Host "Starting Cloudflare Tunnel..."
+Start-Process -FilePath $cloudflared `
+  -ArgumentList "tunnel","--url",$localUrl `
+  -WorkingDirectory $root `
+  -RedirectStandardOutput $tunnelOut `
+  -RedirectStandardError $tunnelErr `
+  -WindowStyle Hidden
+
+$publicUrl = $null
+for ($i = 0; $i -lt 30; $i++) {
+  Start-Sleep -Seconds 1
+  $log = ""
+  if (Test-Path -LiteralPath $tunnelErr) {
+    $log += Get-Content -LiteralPath $tunnelErr -Raw
+  }
+  if (Test-Path -LiteralPath $tunnelOut) {
+    $log += Get-Content -LiteralPath $tunnelOut -Raw
+  }
+
+  $match = [regex]::Match($log, "https://[a-z0-9-]+\.trycloudflare\.com")
+  if ($match.Success) {
+    $publicUrl = $match.Value
+    break
+  }
+}
+
+if (-not $publicUrl) {
+  throw "Tunnel started but URL was not found. Check .cloudflared.err.log"
+}
+
+Write-Host ""
+Write-Host "PUBLIC URL:"
+Write-Host $publicUrl
+Write-Host ""
+Write-Host "Keep PC on. If PC sleeps, app goes down."

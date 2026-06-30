@@ -26,6 +26,7 @@ try {
   await client.query("BEGIN");
 
   const tables = [
+    ["pricing_promotions", "promociones y combos"],
     ["pricing_country_boxes", "productos por país"],
     ["distributor_country_boxes", "precios de distribuidor"],
     ["pricing_countries", "países"],

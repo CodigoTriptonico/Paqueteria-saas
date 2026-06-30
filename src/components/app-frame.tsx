@@ -36,6 +36,10 @@ function activeFromPath(pathname: string) {
     return "Envios";
   }
 
+  if (pathname.startsWith("/logistica")) {
+    return "Logistica";
+  }
+
   if (pathname.startsWith("/configuracion")) {
     return "Configuracion";
   }

@@ -1,45 +1,102 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, MapPin, Phone, Plus, User } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin, Package, Phone, Plus, User } from "lucide-react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
-import { iconWellEmerald } from "@/components/ui-blocks";
-import { Flag } from "@/components/sale/venta-parts";
+import {
+  DEFAULT_SALE_PERSON_CARD_VARIANT_ID,
+  resolveSalePersonCardVariant,
+  type SalePersonCardVariantId,
+} from "@/components/sale/sale-person-card-variants";
+import {
+  Flag,
+  type SalePersonAddress,
+  salePersonAddressLines,
+} from "@/components/sale/venta-parts";
 
-/** Tarjeta operativa de persona — layout horizontal, ancho completo en grilla. */
-export const salePersonCardClass =
-  "group flex h-full min-h-[6.75rem] w-full min-w-0 cursor-pointer flex-col rounded-xl border border-black bg-[#3a4842] p-3 text-left shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-[#425048] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40";
+const defaultVariant = resolveSalePersonCardVariant(DEFAULT_SALE_PERSON_CARD_VARIANT_ID);
+
+/** Tarjeta operativa de persona — estilo por defecto (ámbar cálido). */
+export const salePersonCardClass = `group flex h-full min-h-[12.5rem] w-full min-w-0 cursor-pointer flex-col items-center p-4 text-center focus-visible:outline-none ${defaultVariant.focusRing} ${defaultVariant.card}`;
 
 export const salePersonCardAddClass =
-  "flex h-full min-h-[6.75rem] w-full min-w-0 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/12 bg-surface-inset/50 p-3 text-center transition-colors hover:border-emerald-600/40 hover:bg-emerald-400/5";
+  "flex h-full min-h-[12.5rem] w-full min-w-0 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-amber-900/25 bg-[#2f281f]/50 p-4 text-center transition-colors hover:border-amber-600/40 hover:bg-amber-400/5";
 
 export const salePersonCardEmptyClass =
-  "col-span-full flex min-h-[5.25rem] items-center justify-center rounded-xl border border-black bg-surface-inset px-4 text-center text-sm font-black text-slate-400";
+  "col-span-full flex min-h-[5.25rem] items-center justify-center rounded-xl border border-amber-950/50 bg-[#2f281f] px-4 text-center text-sm font-black text-amber-200/45";
 
 type SalePersonCardProps = {
   name: string;
   phone: string;
-  location: string;
+  address: SalePersonAddress;
   country: string;
+  cardStyle?: SalePersonCardVariantId | string | null;
+  hint?: string;
+  hintHighlighted?: boolean;
+  onQuickSale?: () => void;
+  quickSaleLabel?: string;
+  onIconClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   className?: string;
-  footer?: ReactNode;
   onClick: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
   onContextMenu?: (event: MouseEvent<HTMLElement>) => void;
   contextProps?: Record<string, string | undefined>;
 };
 
+function SalePersonAddressBlock({
+  address,
+  variant,
+}: {
+  address: SalePersonAddress;
+  variant: ReturnType<typeof resolveSalePersonCardVariant>;
+}) {
+  const lines = salePersonAddressLines(address);
+  const summary = lines.join(", ");
+
+  if (!lines.length) {
+    return (
+      <div className={`w-full px-3 py-3 ${variant.addressEmpty}`}>
+        <p className="text-sm font-bold text-current opacity-40">Sin dirección registrada</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`w-full flex-1 px-3 py-3 ${variant.addressBlock}`} title={summary}>
+      <div className="flex h-full flex-col items-center justify-center gap-1.5">
+        <MapPin className={`h-4 w-4 shrink-0 ${variant.mapPin}`} aria-hidden />
+        {lines.map((line, index) => (
+          <p
+            key={`${line}-${index}`}
+            className={`line-clamp-2 w-full text-sm font-bold leading-snug ${variant.addressText}`}
+          >
+            {line}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function SalePersonCard({
   name,
   phone,
-  location,
+  address,
   country,
+  cardStyle,
+  hint,
+  hintHighlighted = false,
+  onQuickSale,
+  quickSaleLabel = "Venta rápida",
+  onIconClick,
   className,
-  footer,
   onClick,
   onKeyDown,
   onContextMenu,
   contextProps,
 }: SalePersonCardProps) {
+  const variant = resolveSalePersonCardVariant(cardStyle);
+  const iconTitle = onIconClick ? "Cambiar estilo de tarjeta" : undefined;
+
   return (
     <div
       role="button"
@@ -48,47 +105,94 @@ export function SalePersonCard({
       onClick={onClick}
       onKeyDown={onKeyDown}
       onContextMenu={onContextMenu}
-      className={`${salePersonCardClass}${className ? ` ${className}` : ""}`}
+      className={`group flex h-full min-h-[12.5rem] w-full min-w-0 cursor-pointer flex-col items-center p-4 text-center focus-visible:outline-none ${variant.focusRing} ${variant.card}${className ? ` ${className}` : ""}`}
     >
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-start gap-2.5">
-          <span className={`h-9 w-9 shrink-0 ${iconWellEmerald}`}>
-            <User className="h-4 w-4" />
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2.5">
+        {onIconClick ? (
+          <button
+            type="button"
+            title={iconTitle}
+            aria-label={iconTitle}
+            onClick={(event) => {
+              event.stopPropagation();
+              onIconClick(event);
+            }}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center text-slate-950 transition hover:scale-105 active:scale-95 ${variant.iconWell}`}
+          >
+            <User className="h-5 w-5" />
+          </button>
+        ) : (
+          <span
+            className={`flex h-11 w-11 shrink-0 items-center justify-center text-slate-950 ${variant.iconWell}`}
+          >
+            <User className="h-5 w-5" />
           </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <p className="line-clamp-2 min-w-0 flex-1 text-sm font-black leading-snug text-[#f8fafc]">
-                {name}
-              </p>
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-black bg-[#202926] px-1.5 py-0.5 text-[10px] font-black leading-none text-slate-200">
-                <Flag country={country} />
-                {country}
-              </span>
-            </div>
-            <p className="mt-1 flex items-center gap-1 truncate text-xs font-bold text-slate-400">
-              <Phone className="h-3 w-3 shrink-0" />
-              <span className="truncate">{phone}</span>
-            </p>
-          </div>
-        </div>
+        )}
+        <span
+          className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs font-black leading-none ${variant.countryBadge}`}
+        >
+          <Flag country={country} />
+          {country}
+        </span>
+        <p className={`line-clamp-2 w-full text-lg font-black leading-snug ${variant.name}`}>
+          {name}
+        </p>
+        <p className={`flex w-full items-center justify-center gap-1.5 text-sm font-bold ${variant.phone}`}>
+          <Phone className="h-4 w-4 shrink-0" />
+          <span className="truncate">{phone}</span>
+        </p>
 
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-black/70 pt-2">
-          <p className="flex min-w-0 flex-1 items-center gap-1 truncate text-[11px] font-bold text-slate-400">
-            <MapPin className="h-3 w-3 shrink-0 text-emerald-400" />
-            <span className="truncate">{location || "—"}</span>
-          </p>
-          {footer ? (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">{footer}</div>
+        <SalePersonAddressBlock address={address} variant={variant} />
+
+        <div className="flex min-h-[1.125rem] w-full items-center justify-center">
+          {hint ? (
+            <p
+              className={`text-xs font-black uppercase tracking-wide ${
+                hintHighlighted ? variant.hintHighlighted : variant.hint
+              }`}
+            >
+              {hint}
+            </p>
           ) : null}
         </div>
+      </div>
+
+      <div className="mt-2.5 flex min-h-7 w-full shrink-0 items-center justify-center">
+        {onQuickSale ? (
+          <button
+            type="button"
+            title={quickSaleLabel}
+            aria-label={quickSaleLabel}
+            onClick={(event) => {
+              event.stopPropagation();
+              onQuickSale();
+            }}
+            className={`inline-flex h-7 items-center justify-center gap-1 rounded-md px-2.5 text-[11px] font-black text-slate-950 transition active:scale-[0.98] ${variant.quickSale}`}
+          >
+            <Package className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
+            Venta rápida
+          </button>
+        ) : null}
       </div>
     </div>
   );
 }
 
-export function SalePersonStatBadge({ children }: { children: ReactNode }) {
+export function SalePersonStatBadge({
+  children,
+  highlighted = false,
+}: {
+  children: ReactNode;
+  highlighted?: boolean;
+}) {
   return (
-    <span className="inline-flex h-6 items-center rounded-md border border-black bg-emerald-400/10 px-1.5 text-[10px] font-black text-emerald-200">
+    <span
+      className={`inline-flex h-6 items-center rounded-md border px-1.5 text-[10px] font-black ${
+        highlighted
+          ? "border-amber-600/40 bg-amber-400/15 text-amber-200"
+          : "border-amber-950/50 bg-amber-400/10 text-amber-200"
+      }`}
+    >
       {children}
     </span>
   );
@@ -107,8 +211,8 @@ export function SalePersonActionButton({
 }) {
   const className =
     variant === "ghost"
-      ? "inline-flex h-6 items-center gap-0.5 rounded-md border border-black/50 bg-transparent px-1.5 text-[10px] font-black text-slate-400 transition hover:border-emerald-700/40 hover:bg-emerald-400/5 hover:text-emerald-200"
-      : "inline-flex h-6 items-center gap-0.5 rounded-md bg-emerald-400 px-1.5 text-[10px] font-black text-slate-950 transition hover:bg-emerald-300";
+      ? "inline-flex h-6 items-center gap-0.5 rounded-md border border-amber-950/40 bg-transparent px-1.5 text-[10px] font-black text-amber-200/50 transition hover:border-amber-700/40 hover:bg-amber-400/5 hover:text-amber-200"
+      : "inline-flex h-6 items-center gap-0.5 rounded-md bg-amber-400 px-1.5 text-[10px] font-black text-slate-950 transition hover:bg-amber-300";
 
   return (
     <button
@@ -138,10 +242,10 @@ export function SalePersonAddCard({
       onClick={onClick}
       className={`${salePersonCardAddClass}${className ? ` ${className}` : ""}`}
     >
-      <span className={`h-8 w-8 ${iconWellEmerald}`}>
-        <Plus className="h-4 w-4" />
+      <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-amber-600/70 bg-amber-400/95 text-slate-950">
+        <Plus className="h-5 w-5" />
       </span>
-      <span className="text-[11px] font-black leading-tight text-emerald-300">{label}</span>
+      <span className="text-sm font-black leading-tight text-amber-300">{label}</span>
     </button>
   );
 }

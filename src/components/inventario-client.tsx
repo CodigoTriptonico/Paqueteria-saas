@@ -34,6 +34,7 @@ import {
 } from "@/lib/pricing-catalog";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
 import { mergeTreeIntoInventoryItems } from "@/lib/inventory-stock";
+import type { PricingConfigPayload } from "@/lib/pricing/types";
 
 const WAREHOUSES_CONFIG_HREF =
   "/configuracion?view=inventory&inventory=warehouses";
@@ -46,8 +47,10 @@ type AssignDraft = {
 
 export function InventarioClient({
   initialData,
+  initialPricing,
 }: {
   initialData?: InventoryBackendInitialData;
+  initialPricing?: PricingConfigPayload;
 }) {
   const router = useRouter();
   const notify = useNotify();
@@ -73,8 +76,9 @@ export function InventarioClient({
   const {
     countries: pricingCountries,
     setCountries: setPricingCountries,
+    setPromotions: setPricingPromotions,
     reload: reloadPricing,
-  } = usePricingBackend();
+  } = usePricingBackend(initialPricing);
   const [newWarehouseName, setNewWarehouseName] = useState("");
   const [warehouseSaving, setWarehouseSaving] = useState(false);
   const [assignDraft, setAssignDraft] = useState<AssignDraft | null>(null);
@@ -231,6 +235,32 @@ export function InventarioClient({
     setWarehouses((current) => [result.data, ...current]);
     setNewWarehouseName("");
     setWarehouseId(result.data.id);
+  }
+
+  function saveProductCountryAssignments(nextCountries: typeof pricingCountries) {
+    setPricingCountries(nextCountries);
+
+    if (!productCountriesDraft) {
+      return;
+    }
+
+    const activeCountries = new Set(
+      nextCountries
+        .filter((country) =>
+          country.boxes.some(
+            (box) => (box.catalogKey || box.size) === productCountriesDraft.catalogKey,
+          ),
+        )
+        .map((country) => country.name),
+    );
+
+    setPricingPromotions((current) =>
+      current.filter(
+        (promotion) =>
+          promotion.catalogKey !== productCountriesDraft.catalogKey ||
+          activeCountries.has(promotion.countryName),
+      ),
+    );
   }
 
   function warehouseCreateForm(compact = false) {
@@ -454,7 +484,7 @@ export function InventarioClient({
         product={productCountriesDraft}
         countries={pricingCountries}
         onClose={() => setProductCountriesDraft(null)}
-        onSave={setPricingCountries}
+        onSave={saveProductCountryAssignments}
       />
     </div>
   );

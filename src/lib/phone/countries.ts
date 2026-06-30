@@ -1,6 +1,8 @@
 import { joinDigitGroups } from "@/lib/phone/format-input";
 import { normalizePhoneDigits } from "@/lib/phone/normalize";
 import { buildPhoneCountries } from "@/lib/phone/build-phone-countries";
+import { DIAL_CODE_BY_ISO } from "@/lib/phone/dial-codes-by-iso";
+import { resolveCountryCodeFromString } from "@/lib/country-options";
 import type { PhoneCountry } from "@/lib/phone/countries.types";
 
 export type { PhoneCountry } from "@/lib/phone/countries.types";
@@ -19,6 +21,22 @@ const PREFERRED_ISO_BY_DIAL: Record<string, string> = {
 };
 
 export const PHONE_COUNTRIES: PhoneCountry[] = buildPhoneCountries();
+
+export function getPhoneIsoForCountryName(countryName: string): string | undefined {
+  const iso = resolveCountryCodeFromString(countryName);
+
+  if (!iso || !DIAL_CODE_BY_ISO[iso]) {
+    return undefined;
+  }
+
+  return iso;
+}
+
+export function getPhoneDialCodeForCountryName(countryName: string): string | undefined {
+  const iso = getPhoneIsoForCountryName(countryName);
+
+  return iso ? DIAL_CODE_BY_ISO[iso] : undefined;
+}
 
 export function getPhoneCountryByDialCode(dialCode: string) {
   const preferredIso = PREFERRED_ISO_BY_DIAL[dialCode];

@@ -10,9 +10,11 @@ import {
   LucideIcon,
   Settings,
   Shield,
+  Truck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { UserAccountMenu } from "@/components/user-account-menu";
+import { BoxarioBrandHeader } from "@/components/notifications/notifications-center";
 import { canAccessPath, platformAdminNeedsClientContext } from "@/lib/auth/permissions";
 import type { AppSession } from "@/lib/auth/types";
 
@@ -21,6 +23,7 @@ const navItems: { label: string; href: string; icon: LucideIcon; hasSubmenu?: bo
   { label: "Nueva venta", href: "/venta", icon: CreditCard, hasSubmenu: true },
   { label: "Inventario", href: "/inventario", icon: Boxes, hasSubmenu: true },
   { label: "Envios", href: "/envios", icon: ClipboardList },
+  { label: "Logistica", href: "/logistica", icon: Truck },
   { label: "Configuracion", href: "/configuracion", icon: Settings },
   { label: "Plataforma", href: "/platform", icon: Shield, platformOnly: true },
 ];
@@ -50,48 +53,12 @@ function hasCompactSidebarContent(content: React.ReactNode) {
   return content !== null && content !== undefined && content !== false;
 }
 
-type SidebarContextHeaderProps = {
-  title: string;
-  backTitle?: string;
-  onBack: () => void;
-  compact?: boolean;
-};
+function shellBrandTitle(active: string, contextNavLabel?: string) {
+  if (!contextNavLabel) {
+    return "Boxario";
+  }
 
-function SidebarContextHeader({
-  title,
-  backTitle = "Volver",
-  onBack,
-  compact = false,
-}: SidebarContextHeaderProps) {
-  const iconSize = compact ? "h-7 w-7" : "h-8 w-8";
-  const titleSize = compact ? "text-[15px]" : "text-lg";
-
-  return (
-    <button
-      type="button"
-      onClick={onBack}
-      title={backTitle}
-      aria-label={`${backTitle}: ${title}`}
-      className={`group flex w-full items-center gap-3 overflow-hidden rounded-xl border border-black bg-[#1a2320] px-3 py-3 text-left shadow-[0_8px_22px_rgba(0,0,0,0.22)] ring-1 ring-inset ring-white/[0.04] transition duration-200 hover:border-emerald-700/35 hover:bg-[#243029] active:scale-[0.99] sm:gap-4 sm:px-4 sm:py-3.5 ${compact ? "min-h-12" : "min-h-[3.75rem]"}`}
-    >
-      <span
-        className={`flex shrink-0 items-center justify-center rounded-lg border border-black bg-[#121816] text-emerald-300/90 transition duration-200 group-hover:border-emerald-700/40 group-hover:bg-emerald-400/10 group-hover:text-emerald-200 ${compact ? "h-10 w-10" : "h-11 w-11 sm:h-12 sm:w-12"}`}
-        aria-hidden
-      >
-        <ArrowLeft
-          className={`${iconSize} transition duration-200 group-hover:-translate-x-0.5`}
-          strokeWidth={2.5}
-        />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span
-          className={`block truncate font-black leading-snug text-[#f8fafc] ${titleSize}`}
-        >
-          {title}
-        </span>
-      </span>
-    </button>
-  );
+  return contextNavLabel === active ? "Boxario" : contextNavLabel;
 }
 
 type CompactNavHeaderProps = {
@@ -258,6 +225,7 @@ export function AppShell({
     navItems[0];
   const showCompactSidebar = hasCompactSidebarContent(compactContent);
   const showContextNav = Boolean(contextNavLabel && onContextNavBack);
+  const showMobileMainNav = !(navCollapsed && showCompactSidebar);
 
   const mobileNavItems = useMemo(() => sidebarNavItems, [sidebarNavItems]);
 
@@ -269,14 +237,27 @@ export function AppShell({
   useEffect(() => {
     if (!showCompactSidebar) {
       queueMicrotask(() => {
-        setNavCollapsed(false);
-        window.sessionStorage.removeItem("boxario-nav-collapsed");
+        setNavCollapsed((current) => {
+          if (!current) {
+            return current;
+          }
+
+          window.sessionStorage.removeItem("boxario-nav-collapsed");
+          return false;
+        });
       });
       return;
     }
 
     queueMicrotask(() => {
-      collapseToCompactNav();
+      setNavCollapsed((current) => {
+        if (current) {
+          return current;
+        }
+
+        window.sessionStorage.setItem("boxario-nav-collapsed", "1");
+        return true;
+      });
     });
   }, [active, showCompactSidebar, compactNavFocusKey]);
 
@@ -296,6 +277,7 @@ export function AppShell({
 
   const compactNavTitle = compactNavLabel ?? activeItem.label;
   const compactNavBackTitle = onCompactNavClick ? "Volver" : "Mostrar menu";
+  const brandTitle = shellBrandTitle(active, contextNavLabel);
 
   function handleNavClick(isActive: boolean, hasSubmenu?: boolean) {
     if (isActive && hasSubmenu && showCompactSidebar) {
@@ -308,26 +290,23 @@ export function AppShell({
   }
 
   return (
-    <main className="flex h-dvh flex-col overflow-hidden bg-surface-shell text-[#f8fafc]">
+    <main className="flex min-h-dvh flex-col bg-surface-shell text-[#f8fafc] lg:h-dvh lg:overflow-hidden">
       <div
-        className={`flex h-full min-h-0 w-full bg-surface-shell ${
+        className={`flex min-h-dvh w-full bg-surface-shell lg:h-full lg:min-h-0 ${
           contentEdgeToEdge
             ? "gap-3 py-3 pl-3 pr-0 sm:gap-4 sm:py-4 sm:pl-4"
             : "gap-4 p-3 sm:gap-5 sm:p-5"
         }`}
       >
-        <aside className="hidden w-72 shrink-0 overflow-visible rounded-xl border border-black bg-surface-panel p-4 shadow-md transition-all duration-300 ease-out lg:sticky lg:top-5 lg:z-[100] lg:flex lg:max-h-[calc(100vh-2.5rem)] lg:min-h-[calc(100vh-2.5rem)] lg:flex-col">
-          {showContextNav ? (
-            <div className="mb-4">
-              <SidebarContextHeader
-                title={contextNavLabel!}
-                onBack={onContextNavBack!}
-              />
-            </div>
-          ) : !navCollapsed ? (
-            <div className="mb-8 rounded-xl border border-black bg-surface-card p-4 text-[#f8fafc] shadow-sm">
-              <h1 className="text-2xl font-black">Boxario</h1>
-            </div>
+        <aside className="hidden w-72 shrink-0 overflow-visible rounded-xl border border-black bg-surface-panel p-4 shadow-md lg:sticky lg:top-5 lg:z-[100] lg:flex lg:max-h-[calc(100vh-2.5rem)] lg:min-h-[calc(100vh-2.5rem)] lg:flex-col">
+          {!navCollapsed ? (
+            <BoxarioBrandHeader
+              session={session}
+              compact
+              className="mb-4"
+              onBack={showContextNav ? onContextNavBack : undefined}
+              title={showContextNav ? brandTitle : undefined}
+            />
           ) : null}
 
           {navCollapsed && showCompactSidebar ? (
@@ -368,7 +347,18 @@ export function AppShell({
           </div>
         </aside>
 
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <section className="flex min-w-0 flex-1 flex-col overflow-visible lg:min-h-0 lg:overflow-hidden">
+          <div className="mb-3 flex items-stretch gap-2 lg:hidden">
+            <BoxarioBrandHeader
+              session={session}
+              compact
+              className="min-w-0 flex-1"
+              onBack={showContextNav ? onContextNavBack : undefined}
+              title={showContextNav ? brandTitle : undefined}
+            />
+            <UserAccountMenu session={session} variant="bar" />
+          </div>
+
           {needsClientSelection ? (
             <div className="mb-4 rounded-lg border border-amber-800/50 bg-amber-950/25 px-4 py-2 text-sm font-bold text-amber-100 lg:hidden">
               Operación bloqueada hasta elegir una paquetería en Plataforma.
@@ -383,22 +373,6 @@ export function AppShell({
                 {" "}
                 · datos de inventario, ventas y configuración de este cliente
               </span>
-            </div>
-          ) : null}
-
-          <div
-            className="sticky top-3 z-50 mb-4 flex justify-end lg:hidden"
-          >
-            <UserAccountMenu session={session} variant="bar" />
-          </div>
-
-          {showContextNav ? (
-            <div className="mb-4 lg:hidden">
-              <SidebarContextHeader
-                compact
-                title={contextNavLabel!}
-                onBack={onContextNavBack!}
-              />
             </div>
           ) : null}
 
@@ -417,7 +391,7 @@ export function AppShell({
             </div>
           ) : null}
 
-          {!navCollapsed || showContextNav ? (
+          {showMobileMainNav ? (
             <nav className="mb-4 grid grid-cols-2 gap-2 sm:mb-5 sm:grid-cols-3 lg:hidden">
               {mobileNavItems.map((item) => (
                 <ShellNavItem
@@ -432,7 +406,7 @@ export function AppShell({
             </nav>
           ) : null}
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
+          <div className="flex flex-col overflow-x-hidden lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
             {children}
           </div>
         </section>

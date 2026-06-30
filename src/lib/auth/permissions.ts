@@ -1,7 +1,7 @@
 import type { AppSession, PermissionKey, RoleSlug } from "@/lib/auth/types";
 
 const ROLE_ROUTE_ACCESS: Partial<Record<RoleSlug, string[]>> = {
-  administrador: ["/", "/venta", "/inventario", "/envios", "/configuracion"],
+  administrador: ["/", "/venta", "/inventario", "/envios", "/logistica", "/configuracion"],
   vendedor: ["/", "/venta", "/inventario"],
   conductor: ["/", "/envios"],
 };
@@ -11,6 +11,7 @@ const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
   "/inventario": ["inventory.view"],
   "/venta": ["sales.manage"],
   "/envios": ["routes.view"],
+  "/logistica": ["routes.view", "routes.update_status"],
 };
 
 function effectiveRoleSlug(session: AppSession): RoleSlug {
@@ -63,6 +64,10 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
 
   const base = "/" + (pathname.split("/").filter(Boolean)[0] || "");
   const allowedPrefixes = ROLE_ROUTE_ACCESS[effectiveRoleSlug(session)];
+
+  if (base === "/logistica" && effectiveRoleSlug(session) !== "administrador") {
+    return false;
+  }
 
   if (allowedPrefixes && !allowedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
     return false;

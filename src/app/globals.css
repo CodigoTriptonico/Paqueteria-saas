@@ -59,6 +59,58 @@ input.client-form-field {
   color: #f8fafc;
 }
 
+.sale-invoice-paper input {
+  background: transparent;
+  color: #0f172a;
+  border: none;
+  box-shadow: none;
+}
+
+.sale-invoice-paper input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.sale-invoice-paper input:focus-visible {
+  outline: 1px solid #94a3b8;
+  outline-offset: 2px;
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body {
+    background: #fff !important;
+    color: #0f172a !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .sale-invoice-paper,
+  .sale-invoice-paper * {
+    visibility: visible;
+  }
+
+  .sale-invoice-paper {
+    position: absolute;
+    inset: 0;
+    margin: 0 auto;
+    max-width: none;
+    min-height: auto;
+    box-shadow: none !important;
+    border: none !important;
+    background: #fff !important;
+  }
+}
+
 select {
   background: #0B1220;
   color: #f8fafc;
@@ -211,6 +263,49 @@ textarea::placeholder {
   }
 }
 
+@keyframes onboarding-help-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(56, 189, 248, 0.35),
+      0 0 8px rgba(56, 189, 248, 0.28);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(125, 211, 252, 0.55),
+      0 0 14px rgba(56, 189, 248, 0.45);
+  }
+}
+
+.onboarding-help-button-glow {
+  animation: onboarding-help-glow 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-help-button-glow {
+    animation: none;
+    box-shadow:
+      0 0 0 1px rgba(56, 189, 248, 0.4),
+      0 0 10px rgba(56, 189, 248, 0.3);
+  }
+}
+
+@keyframes notification-icon-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 2px rgba(52, 211, 153, 0.55))
+      drop-shadow(0 0 5px rgba(52, 211, 153, 0.28));
+  }
+  50% {
+    filter: drop-shadow(0 0 4px rgba(52, 211, 153, 0.95))
+      drop-shadow(0 0 10px rgba(52, 211, 153, 0.5));
+  }
+}
+
+.notification-icon-glow {
+  animation: notification-icon-glow 2.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .motion-enter-left,
   .motion-enter-top,
@@ -223,6 +318,10 @@ textarea::placeholder {
   .skeleton-card,
   .skeleton-line,
   .skeleton-block {
+    animation: none;
+  }
+
+  .notification-icon-glow {
     animation: none;
   }
 }

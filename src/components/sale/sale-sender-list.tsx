@@ -1,7 +1,8 @@
 "use client";
 
-import { Plus, Search, UserPlus } from "lucide-react";
+import { Search, UserPlus } from "lucide-react";
 import { type MouseEvent, useMemo } from "react";
+import type { SalePersonCardVariantId } from "@/components/sale/sale-person-card-variants";
 import { InlineSearchCombobox } from "@/components/inline-search-picker";
 import {
   flowPagerClass,
@@ -10,13 +11,8 @@ import {
   flowPersonToolbarClass,
   flowToolbarCreateButtonClass,
 } from "@/components/flow-form-styles";
-import {
-  SalePersonActionButton,
-  SalePersonCard,
-  salePersonCardEmptyClass,
-  SalePersonPager,
-  SalePersonStatBadge,
-} from "@/components/sale/sale-person-card";
+import { SalePersonCard, salePersonCardEmptyClass, SalePersonPager } from "@/components/sale/sale-person-card";
+import { SaleRecentSenders } from "@/components/sale/sale-recent-senders";
 import {
   personFullName,
   type Sender,
@@ -29,33 +25,51 @@ type SaleSenderListProps = {
   matchingSenders: Sender[];
   filteredCount: number;
   visibleSenders: Sender[];
+  recentSenders: Sender[];
   safePage: number;
   pageCount: number;
   onQueryChange: (value: string) => void;
   onPageChange: (updater: (current: number) => number) => void;
   onNewClient: () => void;
-  onAddReferral: (sender: Sender) => void;
   onChoose: (sender: Sender) => void;
+  onQuickEmptyBox: (sender: Sender) => void;
   getCardClass: (sender: Sender) => string;
   getReferralCount: (sender: Sender) => number;
   onOpenContextMenu: (event: MouseEvent<HTMLElement>, sender: Sender) => void;
+  onIconClick?: (event: MouseEvent<HTMLButtonElement>, sender: Sender) => void;
 };
+
+function senderCardHint(sender: Sender, referralCount: number) {
+  const parts: string[] = [];
+
+  if (sender.recipients.length > 0) {
+    parts.push(`${sender.recipients.length} dest.`);
+  }
+
+  if (referralCount > 0) {
+    parts.push(`${referralCount} ref.`);
+  }
+
+  return parts.length ? parts.join(" · ") : undefined;
+}
 
 export function SaleSenderList({
   query,
   matchingSenders,
   filteredCount,
   visibleSenders,
+  recentSenders,
   safePage,
   pageCount,
   onQueryChange,
   onPageChange,
   onNewClient,
-  onAddReferral,
   onChoose,
+  onQuickEmptyBox,
   getCardClass,
   getReferralCount,
   onOpenContextMenu,
+  onIconClick,
 }: SaleSenderListProps) {
   const senderSearchOptions = useMemo(
     () =>
@@ -78,6 +92,13 @@ export function SaleSenderList({
 
   return (
     <div className={flowPersonListSectionClass}>
+      {recentSenders.length ? (
+        <SaleRecentSenders
+          senders={recentSenders}
+          onChoose={onChoose}
+          onQuickEmptyBox={onQuickEmptyBox}
+        />
+      ) : null}
       <div className={flowPersonToolbarClass}>
         <InlineSearchCombobox
           value={query}
@@ -108,60 +129,62 @@ export function SaleSenderList({
 
       <div className={flowPersonCardGridClass}>
         {visibleSenders.length ? (
-          visibleSenders.map((sender) => (
-            <SalePersonCard
-              key={senderPhoneKey(sender)}
-              name={personFullName(sender)}
-              phone={senderPhonesLabel(sender)}
-              location={[sender.city, sender.state].filter(Boolean).join(", ") || "USA"}
-              country="USA"
-              className={getCardClass(sender)}
-              contextProps={{
-                "data-sale-context-key": `sender:${senderPhoneKey(sender)}`,
-                "data-sale-context-type": "remitente",
-                "data-sale-context-title": personFullName(sender),
-                "data-sale-context-first-name": sender.firstName,
-                "data-sale-context-last-name": sender.lastName,
-                "data-sale-context-phones": sender.phones.join("|"),
-                "data-sale-context-street": sender.street,
-                "data-sale-context-house": sender.houseNumber,
-                "data-sale-context-neighborhood": sender.neighborhood,
-                "data-sale-context-city": sender.city,
-                "data-sale-context-state": sender.state,
-                "data-sale-context-postal-code": sender.postalCode,
-                "data-sale-context-country": "USA",
-              }}
-              onClick={() => onChoose(sender)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onChoose(sender);
+          visibleSenders.map((sender) => {
+            const referralCount = getReferralCount(sender);
+
+            return (
+              <SalePersonCard
+                key={senderPhoneKey(sender)}
+                name={personFullName(sender)}
+                phone={senderPhonesLabel(sender)}
+                address={{
+                  street: sender.street,
+                  houseNumber: sender.houseNumber,
+                  neighborhood: sender.neighborhood,
+                  city: sender.city,
+                  state: sender.state,
+                  postalCode: sender.postalCode,
+                }}
+                country="USA"
+                cardStyle={sender.cardStyle as SalePersonCardVariantId}
+                hint={senderCardHint(sender, referralCount)}
+                className={getCardClass(sender)}
+                contextProps={{
+                  "data-sale-context-key": `sender:${senderPhoneKey(sender)}`,
+                  "data-sale-context-type": "remitente",
+                  "data-sale-context-title": personFullName(sender),
+                  "data-sale-context-first-name": sender.firstName,
+                  "data-sale-context-last-name": sender.lastName,
+                  "data-sale-context-phones": sender.phones.join("|"),
+                  "data-sale-context-street": sender.street,
+                  "data-sale-context-house": sender.houseNumber,
+                  "data-sale-context-neighborhood": sender.neighborhood,
+                  "data-sale-context-city": sender.city,
+                  "data-sale-context-state": sender.state,
+                  "data-sale-context-postal-code": sender.postalCode,
+                  "data-sale-context-country": "USA",
+                  "data-sale-context-customer-id": sender.id.startsWith("local-")
+                    ? undefined
+                    : sender.id,
+                }}
+                onClick={() => onChoose(sender)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onChoose(sender);
+                  }
+                }}
+                onContextMenu={(event) => onOpenContextMenu(event, sender)}
+                onIconClick={
+                  onIconClick && !sender.id.startsWith("local-")
+                    ? (event) => onIconClick(event, sender)
+                    : undefined
                 }
-              }}
-              onContextMenu={(event) => onOpenContextMenu(event, sender)}
-              footer={
-                <>
-                  {sender.recipients.length > 0 ? (
-                    <SalePersonStatBadge>{sender.recipients.length} dest.</SalePersonStatBadge>
-                  ) : null}
-                  {getReferralCount(sender) > 0 ? (
-                    <SalePersonStatBadge>{getReferralCount(sender)} ref.</SalePersonStatBadge>
-                  ) : null}
-                  <SalePersonActionButton
-                    title="Agregar referido"
-                    variant="ghost"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onAddReferral(sender);
-                    }}
-                  >
-                    <Plus className="h-3 w-3" />
-                    Ref.
-                  </SalePersonActionButton>
-                </>
-              }
-            />
-          ))
+                onQuickSale={() => onQuickEmptyBox(sender)}
+                quickSaleLabel={`Venta rápida: ${personFullName(sender)}`}
+              />
+            );
+          })
         ) : (
           <div className={salePersonCardEmptyClass}>
             {filteredCount === 0 ? "Sin remitentes" : "Sin resultados"}

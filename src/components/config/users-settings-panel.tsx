@@ -3,6 +3,7 @@
 import {
   Loader2,
   Search,
+  Shield,
   UserPlus,
   Users,
   X,
@@ -29,9 +30,15 @@ import { listWarehousesAction } from "@/app/actions/warehouses";
 import { PageLoading } from "@/components/page-loading";
 import type { PermissionRow, RoleRow, RoleSlug } from "@/lib/auth/types";
 import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import { AppTabs, type AppTabDefinition } from "@/components/app-tabs";
 import { useNotify } from "@/hooks/use-notify";
 
 type UsersTab = "team" | "roles";
+
+const usersTabs: AppTabDefinition<UsersTab>[] = [
+  { id: "team", label: "Equipo", icon: Users },
+  { id: "roles", label: "Roles y permisos", icon: Shield },
+];
 
 const fieldLabelClass = "grid gap-1.5 text-[11px] font-black uppercase text-slate-400";
 const sectionClass =
@@ -52,14 +59,6 @@ function generateTemporaryPassword() {
   }
 
   return password;
-}
-
-function tabButtonClass(active: boolean) {
-  return `border-b-2 pb-2.5 text-sm font-black transition ${
-    active
-      ? "border-emerald-400 text-[#f8fafc]"
-      : "border-transparent text-slate-300 hover:border-slate-600 hover:text-slate-100"
-  }`;
 }
 
 function warehouseAccessHint(roleSlug: RoleSlug) {
@@ -404,22 +403,12 @@ export function UsersSettingsPanel() {
   return (
     <>
     <div className="grid w-full gap-4">
-      <div className="flex flex-wrap gap-6 border-b border-black/80 pb-0">
-        <button
-          type="button"
-          className={tabButtonClass(activeTab === "team")}
-          onClick={() => setActiveTab("team")}
-        >
-          Equipo
-        </button>
-        <button
-          type="button"
-          className={tabButtonClass(activeTab === "roles")}
-          onClick={() => setActiveTab("roles")}
-        >
-          Roles y permisos
-        </button>
-      </div>
+      <AppTabs
+        tabs={usersTabs}
+        value={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="Secciones de usuarios"
+      />
 
       {activeTab === "team" ? (
         <>

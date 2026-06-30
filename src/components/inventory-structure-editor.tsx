@@ -6,7 +6,6 @@ import {
   Package2,
   Plus,
   Search,
-  Settings2,
   Sparkles,
   X,
 } from "lucide-react";
@@ -29,6 +28,12 @@ import {
 import { InventoryCategorySidebar } from "@/components/inventory/inventory-category-sidebar";
 import { InventoryItemContextMenu } from "@/components/inventory/inventory-item-context-menu";
 import { InventoryItemGrid } from "@/components/inventory/inventory-item-grid";
+import {
+  inventoryToolbarFiltersClass,
+  inventoryToolbarGroupClass,
+  InventoryToolbarIconButton,
+} from "@/components/inventory/inventory-toolbar-icon-button";
+import { InventoryNewItemPopover } from "@/components/inventory/inventory-new-item-popover";
 import { InventoryStructureOptionsMenu } from "@/components/inventory/inventory-structure-options-menu";
 import { useNotify } from "@/hooks/use-notify";
 import {
@@ -124,6 +129,11 @@ export function InventoryStructureEditor({
   const [structureMenuMounted, setStructureMenuMounted] = useState(false);
   const structureButtonRef = useRef<HTMLButtonElement>(null);
   const structurePanelRef = useRef<HTMLDivElement>(null);
+  const newItemPopoverRef = useRef<HTMLDivElement>(null);
+  const [newItemPopoverPosition, setNewItemPopoverPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   const emptyCategoryFormRef = useRef<HTMLDivElement>(null);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
@@ -168,7 +178,6 @@ export function InventoryStructureEditor({
         if (categoryConfigs.length > 0) {
           setShowNewCategoryInput(false);
         }
-        setShowNewItemForm(false);
         setEditingItemId("");
         setEditingItemName("");
       });
@@ -202,6 +211,7 @@ export function InventoryStructureEditor({
     setShowNewCategoryInput(false);
     setOpenSubcategoryInput("");
     setShowNewItemForm(true);
+    setOptionsOpen(false);
   }
 
   const updateStructureMenuPosition = useCallback(() => {
@@ -246,6 +256,42 @@ export function InventoryStructureEditor({
     };
   }, [embedded, optionsOpen, updateStructureMenuPosition]);
 
+  const updateNewItemPopoverPosition = useCallback(() => {
+    const trigger = structureButtonRef.current;
+
+    if (!trigger) {
+      return;
+    }
+
+    const rect = trigger.getBoundingClientRect();
+    const margin = 8;
+    const left = Math.min(
+      Math.max(margin, rect.right - STRUCTURE_MENU_WIDTH),
+      window.innerWidth - STRUCTURE_MENU_WIDTH - margin,
+    );
+
+    setNewItemPopoverPosition({
+      top: rect.bottom + 6,
+      left,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!showNewItemForm) {
+      return;
+    }
+
+    updateNewItemPopoverPosition();
+
+    window.addEventListener("resize", updateNewItemPopoverPosition);
+    window.addEventListener("scroll", updateNewItemPopoverPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateNewItemPopoverPosition);
+      window.removeEventListener("scroll", updateNewItemPopoverPosition, true);
+    };
+  }, [showNewItemForm, updateNewItemPopoverPosition]);
+
   useEffect(() => {
     if (!embedded || !optionsOpen) {
       return;
@@ -257,6 +303,7 @@ export function InventoryStructureEditor({
       if (
         structureButtonRef.current?.contains(target) ||
         structurePanelRef.current?.contains(target) ||
+        newItemPopoverRef.current?.contains(target) ||
         emptyCategoryFormRef.current?.contains(target)
       ) {
         return;
@@ -341,6 +388,14 @@ export function InventoryStructureEditor({
     setShowNewCategoryInput(false);
     setShowNewItemForm(false);
     setOpenSubcategoryInput(selectedCategory);
+    setOptionsOpen(true);
+  }
+
+  function beginAddCategory() {
+    setShowNewItemForm(false);
+    setOpenSubcategoryInput("");
+    setShowNewCategoryInput(true);
+    setOptionsOpen(true);
   }
 
   const addingSubcategoryForSelectedCategory = Boolean(
@@ -1124,7 +1179,7 @@ export function InventoryStructureEditor({
     }
 
     return [
-      { value: "", label: "Todas las subcategorías" },
+      { value: "", label: "Items sueltos" },
       ...subcategories.map((subcategory) => ({
         value: subcategory.id,
         label: subcategory.name,
@@ -1195,32 +1250,6 @@ export function InventoryStructureEditor({
     });
   }, [inventoryItems, selectedCategoryData, selectedSubcategory]);
 
-  useEffect(() => {
-    if (!itemContextMenu) {
-      return;
-    }
-
-    function closeMenu() {
-      setItemContextMenu(null);
-    }
-
-    function handleKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        closeMenu();
-      }
-    }
-
-    window.addEventListener("pointerdown", closeMenu);
-    window.addEventListener("scroll", closeMenu, true);
-    window.addEventListener("keydown", handleKey);
-
-    return () => {
-      window.removeEventListener("pointerdown", closeMenu);
-      window.removeEventListener("scroll", closeMenu, true);
-      window.removeEventListener("keydown", handleKey);
-    };
-  }, [itemContextMenu]);
-
   useLayoutEffect(() => {
     if (layout !== "sidebar" || embedded) {
       return;
@@ -1282,7 +1311,7 @@ export function InventoryStructureEditor({
       stockSaving={stockSaving}
       warehouseId={warehouseId}
       warehouseName={warehouseName}
-      structureEditingEnabled={structureEditingEnabled}
+      structureMenuActionsEnabled={showStructureOptions}
       contextMenuAssignments={contextMenuAssignments}
       itemHistoryContext={itemHistoryContext}
       setItemHistoryContext={setItemHistoryContext}
@@ -1392,20 +1421,11 @@ export function InventoryStructureEditor({
 
   const itemQueryTrimmed = itemQuery.trim();
   const itemQueryActive = itemQueryTrimmed.length > 0;
-  const showSubcategoryGroups =
-    !selectedSubcategory && !itemQueryActive && subcategories.length > 0;
   const itemCountLabel = selectedSubcategory
     ? formatScopedItemCount(scopedItems.length, selectedSubcategory.name)
-    : showSubcategoryGroups
-      ? `${directItems.length} ${directItems.length === 1 ? "item suelto" : "items sueltos"} · ${subcategories.length} subcategoría${subcategories.length === 1 ? "" : "s"}`
-      : formatScopedItemCount(
-          scopedItems.length,
-          selectedCategoryData?.name ?? "",
-        );
+    : formatScopedItemCount(directItems.length, selectedCategoryData?.name ?? "");
 
-  const itemSearchPlaceholder = selectedCategoryData
-    ? `Buscar en ${selectedCategoryData.name}…`
-    : "Buscar item…";
+  const itemSearchPlaceholder = "Buscar…";
 
   const itemsPanel = (
     <InventoryItemGrid
@@ -1418,10 +1438,8 @@ export function InventoryStructureEditor({
       embeddedItemOptions={embeddedItemOptions}
       scopedItems={scopedItems}
       filteredItems={filteredItems}
-      subcategories={subcategories}
       itemQueryTrimmed={itemQueryTrimmed}
       itemQueryActive={itemQueryActive}
-      showSubcategoryGroups={showSubcategoryGroups}
       itemCountLabel={itemCountLabel}
       leafEntryByItemId={leafEntryByItemId}
       inventoryItems={inventoryItems}
@@ -1431,21 +1449,13 @@ export function InventoryStructureEditor({
       setEditingItemId={setEditingItemId}
       showStructureOptions={showStructureOptions}
       showNewItemForm={showNewItemForm}
-      setShowNewItemForm={setShowNewItemForm}
-      newNameByKey={newNameByKey}
-      setNewNameByKey={setNewNameByKey}
-      itemInputKey={itemInputKey}
-      itemPlaceholder={itemPlaceholder}
       addingSubcategoryForSelectedCategory={addingSubcategoryForSelectedCategory}
       exitSubcategory={exitSubcategory}
       beginAddItem={beginAddItem}
       beginAddSubcategory={beginAddSubcategory}
-      addItem={addItem}
-      renderSubcategoryForm={renderSubcategoryForm}
+      beginAddCategory={beginAddCategory}
       onItemContextMenu={openItemContextMenu}
-      onSelectSubcategory={selectSubcategory}
       onSaveItem={saveItem}
-      subcategoryStockItems={subcategoryStockItems}
     />
   );
 
@@ -1471,67 +1481,43 @@ export function InventoryStructureEditor({
 
   const sidebarLayout = embedded ? (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black bg-[#25302c] shadow-[0_10px_26px_rgba(0,0,0,0.22)]">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-black/70 bg-[#1a2320] px-4 py-2.5">
-        {headerSlot}
-        {categoryConfigs.length ? (
-          <InlineSearchPicker
-            value={selectedCategory}
-            onChange={selectCategory}
-            placeholder="Elegir categoría"
-            searchPlaceholder="Buscar categoría…"
-            emptyLabel="Sin categorías"
-            ariaLabel="Categoría de inventario"
-            leadingIcon={<Layers3 className="h-4 w-4" aria-hidden />}
-            options={embeddedCategoryOptions}
-            minWidthClass="min-w-[10rem] sm:min-w-[12rem]"
-          />
-        ) : null}
-        {selectedCategoryData ? (
-          addingSubcategoryForSelectedCategory ? (
-            renderSubcategoryForm(true)
-          ) : embeddedSubcategoryOptions.length ? (
-            <div className="flex min-w-0 items-center gap-1">
-              <InlineSearchPicker
-                value={selectedSubcategoryId}
-                onChange={(nextId) => {
-                  if (!nextId) {
-                    setSelectedSubcategoryId("");
-                    return;
-                  }
+      <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-black/70 bg-[#1a2320] px-3 py-2 sm:px-4">
+        <div className={inventoryToolbarFiltersClass}>
+          {headerSlot}
+          {categoryConfigs.length ? (
+            <InlineSearchPicker
+              value={selectedCategory}
+              onChange={selectCategory}
+              placeholder="Categoría"
+              searchPlaceholder="Buscar categoría…"
+              emptyLabel="Sin categorías"
+              ariaLabel="Categoría de inventario"
+              leadingIcon={<Layers3 className="h-4 w-4" aria-hidden />}
+              options={embeddedCategoryOptions}
+              minWidthClass="min-w-[8.5rem] sm:min-w-[10rem]"
+            />
+          ) : null}
+          {selectedCategoryData && embeddedSubcategoryOptions.length > 1 ? (
+            <InlineSearchPicker
+              value={selectedSubcategoryId}
+              onChange={(nextId) => {
+                if (!nextId) {
+                  setSelectedSubcategoryId("");
+                  return;
+                }
 
-                  selectSubcategory(nextId);
-                }}
-                placeholder="Subcategoría"
-                searchPlaceholder="Buscar subcategoría…"
-                emptyLabel="Sin coincidencias"
-                ariaLabel="Subcategoría"
-                leadingIcon={<Layers3 className="h-4 w-4" aria-hidden />}
-                options={embeddedSubcategoryOptions}
-                minWidthClass="min-w-[10rem] sm:min-w-[12rem]"
-              />
-              {showStructureOptions ? (
-                <button
-                  type="button"
-                  onClick={beginAddSubcategory}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#111827] text-slate-300 hover:text-[#f8fafc]"
-                  title="Nueva subcategoría"
-                  aria-label="Nueva subcategoría"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              ) : null}
-            </div>
-          ) : showStructureOptions ? (
-            <button
-              type="button"
-              onClick={beginAddSubcategory}
-              className={`${secondaryButtonClass} h-9 shrink-0 px-3 text-xs`}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Subcategoría
-            </button>
-          ) : null
-        ) : null}
+                selectSubcategory(nextId);
+              }}
+              placeholder="Subcategoría"
+              searchPlaceholder="Buscar subcategoría…"
+              emptyLabel="Sin coincidencias"
+              ariaLabel="Subcategoría"
+              leadingIcon={<Layers3 className="h-4 w-4" aria-hidden />}
+              options={embeddedSubcategoryOptions}
+              minWidthClass="min-w-[8.5rem] sm:min-w-[10rem]"
+            />
+          ) : null}
+        </div>
         {selectedCategoryData ? (
           <InlineSearchCombobox
             value={itemQuery}
@@ -1541,30 +1527,37 @@ export function InventoryStructureEditor({
             ariaLabel="Buscar items"
             leadingIcon={<Search className="h-4 w-4" aria-hidden />}
             options={embeddedItemOptions}
-            className="min-w-[11rem] flex-1 basis-[11rem] sm:max-w-md"
+            className="shrink-0"
+            minWidthClass="w-[8.75rem] sm:w-[10rem]"
             persistent
           />
         ) : null}
         {toolbarEndSlot || showStructureOptions ? (
-          <div className="ml-auto flex shrink-0 items-center gap-2">
+          <div className={`${inventoryToolbarGroupClass} ml-auto`}>
             {toolbarEndSlot}
             {showStructureOptions ? (
-              <button
-                ref={structureButtonRef}
-                type="button"
-                onClick={() => setOptionsOpen((current) => !current)}
-                className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition ${
-                  optionsOpen
-                    ? "border-emerald-500/60 bg-emerald-400/15 text-emerald-200"
-                    : "border-black bg-[#111827] text-slate-400 hover:text-slate-200"
-                }`}
-                aria-expanded={optionsOpen}
-                aria-haspopup="menu"
-                title="Opciones de estructura"
-                aria-label="Opciones de estructura"
-              >
-                <Settings2 className="h-4 w-4" aria-hidden />
-              </button>
+              <InventoryToolbarIconButton
+                buttonRef={structureButtonRef}
+                icon={Plus}
+                label="Agregar y estructura"
+                tone={optionsOpen || showNewItemForm ? "active" : "primary"}
+                disabled={!selectedCategoryData && categoryConfigs.length > 0}
+                ariaExpanded={optionsOpen || showNewItemForm}
+                ariaHaspopup="menu"
+                onClick={() => {
+                  if (showNewItemForm) {
+                    setShowNewItemForm(false);
+                    return;
+                  }
+
+                  if (!categoryConfigs.length) {
+                    setOptionsOpen(true);
+                    return;
+                  }
+
+                  setOptionsOpen((current) => !current);
+                }}
+              />
             ) : null}
           </div>
         ) : null}
@@ -1596,8 +1589,6 @@ export function InventoryStructureEditor({
         structureMenuPosition={structureMenuPosition}
         structureMenuMounted={structureMenuMounted}
         structurePanelRef={structurePanelRef}
-        showNewItemForm={showNewItemForm}
-        setShowNewItemForm={setShowNewItemForm}
         showNewCategoryInput={showNewCategoryInput}
         setShowNewCategoryInput={setShowNewCategoryInput}
         setOpenSubcategoryInput={setOpenSubcategoryInput}
@@ -1606,15 +1597,29 @@ export function InventoryStructureEditor({
         selectedCategoryData={selectedCategoryData}
         selectedSubcategory={selectedSubcategory}
         addingSubcategoryForSelectedCategory={addingSubcategoryForSelectedCategory}
-        newNameByKey={newNameByKey}
-        setNewNameByKey={setNewNameByKey}
-        itemInputKey={itemInputKey}
-        itemPlaceholder={itemPlaceholder}
-        addItem={addItem}
         addCategory={addCategory}
         beginAddItem={beginAddItem}
         beginAddSubcategory={beginAddSubcategory}
         renderSubcategoryForm={renderSubcategoryForm}
+      />
+      <InventoryNewItemPopover
+        open={showNewItemForm}
+        mounted={structureMenuMounted}
+        position={newItemPopoverPosition}
+        anchorRef={structureButtonRef}
+        panelRef={newItemPopoverRef}
+        selectedCategoryData={selectedCategoryData}
+        selectedSubcategory={selectedSubcategory}
+        itemPlaceholder={itemPlaceholder}
+        value={newNameByKey[itemInputKey] || ""}
+        onChange={(nextValue) =>
+          setNewNameByKey((current) => ({
+            ...current,
+            [itemInputKey]: nextValue,
+          }))
+        }
+        onAdd={addItem}
+        onClose={() => setShowNewItemForm(false)}
       />
     </>
   );

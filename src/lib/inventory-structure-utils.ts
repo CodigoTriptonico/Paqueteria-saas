@@ -1,5 +1,8 @@
 import type { InventoryMovement } from "@/lib/inventory-types";
-import type { InventoryStockItem } from "@/lib/inventory-stock";
+import {
+  inventoryItemsForLeaf,
+  type InventoryStockItem,
+} from "@/lib/inventory-stock";
 import {
   categoryItems,
   isInventoryGroup,
@@ -77,6 +80,46 @@ export const subcategoryRowClass = (selected: boolean) =>
 export function formatScopedItemCount(count: number, scope: string) {
   return `${count} ${count === 1 ? "item" : "items"} en ${scope}`;
 }
+
+export function stockItemForTreeItem(
+  inventoryItems: InventoryStockItem[],
+  categoryName: string,
+  item: InventoryTreeItem,
+  subcategoryName?: string,
+): InventoryStockItem {
+  const leafItems = inventoryItemsForLeaf(
+    inventoryItems,
+    categoryName,
+    item.name,
+    subcategoryName,
+  );
+
+  if (leafItems.length > 0) {
+    return leafItems[0];
+  }
+
+  return {
+    id: `virtual-leaf-${item.id}`,
+    name: item.name,
+    category: categoryName,
+    kind: item.name,
+    subcategory: subcategoryName,
+    stock: 0,
+    reserved: 0,
+    assigned: 0,
+    unavailable: 0,
+    minStock: 2,
+  };
+}
+
+export const INVENTORY_ITEM_CARD_SELECTOR = "[data-inventory-item-id]";
+
+export const INVENTORY_ITEMS_SURFACE_SELECTOR = "[data-inventory-items-surface]";
+
+const INTERACTIVE_SELECTOR =
+  "button, input, textarea, select, a, [role='combobox'], [role='menu'], [data-inventory-empty-context-menu], [data-inventory-item-context-menu]";
+
+export { INTERACTIVE_SELECTOR };
 
 export function categoryLeafEntries(category: CategoryConfig): CategoryLeafEntry[] {
   const entries: CategoryLeafEntry[] = [];

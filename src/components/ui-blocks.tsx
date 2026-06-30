@@ -4,6 +4,9 @@ import Link from "next/link";
 export const inputClass =
   "h-11 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc] outline-none placeholder:font-semibold placeholder:text-slate-500 focus:border-black";
 
+export const pickerShellClass =
+  "box-border inline-flex h-11 max-w-full items-center gap-2 rounded-lg border border-solid border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc]";
+
 export const primaryButtonClass =
   "inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 text-sm font-black text-slate-950";
 

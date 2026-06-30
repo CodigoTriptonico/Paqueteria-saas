@@ -5,6 +5,7 @@ import { BigAction, labelMutedClass, Panel } from "@/components/ui-blocks";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
 import { getAppSession } from "@/lib/auth/session";
+import { loadDashboardSummaryForSession } from "@/lib/dashboard/summary";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 const actions = [
@@ -27,7 +28,7 @@ const actions = [
     text: "Recoger o entregar cajas.",
     icon: Truck,
     color: "bg-emerald-400",
-    href: "/envios",
+    href: "/logistica",
   },
   {
     title: "Envios",
@@ -45,6 +46,15 @@ export default async function Home() {
   }
 
   const supabaseReady = isSupabaseConfigured() && Boolean(session);
+  let initialSummary = null;
+
+  if (supabaseReady && session) {
+    try {
+      initialSummary = await loadDashboardSummaryForSession(session);
+    } catch {
+      initialSummary = null;
+    }
+  }
 
   return (
     <>
@@ -58,8 +68,10 @@ export default async function Home() {
 
         {!isSupabaseConfigured() ? (
           <SupabaseRequiredBanner detail="El panel de resumen mostrará métricas cuando existan ventas y envíos en Supabase." />
-        ) : supabaseReady ? (
-          <DashboardSummary />
+        ) : null}
+
+        {supabaseReady ? (
+          <DashboardSummary initialSummary={initialSummary} />
         ) : null}
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">

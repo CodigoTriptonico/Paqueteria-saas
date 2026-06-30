@@ -3,12 +3,12 @@
 import { Printer, X } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
-  boxProfitDisplay,
   personFullName,
   type Recipient,
   type Sender,
   senderPhonesLabel,
 } from "@/components/sale/venta-parts";
+import { CountryName } from "@/components/country-flag";
 
 type SaleCheckoutModalProps = {
   invoiceNumber: string;
@@ -65,7 +65,16 @@ export function SaleCheckoutModal({
                 <p className="text-xs font-black uppercase text-slate-500">Destinatario</p>
                 <p className="text-xl font-black">{personFullName(recipient)}</p>
                 <p className="font-bold text-slate-400">
-                  {recipient.city}, {recipient.country}
+                  {recipient.city}
+                  {recipient.city && recipient.country ? ", " : null}
+                  {recipient.country ? (
+                    <CountryName
+                      name={recipient.country}
+                      size="xs"
+                      className="inline-flex align-middle"
+                      labelClassName="font-bold text-slate-400"
+                    />
+                  ) : null}
                 </p>
               </div>
             </div>
@@ -87,28 +96,22 @@ export function SaleCheckoutModal({
                 </div>
                 <div>
                   <p className="text-xs font-black uppercase text-slate-500">Pais</p>
-                  <p className="font-black">{recipient.country}</p>
+                  <CountryName
+                    name={recipient.country}
+                    size="sm"
+                    labelClassName="font-black"
+                  />
                 </div>
                 <div>
-                  <p className="text-xs font-black uppercase text-slate-500">Entrega caja vacia</p>
+                  <p className="text-xs font-black uppercase text-slate-500">Logistica</p>
                   <p className="font-black">{deliverySummary}</p>
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-xl border border-black bg-surface-card p-4 text-right border-black bg-surface-card">
-                <p className="text-xs font-black uppercase text-slate-500">Cliente paga</p>
-                <p className="text-3xl font-black">{box[1]}</p>
-              </div>
-              <div className="rounded-xl border border-black bg-surface-card p-4 text-right border-black bg-surface-card">
-                <p className="text-xs font-black uppercase text-slate-500">Carrier cobra</p>
-                <p className="text-3xl font-black">{box[2]}</p>
-              </div>
-              <div className="rounded-xl border border-black bg-surface-card-header p-4 text-right text-slate-300">
-                <p className="text-xs font-black uppercase">Ganancia</p>
-                <p className="text-3xl font-black">{boxProfitDisplay(box)}</p>
-              </div>
+            <div className="rounded-xl border border-black bg-surface-card p-4 text-right border-black bg-surface-card">
+              <p className="text-xs font-black uppercase text-slate-500">Cliente paga</p>
+              <p className="text-3xl font-black">{box[1]}</p>
             </div>
           </div>
 

@@ -5,6 +5,8 @@
 - Node.js 20+
 - Docker Desktop corriendo
 
+Puertos y variables: ver [DESARROLLO-LOCAL.md](./DESARROLLO-LOCAL.md).
+
 ## 2. Instalar
 
 ```powershell
@@ -17,6 +19,7 @@ npm run env:local
 ```powershell
 npm run supabase:start
 npm run db:apply
+npm run db:restore-owner
 ```
 
 Ver estado:
@@ -47,9 +50,11 @@ http://localhost:3000/login
 
 | Rol | Rutas esperadas |
 | --- | --- |
-| Administrador | Todo + Configuracion |
+| Administrador | Todo + Configuracion + Logistica |
 | Vendedor | Inicio, Venta, Inventario |
 | Conductor | Inicio, Envios |
+
+Logistica (`/logistica`) es solo para administrador.
 
 ## 7. Pruebas manuales
 

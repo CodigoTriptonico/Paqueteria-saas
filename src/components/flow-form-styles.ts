@@ -53,8 +53,7 @@ export const flowWizardActionsClass =
 
 /** Grilla flexible para tarjetas de persona (remitente / destinatario). */
 export const flowPersonCardGridClass =
-  "grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] items-stretch gap-2 sm:gap-3";
-
+  "grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] items-stretch gap-3";
 /** Toolbar de listas de persona: buscador + acciones en una fila estable. */
 export const flowPersonToolbarClass =
   "grid w-full gap-2 sm:grid-cols-[1fr_auto] sm:items-center";

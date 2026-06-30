@@ -26,28 +26,12 @@ export function InventoryWarehouseBar({
   onChange,
   compact = false,
 }: InventoryWarehouseBarProps) {
-  const activeWarehouse = warehouses.find((warehouse) => warehouse.id === warehouseId);
-
   if (!warehouses.length) {
     return null;
   }
 
-  if (warehouses.length === 1 && activeWarehouse) {
-    if (!compact) {
-      return null;
-    }
-
-    return (
-      <span className="inline-flex h-9 max-w-full items-center gap-2 rounded-lg border border-black bg-[#111827] px-3 text-sm font-black text-slate-200">
-        <Warehouse className="h-4 w-4 shrink-0 text-emerald-400/80" aria-hidden />
-        <span className="truncate">{activeWarehouse.name}</span>
-        {activeWarehouse.is_default ? (
-          <span className="shrink-0 rounded bg-emerald-400/15 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-300">
-            Org.
-          </span>
-        ) : null}
-      </span>
-    );
+  if (warehouses.length === 1) {
+    return null;
   }
 
   return (

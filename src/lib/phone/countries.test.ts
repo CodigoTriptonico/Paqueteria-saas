@@ -4,6 +4,8 @@ import {
   buildPhoneNumber,
   filterPhoneCountries,
   formatNationalPhoneDigits,
+  getPhoneDialCodeForCountryName,
+  getPhoneIsoForCountryName,
   isValidNationalPhone,
   maxNationalDigitsForDialCode,
   splitPhoneNumber,
@@ -35,6 +37,13 @@ test("filterPhoneCountries matches label, dial code and iso", () => {
   );
   assert.deepEqual(filterPhoneCountries("503").map((country) => country.id), ["sv"]);
   assert.deepEqual(filterPhoneCountries("mx").map((country) => country.id), ["mx"]);
+});
+
+test("maps destination country names to phone dial codes", () => {
+  assert.equal(getPhoneDialCodeForCountryName("México"), "52");
+  assert.equal(getPhoneDialCodeForCountryName("Colombia"), "57");
+  assert.equal(getPhoneDialCodeForCountryName("USA"), "1");
+  assert.equal(getPhoneIsoForCountryName("Guatemala"), "GT");
 });
 
 test("NANP (+1) caps national number at 10 digits", () => {

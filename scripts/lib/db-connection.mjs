@@ -47,14 +47,9 @@ export function assertLocalSupabaseUrl(url = process.env.NEXT_PUBLIC_SUPABASE_UR
     !url.includes("localhost")
   ) {
     throw new Error(
-      `NEXT_PUBLIC_SUPABASE_URL debe apuntar a Supabase local (127.0.0.1:54321). Valor actual: ${url}`,
+      `NEXT_PUBLIC_SUPABASE_URL debe apuntar a Supabase local (127.0.0.1 o localhost). Valor actual: ${url}`,
     );
   }
-}
-
-export function isLocalDatabaseMode() {
-  loadEnvLocal();
-  return true;
 }
 
 export function isLocalSupabase() {
@@ -82,7 +77,7 @@ export function resolvePgConnectionConfig() {
   }
 
   const host = process.env.SUPABASE_DB_HOST || "127.0.0.1";
-  const port = process.env.SUPABASE_DB_PORT || "55322";
+  const port = process.env.SUPABASE_DB_PORT || "54322";
   const password = process.env.SUPABASE_DB_PASSWORD || "postgres";
 
   return {

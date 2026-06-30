@@ -4,14 +4,16 @@ import {
   Box,
   Check,
   ChevronLeft,
-  ChevronRight,
-  Layers3,
   Package2,
   Plus,
   Search,
   X,
 } from "lucide-react";
-import { type MouseEvent } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
+import {
+  InventoryEmptyContextMenu,
+  type InventoryEmptyContextMenuState,
+} from "@/components/inventory/inventory-empty-context-menu";
 import { InlineSearchCombobox } from "@/components/inline-search-picker";
 import {
   iconWellEmerald,
@@ -31,7 +33,11 @@ import {
 import {
   addBtnClass,
   iconBtnClass,
+  INVENTORY_ITEM_CARD_SELECTOR,
+  INVENTORY_ITEMS_SURFACE_SELECTOR,
+  INTERACTIVE_SELECTOR,
   itemsGridClass,
+  stockItemForTreeItem,
   type CategoryLeafEntry,
 } from "@/lib/inventory-structure-utils";
 import { type CategoryConfig, type InventoryTreeItem } from "@/lib/inventory-tree";
@@ -76,30 +82,23 @@ function InventoryItemCard({
     item.name,
     selectedSubcategory?.name,
   );
-  const leafStockItems =
+  const stockItem = stockItemForTreeItem(
+    inventoryItems,
+    selectedCategoryData.name,
+    item,
+    selectedSubcategory?.name,
+  );
+  const metrics = leafStockMetrics(
     leafItems.length > 0
       ? leafItems
-      : [
-          {
-            id: `virtual-leaf-${item.id}`,
-            name: item.name,
-            category: selectedCategoryData.name,
-            kind: item.name,
-            subcategory: selectedSubcategory?.name,
-            stock: 0,
-            reserved: 0,
-            assigned: 0,
-            unavailable: 0,
-            minStock: 2,
-          },
-        ];
-  const stockItem = leafStockItems[0];
-  const metrics = leafStockMetrics(leafStockItems);
+      : [stockItem],
+  );
   const stockLevel = metrics.level;
 
   return (
     <article
       key={item.id}
+      data-inventory-item-id={item.id}
       onContextMenu={(event) => onContextMenu(event, item, stockItem)}
       className={`cursor-context-menu rounded-xl border p-4 transition ${stockCardClass[stockLevel]}`}
     >
@@ -204,60 +203,6 @@ function InventoryItemCard({
   );
 }
 
-type InventorySubcategoryGroupCardProps = {
-  subcategory: InventoryTreeItem;
-  selectedCategoryData: CategoryConfig;
-  onSelectSubcategory: (id: string) => void;
-  subcategoryStockItems: (
-    category: CategoryConfig,
-    subcategoryName: string,
-    childKindNames: string[],
-  ) => InventoryStockItem[];
-};
-
-function InventorySubcategoryGroupCard({
-  subcategory,
-  selectedCategoryData,
-  onSelectSubcategory,
-  subcategoryStockItems,
-}: InventorySubcategoryGroupCardProps) {
-  const children = subcategory.children || [];
-  const stockItems = subcategoryStockItems(
-    selectedCategoryData,
-    subcategory.name,
-    children.map((child) => child.name),
-  );
-  const metrics = leafStockMetrics(stockItems);
-
-  return (
-    <button
-      key={subcategory.id}
-      type="button"
-      onClick={() => onSelectSubcategory(subcategory.id)}
-      className="group flex min-h-[8.5rem] w-full cursor-pointer flex-col rounded-xl border border-black bg-[#36433e] p-4 text-left shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition hover:bg-[#3d4b45] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
-    >
-      <div className="flex items-start gap-3">
-        <span className={`h-10 w-10 shrink-0 ${iconWellEmerald}`}>
-          <Layers3 className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-black capitalize text-[#f8fafc]">
-            {subcategory.name}
-          </p>
-          <p className="mt-0.5 text-xs font-bold text-slate-400">
-            {children.length} {children.length === 1 ? "item" : "items"} dentro
-          </p>
-        </div>
-        <ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition group-hover:text-emerald-300" />
-      </div>
-      <div className="mt-4 flex items-center justify-between text-xs font-bold text-slate-400">
-        <span>Subcategoría</span>
-        <span className="tabular-nums text-emerald-300">{metrics.warehouse} en bodega</span>
-      </div>
-    </button>
-  );
-}
-
 export type InventoryItemGridProps = {
   embedded: boolean;
   selectedCategoryData: CategoryConfig | null;
@@ -273,10 +218,8 @@ export type InventoryItemGridProps = {
   }>;
   scopedItems: InventoryTreeItem[];
   filteredItems: InventoryTreeItem[];
-  subcategories: InventoryTreeItem[];
   itemQueryTrimmed: string;
   itemQueryActive: boolean;
-  showSubcategoryGroups: boolean;
   itemCountLabel: string;
   leafEntryByItemId: Map<string, CategoryLeafEntry>;
   inventoryItems: InventoryStockItem[];
@@ -286,29 +229,17 @@ export type InventoryItemGridProps = {
   setEditingItemId: (value: string) => void;
   showStructureOptions: boolean;
   showNewItemForm: boolean;
-  setShowNewItemForm: (value: boolean) => void;
-  newNameByKey: Record<string, string>;
-  setNewNameByKey: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  itemInputKey: string;
-  itemPlaceholder: string;
   addingSubcategoryForSelectedCategory: boolean;
   exitSubcategory: () => void;
   beginAddItem: () => void;
   beginAddSubcategory: () => void;
-  addItem: () => void;
-  renderSubcategoryForm: (compact?: boolean) => React.ReactNode;
+  beginAddCategory: () => void;
   onItemContextMenu: (
     event: MouseEvent<HTMLElement>,
     item: InventoryTreeItem,
     stockItem: InventoryStockItem,
   ) => void;
-  onSelectSubcategory: (id: string) => void;
   onSaveItem: (categoryName: string, itemId: string) => void;
-  subcategoryStockItems: (
-    category: CategoryConfig,
-    subcategoryName: string,
-    childKindNames: string[],
-  ) => InventoryStockItem[];
 };
 
 export function InventoryItemGrid({
@@ -321,10 +252,8 @@ export function InventoryItemGrid({
   embeddedItemOptions,
   scopedItems,
   filteredItems,
-  subcategories,
   itemQueryTrimmed,
   itemQueryActive,
-  showSubcategoryGroups,
   itemCountLabel,
   leafEntryByItemId,
   inventoryItems,
@@ -334,24 +263,155 @@ export function InventoryItemGrid({
   setEditingItemId,
   showStructureOptions,
   showNewItemForm,
-  setShowNewItemForm,
-  newNameByKey,
-  setNewNameByKey,
-  itemInputKey,
-  itemPlaceholder,
   addingSubcategoryForSelectedCategory,
   exitSubcategory,
   beginAddItem,
   beginAddSubcategory,
-  addItem,
-  renderSubcategoryForm,
+  beginAddCategory,
   onItemContextMenu,
-  onSelectSubcategory,
   onSaveItem,
-  subcategoryStockItems,
 }: InventoryItemGridProps) {
+  const [emptyContextMenu, setEmptyContextMenu] =
+    useState<InventoryEmptyContextMenuState | null>(null);
+  const onItemContextMenuRef = useRef(onItemContextMenu);
+  const contextMenuDataRef = useRef({
+    filteredItems,
+    inventoryItems,
+    selectedCategoryData,
+    selectedSubcategory,
+    showStructureOptions,
+  });
+  const structureActionsRef = useRef({
+    beginAddItem,
+    beginAddSubcategory,
+    beginAddCategory,
+    setEmptyContextMenu,
+  });
+
+  useEffect(() => {
+    onItemContextMenuRef.current = onItemContextMenu;
+    contextMenuDataRef.current = {
+      filteredItems,
+      inventoryItems,
+      selectedCategoryData,
+      selectedSubcategory,
+      showStructureOptions,
+    };
+    structureActionsRef.current = {
+      beginAddItem,
+      beginAddSubcategory,
+      beginAddCategory,
+      setEmptyContextMenu,
+    };
+  }, [
+    beginAddCategory,
+    beginAddItem,
+    beginAddSubcategory,
+    filteredItems,
+    inventoryItems,
+    onItemContextMenu,
+    selectedCategoryData,
+    selectedSubcategory,
+    showStructureOptions,
+  ]);
+
+  useEffect(() => {
+    function openContextMenuFromNativeEvent(event: globalThis.MouseEvent) {
+      if (event.type !== "contextmenu" && event.button !== 2) {
+        return;
+      }
+
+      const target = event.target;
+
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const card = target.closest<HTMLElement>(INVENTORY_ITEM_CARD_SELECTOR);
+
+      if (card) {
+        const itemId = card.dataset.inventoryItemId;
+
+        if (!itemId) {
+          return;
+        }
+
+        const {
+          filteredItems: items,
+          inventoryItems: stockItems,
+          selectedCategoryData: category,
+          selectedSubcategory: subcategory,
+        } = contextMenuDataRef.current;
+
+        if (!category) {
+          return;
+        }
+
+        const item = items.find((entry) => entry.id === itemId);
+
+        if (!item) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        structureActionsRef.current.setEmptyContextMenu(null);
+
+        onItemContextMenuRef.current(
+          event as unknown as MouseEvent<HTMLElement>,
+          item,
+          stockItemForTreeItem(
+            stockItems,
+            category.name,
+            item,
+            subcategory?.name,
+          ),
+        );
+        return;
+      }
+
+      const surface = target.closest(INVENTORY_ITEMS_SURFACE_SELECTOR);
+
+      if (!surface) {
+        return;
+      }
+
+      if (target.closest(INTERACTIVE_SELECTOR)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const { showStructureOptions: canEditStructure } = contextMenuDataRef.current;
+
+      if (!canEditStructure) {
+        return;
+      }
+
+      structureActionsRef.current.setEmptyContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+      });
+    }
+
+    document.addEventListener("contextmenu", openContextMenuFromNativeEvent, true);
+    document.addEventListener("pointerup", openContextMenuFromNativeEvent, true);
+    document.addEventListener("mouseup", openContextMenuFromNativeEvent, true);
+
+    return () => {
+      document.removeEventListener("contextmenu", openContextMenuFromNativeEvent, true);
+      document.removeEventListener("pointerup", openContextMenuFromNativeEvent, true);
+      document.removeEventListener("mouseup", openContextMenuFromNativeEvent, true);
+    };
+  }, []);
+
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <section
+      data-inventory-items-surface
+      className="flex min-h-0 min-w-0 flex-1 flex-col"
+    >
       {!embedded ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/70 px-4 py-3 sm:px-5">
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -397,7 +457,7 @@ export function InventoryItemGrid({
           ) : null}
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+      <div className="min-h-full flex-1 overflow-y-auto px-4 py-4 sm:px-5">
         {embedded && selectedSubcategory && selectedCategoryData ? (
           <div className="mb-4 flex items-center gap-2 border-b border-black/50 pb-3">
             <button
@@ -444,42 +504,8 @@ export function InventoryItemGrid({
               </p>
             ) : null}
 
-            {!selectedSubcategory && subcategories.length && !itemQueryActive ? (
-              <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/5 px-3 py-2">
-                <p className="text-xs text-slate-300">
-                  Los items dentro de una subcategoría solo se ven al abrirla. Aquí
-                  aparecen las carpetas y los items sueltos de{" "}
-                  {selectedCategoryData.name}.
-                </p>
-              </div>
-            ) : null}
-
-            {showSubcategoryGroups ? (
-              <div className="grid gap-2">
-                <p className="text-xs font-black uppercase tracking-wide text-slate-500">
-                  Subcategorías
-                </p>
-                <div className={itemsGridClass}>
-                  {subcategories.map((subcategory) => (
-                    <InventorySubcategoryGroupCard
-                      key={subcategory.id}
-                      subcategory={subcategory}
-                      selectedCategoryData={selectedCategoryData}
-                      onSelectSubcategory={onSelectSubcategory}
-                      subcategoryStockItems={subcategoryStockItems}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
             {filteredItems.length ? (
               <div className="grid gap-2">
-                {showSubcategoryGroups ? (
-                  <p className="text-xs font-black uppercase tracking-wide text-slate-500">
-                    Items en {selectedCategoryData.name}
-                  </p>
-                ) : null}
                 <div className={itemsGridClass}>
                   {filteredItems.map((item) => (
                     <InventoryItemCard
@@ -515,88 +541,23 @@ export function InventoryItemGrid({
                   Limpiar búsqueda
                 </button>
               </div>
-            ) : showSubcategoryGroups ? (
-              <div className="py-6 text-center">
-                <p className="text-sm font-bold text-slate-400">
-                  Sin items sueltos en {selectedCategoryData.name}. Abre una
-                  subcategoría o agrégalos aquí.
-                </p>
-                {showStructureOptions ? (
-                  <button
-                    type="button"
-                    onClick={beginAddItem}
-                    className={`${secondaryButtonClass} mx-auto mt-4 text-xs`}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Agregar item suelto
-                  </button>
-                ) : null}
-              </div>
             ) : (
               <div className="grid gap-3 py-12 text-center">
                 <p className="text-lg font-black text-[#f8fafc]">Sin items todavía</p>
                 <p className="text-sm font-bold text-slate-300">
                   {selectedSubcategory
                     ? "Agrega variantes como rojo, azul o aislante."
-                    : `Agrega medidas o variantes en ${selectedCategoryData.name} (ej. 14x14x14).`}
+                    : "Agrega items sueltos en esta categoría (ej. 14x14x14, cinta, playera M). Clic derecho aquí para agregar."}
                 </p>
-                {showStructureOptions ? (
-                  showNewItemForm && selectedCategoryData ? (
-                    <div className="mx-auto mt-2 w-full max-w-md space-y-2">
-                      <div className="flex items-center gap-2 rounded-xl border border-black bg-[#111827] p-2">
-                        <button
-                          type="button"
-                          onClick={() => addItem()}
-                          className={addBtnClass}
-                          title="Agregar item"
-                          aria-label="Agregar item"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                        <input
-                          className="h-10 min-w-0 flex-1 bg-transparent px-2 text-sm font-black text-[#f8fafc] outline-none placeholder:text-slate-500"
-                          placeholder={itemPlaceholder}
-                          value={newNameByKey[itemInputKey] || ""}
-                          onChange={(event) =>
-                            setNewNameByKey((current) => ({
-                              ...current,
-                              [itemInputKey]: event.target.value,
-                            }))
-                          }
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              addItem();
-                            }
-                          }}
-                          autoFocus
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowNewItemForm(false)}
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-surface-card-hover hover:text-[#f8fafc]"
-                          title="Cancelar"
-                          aria-label="Cancelar"
-                        >
-                          <X className="h-5 w-5" />
-                        </button>
-                      </div>
-                      <p className="text-xs font-bold text-slate-500">
-                        En{" "}
-                        {selectedSubcategory
-                          ? `${selectedCategoryData.name} › ${selectedSubcategory.name}`
-                          : selectedCategoryData.name}
-                      </p>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={beginAddItem}
-                      className={`${primaryButtonClass} mx-auto`}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Agregar item
-                    </button>
-                  )
+                {showStructureOptions && !showNewItemForm ? (
+                  <button
+                    type="button"
+                    onClick={beginAddItem}
+                    className={`${primaryButtonClass} mx-auto`}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Agregar item
+                  </button>
                 ) : null}
                 {!selectedSubcategory &&
                 showStructureOptions &&
@@ -611,13 +572,9 @@ export function InventoryItemGrid({
                       Crear subcategoría
                     </button>
                     <p className="text-xs text-slate-400">
-                      Agrupa variantes dentro de {selectedCategoryData.name} (ej.
-                      colores, materiales).
+                      Agrupa items en subcategorías (ej. colores, materiales,
+                      tallas).
                     </p>
-                  </div>
-                ) : addingSubcategoryForSelectedCategory ? (
-                  <div className="mx-auto mt-2 w-full max-w-md">
-                    {renderSubcategoryForm()}
                   </div>
                 ) : null}
               </div>
@@ -625,6 +582,15 @@ export function InventoryItemGrid({
           </div>
         )}
       </div>
+      <InventoryEmptyContextMenu
+        menu={emptyContextMenu}
+        onClose={() => setEmptyContextMenu(null)}
+        hasCategory={Boolean(selectedCategoryData)}
+        inSubcategory={Boolean(selectedSubcategory)}
+        onAddItem={beginAddItem}
+        onAddSubcategory={beginAddSubcategory}
+        onAddCategory={beginAddCategory}
+      />
     </section>
   );
 }

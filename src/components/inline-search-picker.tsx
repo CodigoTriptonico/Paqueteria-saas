@@ -21,6 +21,8 @@ export type InlineSearchPickerOption = {
   trailing?: ReactNode;
   /** No cambia el valor; solo dispara onSelectOption (p. ej. ir a crear país). */
   action?: boolean;
+  /** Visible pero no seleccionable (p. ej. ya agregado al país). */
+  disabled?: boolean;
 };
 
 type PanelPosition = {
@@ -32,7 +34,7 @@ type PanelPosition = {
 const PANEL_MIN_WIDTH = 200;
 
 const shellBaseClass =
-  "box-border inline-flex h-9 max-w-full items-center gap-2 rounded-lg border border-solid px-2.5 bg-[#111827]";
+  "box-border inline-flex h-9 max-w-full items-center gap-2 rounded-lg border border-solid px-2.5 bg-surface-inset";
 
 function shellStateClass(active: boolean, disabled: boolean) {
   if (disabled) {
@@ -77,11 +79,14 @@ export type InlineSearchPickerProps = {
   ariaLabel?: string;
   minWidthClass?: string;
   disabled?: boolean;
+  shellClassName?: string;
   onSelectOption?: (option: InlineSearchPickerOption) => void;
   formatSelectedLabel?: (
     option: InlineSearchPickerOption | undefined,
     placeholder: string,
   ) => string;
+  /** Abre el panel al montar (p. ej. dentro de un popover recién abierto). */
+  openOnMount?: boolean;
 };
 
 export function InlineSearchPicker({
@@ -97,8 +102,10 @@ export function InlineSearchPicker({
   ariaLabel,
   minWidthClass = "min-w-[11rem] sm:min-w-[14rem]",
   disabled = false,
+  shellClassName,
   onSelectOption,
   formatSelectedLabel,
+  openOnMount = false,
 }: InlineSearchPickerProps) {
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -165,6 +172,10 @@ export function InlineSearchPicker({
 
   const selectOption = useCallback(
     (option: InlineSearchPickerOption) => {
+      if (option.disabled) {
+        return;
+      }
+
       if (option.action) {
         onSelectOption?.(option);
         close();
@@ -226,9 +237,19 @@ export function InlineSearchPicker({
     };
   }, [close, open]);
 
-  const shellClass = compact
-    ? `${shellBaseClass} ${minWidthClass}`
-    : `${shellBaseClass} h-11 w-full min-w-[12rem] max-w-xs px-3`;
+  useEffect(() => {
+    if (!openOnMount || disabled) {
+      return;
+    }
+
+    openPicker();
+  }, [disabled, openOnMount, openPicker]);
+
+  const shellClass = shellClassName
+    ? shellClassName
+    : compact
+      ? `${shellBaseClass} ${minWidthClass}`
+      : `${shellBaseClass} h-11 w-full min-w-[12rem] max-w-xs px-3`;
 
   const panel =
     open && panelPosition && mounted ? (
@@ -236,6 +257,7 @@ export function InlineSearchPicker({
         ref={panelRef}
         id={listboxId}
         role="listbox"
+        data-inline-search-picker-panel
         className="fixed z-[120] overflow-hidden rounded-lg border border-black bg-[#101820] shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
         style={{
           top: panelPosition.top,
@@ -247,6 +269,7 @@ export function InlineSearchPicker({
           {filteredOptions.length ? (
             filteredOptions.map((option) => {
               const selected = option.value === value;
+              const isDisabled = Boolean(option.disabled);
 
               return (
                 <li key={option.value}>
@@ -254,14 +277,18 @@ export function InlineSearchPicker({
                     type="button"
                     role="option"
                     aria-selected={selected}
+                    aria-disabled={isDisabled}
+                    disabled={isDisabled}
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => selectOption(option)}
                     className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-bold transition ${
-                      option.action
-                        ? "text-emerald-300 hover:bg-emerald-400/10"
-                        : selected
-                          ? "bg-emerald-400/15 text-emerald-100"
-                          : "text-slate-200 hover:bg-surface-card-header/80"
+                      isDisabled
+                        ? "cursor-not-allowed text-slate-600"
+                        : option.action
+                          ? "text-emerald-300 hover:bg-emerald-400/10"
+                          : selected
+                            ? "bg-emerald-400/15 text-emerald-100"
+                            : "text-slate-200 hover:bg-surface-card-header/80"
                     }`}
                   >
                     {option.icon ? (
@@ -288,6 +315,8 @@ export function InlineSearchPicker({
     ? formatSelectedLabel(activeOption, placeholder)
     : activeOption?.label || placeholder;
 
+  const triggerIcon = leadingIcon ?? activeOption?.icon;
+
   return (
     <div className={`relative shrink-0 ${className}`}>
       <div
@@ -295,8 +324,8 @@ export function InlineSearchPicker({
         className={`${shellClass} ${shellStateClass(open, disabled)}`}
         style={lockedWidth ? { width: lockedWidth } : undefined}
       >
-        {leadingIcon ? (
-          <span className="shrink-0 text-emerald-400/80">{leadingIcon}</span>
+        {triggerIcon ? (
+          <span className="shrink-0 text-emerald-400/80">{triggerIcon}</span>
         ) : null}
         {open ? (
           <input
@@ -313,9 +342,13 @@ export function InlineSearchPicker({
             role="combobox"
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && filteredOptions[0]) {
-                event.preventDefault();
-                selectOption(filteredOptions[0]);
+              if (event.key === "Enter") {
+                const nextOption = filteredOptions.find((option) => !option.disabled);
+
+                if (nextOption) {
+                  event.preventDefault();
+                  selectOption(nextOption);
+                }
               }
             }}
           />
@@ -323,7 +356,7 @@ export function InlineSearchPicker({
           <button
             type="button"
             disabled={disabled}
-            className={`${fieldClass} truncate text-left capitalize text-[#f8fafc] disabled:cursor-not-allowed`}
+            className={`${fieldClass} min-w-0 truncate text-left capitalize text-[#f8fafc] disabled:cursor-not-allowed`}
             aria-haspopup="listbox"
             aria-expanded={false}
             aria-label={ariaLabel}
@@ -406,6 +439,16 @@ export function InlineSearchCombobox({
       const haystack = `${option.label} ${option.searchText ?? ""}`.toLowerCase();
       return haystack.includes(normalized);
     });
+  }, [options, value]);
+
+  const activeOption = useMemo(() => {
+    const normalized = normalizeSearch(value);
+
+    if (!normalized) {
+      return undefined;
+    }
+
+    return options.find((option) => normalizeSearch(option.label) === normalized);
   }, [options, value]);
 
   const updatePanelPosition = useCallback(() => {
@@ -511,6 +554,7 @@ export function InlineSearchCombobox({
         ref={panelRef}
         id={listboxId}
         role="listbox"
+        data-inline-search-picker-panel
         className="fixed z-[120] overflow-hidden rounded-lg border border-black bg-[#101820] shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
         style={{
           top: panelPosition.top,
@@ -556,7 +600,9 @@ export function InlineSearchCombobox({
         className={`${shellClass} ${shellStateClass(isActive, disabled)}`}
         style={lockedWidth ? { width: lockedWidth } : undefined}
       >
-        {leadingIcon ? (
+        {activeOption?.icon ? (
+          <span className="shrink-0">{activeOption.icon}</span>
+        ) : leadingIcon ? (
           <span className="shrink-0 text-slate-500">{leadingIcon}</span>
         ) : null}
         {showInput ? (

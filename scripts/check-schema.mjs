@@ -1,12 +1,11 @@
-import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { listMigrationFiles } from "./lib/migrations.mjs";
 
 const root = process.cwd();
 const migrationsDir = join(root, "supabase", "migrations");
 
-const requiredMigrations = readdirSync(migrationsDir)
-  .filter((file) => /^\d{3}_.+\.sql$/.test(file))
-  .sort();
+const requiredMigrations = listMigrationFiles(root);
 
 const requiredTables = [
   "organizations",
@@ -23,11 +22,13 @@ const requiredTables = [
   "inventory_movements",
   "inventory_assignments",
   "shipments",
+  "shipment_logistics_tasks",
   "platform_admins",
   "customers",
   "customer_recipients",
   "pricing_countries",
   "pricing_country_boxes",
+  "pricing_promotions",
   "distributors",
   "distributor_country_boxes",
   "organization_route_settings",

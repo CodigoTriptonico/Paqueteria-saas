@@ -44,7 +44,34 @@ export function LoginForm() {
     }
 
     if (mode === "login") {
+      event.preventDefault();
       setLoading(true);
+      setError("");
+
+      const result = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          nextPath: searchParams.get("next"),
+        }),
+      });
+
+      const data = (await result.json().catch(() => null)) as
+        | { ok: true; redirectTo: string }
+        | { ok: false; error: string }
+        | null;
+
+      setLoading(false);
+
+      if (!data?.ok) {
+        setError(data?.error || "No se pudo iniciar sesion");
+        return;
+      }
+
+      router.replace(data.redirectTo);
+      router.refresh();
       return;
     }
 

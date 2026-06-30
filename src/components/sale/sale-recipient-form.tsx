@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { PhoneCountryInput } from "@/components/phone-country-input";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
+import { countryFlagIcon } from "@/components/country-flag";
 import { flowFormStackClass, flowIntroClass } from "@/components/flow-form-styles";
 import { MapPin, Plus, UserPlus } from "lucide-react";
 import {
@@ -11,12 +12,18 @@ import {
   type AddressValidation,
   clientFormInputClass,
   clientFormLabelClass,
+  clientFormPickerShellClass,
   noBrowserAutocomplete,
   type Recipient,
 } from "@/components/sale/venta-parts";
+import { configPricesCountryHref } from "@/lib/country-options";
+import {
+  buildPhoneNumber,
+  getPhoneDialCodeForCountryName,
+  splitPhoneNumber,
+} from "@/lib/phone/countries";
 
 const CREATE_COUNTRY_OPTION_VALUE = "__create_country__";
-import { configPricesCountryHref } from "@/lib/country-options";
 
 type SaleRecipientFormProps = {
   form: {
@@ -61,8 +68,22 @@ type SaleRecipientFormProps = {
   };
 };
 
+function clearRecipientAddress(form: SaleRecipientFormProps["form"]) {
+  form.setStreet("");
+  form.setHouse("");
+  form.setNeighborhood("");
+  form.setCity("");
+  form.setState("");
+  form.setPostalCode("");
+}
+
 export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipientFormProps) {
   const router = useRouter();
+  const hasCountry = Boolean(form.country.trim());
+  const phoneDefaultDialCode = useMemo(
+    () => getPhoneDialCodeForCountryName(form.country),
+    [form.country],
+  );
 
   const countryOptions = useMemo(() => {
     if (!meta.countries.length) {
@@ -80,8 +101,28 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
     return meta.countries.map((country) => ({
       value: country,
       label: country,
+      icon: countryFlagIcon(country),
     }));
   }, [meta.countries]);
+
+  function handleCountryChange(country: string) {
+    const previousDial = getPhoneDialCodeForCountryName(form.country);
+    const nextDial = getPhoneDialCodeForCountryName(country);
+
+    form.setCountry(country);
+    address.setSuggestions([]);
+    address.setValidation({ status: "idle", message: "" });
+    address.setSearch("");
+    clearRecipientAddress(form);
+
+    const { nationalDigits } = splitPhoneNumber(form.phone, previousDial || nextDial || "1");
+
+    if (nextDial) {
+      form.setPhone(buildPhoneNumber(nextDial, nationalDigits));
+    } else if (!nationalDigits) {
+      form.setPhone("");
+    }
+  }
 
   const saveDisabled =
     !form.firstName.trim() ||
@@ -89,6 +130,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
     !form.phone.trim() ||
     !form.country ||
     (!meta.duplicateRecipient && address.validation.status !== "valid");
+
   const fullAddress = [
     [form.street, form.house].filter(Boolean).join(" "),
     [form.city, form.state, form.postalCode].filter(Boolean).join(" "),
@@ -96,6 +138,8 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
   ]
     .filter(Boolean)
     .join(", ");
+
+  const lockedClass = "pointer-events-none opacity-45";
 
   return (
     <>
@@ -106,18 +150,22 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
           </p>
           <span
             className={`rounded-lg border px-3 py-1 text-xs font-black uppercase ${
-              address.validation.status === "valid"
-                ? "border-black bg-surface-inset text-slate-200"
-                : address.validation.status === "invalid"
-                  ? "border-amber-600 bg-amber-400 text-slate-950"
-                  : "border-black bg-surface-card text-slate-300"
+              !hasCountry
+                ? "border-black bg-surface-card text-slate-300"
+                : address.validation.status === "valid"
+                  ? "border-black bg-surface-inset text-slate-200"
+                  : address.validation.status === "invalid"
+                    ? "border-amber-600 bg-amber-400 text-slate-950"
+                    : "border-black bg-surface-card text-slate-300"
             }`}
           >
-            {address.validation.status === "valid"
-              ? "Google OK"
-              : address.validation.status === "invalid" && address.validation.message
-                ? "Error direccion"
-                : "Sin validar"}
+            {!hasCountry
+              ? "Elige pais"
+              : address.validation.status === "valid"
+                ? "Google OK"
+                : address.validation.status === "invalid" && address.validation.message
+                  ? "Error direccion"
+                  : "Sin validar"}
           </span>
         </div>
         <div className="flex gap-2">
@@ -159,72 +207,77 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
             </span>
             <div className="min-w-0">
               <p className="text-sm font-black uppercase text-[#f8fafc]">Destinatario</p>
-              <p className="text-xs font-bold text-slate-400">Nombre, telefono y pais</p>
+              <p className="text-xs font-bold text-slate-400">Pais, nombre y telefono</p>
             </div>
           </div>
           <div className="space-y-3 p-4">
             <div className={`${flowFormStackClass} max-w-none`}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1.5">
-                  <span className={clientFormLabelClass}>Nombre</span>
-                  <input
-                    {...noBrowserAutocomplete}
-                    name="boxario-recipient-first-name"
-                    className={clientFormInputClass}
-                    placeholder="Maria"
-                    value={form.firstName}
-                    onChange={(event) => form.setFirstName(event.target.value)}
-                  />
-                </label>
-                <label className="grid gap-1.5">
-                  <span className={clientFormLabelClass}>Apellido</span>
-                  <input
-                    {...noBrowserAutocomplete}
-                    name="boxario-recipient-last-name"
-                    className={clientFormInputClass}
-                    placeholder="Lopez"
-                    value={form.lastName}
-                    onChange={(event) => form.setLastName(event.target.value)}
-                  />
-                </label>
-              </div>
-
               <label className="grid gap-1.5">
-                <span className={clientFormLabelClass}>Telefono</span>
-                <PhoneCountryInput
-                  className="min-w-0"
-                  name="boxario-recipient-phone"
-                  value={form.phone}
-                  onChange={form.setPhone}
-                />
-              </label>
-
-              <label className="grid gap-1.5">
-                <span className={clientFormLabelClass}>Pais obligatorio</span>
+                <span className={clientFormLabelClass}>Pais</span>
                 <InlineSearchPicker
                   compact={false}
                   className="w-full"
                   minWidthClass="w-full min-w-0"
+                  shellClassName={clientFormPickerShellClass}
                   value={form.country}
-                  onChange={(country) => {
-                    form.setCountry(country);
-                    address.setSuggestions([]);
-                    address.setValidation({ status: "idle", message: "" });
-                  }}
+                  onChange={handleCountryChange}
                   onSelectOption={(option) => {
                     if (option.value === CREATE_COUNTRY_OPTION_VALUE || option.action) {
                       router.push(configPricesCountryHref(form.country));
                     }
                   }}
                   options={countryOptions}
-                  placeholder={
-                    meta.countries.length ? "Elegir pais" : "Sin paises — crear uno"
-                  }
+                  placeholder={meta.countries.length ? "Elegir pais" : "Sin paises — crear uno"}
                   searchPlaceholder="Buscar pais…"
                   emptyLabel="Sin paises configurados"
                   ariaLabel="Pais del destinatario"
                 />
               </label>
+
+              <div className={hasCountry ? undefined : lockedClass} aria-disabled={!hasCountry}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-1.5">
+                    <span className={clientFormLabelClass}>Nombre</span>
+                    <input
+                      {...noBrowserAutocomplete}
+                      name="boxario-recipient-first-name"
+                      className={clientFormInputClass}
+                      placeholder="Maria"
+                      value={form.firstName}
+                      disabled={!hasCountry}
+                      tabIndex={hasCountry ? 0 : -1}
+                      onChange={(event) => form.setFirstName(event.target.value)}
+                    />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span className={clientFormLabelClass}>Apellido</span>
+                    <input
+                      {...noBrowserAutocomplete}
+                      name="boxario-recipient-last-name"
+                      className={clientFormInputClass}
+                      placeholder="Lopez"
+                      value={form.lastName}
+                      disabled={!hasCountry}
+                      tabIndex={hasCountry ? 0 : -1}
+                      onChange={(event) => form.setLastName(event.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <label className="mt-3 grid gap-1.5">
+                  <span className={clientFormLabelClass}>Telefono</span>
+                  <PhoneCountryInput
+                    className="min-w-0"
+                    name="boxario-recipient-phone"
+                    value={form.phone}
+                    defaultDialCode={phoneDefaultDialCode}
+                    disabled={!hasCountry}
+                    inputClassName={`${clientFormInputClass} pl-10`}
+                    pickerShellClassName={`${clientFormPickerShellClass} min-w-[6.5rem] w-auto`}
+                    onChange={form.setPhone}
+                  />
+                </label>
+              </div>
 
               {meta.duplicateRecipient ? (
                 <div className="rounded-lg border border-amber-600 bg-amber-400 px-3 py-2.5 text-slate-950">
@@ -238,14 +291,19 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
           </div>
         </div>
 
-        <div className="flex h-full min-w-0 flex-col rounded-lg border border-black bg-surface-card">
+        <div
+          className={`flex h-full min-w-0 flex-col rounded-lg border border-black bg-surface-card ${hasCountry ? "" : lockedClass}`}
+          aria-disabled={!hasCountry}
+        >
           <div className="flex items-center gap-3 border-b border-sky-300/25 bg-[#1f2c28] px-4 py-3">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-sky-300 text-slate-950">
               <MapPin className="h-4 w-4" />
             </span>
             <div className="min-w-0">
               <p className="text-sm font-black uppercase text-[#f8fafc]">Direccion destino</p>
-              <p className="text-xs font-bold text-slate-400">Buscar y validar en Google</p>
+              <p className="text-xs font-bold text-slate-400">
+                {hasCountry ? "Buscar y validar en Google" : "Disponible al elegir pais"}
+              </p>
             </div>
           </div>
           <div className="space-y-3 p-4">
@@ -258,6 +316,8 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   className={clientFormInputClass}
                   placeholder="Calle y numero"
                   value={form.street}
+                  disabled={!hasCountry}
+                  tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
                     address.touchField(() => form.setStreet(event.target.value));
                   }}
@@ -271,6 +331,8 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   className={clientFormInputClass}
                   placeholder="Apto / suite"
                   value={form.house}
+                  disabled={!hasCountry}
+                  tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
                     address.touchField(() => form.setHouse(event.target.value));
                   }}
@@ -284,6 +346,8 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   className={clientFormInputClass}
                   placeholder="Codigo postal"
                   value={form.postalCode}
+                  disabled={!hasCountry}
+                  tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
                     address.touchField(() => form.setPostalCode(event.target.value));
                   }}
@@ -300,6 +364,8 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   className={clientFormInputClass}
                   placeholder="Barrio / colonia"
                   value={form.neighborhood}
+                  disabled={!hasCountry}
+                  tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
                     address.touchField(() => form.setNeighborhood(event.target.value));
                   }}
@@ -313,6 +379,8 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   className={clientFormInputClass}
                   placeholder="Ciudad"
                   value={form.city}
+                  disabled={!hasCountry}
+                  tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
                     address.touchField(() => form.setCity(event.target.value));
                   }}
@@ -326,6 +394,8 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   className={clientFormInputClass}
                   placeholder="Estado"
                   value={form.state}
+                  disabled={!hasCountry}
+                  tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
                     address.touchField(() => form.setState(event.target.value));
                   }}
@@ -333,7 +403,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
               </label>
             </div>
 
-            {address.suggestions.length ? (
+            {hasCountry && address.suggestions.length ? (
               <div
                 id="recipient-address-suggestions-listbox"
                 role="listbox"
@@ -359,17 +429,21 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
 
             <p
               className={`rounded-lg border px-3.5 py-2.5 text-sm font-bold leading-snug break-words ${
-                address.validation.status === "valid"
-                  ? "border-black bg-surface-inset text-slate-300"
-                  : address.validation.status === "invalid"
-                    ? "border-amber-600 bg-amber-400 text-slate-950"
-                    : "border-black bg-surface-inset text-slate-500"
+                !hasCountry
+                  ? "border-black bg-surface-inset text-slate-500"
+                  : address.validation.status === "valid"
+                    ? "border-black bg-surface-inset text-slate-300"
+                    : address.validation.status === "invalid"
+                      ? "border-amber-600 bg-amber-400 text-slate-950"
+                      : "border-black bg-surface-inset text-slate-500"
               }`}
             >
-              {fullAddress ||
-                address.validation.formattedAddress ||
-                address.validation.message ||
-                "Selecciona una direccion para validar"}
+              {!hasCountry
+                ? "Elige el pais del destinatario para habilitar telefono y direccion."
+                : fullAddress ||
+                  address.validation.formattedAddress ||
+                  address.validation.message ||
+                  "Selecciona una direccion para validar"}
             </p>
           </div>
         </div>

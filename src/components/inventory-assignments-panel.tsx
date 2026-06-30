@@ -8,6 +8,7 @@ import {
   listOrgMembersForInventoryAction,
   type InventoryMemberRow,
 } from "@/app/actions/users";
+import { InventoryToolbarIconButton } from "@/components/inventory/inventory-toolbar-icon-button";
 import {
   InlineSearchCombobox,
   InlineSearchPicker,
@@ -286,31 +287,32 @@ export function InventoryAssignmentsDrawer({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={
-          iconOnly
-            ? "relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#111827] text-slate-300 transition hover:text-[#f8fafc]"
-            : "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-black bg-[#111827] px-3 text-xs font-black text-slate-300 transition hover:text-[#f8fafc]"
-        }
-        title="Asignaciones activas"
-        aria-label="Asignaciones activas"
-      >
-        <ClipboardList className="h-4 w-4 text-slate-400" aria-hidden />
-        {iconOnly ? null : <span className="hidden sm:inline">Asignaciones</span>}
-        {assignments.length ? (
-          <span
-            className={
-              iconOnly
-                ? "absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border border-black bg-surface-inset px-1 text-[9px] font-black tabular-nums text-slate-300"
-                : "rounded-md border border-black bg-surface-inset px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-400"
-            }
-          >
-            {assignments.length}
-          </span>
-        ) : null}
-      </button>
+      {iconOnly ? (
+        <InventoryToolbarIconButton
+          icon={ClipboardList}
+          label="Asignaciones activas"
+          badge={assignments.length || undefined}
+          onClick={() => setOpen(true)}
+          ariaHaspopup="dialog"
+          ariaExpanded={open}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-black bg-[#1a2320] px-3 text-xs font-black text-slate-300 transition hover:bg-[#243029] hover:text-[#f8fafc]"
+          title="Asignaciones activas"
+          aria-label="Asignaciones activas"
+        >
+          <ClipboardList className="h-4 w-4 text-slate-400" aria-hidden />
+          <span className="hidden sm:inline">Asignaciones</span>
+          {assignments.length ? (
+            <span className="rounded-md border border-black bg-surface-inset px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-400">
+              {assignments.length}
+            </span>
+          ) : null}
+        </button>
+      )}
 
       {drawer ? createPortal(drawer, document.body) : null}
 

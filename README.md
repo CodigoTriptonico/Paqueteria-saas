@@ -14,6 +14,7 @@ npm install
 npm run env:local
 npm run supabase:start
 npm run db:apply
+npm run db:restore-owner
 npm run dev
 ```
 
@@ -36,7 +37,17 @@ http://localhost:3000/login
 | `npm run supabase:status` | Ver URLs/keys locales |
 | `npm run db:apply` | Aplicar migraciones |
 | `npm run db:check` | Revisar migraciones esperadas |
+| `npm run db:restore-owner` | Crear dueño de plataforma local |
+| `npm run db:inspect` | Inspeccionar tablas locales |
+| `npm run db:list-users` | Listar usuarios locales |
+| `npm run db:delete-users` | Borrar todos los usuarios y orgs (dev) |
+| `npm run db:repair-plan-limits` | Reparar límites de plan (migración 015) |
+| `npm run db:rename-platform-org` | Renombrar org plataforma a Boxario |
+| `npm run db:add-box-sizes` | Añadir tamaños de caja al inventario |
 | `npm run db:local:reset` | Resetear base local |
+| `npm run codegen:dial-codes` | Regenerar `dial-codes-by-iso.ts` |
+| `npm run test:platform-auth` | Probar flujo de auth de plataforma |
+| `npm run test:sms` | Probar flujo SMS local |
 
 ## Arquitectura
 
@@ -44,10 +55,11 @@ http://localhost:3000/login
 - React 19
 - Supabase local: Auth + Postgres + RLS
 - Server Actions en `src/app/actions/`
-- Guards de sesion en `src/proxy.ts`
+- Auth global en `src/proxy.ts` (convención Proxy de Next 16; redirige a `/login` sin sesión)
+- Permisos por ruta en layouts con `requirePathAccess()`
 - Super-admin en `/platform`
 
 ## Docs
 
-- Setup local: [SETUP.md](./SETUP.md)
-- Base local: [DESARROLLO-LOCAL.md](./DESARROLLO-LOCAL.md)
+- Setup y pruebas: [SETUP.md](./SETUP.md)
+- Docker, puertos y troubleshooting: [DESARROLLO-LOCAL.md](./DESARROLLO-LOCAL.md)

@@ -4,229 +4,91 @@ import { requireAppSession } from "@/lib/auth/session";
 import { sessionHasPermission } from "@/lib/auth/permissions";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
-import { resolveCountryCode } from "@/lib/country-options";
-import { categoriesToConfig, type DbCategory } from "@/lib/inventory-backend";
-import type { CategoryConfig } from "@/lib/inventory-tree";
-import { listCatalogProducts, type InventoryCatalogProduct } from "@/lib/pricing-catalog";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { defaultInvoiceBillingConfig } from "@/lib/invoice-billing";
+import type { PricingPromotionConfig } from "@/lib/pricing-promotions";
+import {
+  isPromotionRuleValid,
+  primaryCatalogKey,
+} from "@/lib/combo-rules";
+import {
+  canReadPricingSession,
+  canWritePricingSession,
+  isMissingRuleJsonColumn,
+  loadPricingConfigForSession,
+  promotionsRuleJsonColumnAvailable,
+  syncLinkedRouteSchedules,
+} from "@/lib/pricing/load-config";
+import {
+  saleCountryBoxesFromCountries,
+  saleLogisticsFeesFromRouteConfig,
+  salePricingFromConfig,
+} from "@/lib/pricing/sale-derivatives";
+import type { SaleLogisticsFeesPayload, SalePricingPayload } from "@/lib/pricing/sale-derivatives";
+import type { PricingConfigPayload } from "@/lib/pricing/types";
 
-export type PricingBoxConfig = {
-  size: string;
-  price: string;
-  cost?: string;
-  catalogKey?: string;
-};
+export type {
+  PricingBoxConfig,
+  PricingConfigPayload,
+  PricingCountryConfig,
+  PricingDistributorConfig,
+  PricingDistributorPrices,
+  PricingRouteConfig,
+} from "@/lib/pricing/types";
+export type { SaleLogisticsFeesPayload, SalePricingPayload } from "@/lib/pricing/sale-derivatives";
 
-export type PricingCountryConfig = {
-  code: string;
-  name: string;
-  deliveryTime: string;
-  boxes: PricingBoxConfig[];
-};
+function legacyPromotionFields(rule: PricingPromotionConfig["rule"]) {
+  const buyLine = rule.buy[0];
+  const getLine = rule.get[0];
 
-export type PricingDistributorConfig = {
-  name: string;
-  contact: string;
-  phone: string;
-  active: boolean;
-};
-
-export type PricingDistributorPrices = Record<string, Record<string, PricingBoxConfig[]>>;
-
-export type PricingRouteConfig = {
-  deliveryDays: string[];
-  pickupDays: string[];
-  deliveryRanges: string[];
-  pickupRanges: string[];
-  pendingAllowed: boolean;
-  routeLeadTime: string;
-};
-
-export type PricingConfigPayload = {
-  countries: PricingCountryConfig[];
-  distributors: PricingDistributorConfig[];
-  distributorPrices: PricingDistributorPrices;
-  routeConfig: PricingRouteConfig;
-  catalogProducts: InventoryCatalogProduct[];
-};
-
-const emptyRouteConfig: PricingRouteConfig = {
-  deliveryDays: [],
-  pickupDays: [],
-  deliveryRanges: [],
-  pickupRanges: [],
-  pendingAllowed: true,
-  routeLeadTime: "",
-};
-
-type DbPricingCountryBox = {
-  size: string;
-  price: string;
-  cost: string | null;
-  catalog_key?: string | null;
-};
-
-function canReadPricing(session: Awaited<ReturnType<typeof requireAppSession>>) {
-  return (
-    sessionHasPermission(session, "settings.manage") ||
-    sessionHasPermission(session, "sales.manage")
-  );
-}
-
-function canWritePricing(session: Awaited<ReturnType<typeof requireAppSession>>) {
-  return sessionHasPermission(session, "settings.manage");
-}
-
-async function loadInventoryCategoryConfigs(
-  supabase: SupabaseClient,
-  orgId: string,
-): Promise<CategoryConfig[]> {
-  const { data, error } = await supabase
-    .from("inventory_categories")
-    .select("id, name, tree_data")
-    .eq("organization_id", orgId)
-    .order("name");
-
-  if (error) {
-    if (error.code === "42P01") {
-      return [];
-    }
-
-    throw new Error(error.message);
+  if (rule.mode === "bundle_price") {
+    return {
+      promotion_type: "combo",
+      bundle_quantity: buyLine?.quantity || 2,
+      bundle_price: rule.bundlePrice || "$0",
+      paid_quantity: buyLine?.quantity || 2,
+      discounted_quantity: 1,
+      discount_percent: 100,
+    };
   }
 
-  return categoriesToConfig((data || []) as DbCategory[]);
+  if (getLine?.kind === "set_total") {
+    return {
+      promotion_type: "combo",
+      bundle_quantity: buyLine?.quantity || 2,
+      bundle_price: getLine.amount || "$0",
+      paid_quantity: buyLine?.quantity || 2,
+      discounted_quantity: getLine.quantity || 1,
+      discount_percent: 100,
+    };
+  }
+
+  return {
+    promotion_type: "combo",
+    bundle_quantity: buyLine?.quantity || 2,
+    bundle_price: getLine?.amount || "$0",
+    paid_quantity: buyLine?.quantity || 2,
+    discounted_quantity: getLine?.quantity || 1,
+    discount_percent: getLine?.percent ?? 100,
+  };
+}
+
+function safePositiveInt(value: number, fallback: number) {
+  return Math.max(Number.isFinite(value) ? Math.floor(value) : fallback, 1);
+}
+
+function safePercent(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(Math.max(value, 0), 100);
 }
 
 export async function loadPricingConfigAction(): Promise<ActionResult<PricingConfigPayload>> {
   try {
     const session = await requireAppSession();
-
-    if (!canReadPricing(session)) {
-      throw new Error("FORBIDDEN");
-    }
-
-    const supabase = await createScopedSupabase(session);
-    if (!supabase) {
-      return fail("Supabase no configurado");
-    }
-
-    const orgId = session.organizationId;
-
-    const [countriesResult, distributorsResult, distributorBoxesResult, routeResult, categoryConfigs] =
-      await Promise.all([
-        supabase
-          .from("pricing_countries")
-          .select(
-            "id, code, name, delivery_time, sort_order, pricing_country_boxes(size, price, cost, catalog_key)",
-          )
-          .eq("organization_id", orgId)
-          .order("sort_order")
-          .order("name"),
-        supabase
-          .from("distributors")
-          .select("id, name, contact, phone, is_active")
-          .eq("organization_id", orgId)
-          .order("name"),
-        supabase
-          .from("distributor_country_boxes")
-          .select("size, price, distributor_id, country_id, distributors(name), pricing_countries(name)")
-          .eq("organization_id", orgId),
-        supabase
-          .from("organization_route_settings")
-          .select(
-            "delivery_days, pickup_days, delivery_ranges, pickup_ranges, pending_allowed, route_lead_time",
-          )
-          .eq("organization_id", orgId)
-          .maybeSingle(),
-        loadInventoryCategoryConfigs(supabase, orgId),
-      ]);
-
-    const catalogProducts = listCatalogProducts(categoryConfigs);
-
-    if (countriesResult.error?.code === "42P01") {
-      return ok({
-        countries: [],
-        distributors: [],
-        distributorPrices: {},
-        routeConfig: emptyRouteConfig,
-        catalogProducts,
-      });
-    }
-
-    if (countriesResult.error) {
-      return fail(countriesResult.error.message);
-    }
-
-    if (distributorsResult.error) {
-      return fail(distributorsResult.error.message);
-    }
-
-    const countries: PricingCountryConfig[] = (countriesResult.data || []).map((row) => {
-      const boxes = (row.pricing_country_boxes as DbPricingCountryBox[] | null) || [];
-
-      return {
-        code: resolveCountryCode({ code: row.code || "", name: row.name }),
-        name: row.name,
-        deliveryTime: row.delivery_time || "",
-        boxes: boxes.map((box) => ({
-          size: box.size,
-          price: box.price,
-          cost: box.cost || "$0",
-          catalogKey: box.catalog_key || undefined,
-        })),
-      };
-    });
-
-    const distributors: PricingDistributorConfig[] = (distributorsResult.data || []).map(
-      (row) => ({
-        name: row.name,
-        contact: row.contact,
-        phone: row.phone,
-        active: row.is_active,
-      }),
-    );
-
-    const distributorPrices: PricingDistributorPrices = {};
-
-    for (const row of distributorBoxesResult.data || []) {
-      const distributor = row.distributors as { name: string } | { name: string }[] | null;
-      const country = row.pricing_countries as { name: string } | { name: string }[] | null;
-      const distributorName = Array.isArray(distributor) ? distributor[0]?.name : distributor?.name;
-      const countryName = Array.isArray(country) ? country[0]?.name : country?.name;
-
-      if (!distributorName || !countryName) {
-        continue;
-      }
-
-      if (!distributorPrices[distributorName]) {
-        distributorPrices[distributorName] = {};
-      }
-
-      if (!distributorPrices[distributorName][countryName]) {
-        distributorPrices[distributorName][countryName] = [];
-      }
-
-      distributorPrices[distributorName][countryName].push({
-        size: row.size,
-        price: row.price,
-      });
-    }
-
-    const routeRow = routeResult.data;
-
-    const routeConfig: PricingRouteConfig = routeRow
-      ? {
-          deliveryDays: routeRow.delivery_days || [],
-          pickupDays: routeRow.pickup_days || [],
-          deliveryRanges: routeRow.delivery_ranges || [],
-          pickupRanges: routeRow.pickup_ranges || [],
-          pendingAllowed: routeRow.pending_allowed,
-          routeLeadTime: routeRow.route_lead_time || "",
-        }
-      : emptyRouteConfig;
-
-    return ok({ countries, distributors, distributorPrices, routeConfig, catalogProducts });
+    const data = await loadPricingConfigForSession(session);
+    return ok(data);
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -238,7 +100,7 @@ export async function savePricingConfigAction(
   try {
     const session = await requireAppSession();
 
-    if (!canWritePricing(session)) {
+    if (!canWritePricingSession(session)) {
       throw new Error("FORBIDDEN");
     }
 
@@ -250,6 +112,16 @@ export async function savePricingConfigAction(
     const orgId = session.organizationId;
 
     await supabase.from("distributor_country_boxes").delete().eq("organization_id", orgId);
+    const promotionsDeleteResult = await supabase
+      .from("pricing_promotions")
+      .delete()
+      .eq("organization_id", orgId);
+    const promotionsTableAvailable = promotionsDeleteResult.error?.code !== "42P01";
+
+    if (promotionsDeleteResult.error && promotionsTableAvailable) {
+      return fail(promotionsDeleteResult.error.message);
+    }
+
     await supabase.from("pricing_country_boxes").delete().eq("organization_id", orgId);
     await supabase.from("distributors").delete().eq("organization_id", orgId);
     await supabase.from("pricing_countries").delete().eq("organization_id", orgId);
@@ -289,6 +161,68 @@ export async function savePricingConfigAction(
 
         if (boxesError) {
           return fail(boxesError.message);
+        }
+      }
+    }
+
+    if (promotionsTableAvailable && payload.promotions.length) {
+      const promotionsRuleJsonAvailable = await promotionsRuleJsonColumnAvailable(supabase);
+
+      const promotionRows = payload.promotions
+        .map((promotion) => {
+          const countryId = countryIdByName.get(promotion.countryName);
+
+          const catalogKey =
+            primaryCatalogKey(promotion.rule) || promotion.catalogKey.trim();
+
+          if (!countryId || !promotion.name.trim() || !catalogKey || !isPromotionRuleValid(promotion.rule)) {
+            return null;
+          }
+
+          const legacyFields = legacyPromotionFields(promotion.rule);
+
+          const row: Record<string, unknown> = {
+            organization_id: orgId,
+            country_id: countryId,
+            catalog_key: catalogKey,
+            name: promotion.name.trim(),
+            is_active: promotion.active,
+            promotion_type: legacyFields.promotion_type,
+            bundle_quantity: safePositiveInt(Number(legacyFields.bundle_quantity), 2),
+            bundle_price: legacyFields.bundle_price || "$0",
+            paid_quantity: safePositiveInt(Number(legacyFields.paid_quantity), 2),
+            discounted_quantity: safePositiveInt(Number(legacyFields.discounted_quantity), 1),
+            discount_percent: safePercent(Number(legacyFields.discount_percent)),
+            sort_order: promotion.sortOrder,
+          };
+
+          if (promotionsRuleJsonAvailable) {
+            row.rule_json = promotion.rule;
+          }
+
+          return row;
+        })
+        .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+      if (promotionRows.length) {
+        let { error: promotionsError } = await supabase
+          .from("pricing_promotions")
+          .insert(promotionRows);
+
+        if (promotionsError && isMissingRuleJsonColumn(promotionsError.message)) {
+          const legacyRows = promotionRows.map((row) => {
+            const legacyRow = { ...row };
+            delete legacyRow.rule_json;
+            return legacyRow;
+          });
+
+          ({ error: promotionsError } = await supabase
+            .from("pricing_promotions")
+            .insert(legacyRows));
+        }
+
+        if (promotionsError) {
+          return fail(promotionsError.message);
         }
       }
     }
@@ -359,14 +293,21 @@ export async function savePricingConfigAction(
       }
     }
 
+    const routeConfig = syncLinkedRouteSchedules(payload.routeConfig);
+
     const { error: routeError } = await supabase.from("organization_route_settings").upsert({
       organization_id: orgId,
-      delivery_days: payload.routeConfig.deliveryDays,
-      pickup_days: payload.routeConfig.pickupDays,
-      delivery_ranges: payload.routeConfig.deliveryRanges,
-      pickup_ranges: payload.routeConfig.pickupRanges,
-      pending_allowed: payload.routeConfig.pendingAllowed,
-      route_lead_time: payload.routeConfig.routeLeadTime,
+      delivery_days: routeConfig.deliveryDays,
+      pickup_days: routeConfig.pickupDays,
+      delivery_ranges: routeConfig.deliveryRanges,
+      pickup_ranges: routeConfig.pickupRanges,
+      pending_allowed: routeConfig.pendingAllowed,
+      route_lead_time: routeConfig.routeLeadTime,
+      linked_route_schedules: routeConfig.linkedRouteSchedules,
+      empty_box_delivery_fee: defaultInvoiceBillingConfig.emptyBoxDeliveryFee,
+      full_box_pickup_fee: defaultInvoiceBillingConfig.fullBoxPickupFee,
+      minimum_deposit: routeConfig.minimumDeposit,
+      logistics_fee_mode: defaultInvoiceBillingConfig.logisticsFeeMode,
       updated_at: new Date().toISOString(),
     });
 
@@ -380,36 +321,51 @@ export async function savePricingConfigAction(
   }
 }
 
-/** Cajas por pais para el flujo de venta: [tamano, precio, costo, carrier, tiempo] */
+/** Cajas por pais para venta: [tamano, precio, costo, carrier, tiempo, catalogKey] */
 export async function loadSaleCountryBoxesAction(): Promise<
   ActionResult<Record<string, string[][]>>
 > {
   try {
     const session = await requireAppSession();
 
-    if (!canReadPricing(session)) {
+    if (!canReadPricingSession(session)) {
       throw new Error("FORBIDDEN");
     }
 
-    const result = await loadPricingConfigAction();
+    const config = await loadPricingConfigForSession(session);
+    return ok(saleCountryBoxesFromCountries(config.countries));
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
 
-    if (!result.ok) {
-      return result;
+export async function loadSalePricingAction(): Promise<ActionResult<SalePricingPayload>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canReadPricingSession(session)) {
+      throw new Error("FORBIDDEN");
     }
 
-    const countryBoxes: Record<string, string[][]> = {};
+    const config = await loadPricingConfigForSession(session);
+    return ok(salePricingFromConfig(config.countries, config.promotions));
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
 
-    for (const country of result.data.countries) {
-      countryBoxes[country.name] = country.boxes.map((box) => [
-        box.size,
-        box.price,
-        box.cost || "$0",
-        "",
-        country.deliveryTime || "",
-      ]);
+export async function loadSaleLogisticsFeesAction(): Promise<
+  ActionResult<SaleLogisticsFeesPayload>
+> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canReadPricingSession(session)) {
+      throw new Error("FORBIDDEN");
     }
 
-    return ok(countryBoxes);
+    const config = await loadPricingConfigForSession(session);
+    return ok(saleLogisticsFeesFromRouteConfig(config.routeConfig));
   } catch (error) {
     return fail(actionErrorMessage(error));
   }

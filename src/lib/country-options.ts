@@ -245,6 +245,25 @@ const COUNTRY_NAMES_ES: Record<string, string> = {
   ZW: "Zimbabue",
 };
 
+/** Alias frecuentes (inglés, abreviaturas) → ISO 3166-1 alpha-2 */
+const COUNTRY_NAME_ALIASES: Record<string, string> = {
+  usa: "US",
+  us: "US",
+  "united states": "US",
+  "united states of america": "US",
+  uk: "GB",
+  "great britain": "GB",
+  england: "GB",
+  mexico: "MX",
+  brasil: "BR",
+  brazil: "BR",
+  "south korea": "KR",
+  "north korea": "KP",
+  "czech republic": "CZ",
+  "ivory coast": "CI",
+  "cote d'ivoire": "CI",
+};
+
 const excludedCountryCodes = new Set(["US"]);
 
 const usProximityCodes = [
@@ -318,6 +337,69 @@ function normalizeCountryName(value: string) {
     .trim();
 }
 
+const ISO_COUNTRY_CODES = [
+  "AF", "AL", "DE", "AD", "AO", "AI", "AQ", "AG", "SA", "DZ", "AR", "AM",
+  "AW", "AU", "AT", "AZ", "BS", "BH", "BD", "BB", "BE", "BZ", "BJ", "BM",
+  "BY", "BO", "BA", "BW", "BR", "BN", "BG", "BF", "BI", "BT", "CV", "KH",
+  "CM", "CA", "BQ", "QA", "TD", "CL", "CN", "CY", "CO", "KM", "CG", "CD",
+  "KP", "KR", "CI", "CR", "HR", "CU", "CW", "DK", "DM", "EC", "EG", "SV",
+  "AE", "ER", "SK", "SI", "ES", "US", "EE", "SZ", "ET", "PH", "FI", "FJ",
+  "FR", "GA", "GM", "GE", "GH", "GI", "GD", "GR", "GL", "GP", "GU", "GT",
+  "GF", "GG", "GN", "GQ", "GW", "GY", "HT", "HN", "HK", "HU", "IN", "ID",
+  "IQ", "IR", "IE", "IM", "IS", "KY", "CK", "FO", "FK", "MP", "MH", "SB",
+  "TC", "VG", "VI", "IL", "IT", "JM", "JP", "JE", "JO", "KZ", "KE", "KG",
+  "KI", "KW", "LA", "LS", "LV", "LB", "LR", "LY", "LI", "LT", "LU", "MO",
+  "MG", "MY", "MW", "MV", "ML", "MT", "MA", "MQ", "MU", "MR", "YT", "MX",
+  "FM", "MD", "MC", "MN", "ME", "MS", "MZ", "MM", "NA", "NR", "NP", "NI",
+  "NE", "NG", "NU", "NO", "NC", "NZ", "OM", "NL", "PK", "PW", "PS", "PA",
+  "PG", "PY", "PE", "PF", "PL", "PT", "PR", "GB", "CF", "CZ", "DO", "RE",
+  "RW", "RO", "RU", "EH", "WS", "AS", "BL", "KN", "SM", "MF", "PM", "VC",
+  "SH", "LC", "ST", "SN", "RS", "SC", "SL", "SG", "SX", "SY", "SO", "LK",
+  "ZA", "SD", "SS", "SE", "CH", "SR", "SJ", "TH", "TW", "TZ", "TJ", "IO",
+  "TF", "TL", "TG", "TK", "TO", "TT", "TN", "TM", "TR", "TV", "UA", "UG",
+  "UY", "UZ", "VU", "VA", "VE", "VN", "WF", "YE", "DJ", "ZM", "ZW",
+] as const;
+
+const ISO_CODES_SET = new Set<string>(ISO_COUNTRY_CODES);
+
+const COUNTRY_NAME_TO_CODE = (() => {
+  const map = new Map<string, string>();
+
+  for (const [code, name] of Object.entries(COUNTRY_NAMES_ES)) {
+    map.set(normalizeCountryName(name), code);
+  }
+
+  for (const [alias, code] of Object.entries(COUNTRY_NAME_ALIASES)) {
+    map.set(normalizeCountryName(alias), code);
+  }
+
+  return map;
+})();
+
+/** Resuelve nombre, alias o código ISO a alpha-2 (catálogo completo, incluye US). */
+export function resolveCountryCodeFromString(value: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const upper = trimmed.toUpperCase();
+
+  if (/^[A-Z]{2}$/.test(upper) && ISO_CODES_SET.has(upper)) {
+    return upper;
+  }
+
+  return COUNTRY_NAME_TO_CODE.get(normalizeCountryName(trimmed)) || "";
+}
+
+/** Código ISO para APIs de Google Maps (geocode / places). */
+export function resolveGoogleCountryCode(country?: string): string | undefined {
+  const code = resolveCountryCodeFromString(country || "");
+
+  return code || undefined;
+}
+
 export function findCountryByNormalizedName<T extends { name: string }>(
   query: string,
   list: readonly T[],
@@ -339,28 +421,7 @@ export function configPricesCountryHref(country?: string) {
   return `/configuracion?view=prices&country=${encodeURIComponent(trimmed)}`;
 }
 
-const countryCodes = [
-  "AF", "AL", "DE", "AD", "AO", "AI", "AQ", "AG", "SA", "DZ", "AR", "AM",
-  "AW", "AU", "AT", "AZ", "BS", "BH", "BD", "BB", "BE", "BZ", "BJ", "BM",
-  "BY", "BO", "BA", "BW", "BR", "BN", "BG", "BF", "BI", "BT", "CV", "KH",
-  "CM", "CA", "BQ", "QA", "TD", "CL", "CN", "CY", "CO", "KM", "CG", "CD",
-  "KP", "KR", "CI", "CR", "HR", "CU", "CW", "DK", "DM", "EC", "EG", "SV",
-  "AE", "ER", "SK", "SI", "ES", "US", "EE", "SZ", "ET", "PH", "FI", "FJ",
-  "FR", "GA", "GM", "GE", "GH", "GI", "GD", "GR", "GL", "GP", "GU", "GT",
-  "GF", "GG", "GN", "GQ", "GW", "GY", "HT", "HN", "HK", "HU", "IN", "ID",
-  "IQ", "IR", "IE", "IM", "IS", "KY", "CK", "FO", "FK", "MP", "MH", "SB",
-  "TC", "VG", "VI", "IL", "IT", "JM", "JP", "JE", "JO", "KZ", "KE", "KG",
-  "KI", "KW", "LA", "LS", "LV", "LB", "LR", "LY", "LI", "LT", "LU", "MO",
-  "MG", "MY", "MW", "MV", "ML", "MT", "MA", "MQ", "MU", "MR", "YT", "MX",
-  "FM", "MD", "MC", "MN", "ME", "MS", "MZ", "MM", "NA", "NR", "NP", "NI",
-  "NE", "NG", "NU", "NO", "NC", "NZ", "OM", "NL", "PK", "PW", "PS", "PA",
-  "PG", "PY", "PE", "PF", "PL", "PT", "PR", "GB", "CF", "CZ", "DO", "RE",
-  "RW", "RO", "RU", "EH", "WS", "AS", "BL", "KN", "SM", "MF", "PM", "VC",
-  "SH", "LC", "ST", "SN", "RS", "SC", "SL", "SG", "SX", "SY", "SO", "LK",
-  "ZA", "SD", "SS", "SE", "CH", "SR", "SJ", "TH", "TW", "TZ", "TJ", "IO",
-  "TF", "TL", "TG", "TK", "TO", "TT", "TN", "TM", "TR", "TV", "UA", "UG",
-  "UY", "UZ", "VU", "VA", "VE", "VN", "WF", "YE", "DJ", "ZM", "ZW",
-];
+const countryCodes = ISO_COUNTRY_CODES;
 
 function buildCountryOptions(): CountryOption[] {
   const availableCountryCodes = countryCodes.filter((code) => !excludedCountryCodes.has(code));
@@ -422,15 +483,23 @@ export function compareCountriesByCatalogOrder(
 }
 
 export function resolveCountryCode(country: { code: string; name: string }) {
-  if (country.code) {
-    return country.code.toUpperCase();
+  const codeField = country.code?.trim().toUpperCase() || "";
+
+  if (codeField && /^[A-Z]{2}$/.test(codeField) && ISO_CODES_SET.has(codeField)) {
+    return codeField;
   }
 
-  const match = COUNTRY_OPTIONS.find(
-    (entry) => normalizeCountryName(entry.name) === normalizeCountryName(country.name),
-  );
+  const fromName = country.name?.trim();
 
-  return match?.code || country.code;
+  if (fromName) {
+    const resolved = resolveCountryCodeFromString(fromName);
+
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return codeField;
 }
 
 export function isCountryAlreadyConfigured(
