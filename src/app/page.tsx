@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
-import { ClipboardList, PackagePlus, Truck, Users } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ClipboardList, PackagePlus, Truck, Users } from "lucide-react";
 import { DashboardSummary } from "@/components/dashboard-summary";
-import { BigAction, labelMutedClass, Panel } from "@/components/ui-blocks";
+import { BigAction, cardClass, labelMutedClass, Panel, textMutedClass } from "@/components/ui-blocks";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
 import { getAppSession } from "@/lib/auth/session";
@@ -39,6 +40,8 @@ const actions = [
   },
 ];
 
+const [primaryAction, ...secondaryActions] = actions;
+
 export default async function Home() {
   const session = await getAppSession();
   if (session && platformAdminNeedsClientContext(session)) {
@@ -74,7 +77,50 @@ export default async function Home() {
           <DashboardSummary initialSummary={initialSummary} />
         ) : null}
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 md:hidden">
+          <Link
+            href={primaryAction.href}
+            className={`${cardClass} flex min-h-20 items-center gap-3 p-3 active:scale-[0.99]`}
+          >
+            <span
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-black text-slate-950 ${primaryAction.color}`}
+            >
+              <primaryAction.icon className="h-6 w-6" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xl font-black text-[#f8fafc]">{primaryAction.title}</span>
+              <span className={`block truncate ${textMutedClass}`}>{primaryAction.text}</span>
+            </span>
+          </Link>
+
+          <details className={`${cardClass} group mt-3 overflow-hidden`}>
+            <summary className="flex min-h-14 list-none items-center justify-between gap-3 px-3 py-2 text-base font-black text-[#f8fafc] marker:hidden">
+              <span>Mas opciones</span>
+              <ChevronDown className="h-5 w-5 shrink-0 text-slate-300 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="grid border-t border-black">
+              {secondaryActions.map((action) => (
+                <Link
+                  key={action.title}
+                  href={action.href}
+                  className="flex min-h-16 items-center gap-3 border-b border-black px-3 py-2 last:border-b-0 active:bg-surface-card-hover"
+                >
+                  <span
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black text-slate-950 ${action.color}`}
+                  >
+                    <action.icon className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-base font-black text-[#f8fafc]">{action.title}</span>
+                    <span className={`block truncate ${textMutedClass}`}>{action.text}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </details>
+        </div>
+
+        <div className="mt-4 hidden gap-3 md:grid md:grid-cols-2 xl:grid-cols-4">
           {actions.map((action) => (
             <BigAction key={action.title} {...action} />
           ))}

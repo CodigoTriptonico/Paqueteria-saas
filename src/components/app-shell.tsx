@@ -8,9 +8,11 @@ import {
   CreditCard,
   House,
   LucideIcon,
+  Menu,
   Settings,
   Shield,
   Truck,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { UserAccountMenu } from "@/components/user-account-menu";
@@ -152,15 +154,15 @@ function ShellNavItem({ item, session, isActive, variant, onNavigate }: ShellNav
     const lockedClass =
       variant === "sidebar"
         ? "flex h-14 min-w-0 cursor-not-allowed items-center gap-3 rounded-lg border border-transparent px-4 text-left text-lg font-black text-slate-600 opacity-50"
-        : "relative flex min-h-14 cursor-not-allowed flex-col items-center justify-center rounded-lg border border-black bg-surface-card px-2 text-center text-xs font-black text-slate-600 opacity-50 sm:min-h-16 sm:text-sm";
+        : "flex h-12 min-w-0 cursor-not-allowed items-center gap-3 rounded-lg border border-black bg-surface-card px-3 text-sm font-black text-slate-600 opacity-50";
 
     return (
       <span key={item.href} className={lockedClass} title={LOCKED_NAV_HINT} aria-disabled="true">
-        <Icon className={variant === "sidebar" ? "h-6 w-6 shrink-0" : "mb-1 h-6 w-6"} />
+        <Icon className={variant === "sidebar" ? "h-6 w-6 shrink-0" : "h-5 w-5 shrink-0"} />
         {variant === "sidebar" ? (
           <span className="min-w-0 flex-1 truncate">{item.label}</span>
         ) : (
-          item.label
+          <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
         )}
       </span>
     );
@@ -191,12 +193,12 @@ function ShellNavItem({ item, session, isActive, variant, onNavigate }: ShellNav
       href={item.href}
       prefetch
       onClick={() => onNavigate?.(isActive, item.hasSubmenu)}
-      className={`relative flex min-h-14 flex-col items-center justify-center rounded-lg border px-2 text-center text-xs font-black transition-all duration-200 active:scale-[0.98] sm:min-h-16 sm:text-sm ${
-        isActive ? "border-black bg-surface-card text-white" : "border-black bg-surface-card text-slate-300"
+      className={`flex h-12 min-w-0 items-center gap-3 rounded-lg border px-3 text-sm font-black transition-all duration-200 active:scale-[0.98] ${
+        isActive ? "border-black bg-emerald-400 text-slate-950" : "border-black bg-surface-card text-slate-300"
       }`}
     >
-      <Icon className="mb-1 h-6 w-6" />
-      {item.label}
+      <Icon className="h-5 w-5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
     </Link>
   );
 }
@@ -217,17 +219,17 @@ export function AppShell({
   contentEdgeToEdge = false,
 }: AppShellProps & { session: AppSession | null }) {
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const needsClientSelection = platformAdminNeedsClientContext(session);
   const sidebarNavItems = useMemo(() => navItemsForSession(session), [session]);
   const activeItem =
     sidebarNavItems.find((item) => item.label === active) ??
     sidebarNavItems[0] ??
     navItems[0];
+  const mobileNavItems = useMemo(() => sidebarNavItems, [sidebarNavItems]);
   const showCompactSidebar = hasCompactSidebarContent(compactContent);
   const showContextNav = Boolean(contextNavLabel && onContextNavBack);
-  const showMobileMainNav = !(navCollapsed && showCompactSidebar);
-
-  const mobileNavItems = useMemo(() => sidebarNavItems, [sidebarNavItems]);
+  const showMobileMainNav = !(navCollapsed && showCompactSidebar) && mobileNavItems.length > 0;
 
   function collapseToCompactNav() {
     setNavCollapsed(true);
@@ -280,6 +282,8 @@ export function AppShell({
   const brandTitle = shellBrandTitle(active, contextNavLabel);
 
   function handleNavClick(isActive: boolean, hasSubmenu?: boolean) {
+    setMobileMenuOpen(false);
+
     if (isActive && hasSubmenu && showCompactSidebar) {
       collapseToCompactNav();
     }
@@ -391,24 +395,46 @@ export function AppShell({
             </div>
           ) : null}
 
-          {showMobileMainNav ? (
-            <nav className="mb-4 grid grid-cols-2 gap-2 sm:mb-5 sm:grid-cols-3 lg:hidden">
-              {mobileNavItems.map((item) => (
-                <ShellNavItem
-                  key={item.href}
-                  item={item}
-                  session={session}
-                  isActive={item.label === active}
-                  variant="mobile"
-                  onNavigate={handleNavClick}
-                />
-              ))}
-            </nav>
-          ) : null}
-
-          <div className="flex flex-col overflow-x-hidden lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+          <div className="flex flex-col overflow-x-hidden pb-20 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-0">
             {children}
           </div>
+
+          {showMobileMainNav ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((open) => !open)}
+                className="fixed bottom-5 right-5 z-[120] flex h-14 w-14 items-center justify-center rounded-full border border-black bg-emerald-400 text-slate-950 shadow-[0_10px_28px_rgba(0,0,0,0.45)] active:scale-[0.96] lg:hidden"
+                aria-label={mobileMenuOpen ? "Cerrar menu" : "Abrir menu"}
+                aria-expanded={mobileMenuOpen}
+              >
+                {mobileMenuOpen ? <X className="h-7 w-7" /> : <Menu className="h-7 w-7" />}
+              </button>
+
+              {mobileMenuOpen ? (
+                <div className="fixed inset-0 z-[110] lg:hidden">
+                  <button
+                    type="button"
+                    aria-label="Cerrar menu"
+                    className="absolute inset-0 bg-black/45"
+                    onClick={() => setMobileMenuOpen(false)}
+                  />
+                  <nav className="absolute inset-x-3 bottom-24 grid max-h-[62dvh] gap-2 overflow-y-auto rounded-xl border border-black bg-surface-panel p-3 shadow-[0_18px_44px_rgba(0,0,0,0.55)]">
+                    {mobileNavItems.map((item) => (
+                      <ShellNavItem
+                        key={item.href}
+                        item={item}
+                        session={session}
+                        isActive={item.label === active}
+                        variant="mobile"
+                        onNavigate={handleNavClick}
+                      />
+                    ))}
+                  </nav>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </section>
       </div>
     </main>
