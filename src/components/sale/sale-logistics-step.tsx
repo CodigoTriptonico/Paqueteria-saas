@@ -1,13 +1,9 @@
 "use client";
 
 import {
-  ArrowDown,
   Building2,
-  CalendarDays,
-  Check,
   Truck,
 } from "lucide-react";
-import type { RefObject } from "react";
 import {
   deliveryModeCardClass,
   deliveryModeIconClass,
@@ -15,21 +11,20 @@ import {
   deliverySummary,
   EMPTY_BOX_DRIVER_MODE,
   EMPTY_BOX_OFFICE_MODE,
+  FULL_BOX_DEFERRED_SUMMARY,
   FULL_BOX_DRIVER_MODE,
   FULL_BOX_OFFICE_MODE,
-  inputClass,
+  fullBoxSummaryLine,
   logisticsLegComplete,
   minScheduleDateInput,
   resolveScheduleDate,
 } from "@/components/sale/venta-parts";
+import { DateInput } from "@/components/date-input";
 import { ScheduleTimeField } from "@/components/sale/schedule-time-field";
-import { primaryButtonClass } from "@/components/ui-blocks";
 
 type ScheduleMode = "pending" | "scheduled";
 
 type SaleLogisticsStepProps = {
-  emptyBoxHandingNow: boolean;
-  onEmptyBoxHandingNowChange: (value: boolean) => void;
   emptyBoxMode: string;
   emptyBoxScheduleMode: string;
   emptyBoxScheduleAt: string;
@@ -40,40 +35,33 @@ type SaleLogisticsStepProps = {
   emptyBoxRouteTime: string;
   fullBoxRouteDate: string;
   fullBoxRouteTime: string;
-  emptyDateInputRef: RefObject<HTMLInputElement | null>;
-  fullDateInputRef: RefObject<HTMLInputElement | null>;
   onSelectEmptyBoxMode: (mode: string) => void;
   onSelectEmptyBoxScheduleMode: (mode: ScheduleMode) => void;
   onUpdateEmptyBoxSchedule: (date?: string, time?: string) => void;
   onQuickEmptyBoxDate: (daysFromToday: number) => void;
-  onOpenEmptyBoxDatePicker: () => void;
   onSelectFullBoxMode: (mode: string) => void;
   onSelectFullBoxScheduleMode: (mode: ScheduleMode) => void;
   onUpdateFullBoxSchedule: (date?: string, time?: string) => void;
   onQuickFullBoxDate: (daysFromToday: number) => void;
-  onOpenFullBoxDatePicker: () => void;
-  canContinue: boolean;
-  onContinue: () => void;
+  fullBoxPickupExpanded: boolean;
+  onExpandFullBoxPickup: () => void;
+  onDeferFullBoxPickup: () => void;
 };
 
 function SchedulePanel({
   scheduleMode,
   routeDate,
   routeTime,
-  dateInputRef,
   onSelectScheduleMode,
   onUpdateSchedule,
   onQuickDate,
-  onOpenDatePicker,
 }: {
   scheduleMode: string;
   routeDate: string;
   routeTime: string;
-  dateInputRef: RefObject<HTMLInputElement | null>;
   onSelectScheduleMode: (mode: ScheduleMode) => void;
   onUpdateSchedule: (date?: string, time?: string) => void;
   onQuickDate: (daysFromToday: number) => void;
-  onOpenDatePicker: () => void;
 }) {
   return (
     <div className="rounded-xl border border-black/80 bg-[#2e3834] p-3">
@@ -131,20 +119,16 @@ function SchedulePanel({
 
           <label className="grid gap-1.5">
             <span className="text-[11px] font-black uppercase text-slate-500">Fecha</span>
-            <span className="relative block">
-              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                ref={dateInputRef}
-                className={`${inputClass} w-full pl-10`}
-                type="date"
-                min={minScheduleDateInput()}
-                value={routeDate}
-                onClick={onOpenDatePicker}
-                onChange={(event) =>
-                  onUpdateSchedule(resolveScheduleDate(event.target.value), routeTime)
-                }
-              />
-            </span>
+            <DateInput
+              compact={false}
+              className="w-full"
+              min={minScheduleDateInput()}
+              value={routeDate}
+              ariaLabel="Fecha de entrega"
+              onChange={(nextValue) =>
+                onUpdateSchedule(resolveScheduleDate(nextValue), routeTime)
+              }
+            />
           </label>
 
           <ScheduleTimeField
@@ -153,35 +137,6 @@ function SchedulePanel({
           />
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function OfficeHandingPanel({
-  handingNow,
-  onChange,
-}: {
-  handingNow: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <div className="rounded-xl border border-black/70 bg-[#2e3834] p-3">
-      <label className="flex cursor-pointer items-start gap-3">
-        <input
-          type="checkbox"
-          checked={handingNow}
-          onChange={(event) => onChange(event.target.checked)}
-          className="mt-0.5 h-5 w-5 shrink-0 rounded border-black bg-surface-inset accent-emerald-400"
-        />
-        <span className="min-w-0">
-          <span className="block text-sm font-black text-[#f8fafc]">Se la entregamos ahora</span>
-          <span className="mt-0.5 block text-xs font-bold leading-snug text-slate-400">
-            {handingNow
-              ? "La caja sale del mostrador en este momento."
-              : "Queda pendiente — el cliente la recogerá después en oficina."}
-          </span>
-        </span>
-      </label>
     </div>
   );
 }
@@ -195,7 +150,7 @@ function StepBadge({
 }) {
   return (
     <span
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-sm font-black shadow-[0_4px_14px_rgba(0,0,0,0.25)] ${
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-black shadow-[0_4px_14px_rgba(0,0,0,0.25)] sm:h-9 sm:w-9 sm:text-sm ${
         complete
           ? "border-emerald-600 bg-emerald-400 text-slate-950"
           : "border-black bg-[#3a4842] text-emerald-300"
@@ -222,14 +177,10 @@ function MovementCard({
   scheduleMode,
   routeDate,
   routeTime,
-  dateInputRef,
   onSelectMode,
   onSelectScheduleMode,
   onUpdateSchedule,
   onQuickDate,
-  onOpenDatePicker,
-  officeHandingNow,
-  onOfficeHandingNowChange,
   showOfficeHandingOption = false,
 }: {
   step: 1 | 2;
@@ -247,27 +198,24 @@ function MovementCard({
   scheduleMode: string;
   routeDate: string;
   routeTime: string;
-  dateInputRef: RefObject<HTMLInputElement | null>;
   onSelectMode: (mode: string) => void;
   onSelectScheduleMode: (mode: ScheduleMode) => void;
   onUpdateSchedule: (date?: string, time?: string) => void;
   onQuickDate: (daysFromToday: number) => void;
-  onOpenDatePicker: () => void;
-  officeHandingNow?: boolean;
-  onOfficeHandingNowChange?: (value: boolean) => void;
   showOfficeHandingOption?: boolean;
 }) {
   const officeSelected = mode === officeMode;
   const driverSelected = mode === driverMode;
   const hasSelection = Boolean(mode);
+  const compactOfficeSelection = officeSelected && showOfficeHandingOption;
 
   return (
     <section
-      className={`flex h-full min-w-0 flex-col rounded-xl border-2 bg-[#3a4842] p-4 shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition-colors ${
+      className={`flex min-w-0 flex-col rounded-xl border-2 bg-[#3a4842] p-3 shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition-colors sm:p-4 ${
         complete ? "border-emerald-700/50" : "border-black"
       }`}
     >
-      <div className="mb-4 flex items-start gap-3">
+      <div className="mb-3 flex items-start gap-2.5 sm:mb-4 sm:gap-3">
         <StepBadge step={step} complete={complete} />
         <div className="min-w-0 flex-1 pt-0.5">
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
@@ -282,7 +230,7 @@ function MovementCard({
         <button
           type="button"
           onClick={() => onSelectMode(officeMode)}
-          className={`min-h-[5.25rem] rounded-xl border p-3 text-left transition ${deliveryModeCardClass(
+          className={`min-h-[4rem] rounded-xl border p-2.5 text-left transition sm:min-h-[4.75rem] sm:p-3 ${deliveryModeCardClass(
             officeSelected,
           )}`}
         >
@@ -314,7 +262,7 @@ function MovementCard({
         <button
           type="button"
           onClick={() => onSelectMode(driverMode)}
-          className={`min-h-[5.25rem] rounded-xl border p-3 text-left transition ${deliveryModeCardClass(
+          className={`min-h-[4rem] rounded-xl border p-2.5 text-left transition sm:min-h-[4.75rem] sm:p-3 ${deliveryModeCardClass(
             driverSelected,
           )}`}
         >
@@ -348,33 +296,26 @@ function MovementCard({
         <p className="mt-3 text-center text-xs font-bold text-slate-500 sm:text-sm">
           Elige una opción para continuar
         </p>
-      ) : (
+      ) : compactOfficeSelection ? null : officeSelected ? (
         <div className="mt-3">
-          {officeSelected && showOfficeHandingOption ? (
-            <OfficeHandingPanel
-              handingNow={officeHandingNow ?? true}
-              onChange={onOfficeHandingNowChange ?? (() => undefined)}
-            />
-          ) : officeSelected ? (
-            <p className="rounded-lg border border-black/70 bg-[#2e3834] px-3 py-2.5 text-sm font-bold text-slate-400">
-              Sin ruta de chofer — el cliente se encarga en oficina.
-            </p>
-          ) : driverSelected ? (
-            <SchedulePanel
-              scheduleMode={scheduleMode}
-              routeDate={routeDate}
-              routeTime={routeTime}
-              dateInputRef={dateInputRef}
-              onSelectScheduleMode={onSelectScheduleMode}
-              onUpdateSchedule={onUpdateSchedule}
-              onQuickDate={onQuickDate}
-              onOpenDatePicker={onOpenDatePicker}
-            />
-          ) : null}
+          <p className="rounded-lg border border-black/70 bg-[#2e3834] px-3 py-2.5 text-sm font-bold text-slate-400">
+            Sin ruta de chofer — el cliente se encarga en oficina.
+          </p>
         </div>
-      )}
+      ) : driverSelected ? (
+        <div className="mt-3">
+          <SchedulePanel
+            scheduleMode={scheduleMode}
+            routeDate={routeDate}
+            routeTime={routeTime}
+            onSelectScheduleMode={onSelectScheduleMode}
+            onUpdateSchedule={onUpdateSchedule}
+            onQuickDate={onQuickDate}
+          />
+        </div>
+      ) : null}
 
-      {hasSelection ? (
+      {hasSelection && !compactOfficeSelection ? (
         <div className="mt-auto border-t border-black/70 pt-3">
           <p className="text-[11px] font-black uppercase text-slate-500">Quedó así</p>
           <p className="mt-1 text-sm font-black leading-snug text-emerald-100/90">{summary}</p>
@@ -385,8 +326,6 @@ function MovementCard({
 }
 
 export function SaleLogisticsStep({
-  emptyBoxHandingNow,
-  onEmptyBoxHandingNowChange,
   emptyBoxMode,
   emptyBoxScheduleMode,
   emptyBoxScheduleAt,
@@ -397,38 +336,34 @@ export function SaleLogisticsStep({
   emptyBoxRouteTime,
   fullBoxRouteDate,
   fullBoxRouteTime,
-  emptyDateInputRef,
-  fullDateInputRef,
   onSelectEmptyBoxMode,
   onSelectEmptyBoxScheduleMode,
   onUpdateEmptyBoxSchedule,
   onQuickEmptyBoxDate,
-  onOpenEmptyBoxDatePicker,
   onSelectFullBoxMode,
   onSelectFullBoxScheduleMode,
   onUpdateFullBoxSchedule,
   onQuickFullBoxDate,
-  onOpenFullBoxDatePicker,
-  canContinue,
-  onContinue,
+  fullBoxPickupExpanded,
+  onExpandFullBoxPickup,
+  onDeferFullBoxPickup,
 }: SaleLogisticsStepProps) {
   const emptySummary = deliverySummary(
     emptyBoxMode,
     emptyBoxScheduleMode,
     emptyBoxScheduleAt,
-    emptyBoxHandingNow,
   );
-  const fullSummary = deliverySummary(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt);
+  const fullSummary = fullBoxSummaryLine(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt);
   const emptyComplete = logisticsLegComplete(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt);
   const fullComplete = logisticsLegComplete(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt);
 
   return (
-    <div className="grid w-full gap-4">
-      <div className="grid items-start gap-3 xl:grid-cols-2 xl:gap-4">
+    <div className="grid w-full gap-3 pb-2 sm:gap-4 sm:pb-4">
+      <div className="mx-auto w-full max-w-2xl space-y-2.5 sm:space-y-3">
         <MovementCard
           step={1}
           title="Caja vacía sale de oficina"
-          hint="¿Quién se la lleva al cliente?"
+          hint="¿Cómo sale la caja vacía?"
           summary={emptySummary}
           complete={emptyComplete}
           mode={emptyBoxMode}
@@ -436,70 +371,68 @@ export function SaleLogisticsStep({
           driverMode={EMPTY_BOX_DRIVER_MODE}
           officeLabel="Cliente recoge"
           driverLabel="Chofer entrega"
-          officeDetail="Pasa por la oficina y se la lleva."
+          officeDetail="Se entrega ahora en mostrador."
           driverDetail="La llevamos a su domicilio."
           scheduleMode={emptyBoxScheduleMode}
           routeDate={emptyBoxRouteDate}
           routeTime={emptyBoxRouteTime}
-          dateInputRef={emptyDateInputRef}
           onSelectMode={onSelectEmptyBoxMode}
           onSelectScheduleMode={onSelectEmptyBoxScheduleMode}
           onUpdateSchedule={onUpdateEmptyBoxSchedule}
           onQuickDate={onQuickEmptyBoxDate}
-          onOpenDatePicker={onOpenEmptyBoxDatePicker}
-          officeHandingNow={emptyBoxHandingNow}
-          onOfficeHandingNowChange={onEmptyBoxHandingNowChange}
           showOfficeHandingOption
         />
 
-        <div className="flex items-center justify-center py-0.5 xl:hidden" aria-hidden>
-          <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-black bg-[#3a4842] text-emerald-300/70">
-            <ArrowDown className="h-4 w-4" />
-          </span>
-        </div>
-
-        <MovementCard
-          step={2}
-          title="Caja llena vuelve a oficina"
-          hint="¿Cómo regresa con el envío?"
-          summary={fullSummary}
-          complete={fullComplete}
-          mode={fullBoxMode}
-          officeMode={FULL_BOX_OFFICE_MODE}
-          driverMode={FULL_BOX_DRIVER_MODE}
-          officeLabel="Cliente trae"
-          driverLabel="Chofer recoge"
-          officeDetail="La devuelve en la oficina."
-          driverDetail="Pasamos a recogerla."
-          scheduleMode={fullBoxScheduleMode}
-          routeDate={fullBoxRouteDate}
-          routeTime={fullBoxRouteTime}
-          dateInputRef={fullDateInputRef}
-          onSelectMode={onSelectFullBoxMode}
-          onSelectScheduleMode={onSelectFullBoxScheduleMode}
-          onUpdateSchedule={onUpdateFullBoxSchedule}
-          onQuickDate={onQuickFullBoxDate}
-          onOpenDatePicker={onOpenFullBoxDatePicker}
-        />
-      </div>
-
-      <div className="flex justify-center border-t border-black/80 pt-4">
-        <div className="flex w-full max-w-md flex-col items-center gap-2">
-          <button
-            type="button"
-            disabled={!canContinue}
-            onClick={onContinue}
-            className={`${primaryButtonClass} flex h-12 w-full items-center justify-center gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-35`}
-          >
-            <Check className="h-4 w-4" />
-            Finalizar entrega
-          </button>
-          <p className="text-center text-xs font-bold text-slate-500">
-            {canContinue
-              ? "Listo — continúa a crear el invoice."
-              : "Completa los dos movimientos para continuar."}
+        {emptyComplete && !fullBoxPickupExpanded ? (
+          <p className="px-1 text-center text-xs leading-relaxed text-slate-500">
+            <span className="font-bold text-slate-400">
+              Caja llena: {FULL_BOX_DEFERRED_SUMMARY}.
+            </span>{" "}
+            <button
+              type="button"
+              onClick={onExpandFullBoxPickup}
+              title="Programar recolección ahora"
+              className="font-black text-slate-400 underline-offset-2 hover:text-slate-300 hover:underline"
+            >
+              Programar ahora
+            </button>
           </p>
-        </div>
+        ) : null}
+
+        {fullBoxPickupExpanded ? (
+          <div className="space-y-2">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={onDeferFullBoxPickup}
+                className="text-[11px] font-black text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+              >
+                Dejar pendiente
+              </button>
+            </div>
+            <MovementCard
+              step={2}
+              title="Caja llena vuelve a oficina"
+              hint="¿Cómo regresa con el envío?"
+              summary={fullSummary}
+              complete={fullComplete}
+              mode={fullBoxMode}
+              officeMode={FULL_BOX_OFFICE_MODE}
+              driverMode={FULL_BOX_DRIVER_MODE}
+              officeLabel="Cliente trae"
+              driverLabel="Chofer recoge"
+              officeDetail="La devuelve en la oficina."
+              driverDetail="Pasamos a recogerla."
+              scheduleMode={fullBoxScheduleMode}
+              routeDate={fullBoxRouteDate}
+              routeTime={fullBoxRouteTime}
+              onSelectMode={onSelectFullBoxMode}
+              onSelectScheduleMode={onSelectFullBoxScheduleMode}
+              onUpdateSchedule={onUpdateFullBoxSchedule}
+              onQuickDate={onQuickFullBoxDate}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

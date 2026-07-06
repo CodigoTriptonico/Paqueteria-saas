@@ -22,12 +22,17 @@ export async function loadDashboardSummaryForSession(
   startOfDay.setHours(0, 0, 0, 0);
 
   const [pendingResult, salesResult, stockResult, customersResult] = await Promise.all([
-    sessionHasPermission(session, "routes.view")
+    sessionHasPermission(session, "routes.view") || sessionHasPermission(session, "sales.manage")
       ? supabase
           .from("shipments")
           .select("id", { count: "exact", head: true })
           .eq("organization_id", orgId)
-          .in("status", ["Pendiente", "En oficina", "Pickup"])
+          .in("status", [
+            "Pendiente entrega caja vacía",
+            "Pendiente recolección caja llena",
+            "En oficina",
+            "Pickup",
+          ])
       : Promise.resolve({ count: 0, error: null }),
     sessionHasPermission(session, "sales.manage") || sessionHasPermission(session, "routes.view")
       ? supabase

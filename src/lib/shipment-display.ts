@@ -6,6 +6,11 @@ import type {
 import { formatScheduleAtDisplay } from "@/components/sale/schedule-time";
 import { readBillingFromPlan } from "@/lib/invoice-billing";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
+import { legHasScheduleChange } from "@/lib/shipment-schedule-history";
+import {
+  EMPTY_BOX_LEG_LABELS,
+  FULL_BOX_LEG_LABELS,
+} from "@/lib/shipment-leg-labels";
 
 export type ShipmentProgressStepState = "done" | "active" | "pending";
 
@@ -29,12 +34,109 @@ export type ShipmentProgressStep = {
   kind: ShipmentProgressKind;
   channel: ShipmentProgressChannel;
   channelLabel?: string;
+  awaitingOrder?: boolean;
+  driverTaskOrdered?: boolean;
+  scheduleChanged?: boolean;
 };
 
 const EMPTY_BOX_OFFICE_MODE = "Cliente recoge caja vacia en oficina";
 const EMPTY_BOX_DRIVER_MODE = "Programar entrega de caja vacia";
 const FULL_BOX_OFFICE_MODE = "Cliente trae caja llena a oficina";
 const FULL_BOX_DRIVER_MODE = "Programar recoleccion caja llena";
+
+export const PENDING_EMPTY_BOX_STATUS = "Pendiente entrega caja vacía" as const;
+export const PENDING_FULL_BOX_STATUS = "Pendiente recolección caja llena" as const;
+
+export const PENDING_SHIPMENT_STATUSES = [
+  PENDING_EMPTY_BOX_STATUS,
+  PENDING_FULL_BOX_STATUS,
+] as const satisfies readonly ShipmentStatus[];
+
+export const TRANSIT_SHIPMENT_STATUSES = [
+  "En oficina",
+  "Pickup",
+  "Enviado",
+  "Entregado",
+] as const satisfies readonly ShipmentStatus[];
+
+export type EnviosStatusFilterBucket =
+  | "recolecciones"
+  | "entregas"
+  | "en_oficina"
+  | "en_transito"
+  | "en_destino_final";
+
+export const ENVIOS_STATUS_FILTER_OPTIONS: ReadonlyArray<{
+  value: EnviosStatusFilterBucket;
+  label: string;
+}> = [
+  { value: "recolecciones", label: "Recolecciones" },
+  { value: "entregas", label: "Entregas" },
+  { value: "en_oficina", label: "En oficina" },
+  { value: "en_transito", label: "En tránsito" },
+  { value: "en_destino_final", label: "Ya en destino final" },
+];
+
+export const ENVIOS_STATUS_BUCKET_LABEL: Record<EnviosStatusFilterBucket, string> = {
+  recolecciones: "Recolecciones",
+  entregas: "Entregas",
+  en_oficina: "En oficina",
+  en_transito: "En tránsito",
+  en_destino_final: "Ya en destino final",
+};
+
+export function classifyEnviosStatusFilterBucket(row: ShipmentRow): EnviosStatusFilterBucket {
+  if (row.status === "Entregado") {
+    return "en_destino_final";
+  }
+
+  if (row.status === "Enviado" || row.status === "Pickup") {
+    return "en_transito";
+  }
+
+  if (row.status === "En oficina") {
+    return "en_oficina";
+  }
+
+  if (row.status === PENDING_FULL_BOX_STATUS) {
+    return "recolecciones";
+  }
+
+  if (row.status === PENDING_EMPTY_BOX_STATUS) {
+    return "entregas";
+  }
+
+  const active = shipmentLogisticsSteps(row).find((step) => step.state === "active");
+
+  if (!active) {
+    return "entregas";
+  }
+
+  switch (active.kind) {
+    case "full_box":
+      return "recolecciones";
+    case "empty_box":
+      return "entregas";
+    case "office":
+      return "en_oficina";
+    case "pickup":
+    case "transit":
+    case "delivered":
+      return "en_transito";
+    default:
+      return "entregas";
+  }
+}
+
+export function matchesEnviosStatusFilter(row: ShipmentRow, filter: string) {
+  const clean = filter.trim();
+
+  if (!clean) {
+    return true;
+  }
+
+  return classifyEnviosStatusFilterBucket(row) === clean;
+}
 
 const OFFICE_RECEIVED_STATUSES = new Set<ShipmentRow["status"]>([
   "En oficina",
@@ -44,12 +146,21 @@ const OFFICE_RECEIVED_STATUSES = new Set<ShipmentRow["status"]>([
 ]);
 
 const STATUS_RANK: Record<ShipmentStatus, number> = {
-  Pendiente: 0,
+  [PENDING_EMPTY_BOX_STATUS]: 0,
+  [PENDING_FULL_BOX_STATUS]: 0,
   "En oficina": 1,
   Pickup: 2,
   Enviado: 3,
   Entregado: 4,
 };
+
+export function isPendingShipmentStatus(status: ShipmentStatus): boolean {
+  return (PENDING_SHIPMENT_STATUSES as readonly string[]).includes(status);
+}
+
+export function isTransitShipmentStatus(status: ShipmentStatus): boolean {
+  return (TRANSIT_SHIPMENT_STATUSES as readonly string[]).includes(status);
+}
 
 function shipmentStatusRank(status: ShipmentRow["status"]) {
   return STATUS_RANK[status] ?? 0;
@@ -79,40 +190,6 @@ function stepMeta(
   return { kind, channel, channelLabel };
 }
 
-function saleStep(row: ShipmentRow) {
-  const billing = readBillingFromPlan(row.logistics_plan);
-  const deposit = billing ? billing.payNow : formatMoneyValue(row.paid);
-
-  return {
-    id: "sale",
-    title: "Venta",
-    detail: `Invoice ${row.code} · Depósito ${deposit}`,
-    ...stepMeta("sale"),
-    raw: "done" as const,
-  };
-}
-
-function officeTransitStep(row: ShipmentRow, fullBoxDone: boolean) {
-  const rank = shipmentStatusRank(row.status);
-  const raw = transitStepRaw(fullBoxDone, rank, 1, 0);
-
-  let detail = "Pendiente recepción en oficina";
-
-  if (rank >= 1) {
-    detail = "Recibida en oficina";
-  } else if (fullBoxDone) {
-    detail = "Esperando registro en oficina";
-  }
-
-  return {
-    id: "office",
-    title: "En oficina",
-    detail,
-    ...stepMeta("office", "office", "Oficina"),
-    raw,
-  };
-}
-
 function pickupTransitStep(row: ShipmentRow, fullBoxDone: boolean) {
   const rank = shipmentStatusRank(row.status);
   const raw = transitStepRaw(fullBoxDone, rank, 2, 1);
@@ -121,7 +198,7 @@ function pickupTransitStep(row: ShipmentRow, fullBoxDone: boolean) {
 
   if (rank >= 2) {
     detail = "Salida registrada";
-  } else if (rank === 1) {
+  } else if (rank === 1 || fullBoxDone) {
     detail = "Lista para salida";
   }
 
@@ -130,27 +207,6 @@ function pickupTransitStep(row: ShipmentRow, fullBoxDone: boolean) {
     title: "Salida",
     detail,
     ...stepMeta("pickup", "office", "Oficina"),
-    raw,
-  };
-}
-
-function shippedTransitStep(row: ShipmentRow, fullBoxDone: boolean) {
-  const rank = shipmentStatusRank(row.status);
-  const raw = transitStepRaw(fullBoxDone, rank, 3, 2);
-
-  let detail = "Pendiente envío";
-
-  if (rank >= 3) {
-    detail = "En camino al destino";
-  } else if (rank === 2) {
-    detail = "Preparando envío internacional";
-  }
-
-  return {
-    id: "transit",
-    title: "En tránsito",
-    detail,
-    ...stepMeta("transit"),
     raw,
   };
 }
@@ -169,7 +225,7 @@ function deliveredTransitStep(row: ShipmentRow, fullBoxDone: boolean) {
 
   return {
     id: "delivered",
-    title: "Entregado",
+    title: "Destino",
     detail,
     ...stepMeta("delivered", "home", "Destino"),
     raw,
@@ -178,9 +234,7 @@ function deliveredTransitStep(row: ShipmentRow, fullBoxDone: boolean) {
 
 function postFullBoxSteps(row: ShipmentRow, fullBoxDone: boolean) {
   return [
-    officeTransitStep(row, fullBoxDone),
     pickupTransitStep(row, fullBoxDone),
-    shippedTransitStep(row, fullBoxDone),
     deliveredTransitStep(row, fullBoxDone),
   ];
 }
@@ -191,6 +245,17 @@ export type ShipmentQuote = {
   cost: string;
   total: string;
 };
+
+export function formatBoxQuantityLabel(label: string, quantity = 1) {
+  const cleanLabel = String(label || "").trim();
+  const count = Math.max(Number(quantity) || 1, 1);
+
+  if (!cleanLabel) {
+    return "";
+  }
+
+  return `(${count}) ${cleanLabel}`;
+}
 
 export function quoteFromShipment(row: ShipmentRow): ShipmentQuote | null {
   const plan = row.logistics_plan || {};
@@ -203,7 +268,7 @@ export function quoteFromShipment(row: ShipmentRow): ShipmentQuote | null {
       .map((line) => {
         const label = String(line.label || "").trim();
         const quantity = Math.max(Number(line.quantity) || 1, 1);
-        return label ? `${label} x${quantity}` : "";
+        return formatBoxQuantityLabel(label, quantity);
       })
       .filter(Boolean);
 
@@ -241,7 +306,7 @@ export function quoteFromShipment(row: ShipmentRow): ShipmentQuote | null {
   const unitCost = parseMoneyValue(String(box?.cost || "0"));
 
   return {
-    label: boxCount > 1 ? `${label} x${boxCount}` : label,
+    label: formatBoxQuantityLabel(label, boxCount),
     paid: formatMoneyValue(unitPaid),
     cost: formatMoneyValue(unitCost),
     total: formatMoneyValue(unitPaid * boxCount),
@@ -252,7 +317,7 @@ export function balanceDueFromShipment(row: ShipmentRow, quote: ShipmentQuote | 
   const billing = readBillingFromPlan(row.logistics_plan);
 
   if (billing) {
-    return parseMoneyValue(billing.balanceDue);
+    return Math.max(parseMoneyValue(billing.quotedTotal) - row.paid, 0);
   }
 
   if (!quote) {
@@ -323,9 +388,17 @@ function taskIsInProgress(task: ShipmentLogisticsTaskRow | undefined) {
   );
 }
 
+function legPlannedScheduleDetail(leg: Record<string, unknown> | null, fallback: string) {
+  if (leg?.scheduleMode === "scheduled" && leg.scheduleAt) {
+    return `Programado · ${formatScheduleAtDisplay(String(leg.scheduleAt))}`;
+  }
+
+  return fallback;
+}
+
 function scheduleDetail(task: ShipmentLogisticsTaskRow | undefined, pendingLabel: string) {
   if (!task) {
-    return pendingLabel;
+    return `${pendingLabel} · sin fecha`;
   }
 
   if (task.status === "scheduled" && task.scheduledAt) {
@@ -344,12 +417,36 @@ function scheduleDetail(task: ShipmentLogisticsTaskRow | undefined, pendingLabel
     return "En proceso";
   }
 
-  return pendingLabel;
+  return `${pendingLabel} · sin fecha`;
+}
+
+function logisticsTaskOpen(row: ShipmentRow, taskType: ShipmentLogisticsTaskRow["taskType"]) {
+  const task = taskByType(row, taskType);
+
+  return Boolean(task && task.status !== "cancelled");
+}
+
+function legDriverTaskOrdered(row: ShipmentRow, taskType: ShipmentLogisticsTaskRow["taskType"]) {
+  return logisticsTaskOpen(row, taskType);
+}
+
+function driverLegAwaitingOrder(
+  row: ShipmentRow,
+  taskType: ShipmentLogisticsTaskRow["taskType"],
+  mode: string,
+) {
+  if (!mode.includes("Programar")) {
+    return false;
+  }
+
+  return !logisticsTaskOpen(row, taskType);
 }
 
 function resolveStepStates(
   steps: Array<
-    Omit<ShipmentProgressStep, "state"> & { raw: "done" | "active" | "pending" }
+    Omit<ShipmentProgressStep, "state" | "awaitingOrder"> & {
+      raw: "done" | "active" | "pending" | "awaiting_order";
+    }
   >,
 ) {
   let foundActive = false;
@@ -364,6 +461,11 @@ function resolveStepStates(
     if (!foundActive && raw === "active") {
       foundActive = true;
       return { ...rest, state: "active" as const };
+    }
+
+    if (!foundActive && raw === "awaiting_order") {
+      foundActive = true;
+      return { ...rest, state: "active" as const, awaitingOrder: true };
     }
 
     if (!foundActive && raw === "pending") {
@@ -384,16 +486,16 @@ function emptyBoxStep(row: ShipmentRow, leg: Record<string, unknown> | null) {
     if (handingNow || taskIsDone(task) || Boolean(task?.stockDeductedAt)) {
       return {
         id: "empty",
-        title: "Entrega de caja vacía",
-        detail: handingNow ? "Entregada en mostrador" : "Entregada en oficina",
-        ...stepMeta("empty_box", "office", handingNow ? "Mostrador" : "Oficina"),
+        title: EMPTY_BOX_LEG_LABELS.short,
+        detail: "Entregado en oficina",
+        ...stepMeta("empty_box", "office", "Oficina"),
         raw: "done" as const,
       };
     }
 
     return {
       id: "empty",
-      title: "Entrega de caja vacía",
+      title: EMPTY_BOX_LEG_LABELS.short,
       detail: "Cliente recoge en oficina",
       ...stepMeta("empty_box", "office", "Oficina"),
       raw: "active" as const,
@@ -404,17 +506,29 @@ function emptyBoxStep(row: ShipmentRow, leg: Record<string, unknown> | null) {
     if (taskIsDone(task) || Boolean(task?.stockDeductedAt)) {
       return {
         id: "empty",
-        title: "Entrega de caja vacía",
+        title: EMPTY_BOX_LEG_LABELS.short,
         detail: "Entregada a domicilio",
         ...stepMeta("empty_box", "home", "Domicilio"),
         raw: "done" as const,
       };
     }
 
+    if (driverLegAwaitingOrder(row, "deliver_empty_box", mode)) {
+      return {
+        id: "empty",
+        title: EMPTY_BOX_LEG_LABELS.short,
+        detail: legPlannedScheduleDetail(leg, "Orden pendiente en envíos"),
+        scheduleChanged: legHasScheduleChange(leg),
+        ...stepMeta("empty_box", "home", "Domicilio"),
+        raw: "awaiting_order" as const,
+      };
+    }
+
     return {
       id: "empty",
-      title: "Entrega de caja vacía",
+      title: EMPTY_BOX_LEG_LABELS.short,
       detail: scheduleDetail(task, "Pendiente entrega a domicilio"),
+      scheduleChanged: legHasScheduleChange(leg),
       ...stepMeta("empty_box", "home", "Domicilio"),
       raw: taskIsInProgress(task) ? ("active" as const) : ("pending" as const),
     };
@@ -428,7 +542,7 @@ function emptyBoxStep(row: ShipmentRow, leg: Record<string, unknown> | null) {
 
   return {
     id: "empty",
-    title: "Entrega de caja vacía",
+    title: EMPTY_BOX_LEG_LABELS.short,
     detail: summaryDetail || "Pendiente",
     ...stepMeta("empty_box"),
     raw: "pending" as const,
@@ -444,7 +558,7 @@ function fullBoxStep(row: ShipmentRow, leg: Record<string, unknown> | null, empt
     if (officeReceived || taskIsDone(task)) {
       return {
         id: "full",
-        title: "Recolección de caja llena",
+        title: FULL_BOX_LEG_LABELS.short,
         detail: "Recibida en oficina",
         ...stepMeta("full_box", "office", "Oficina"),
         raw: "done" as const,
@@ -453,7 +567,7 @@ function fullBoxStep(row: ShipmentRow, leg: Record<string, unknown> | null, empt
 
     return {
       id: "full",
-      title: "Recolección de caja llena",
+      title: FULL_BOX_LEG_LABELS.short,
       detail: emptyDone ? "Cliente la trae a oficina" : "Esperando caja vacía",
       ...stepMeta("full_box", "office", "Oficina"),
       raw: emptyDone ? ("active" as const) : ("pending" as const),
@@ -464,17 +578,29 @@ function fullBoxStep(row: ShipmentRow, leg: Record<string, unknown> | null, empt
     if (taskIsDone(task) || row.status === "Entregado") {
       return {
         id: "full",
-        title: "Recolección de caja llena",
+        title: FULL_BOX_LEG_LABELS.short,
         detail: "Recogida en domicilio",
         ...stepMeta("full_box", "home", "Domicilio"),
         raw: "done" as const,
       };
     }
 
+    if (driverLegAwaitingOrder(row, "pickup_full_box", mode)) {
+      return {
+        id: "full",
+        title: FULL_BOX_LEG_LABELS.short,
+        detail: legPlannedScheduleDetail(leg, "Orden pendiente en envíos"),
+        scheduleChanged: legHasScheduleChange(leg),
+        ...stepMeta("full_box", "home", "Domicilio"),
+        raw: emptyDone ? ("awaiting_order" as const) : ("pending" as const),
+      };
+    }
+
     return {
       id: "full",
-      title: "Recolección de caja llena",
+      title: FULL_BOX_LEG_LABELS.short,
       detail: scheduleDetail(task, "Pendiente recolección a domicilio"),
+      scheduleChanged: legHasScheduleChange(leg),
       ...stepMeta("full_box", "home", "Domicilio"),
       raw: emptyDone
         ? taskIsInProgress(task)
@@ -490,16 +616,12 @@ function fullBoxStep(row: ShipmentRow, leg: Record<string, unknown> | null, empt
     ?.slice("Caja llena:".length)
     .trim();
 
-  if (!mode && !summaryDetail) {
-    return null;
-  }
-
   return {
     id: "full",
-    title: "Recolección de caja llena",
-    detail: summaryDetail || "Pendiente",
+    title: FULL_BOX_LEG_LABELS.short,
+    detail: emptyDone ? "Orden pendiente en envíos" : summaryDetail || "Esperando caja vacía",
     ...stepMeta("full_box"),
-    raw: officeReceived ? ("done" as const) : emptyDone ? ("active" as const) : ("pending" as const),
+    raw: officeReceived ? ("done" as const) : emptyDone ? ("awaiting_order" as const) : ("pending" as const),
   };
 }
 
@@ -554,80 +676,475 @@ export function shipmentPaymentProgress(
   };
 }
 
+type ResolvePendingShipmentStatusInput = Pick<
+  ShipmentRow,
+  "sale_kind" | "logistics_plan" | "logisticsTasks" | "delivery_notes"
+> &
+  Partial<Pick<ShipmentRow, "empty_box_delivered_at" | "full_box_collected_at" | "status">>;
+
+function draftShipmentRowForStatusResolve(
+  input: ResolvePendingShipmentStatusInput,
+): ShipmentRow {
+  return {
+    id: "",
+    code: "",
+    customerId: null,
+    recipientId: null,
+    recipientSnapshot: null,
+    customer_name: "",
+    country: "",
+    carrier: "",
+    paid: 0,
+    profit: 0,
+    status: input.status ?? PENDING_EMPTY_BOX_STATUS,
+    assigned_to: null,
+    createdBy: null,
+    salesOwnerId: null,
+    salesOwnerName: "",
+    sale_kind: input.sale_kind,
+    invoice_status: "open",
+    invoice_priority: false,
+    accounting_status: "not_exportable",
+    created_at: null,
+    finalized_at: null,
+    empty_box_delivered_at: input.empty_box_delivered_at ?? null,
+    full_box_collected_at: input.full_box_collected_at ?? null,
+    office_received_at: null,
+    departed_at: null,
+    shipped_at: null,
+    delivered_at: null,
+    delivery_notes: input.delivery_notes ?? "",
+    logistics_plan: input.logistics_plan,
+    logisticsTasks: input.logisticsTasks,
+    payments: [],
+  };
+}
+
+export function sortShipmentsByInvoicePriority<T extends Pick<ShipmentRow, "invoice_priority" | "created_at">>(
+  rows: T[],
+): T[] {
+  return [...rows].sort((a, b) => {
+    if (a.invoice_priority !== b.invoice_priority) {
+      return a.invoice_priority ? -1 : 1;
+    }
+
+    return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+  });
+}
+
+/** Newest invoices first (arrival / creation order). */
+export function sortShipmentsByArrivalOrder<T extends Pick<ShipmentRow, "id" | "created_at">>(
+  rows: T[],
+): T[] {
+  return [...rows].sort((a, b) => {
+    const byCreated = String(b.created_at || "").localeCompare(String(a.created_at || ""));
+    if (byCreated !== 0) {
+      return byCreated;
+    }
+
+    return String(b.id).localeCompare(String(a.id));
+  });
+}
+
+export function shipmentVisibleIdSetKey<T extends Pick<ShipmentRow, "id">>(rows: T[]): string {
+  return rows
+    .map((row) => row.id)
+    .sort()
+    .join("\0");
+}
+
+/** Keeps order when the visible id set is unchanged (e.g. toggling invoice_priority). */
+export function reconcileShipmentDisplayOrderIds<T extends Pick<ShipmentRow, "id" | "created_at">>(
+  previousOrderIds: string[],
+  rows: T[],
+  options: { reset?: boolean } = {},
+): string[] {
+  if (options.reset || previousOrderIds.length === 0) {
+    return sortShipmentsByArrivalOrder(rows).map((row) => row.id);
+  }
+
+  const rowIdSet = new Set(rows.map((row) => row.id));
+  const kept = previousOrderIds.filter((id) => rowIdSet.has(id));
+
+  if (kept.length === rows.length && kept.length === previousOrderIds.length) {
+    return kept;
+  }
+
+  const keptSet = new Set(kept);
+  const arrivals = sortShipmentsByArrivalOrder(rows);
+  const added = arrivals.filter((row) => !keptSet.has(row.id)).map((row) => row.id);
+
+  if (added.length === 0) {
+    return kept;
+  }
+
+  const rank = new Map(arrivals.map((row, index) => [row.id, index]));
+  const merged = [...kept];
+
+  for (const id of added) {
+    const idRank = rank.get(id) ?? merged.length;
+    let insertAt = merged.length;
+
+    for (let index = 0; index < merged.length; index += 1) {
+      const existingRank = rank.get(merged[index]!) ?? Number.MAX_SAFE_INTEGER;
+      if (idRank < existingRank) {
+        insertAt = index;
+        break;
+      }
+    }
+
+    merged.splice(insertAt, 0, id);
+  }
+
+  return merged;
+}
+
+/** Keeps the current visual order while rows update (e.g. toggling invoice_priority). */
+export function orderShipmentsByStableIds<T extends Pick<ShipmentRow, "id">>(
+  rows: T[],
+  orderIds: string[],
+): T[] {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const ordered: T[] = [];
+  const seen = new Set<string>();
+
+  for (const id of orderIds) {
+    const row = byId.get(id);
+    if (!row) {
+      continue;
+    }
+
+    ordered.push(row);
+    seen.add(id);
+  }
+
+  for (const row of rows) {
+    if (!seen.has(row.id)) {
+      ordered.push(row);
+    }
+  }
+
+  return ordered;
+}
+
+export function resolvePendingShipmentStatus(
+  input: ResolvePendingShipmentStatusInput | ShipmentRow,
+): ShipmentStatus {
+  const row = "id" in input && input.id ? (input as ShipmentRow) : draftShipmentRowForStatusResolve(input);
+  const steps = shipmentLogisticsSteps(row);
+  const active = steps.find((step) => step.state === "active");
+
+  if (active?.kind === "empty_box") {
+    return PENDING_EMPTY_BOX_STATUS;
+  }
+
+  if (active?.kind === "full_box") {
+    return PENDING_FULL_BOX_STATUS;
+  }
+
+  if (!row.empty_box_delivered_at) {
+    return PENDING_EMPTY_BOX_STATUS;
+  }
+
+  if (row.sale_kind === "full" && !row.full_box_collected_at) {
+    return PENDING_FULL_BOX_STATUS;
+  }
+
+  return PENDING_EMPTY_BOX_STATUS;
+}
+
+export function resolveInitialShipmentStatus(input: {
+  saleKind: ShipmentRow["sale_kind"];
+  logisticsPlan: Record<string, unknown>;
+  logisticsTasks?: ShipmentLogisticsTaskRow[];
+  deliveryNotes?: string;
+  emptyBoxDeliveredAt?: string | null;
+}): ShipmentStatus {
+  return resolvePendingShipmentStatus({
+    sale_kind: input.saleKind,
+    logistics_plan: input.logisticsPlan,
+    logisticsTasks: input.logisticsTasks ?? [],
+    delivery_notes: input.deliveryNotes ?? "",
+    empty_box_delivered_at: input.emptyBoxDeliveredAt ?? null,
+  });
+}
+
+export function syncShipmentStatusPatch(
+  row: ShipmentRow,
+): Partial<Pick<ShipmentRow, "status">> {
+  if (isTransitShipmentStatus(row.status) || row.status === "Entregado") {
+    return {};
+  }
+
+  const nextStatus = resolvePendingShipmentStatus(row);
+
+  if (row.status === nextStatus) {
+    return {};
+  }
+
+  return { status: nextStatus };
+}
+
 export function shipmentLogisticsSteps(row: ShipmentRow): ShipmentProgressStep[] {
   const plan = row.logistics_plan || {};
   const emptyLeg = planLeg(plan, "emptyBox");
   const fullLeg = planLeg(plan, "fullBox");
 
-  const sale = saleStep(row);
   const empty = emptyBoxStep(row, emptyLeg);
   const emptyDone = empty.raw === "done";
-  const full = row.sale_kind === "empty_box_deposit" ? null : fullBoxStep(row, fullLeg, emptyDone);
-  const fullDone = full?.raw === "done";
-
-  let rawSteps: Array<Omit<ShipmentProgressStep, "state"> & { raw: "done" | "active" | "pending" }>;
-
-  if (row.sale_kind === "empty_box_deposit") {
-    rawSteps = [sale, empty];
-  } else if (full) {
-    rawSteps = [sale, empty, full, ...postFullBoxSteps(row, fullDone)];
-  } else {
-    rawSteps = [sale, empty, ...postFullBoxSteps(row, emptyDone)];
-  }
+  const full = fullBoxStep(row, fullLeg, emptyDone);
+  const fullDone = full.raw === "done";
+  const rawSteps: Array<
+    Omit<ShipmentProgressStep, "state" | "awaitingOrder"> & {
+      raw: "done" | "active" | "pending" | "awaiting_order";
+    }
+  > = [
+    withDriverTaskOrdered(row, empty),
+    withDriverTaskOrdered(row, full),
+    ...postFullBoxSteps(row, fullDone).map((step) => withDriverTaskOrdered(row, step)),
+  ];
 
   return resolveStepStates(rawSteps);
 }
 
-export function shipmentOperationalStatusLabel(row: ShipmentRow): string {
-  if (row.status === "Entregado") {
-    return "Entregado";
+function withDriverTaskOrdered<T extends { kind: ShipmentProgressKind }>(
+  row: ShipmentRow,
+  step: T,
+): T & { driverTaskOrdered?: boolean } {
+  if (step.kind === "empty_box") {
+    return {
+      ...step,
+      driverTaskOrdered: legDriverTaskOrdered(row, "deliver_empty_box"),
+    };
   }
 
-  if (row.status === "Enviado") {
-    const steps = shipmentLogisticsSteps(row);
-    const active = steps.find((step) => step.state === "active");
+  if (step.kind === "full_box") {
+    return {
+      ...step,
+      driverTaskOrdered: legDriverTaskOrdered(row, "pickup_full_box"),
+    };
+  }
 
-    if (active?.kind === "delivered") {
-      return "Pendiente por entregar";
+  return step;
+}
+
+export function shipmentStatusDisplayLabel(status: ShipmentStatus): string {
+  if (status === "Enviado") {
+    return "En tránsito";
+  }
+
+  if (status === "Pickup") {
+    return "Pendiente salida";
+  }
+
+  return status;
+}
+
+export function shipmentOperationalStatusLabel(row: ShipmentRow): string {
+  return ENVIOS_STATUS_BUCKET_LABEL[classifyEnviosStatusFilterBucket(row)];
+}
+
+export function shipmentOperationalDetailLabel(step: ShipmentProgressStep | null | undefined) {
+  const detail = step?.detail.trim() || "";
+  const normalized = detail.toLocaleLowerCase("es-MX");
+
+  if (
+    normalized === "chofer asignado" ||
+    normalized.startsWith("pendiente entrega") ||
+    normalized.startsWith("pendiente recolección") ||
+    normalized.startsWith("pendiente recoleccion")
+  ) {
+    return "";
+  }
+
+  return detail;
+}
+
+export function shipmentOperationalDriverLabel(
+  row: ShipmentRow,
+  step: ShipmentProgressStep | null | undefined,
+  driverLabelById: (driverId: string) => string | undefined = () => undefined,
+) {
+  const taskType =
+    step?.kind === "empty_box"
+      ? "deliver_empty_box"
+      : step?.kind === "full_box"
+        ? "pickup_full_box"
+        : null;
+
+  if (!taskType) {
+    return "";
+  }
+
+  const task = taskByType(row, taskType);
+
+  if (task?.assignedTo) {
+    return `Chofer: ${driverLabelById(task.assignedTo) || task.assignedTo}`;
+  }
+
+  if (step?.channel === "home") {
+    return "Sin chofer asignado";
+  }
+
+  return "";
+}
+
+export type ShipmentRouteAssignmentInfo = {
+  routeName: string;
+  assignedTo: string | null;
+};
+
+export type FullBoxPickupPlanStatus =
+  | "inactive"
+  | "deferred"
+  | "marked"
+  | "scheduled"
+  | "office"
+  | "done";
+
+export function fullBoxPickupPlanStatus(
+  row: ShipmentRow,
+  step: ShipmentProgressStep | null | undefined,
+): FullBoxPickupPlanStatus {
+  if (!step || step.kind !== "full_box") {
+    return "inactive";
+  }
+
+  const leg = planLeg(row.logistics_plan, "fullBox");
+  const mode = String(leg?.mode || "");
+  const task = taskByType(row, "pickup_full_box");
+
+  if (step.state === "done" || taskIsDone(task)) {
+    return "done";
+  }
+
+  if (mode === FULL_BOX_OFFICE_MODE) {
+    return "office";
+  }
+
+  if (mode === FULL_BOX_DRIVER_MODE) {
+    if (task?.status === "scheduled" && task.scheduledAt) {
+      return "scheduled";
     }
 
-    return "En tránsito";
+    return "marked";
   }
 
-  if (row.status === "Pickup") {
-    return "Pendiente salida";
+  return "deferred";
+}
+
+export function fullBoxPickupPlanStatusLabel(status: FullBoxPickupPlanStatus) {
+  if (status === "deferred") {
+    return "Sin marcar";
   }
 
-  if (row.status === "En oficina") {
-    return "En oficina";
+  if (status === "marked") {
+    return "Marcada para recoger";
   }
 
-  const steps = shipmentLogisticsSteps(row);
-  const active = steps.find((step) => step.state === "active");
-
-  if (!active) {
-    return row.status;
+  if (status === "scheduled") {
+    return "Recolección programada";
   }
 
-  if (active.kind === "full_box") {
-    return "Pendiente por recoger";
+  if (status === "office") {
+    return "Trae a oficina";
   }
 
-  if (active.kind === "empty_box" || active.kind === "delivered") {
-    return "Pendiente por entregar";
+  if (status === "done") {
+    return "Recogida";
   }
 
-  if (active.kind === "transit") {
-    return "En tránsito";
+  return "";
+}
+
+export type ShipmentOperationalAssignment = {
+  routeLabel: string;
+  routeAssigned: boolean;
+  driverLabel: string;
+  driverAssigned: boolean;
+  isReady: boolean;
+};
+
+export const SHIPMENT_LOGISTICS_BRIDGE_LABEL =
+  "Avisado a logística · pendiente ruta y conductor";
+
+export function shipmentLogisticsBridgeLabel(
+  assignment: ShipmentOperationalAssignment | null,
+  step: ShipmentProgressStep | null | undefined,
+): string {
+  if (!assignment || assignment.isReady) {
+    return "";
   }
 
-  if (active.kind === "pickup") {
-    return "Pendiente salida";
+  if (!step || (step.kind !== "empty_box" && step.kind !== "full_box")) {
+    return "";
   }
 
-  if (active.kind === "office") {
-    return "Pendiente en oficina";
+  if (step.awaitingOrder || step.driverTaskOrdered !== true) {
+    return "";
   }
 
-  return row.status;
+  return SHIPMENT_LOGISTICS_BRIDGE_LABEL;
+}
+
+export function shipmentOperationalAssignment(
+  row: ShipmentRow,
+  step: ShipmentProgressStep | null | undefined,
+  driverLabelById: (driverId: string) => string | undefined = () => undefined,
+  routeByTaskId: (taskId: string) => ShipmentRouteAssignmentInfo | undefined = () => undefined,
+): ShipmentOperationalAssignment | null {
+  if (!step || (step.kind !== "empty_box" && step.kind !== "full_box")) {
+    return null;
+  }
+
+  if (step.channel === "office") {
+    return null;
+  }
+
+  if (step.awaitingOrder) {
+    return null;
+  }
+
+  if (step.driverTaskOrdered !== true) {
+    return null;
+  }
+
+  const taskType = step.kind === "empty_box" ? "deliver_empty_box" : "pickup_full_box";
+  const task = taskByType(row, taskType);
+  const route = task ? routeByTaskId(task.id) : undefined;
+  const driverId = task?.assignedTo || route?.assignedTo || null;
+  const routeAssigned = Boolean(route?.routeName);
+  const driverAssigned = Boolean(driverId);
+
+  return {
+    routeLabel: routeAssigned ? route!.routeName : "Ruta no asignada",
+    routeAssigned,
+    driverLabel: driverAssigned
+      ? driverLabelById(driverId!) || driverId!
+      : "Conductor no asignado",
+    driverAssigned,
+    isReady: routeAssigned && driverAssigned,
+  };
+}
+
+export function shipmentOperationalAssignmentLabel(
+  row: ShipmentRow,
+  step: ShipmentProgressStep | null | undefined,
+  driverLabelById: (driverId: string) => string | undefined = () => undefined,
+  routeByTaskId: (taskId: string) => ShipmentRouteAssignmentInfo | undefined = () => undefined,
+) {
+  const assignment = shipmentOperationalAssignment(row, step, driverLabelById, routeByTaskId);
+
+  if (!assignment) {
+    return "";
+  }
+
+  const routeLabel = assignment.routeAssigned
+    ? `Ruta asignada: ${assignment.routeLabel}`
+    : assignment.routeLabel;
+  const driverLabel = assignment.driverAssigned
+    ? `Conductor asignado: ${assignment.driverLabel}`
+    : assignment.driverLabel;
+
+  return `${routeLabel} · ${driverLabel}`;
 }

@@ -9,6 +9,7 @@ import {
   shipmentMilestoneAuditPayload,
   SHIPMENT_MILESTONE_ACTION,
 } from "./shipment-milestones";
+import { PENDING_EMPTY_BOX_STATUS, PENDING_FULL_BOX_STATUS } from "./shipment-display";
 
 describe("shipment-milestones", () => {
   it("maps shipment status to milestone column", () => {
@@ -16,7 +17,8 @@ describe("shipment-milestones", () => {
     assert.equal(milestoneKeyForStatus("Pickup"), "departed_at");
     assert.equal(milestoneKeyForStatus("Enviado"), "shipped_at");
     assert.equal(milestoneKeyForStatus("Entregado"), "delivered_at");
-    assert.equal(milestoneKeyForStatus("Pendiente"), null);
+    assert.equal(milestoneKeyForStatus(PENDING_EMPTY_BOX_STATUS), null);
+    assert.equal(milestoneKeyForStatus(PENDING_FULL_BOX_STATUS), null);
   });
 
   it("maps logistics tasks to milestone column", () => {
@@ -63,7 +65,8 @@ describe("shipment-milestones", () => {
     });
 
     assert.equal(payload.action, SHIPMENT_MILESTONE_ACTION);
-    assert.match(payload.title, /INV-001/);
+    assert.equal(payload.title, "Entregado");
+    assert.equal(payload.description, "Estado marcado: Entregado");
     assert.equal(payload.metadata.milestone, "delivered_at");
     assert.equal(payload.metadata.source, "status_update");
     assert.equal(payload.metadata.nextStatus, "Entregado");

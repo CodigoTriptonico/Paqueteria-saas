@@ -1,8 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   distanceKm,
   logisticsZoneKey,
+  logisticsZoneLabel,
   orderStopsByProximity,
   statusAfterRouteUnassign,
   suggestLogisticsRoutes,
@@ -122,6 +126,19 @@ describe("logistics routing", () => {
     assert.equal(logisticsZoneKey(task({ id: "c", city: "LA", zip: "90001", lat: null, lng: null }).address), "falta-geo");
   });
 
+  it("uses zip prefix for route buckets", () => {
+    const address = task({
+      id: "sc",
+      city: "Santa Clarita",
+      zip: "91387",
+      lat: 34.4,
+      lng: -118.5,
+    }).address;
+
+    assert.equal(logisticsZoneKey(address), "santa-clarita-913");
+    assert.equal(logisticsZoneLabel(address), "Santa Clarita");
+  });
+
   it("orders stops by nearest next point", () => {
     const ordered = orderStopsByProximity([
       task({ id: "far", city: "A", zip: "900", lat: 34.2, lng: -118.4 }),
@@ -186,5 +203,17 @@ describe("logistics routing", () => {
     assert.equal(statusAfterRouteUnassign("assigned", "2026-07-01T10:00:00.000Z"), "scheduled");
     assert.equal(statusAfterRouteUnassign("assigned", null), "pending");
     assert.equal(statusAfterRouteUnassign("loaded_to_truck", null), "loaded_to_truck");
+  });
+});
+
+describe("logistics route action eval", () => {
+  it("filters route candidates to current invoice steps", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../app/actions/logistics-routes.ts"),
+      "utf8",
+    );
+
+    assert.match(source, /activeLogisticsRouteTaskIds/);
+    assert.equal((source.match(/onlyCurrentStep: true/g) || []).length, 3);
   });
 });

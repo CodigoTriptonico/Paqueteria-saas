@@ -1,17 +1,18 @@
 import type { AppSession, PermissionKey, RoleSlug } from "@/lib/auth/types";
 
 const ROLE_ROUTE_ACCESS: Partial<Record<RoleSlug, string[]>> = {
-  administrador: ["/", "/venta", "/inventario", "/envios", "/logistica", "/configuracion"],
-  vendedor: ["/", "/venta", "/inventario"],
-  conductor: ["/", "/envios"],
+  administrador: ["/", "/venta", "/inventario", "/envios", "/logistica", "/estadisticas", "/vendedores", "/configuracion", "/conductor"],
+  vendedor: ["/", "/venta", "/inventario", "/envios"],
+  conductor: ["/", "/conductor"],
 };
 
 const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
   "/configuracion": ["settings.manage", "users.manage", "warehouses.manage", "permissions.manage"],
   "/inventario": ["inventory.view"],
   "/venta": ["sales.manage"],
-  "/envios": ["routes.view"],
+  "/envios": ["routes.view", "sales.manage"],
   "/logistica": ["routes.view", "routes.update_status"],
+  "/conductor": ["routes.view"],
 };
 
 function effectiveRoleSlug(session: AppSession): RoleSlug {
@@ -66,6 +67,22 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
   const allowedPrefixes = ROLE_ROUTE_ACCESS[effectiveRoleSlug(session)];
 
   if (base === "/logistica" && effectiveRoleSlug(session) !== "administrador") {
+    return false;
+  }
+
+  if (base === "/estadisticas" && effectiveRoleSlug(session) !== "administrador") {
+    return false;
+  }
+
+  if (base === "/vendedores" && effectiveRoleSlug(session) !== "administrador") {
+    return false;
+  }
+
+  if (
+    base === "/conductor" &&
+    effectiveRoleSlug(session) !== "conductor" &&
+    effectiveRoleSlug(session) !== "administrador"
+  ) {
     return false;
   }
 

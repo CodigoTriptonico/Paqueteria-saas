@@ -72,6 +72,7 @@ type CustomerDbRow = {
 
 type RecipientDbRow = {
   id: string;
+  customer_id?: string;
   first_name: string;
   last_name: string;
   phone: string;
@@ -88,6 +89,124 @@ type RecipientDbRow = {
   lat?: number | string | null;
   lng?: number | string | null;
 };
+
+const RECIPIENT_SELECT_FIELDS = `
+  id,
+  customer_id,
+  first_name,
+  last_name,
+  phone,
+  country,
+  street,
+  house_number,
+  neighborhood,
+  city,
+  state,
+  postal_code,
+  card_style,
+  place_id,
+  formatted_address,
+  lat,
+  lng
+`;
+
+const CUSTOMER_SELECT_FIELDS = `
+  id,
+  referred_by_customer_id,
+  first_name,
+  last_name,
+  phones,
+  email,
+  street,
+  house_number,
+  neighborhood,
+  city,
+  state,
+  postal_code,
+  country,
+  card_style,
+  place_id,
+  formatted_address,
+  lat,
+  lng
+`;
+
+export function groupRecipientsByCustomerId(recipients: RecipientDbRow[]) {
+  const grouped = new Map<string, RecipientDbRow[]>();
+
+  for (const recipient of recipients) {
+    const customerId = recipient.customer_id;
+    if (!customerId) {
+      continue;
+    }
+
+    const bucket = grouped.get(customerId);
+    if (bucket) {
+      bucket.push(recipient);
+    } else {
+      grouped.set(customerId, [recipient]);
+    }
+  }
+
+  return grouped;
+}
+
+export function mergeCustomersWithRecipients(
+  customers: CustomerDbRow[],
+  recipients: RecipientDbRow[],
+): CustomerWithRecipientsRow[] {
+  const grouped = groupRecipientsByCustomerId(recipients);
+
+  return customers.map((row) =>
+    mapCustomerRow({
+      ...row,
+      customer_recipients: grouped.get(row.id) || [],
+    }),
+  );
+}
+
+async function listRecipientsForCustomerIds(
+  supabase: NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>,
+  session: AppSession,
+  customerIds: string[],
+) {
+  if (!customerIds.length) {
+    return [] as RecipientDbRow[];
+  }
+
+  const { data, error } = await supabase
+    .from("customer_recipients")
+    .select(RECIPIENT_SELECT_FIELDS)
+    .eq("organization_id", session.organizationId)
+    .in("customer_id", customerIds);
+
+  if (error) {
+    if (error.code === "42P01") {
+      return [];
+    }
+
+    throw new Error(error.message);
+  }
+
+  return (data || []) as RecipientDbRow[];
+}
+
+export async function listRecipientsForCustomerSession(
+  session: AppSession,
+  customerId: string,
+): Promise<CustomerRecipientRow[]> {
+  if (!canAccessCustomersSession(session)) {
+    throw new Error("FORBIDDEN");
+  }
+
+  const supabase = await createScopedSupabase(session);
+  if (!supabase) {
+    throw new Error("Supabase no configurado");
+  }
+
+  const recipients = await listRecipientsForCustomerIds(supabase, session, [customerId]);
+  return recipients.map(mapRecipientRow);
+}
 
 function mapGeoNumber(value: number | string | null | undefined) {
   const parsed = Number(value);
@@ -167,46 +286,7 @@ export async function listCustomersForSession(
 
   let request = supabase
     .from("customers")
-    .select(
-      `
-        id,
-        referred_by_customer_id,
-        first_name,
-        last_name,
-        phones,
-        email,
-        street,
-        house_number,
-        neighborhood,
-        city,
-        state,
-        postal_code,
-        country,
-        card_style,
-        place_id,
-        formatted_address,
-        lat,
-        lng,
-        customer_recipients (
-          id,
-          first_name,
-          last_name,
-          phone,
-          country,
-          street,
-          house_number,
-          neighborhood,
-          city,
-          state,
-          postal_code,
-          card_style,
-          place_id,
-          formatted_address,
-          lat,
-          lng
-        )
-      `,
-    )
+    .select(CUSTOMER_SELECT_FIELDS)
     .eq("organization_id", session.organizationId)
     .eq("is_active", true)
     .order("created_at", { ascending: false })
@@ -229,5 +309,12 @@ export async function listCustomersForSession(
     throw new Error(error.message);
   }
 
-  return (data || []).map((row) => mapCustomerRow(row as CustomerDbRow));
+  const customers = (data || []) as CustomerDbRow[];
+  const recipients = await listRecipientsForCustomerIds(
+    supabase,
+    session,
+    customers.map((row) => row.id),
+  );
+
+  return mergeCustomersWithRecipients(customers, recipients);
 }

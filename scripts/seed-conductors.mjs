@@ -21,12 +21,12 @@ const admin = createClient(url, serviceKey, {
 const users = [
   {
     email: "conductor1@scgs.local",
-    password: "123456",
+    password: "123456789",
     fullName: "Conductor 1",
   },
   {
     email: "conductor2@scgs.local",
-    password: "123456",
+    password: "123456789",
     fullName: "Conductor 2",
   },
 ];

@@ -5,6 +5,8 @@ import { ChevronDown, LogOut, Settings, User, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { exitClientOrganizationAction } from "@/app/actions/act-as";
 import { signOutAction } from "@/app/actions/auth";
+import { actionConfirmButtonClass } from "@/components/action-confirm-dialog";
+import { secondaryButtonClass } from "@/components/ui-blocks";
 import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
 import type { AppSession } from "@/lib/auth/types";
 
@@ -24,6 +26,8 @@ type UserAccountMenuProps = {
 
 export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuProps) {
   const [open, setOpen] = useState(false);
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const displayName = useMemo(() => {
@@ -38,7 +42,7 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
   const secondaryLine = session?.isActingAsClient ? displayName : session?.roleName || "";
 
   useEffect(() => {
-    if (!open) return;
+    if (!open && !signOutConfirmOpen) return;
 
     function onPointerDown(event: MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
@@ -48,6 +52,10 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        if (signOutConfirmOpen) {
+          setSignOutConfirmOpen(false);
+          return;
+        }
         setOpen(false);
       }
     }
@@ -58,7 +66,12 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [open, signOutConfirmOpen]);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    await signOutAction();
+  }
 
   if (!session) {
     return null;
@@ -106,7 +119,7 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
             isSidebar ? "bottom-full left-0 right-0 mb-2" : "right-0 top-full mt-2 w-72"
           }`}
         >
-          <div className="border-b border-black/40 bg-surface-card px-4 py-3">
+          <div className="border-b border-black/40 bg-surface-card px-4 py-3 text-center">
             {session.isActingAsClient ? (
               <>
                 <p className="truncate text-sm font-black text-emerald-200">
@@ -190,16 +203,62 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
                 Panel plataforma
               </Link>
             ) : null}
-            <form action={signOutAction}>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                setSignOutConfirmOpen(true);
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-red-300 transition-colors hover:bg-red-950/40"
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              Cerrar sesion
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {signOutConfirmOpen ? (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 p-4">
+          <button
+            type="button"
+            aria-label="Cancelar cierre de sesion"
+            className="absolute inset-0"
+            disabled={signingOut}
+            onClick={() => setSignOutConfirmOpen(false)}
+          />
+          <div
+            className="relative w-full max-w-sm rounded-xl border border-black bg-surface-panel p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sign-out-confirm-title"
+          >
+            <p id="sign-out-confirm-title" className="text-xl font-black text-[#f8fafc]">
+              ¿Cerrar sesion?
+            </p>
+            <p className="mt-2 text-sm font-bold text-slate-400">
+              Saldras de la cuenta de {displayName}. Tendras que volver a iniciar sesion para entrar.
+            </p>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button
-                type="submit"
-                role="menuitem"
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-red-300 transition-colors hover:bg-red-950/40"
+                type="button"
+                onClick={() => setSignOutConfirmOpen(false)}
+                disabled={signingOut}
+                className={`${secondaryButtonClass} h-11 text-sm font-black disabled:opacity-40`}
               >
-                <LogOut className="h-4 w-4 shrink-0" />
-                Cerrar sesion
+                Cancelar
               </button>
-            </form>
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                disabled={signingOut}
+                className={actionConfirmButtonClass("danger")}
+              >
+                {signingOut ? "Cerrando..." : "Cerrar sesion"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

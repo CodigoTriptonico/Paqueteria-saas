@@ -306,6 +306,60 @@ textarea::placeholder {
   animation: notification-icon-glow 2.4s ease-in-out infinite;
 }
 
+@keyframes logistics-unassigned-alert {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(244, 63, 94, 0.62),
+      0 0 10px rgba(244, 63, 94, 0.28);
+    filter: saturate(1.15);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1px rgba(251, 113, 133, 0.82),
+      0 0 18px rgba(244, 63, 94, 0.42);
+    filter: saturate(1.28);
+  }
+}
+
+.logistics-unassigned-alert {
+  animation: logistics-unassigned-alert 1.9s ease-in-out infinite;
+}
+
+@keyframes logistics-priority-awaiting-driver {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.55));
+    transform: scale(1);
+  }
+
+  50% {
+    filter: drop-shadow(0 0 10px rgba(252, 211, 77, 0.95));
+    transform: scale(1.15);
+  }
+}
+
+.logistics-priority-awaiting-driver {
+  animation: logistics-priority-awaiting-driver 1.6s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes shipment-step-active-pulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.45);
+  }
+
+  50% {
+    box-shadow: inset 0 0 0 1px rgba(252, 211, 77, 0.95);
+  }
+}
+
+.shipment-step-active-pulse {
+  animation: shipment-step-active-pulse 2.2s ease-in-out infinite;
+  contain: paint;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .motion-enter-left,
   .motion-enter-top,
@@ -317,7 +371,10 @@ textarea::placeholder {
   ::view-transition-new(.inventory-view),
   .skeleton-card,
   .skeleton-line,
-  .skeleton-block {
+  .skeleton-block,
+  .logistics-unassigned-alert,
+  .logistics-priority-awaiting-driver,
+  .shipment-step-active-pulse {
     animation: none;
   }
 

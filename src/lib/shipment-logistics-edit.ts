@@ -12,6 +12,8 @@ export type ShipmentLogisticsLegInput = {
   handingNow?: boolean;
   scheduleMode?: string;
   scheduleAt?: string | null;
+  /** When true, creates/syncs the driver logistics task in Envíos. Schedule-only updates leave this false. */
+  driverTaskOrdered?: boolean;
 };
 
 export type UpdateShipmentLogisticsPlanInput = {
@@ -24,9 +26,11 @@ export type ShipmentLogisticsEditorState = {
   emptyBoxHandingNow: boolean;
   emptyBoxScheduleMode: string;
   emptyBoxScheduleAt: string;
+  emptyBoxDriverTaskOrdered: boolean;
   fullBoxMode: string;
   fullBoxScheduleMode: string;
   fullBoxScheduleAt: string;
+  fullBoxDriverTaskOrdered: boolean;
 };
 
 const OFFICE_RECEIVED_STATUSES = new Set<ShipmentRow["status"]>([
@@ -72,9 +76,13 @@ export function shipmentLogisticsEditorState(row: ShipmentRow): ShipmentLogistic
     emptyBoxHandingNow: empty.handingNow === true,
     emptyBoxScheduleMode: String(empty.scheduleMode || "pending"),
     emptyBoxScheduleAt: emptyScheduleAt,
+    emptyBoxDriverTaskOrdered:
+      empty.driverTaskOrdered === true || Boolean(activeTask(row, "deliver_empty_box")),
     fullBoxMode: String(full.mode || ""),
     fullBoxScheduleMode: String(full.scheduleMode || "pending"),
     fullBoxScheduleAt: fullScheduleAt,
+    fullBoxDriverTaskOrdered:
+      full.driverTaskOrdered === true || Boolean(activeTask(row, "pickup_full_box")),
   };
 }
 
@@ -142,6 +150,26 @@ export function fullBoxLegLockReason(row: ShipmentRow) {
   return "";
 }
 
+function resolveDriverTaskOrdered(
+  existing: Record<string, unknown> | null,
+  input: ShipmentLogisticsLegInput,
+  driverNeeded: boolean,
+) {
+  if (!driverNeeded) {
+    return false;
+  }
+
+  if (input.driverTaskOrdered === true) {
+    return true;
+  }
+
+  if (input.driverTaskOrdered === false) {
+    return false;
+  }
+
+  return existing?.driverTaskOrdered === true;
+}
+
 function buildLegPatch(
   existing: Record<string, unknown> | null,
   input: ShipmentLogisticsLegInput,
@@ -159,8 +187,88 @@ function buildLegPatch(
     scheduleMode: driverNeeded ? input.scheduleMode || "pending" : null,
     scheduleAt: driverNeeded ? input.scheduleAt || null : null,
     driverTaskNeeded: driverNeeded,
+    driverTaskOrdered: resolveDriverTaskOrdered(existing, input, driverNeeded),
     driverTaskType: driverNeeded ? driverTaskType : null,
   };
+}
+
+function buildDeferredEmptyBoxLeg(existing: Record<string, unknown> | null) {
+  return {
+    ...(existing || {}),
+    label: existing?.label || "empty_box",
+    mode: "",
+    deferred: true,
+    handingNow: null,
+    scheduleMode: null,
+    scheduleAt: null,
+    driverTaskNeeded: false,
+    driverTaskOrdered: false,
+    driverTaskType: null,
+  };
+}
+
+function buildDeferredFullBoxLeg(existing: Record<string, unknown> | null) {
+  return {
+    ...(existing || {}),
+    label: existing?.label || "full_box",
+    mode: "",
+    deferred: true,
+    handingNow: null,
+    scheduleMode: null,
+    scheduleAt: null,
+    driverTaskNeeded: false,
+    driverTaskOrdered: false,
+    driverTaskType: null,
+  };
+}
+
+function legDriverTaskNeeded(
+  row: ShipmentRow,
+  taskType: "deliver_empty_box" | "pickup_full_box",
+  mode: string,
+  driverMode: string,
+  input: ShipmentLogisticsLegInput,
+  legKey: "emptyBox" | "fullBox",
+) {
+  if (mode !== driverMode) {
+    return false;
+  }
+
+  if (activeTask(row, taskType)) {
+    return true;
+  }
+
+  const existingLeg = planLeg(row.logistics_plan, legKey);
+
+  return input.driverTaskOrdered === true || existingLeg?.driverTaskOrdered === true;
+}
+
+export function emptyBoxDeliveryCanClear(row: ShipmentRow, input: UpdateShipmentLogisticsPlanInput) {
+  if (input.emptyBox.mode) {
+    return false;
+  }
+
+  const currentMode = String(planLeg(row.logistics_plan, "emptyBox")?.mode || "");
+
+  if (!currentMode) {
+    return false;
+  }
+
+  return !emptyBoxLegLocked(row);
+}
+
+export function fullBoxPickupCanClear(row: ShipmentRow, input: UpdateShipmentLogisticsPlanInput) {
+  if (!input.fullBox || input.fullBox.mode) {
+    return false;
+  }
+
+  const currentMode = String(planLeg(row.logistics_plan, "fullBox")?.mode || "");
+
+  if (!currentMode) {
+    return false;
+  }
+
+  return !fullBoxLegLocked(row);
 }
 
 export function buildUpdatedLogisticsPlan(
@@ -172,11 +280,15 @@ export function buildUpdatedLogisticsPlan(
   const emptyExisting = planLeg(plan, "emptyBox");
   const fullExisting = planLeg(plan, "fullBox");
 
-  const emptyBox = buildLegPatch(emptyExisting, input.emptyBox, "deliver_empty_box", true);
+  const emptyBox = !input.emptyBox.mode
+    ? buildDeferredEmptyBoxLeg(emptyExisting)
+    : buildLegPatch(emptyExisting, input.emptyBox, "deliver_empty_box", true);
   const fullBox =
     row.sale_kind === "empty_box_deposit" || !input.fullBox
       ? fullExisting
-      : buildLegPatch(fullExisting, input.fullBox, "pickup_full_box", false);
+      : !input.fullBox.mode
+        ? buildDeferredFullBoxLeg(fullExisting)
+        : buildLegPatch(fullExisting, input.fullBox, "pickup_full_box", false);
 
   const emptyBoxMode = String(emptyBox.mode || "");
   const fullBoxMode = String(fullBox?.mode || "");
@@ -189,7 +301,6 @@ export function buildUpdatedLogisticsPlan(
     String(fullBox?.scheduleMode || "pending"),
     String(fullBox?.scheduleAt || ""),
     notes,
-    emptyBox.handingNow === true,
   );
 
   const nextPlan = {
@@ -218,7 +329,14 @@ export function logisticsTaskSyncPlan(
   }> = [
     {
       taskType: "deliver_empty_box",
-      needed: input.emptyBox.mode === EMPTY_BOX_DRIVER_MODE,
+      needed: legDriverTaskNeeded(
+        row,
+        "deliver_empty_box",
+        input.emptyBox.mode,
+        EMPTY_BOX_DRIVER_MODE,
+        input.emptyBox,
+        "emptyBox",
+      ),
       scheduleMode: input.emptyBox.scheduleMode || "pending",
       scheduleAt: input.emptyBox.scheduleAt || null,
     },
@@ -227,7 +345,14 @@ export function logisticsTaskSyncPlan(
   if (row.sale_kind !== "empty_box_deposit" && input.fullBox) {
     tasks.push({
       taskType: "pickup_full_box",
-      needed: input.fullBox.mode === FULL_BOX_DRIVER_MODE,
+      needed: legDriverTaskNeeded(
+        row,
+        "pickup_full_box",
+        input.fullBox.mode,
+        FULL_BOX_DRIVER_MODE,
+        input.fullBox,
+        "fullBox",
+      ),
       scheduleMode: input.fullBox.scheduleMode || "pending",
       scheduleAt: input.fullBox.scheduleAt || null,
     });
@@ -268,11 +393,19 @@ export function validateLogisticsPlanUpdate(row: ShipmentRow, input: UpdateShipm
   }
 
   if (!input.emptyBox.mode) {
-    return "Elige cómo se entrega la caja vacía.";
+    const currentEmptyBoxMode = String(planLeg(row.logistics_plan, "emptyBox")?.mode || "");
+
+    if (currentEmptyBoxMode && !emptyBoxDeliveryCanClear(row, input)) {
+      return "Elige cómo se entrega la caja vacía.";
+    }
   }
 
   if (row.sale_kind !== "empty_box_deposit" && input.fullBox && !input.fullBox.mode) {
-    return "Elige cómo se recoge la caja llena.";
+    const currentFullBoxMode = String(planLeg(row.logistics_plan, "fullBox")?.mode || "");
+
+    if (currentFullBoxMode && !fullBoxPickupCanClear(row, input)) {
+      return "Elige cómo se recoge la caja llena.";
+    }
   }
 
   const taskSync = logisticsTaskSyncPlan(row, input);
@@ -302,13 +435,13 @@ export function editorStateToUpdateInput(state: ShipmentLogisticsEditorState): U
       handingNow: state.emptyBoxHandingNow,
       scheduleMode: state.emptyBoxScheduleMode,
       scheduleAt: state.emptyBoxScheduleAt || null,
+      driverTaskOrdered: state.emptyBoxDriverTaskOrdered,
     },
-    fullBox: state.fullBoxMode
-      ? {
-          mode: state.fullBoxMode,
-          scheduleMode: state.fullBoxScheduleMode,
-          scheduleAt: state.fullBoxScheduleAt || null,
-        }
-      : null,
+    fullBox: {
+      mode: state.fullBoxMode,
+      scheduleMode: state.fullBoxScheduleMode,
+      scheduleAt: state.fullBoxScheduleAt || null,
+      driverTaskOrdered: state.fullBoxDriverTaskOrdered,
+    },
   };
 }

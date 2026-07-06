@@ -29,6 +29,7 @@ import {
   type ShipmentLogisticsTaskRow,
   type ShipmentRow,
 } from "@/app/actions/shipments";
+import { activeLogisticsRouteTaskIds } from "@/lib/logistics-view";
 import type { AppSession } from "@/lib/auth/types";
 
 type Supabase = NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>;
@@ -72,6 +73,7 @@ type LogisticsTaskDbRow = {
   id: string;
   status: LogisticsTaskStatus;
   assigned_to: string | null;
+  assigned_at: string | null;
   scheduled_at: string | null;
   shipment_id: string;
 };
@@ -224,18 +226,22 @@ function taskInputFromShipment(
 async function loadTaskInputs(
   supabase: Supabase,
   session: AppSession,
-  options?: { excludeRouted?: boolean },
+  options?: { excludeRouted?: boolean; onlyCurrentStep?: boolean },
 ) {
   const shipments = await loadShipments();
   const customerById = await loadCustomerMap(supabase, session, shipments);
   const routedIds = options?.excludeRouted
     ? await loadRoutedTaskIds(supabase, session)
     : new Set<string>();
+  const currentTaskIds = options?.onlyCurrentStep
+    ? activeLogisticsRouteTaskIds(shipments)
+    : null;
 
   return shipments.flatMap((shipment) =>
     shipment.logisticsTasks
       .filter((task) => isOpenTask(task))
       .filter((task) => !routedIds.has(task.id))
+      .filter((task) => !currentTaskIds || currentTaskIds.has(task.id))
       .map((task) => taskInputFromShipment(shipment, task, customerById)),
   );
 }
@@ -262,7 +268,7 @@ async function loadTaskRows(supabase: Supabase, session: AppSession, taskIds: st
 
   const { data, error } = await supabase
     .from("shipment_logistics_tasks")
-    .select("id, status, assigned_to, scheduled_at, shipment_id")
+    .select("id, status, assigned_to, assigned_at, scheduled_at, shipment_id")
     .eq("organization_id", session.organizationId)
     .in("id", taskIds);
 
@@ -294,6 +300,9 @@ async function syncRouteDriver(
     if (assignedTo) {
       patch.assigned_to = assignedTo;
       shouldUpdateShipment = true;
+      if (!task.assigned_at) {
+        patch.assigned_at = new Date().toISOString();
+      }
       if (["pending", "scheduled", "assigned"].includes(task.status)) {
         patch.status = "assigned";
       }
@@ -432,7 +441,10 @@ export async function suggestLogisticsRoutesAction(input: {
     }
 
     const fallbackDate = input.routeDate || new Date().toISOString().slice(0, 10);
-    const tasks = await loadTaskInputs(supabase, session, { excludeRouted: true });
+    const tasks = await loadTaskInputs(supabase, session, {
+      excludeRouted: true,
+      onlyCurrentStep: true,
+    });
 
     return ok(suggestLogisticsRoutes(tasks, { fallbackDate, minimumStops: 1 }));
   } catch (error) {
@@ -460,7 +472,10 @@ export async function createLogisticsRouteFromSuggestionAction(input: {
       return fail("Supabase no configurado");
     }
 
-    const candidates = await loadTaskInputs(supabase, session, { excludeRouted: true });
+    const candidates = await loadTaskInputs(supabase, session, {
+      excludeRouted: true,
+      onlyCurrentStep: true,
+    });
     const taskIdSet = new Set(input.taskIds);
     const selected = orderStopsByProximity(candidates.filter((task) => taskIdSet.has(task.taskId)));
 
@@ -539,7 +554,10 @@ export async function addLogisticsRouteStopAction(input: {
       return fail("No puedes modificar una ruta cerrada");
     }
 
-    const candidates = await loadTaskInputs(supabase, session, { excludeRouted: true });
+    const candidates = await loadTaskInputs(supabase, session, {
+      excludeRouted: true,
+      onlyCurrentStep: true,
+    });
     const task = candidates.find((candidate) => candidate.taskId === input.taskId);
 
     if (!task) {

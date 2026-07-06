@@ -32,6 +32,20 @@ type PanelPosition = {
 };
 
 const PANEL_MIN_WIDTH = 200;
+const PANEL_CHAR_WIDTH = 7.2;
+const PANEL_HORIZONTAL_PADDING = 48;
+
+export function resolveInlineSearchPanelWidth(
+  triggerWidth: number,
+  labels: readonly string[],
+  viewportWidth = 1280,
+) {
+  const longest = labels.reduce((max, label) => Math.max(max, label.length), 0);
+  const estimated = Math.ceil(longest * PANEL_CHAR_WIDTH + PANEL_HORIZONTAL_PADDING);
+  const viewportMax = Math.max(PANEL_MIN_WIDTH, viewportWidth - 16);
+
+  return Math.min(Math.max(PANEL_MIN_WIDTH, triggerWidth, estimated), viewportMax);
+}
 
 const shellBaseClass =
   "box-border inline-flex h-9 max-w-full items-center gap-2 rounded-lg border border-solid px-2.5 bg-surface-inset";
@@ -251,6 +265,17 @@ export function InlineSearchPicker({
       ? `${shellBaseClass} ${minWidthClass}`
       : `${shellBaseClass} h-11 w-full min-w-[12rem] max-w-xs px-3`;
 
+  const panelWidth = useMemo(() => {
+    if (!panelPosition) {
+      return PANEL_MIN_WIDTH;
+    }
+
+    return resolveInlineSearchPanelWidth(
+      panelPosition.width,
+      filteredOptions.map((option) => option.label),
+    );
+  }, [filteredOptions, panelPosition]);
+
   const panel =
     open && panelPosition && mounted ? (
       <div
@@ -262,7 +287,7 @@ export function InlineSearchPicker({
         style={{
           top: panelPosition.top,
           left: panelPosition.left,
-          width: panelPosition.width,
+          width: panelWidth,
         }}
       >
         <ul className="max-h-52 overflow-y-auto py-1">
@@ -294,7 +319,9 @@ export function InlineSearchPicker({
                     {option.icon ? (
                       <span className="shrink-0">{option.icon}</span>
                     ) : null}
-                    <span className="min-w-0 flex-1 truncate capitalize">{option.label}</span>
+                    <span className="min-w-0 flex-1 whitespace-normal break-words capitalize">
+                      {option.label}
+                    </span>
                     {option.trailing ? (
                       <span className="shrink-0">{option.trailing}</span>
                     ) : null}
@@ -548,6 +575,17 @@ export function InlineSearchCombobox({
   const isActive = persistent || open || value.trim().length > 0;
   const showInput = persistent || open || value.trim().length > 0;
 
+  const panelWidth = useMemo(() => {
+    if (!panelPosition) {
+      return PANEL_MIN_WIDTH;
+    }
+
+    return resolveInlineSearchPanelWidth(
+      panelPosition.width,
+      filteredOptions.map((option) => option.label),
+    );
+  }, [filteredOptions, panelPosition]);
+
   const panel =
     open && panelPosition && mounted ? (
       <div
@@ -559,7 +597,7 @@ export function InlineSearchCombobox({
         style={{
           top: panelPosition.top,
           left: panelPosition.left,
-          width: panelPosition.width,
+          width: panelWidth,
         }}
       >
         <ul className="max-h-52 overflow-y-auto py-1">
@@ -577,7 +615,9 @@ export function InlineSearchCombobox({
                   {option.icon ? (
                     <span className="shrink-0">{option.icon}</span>
                   ) : null}
-                  <span className="min-w-0 flex-1 truncate capitalize">{option.label}</span>
+                  <span className="min-w-0 flex-1 whitespace-normal break-words capitalize">
+                    {option.label}
+                  </span>
                   {option.trailing ? (
                     <span className="shrink-0">{option.trailing}</span>
                   ) : null}

@@ -2,6 +2,7 @@
 
 import { ChevronRight, Copy, Edit3, History, MoreHorizontal, Package, Plus } from "lucide-react";
 import type { ReactNode } from "react";
+import { ContextMenuFlyout } from "@/components/context-menu-flyout";
 import type { ContextMenuState } from "@/components/sale/venta-parts";
 
 type CopyGroup = {
@@ -33,36 +34,6 @@ type SaleContextMenuProps = {
   onQuickEmptyBox?: () => void;
   onAddReferral?: () => void;
 };
-
-function ContextMenuFlyout({
-  title,
-  icon,
-  children,
-  onMouseEnter,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  onMouseEnter?: () => void;
-}) {
-  return (
-    <div className="group relative mt-1">
-      <button
-        type="button"
-        onMouseEnter={onMouseEnter}
-        className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left font-black hover:bg-surface-card"
-      >
-        {icon}
-        <span className="flex-1">{title}</span>
-        <ChevronRight className="h-4 w-4 text-slate-500" />
-      </button>
-
-      <div className="invisible absolute left-[calc(100%-1px)] top-0 z-50 min-w-[15rem] rounded-xl border border-black bg-surface-panel p-2 opacity-0 shadow-2xl delay-300 duration-150 group-hover:visible group-hover:opacity-100 group-hover:delay-0">
-        {children}
-      </div>
-    </div>
-  );
-}
 
 export function SaleContextMenu({
   menu,

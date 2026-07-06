@@ -87,24 +87,21 @@ export type ContextMenuState = {
   };
 };
 
-export function emptyBoxOfficeSummary(handingNow: boolean) {
-  return handingNow
-    ? "Caja vacia entregada en mostrador"
-    : "Cliente recoge caja vacia en oficina (pendiente)";
+export function emptyBoxOfficeSummary() {
+  return "Caja vacia entregada en mostrador";
 }
 
 export function deliverySummary(
   action: string,
   scheduleMode: string,
   scheduleAt: string,
-  emptyBoxHandingNow = true,
 ) {
   if (!action) {
     return "Pendiente";
   }
 
   if (action === EMPTY_BOX_OFFICE_MODE) {
-    return emptyBoxOfficeSummary(emptyBoxHandingNow);
+    return emptyBoxOfficeSummary();
   }
 
   if (!action.includes("Programar")) {
@@ -126,6 +123,80 @@ export const EMPTY_BOX_OFFICE_MODE = "Cliente recoge caja vacia en oficina";
 export const EMPTY_BOX_DRIVER_MODE = "Programar entrega de caja vacia";
 export const FULL_BOX_OFFICE_MODE = "Cliente trae caja llena a oficina";
 export const FULL_BOX_DRIVER_MODE = "Programar recoleccion caja llena";
+export const FULL_BOX_DEFERRED_SUMMARY = "Recolección pendiente";
+
+export function fullBoxSummaryLine(
+  fullBoxMode: string,
+  fullBoxScheduleMode: string,
+  fullBoxScheduleAt: string,
+) {
+  if (!fullBoxMode) {
+    return FULL_BOX_DEFERRED_SUMMARY;
+  }
+
+  return deliverySummary(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt);
+}
+
+export function saleLogisticsPlanReady(
+  emptyBoxMode: string,
+  emptyBoxScheduleMode: string,
+  emptyBoxScheduleAt: string,
+  fullBoxMode: string,
+  fullBoxScheduleMode: string,
+  fullBoxScheduleAt: string,
+) {
+  const emptyBoxComplete = logisticsLegComplete(
+    emptyBoxMode,
+    emptyBoxScheduleMode,
+    emptyBoxScheduleAt,
+  );
+
+  if (!emptyBoxComplete) {
+    return false;
+  }
+
+  if (!fullBoxMode) {
+    return true;
+  }
+
+  return logisticsLegComplete(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt);
+}
+
+export function saleLogisticsContinueHint(
+  emptyBoxMode: string,
+  emptyBoxScheduleMode: string,
+  emptyBoxScheduleAt: string,
+  fullBoxMode: string,
+  fullBoxScheduleMode: string,
+  fullBoxScheduleAt: string,
+  fullBoxPickupExpanded: boolean,
+) {
+  if (
+    saleLogisticsPlanReady(
+      emptyBoxMode,
+      emptyBoxScheduleMode,
+      emptyBoxScheduleAt,
+      fullBoxMode,
+      fullBoxScheduleMode,
+      fullBoxScheduleAt,
+    )
+  ) {
+    return "";
+  }
+
+  const pickupDeferred = !fullBoxMode && !fullBoxPickupExpanded;
+  const fullComplete = logisticsLegComplete(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt);
+
+  if (pickupDeferred) {
+    return "Elige cómo sale la caja vacía. La recolección queda pendiente.";
+  }
+
+  if (fullBoxMode && !fullComplete) {
+    return "Completa la recolección o toca Dejar pendiente.";
+  }
+
+  return "Elige cómo sale la caja vacía para continuar.";
+}
 
 export function scheduledModeComplete(scheduleMode: string, scheduleAt: string) {
   const routeDate = scheduleAt.split("T")[0] || "";
@@ -158,11 +229,10 @@ export function logisticsSummary(
   fullBoxScheduleMode: string,
   fullBoxScheduleAt: string,
   notes = "",
-  emptyBoxHandingNow = true,
 ) {
   const parts = [
-    `Caja vacia: ${deliverySummary(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt, emptyBoxHandingNow)}`,
-    `Caja llena: ${deliverySummary(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt)}`,
+    `Caja vacia: ${deliverySummary(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt)}`,
+    `Caja llena: ${fullBoxSummaryLine(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt)}`,
   ];
   const cleanNotes = notes.trim();
 
@@ -596,26 +666,14 @@ export function normalizePhoneList(phones: string[]) {
   return phones.map((phone) => phone.trim()).filter(Boolean);
 }
 
-export function formatDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-export function minScheduleDateInput() {
-  return formatDateInput(new Date());
-}
-
-export function resolveScheduleDate(date?: string) {
-  const min = minScheduleDateInput();
-  if (!date) {
-    return min;
-  }
-
-  return date < min ? min : date;
-}
+export {
+  formatScheduleDateInput,
+  formatScheduleDateInput as formatDateInput,
+  minScheduleDateInput,
+  minScheduleDatetimeInput,
+  resolveScheduleDate,
+  resolveScheduleDatetime,
+} from "@/lib/schedule-date";
 
 export function CountryBadge({ country }: { country: string }) {
   return (
@@ -657,13 +715,17 @@ export const recipientCardClass = senderCardClass;
 export const boxCardClass =
   "w-full border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-surface-card-hover";
 
-export const saleSteps: { id: SaleStep; label: string }[] = [
-  { id: "client", label: "Remitente" },
-  { id: "recipient", label: "Destinatario" },
-  { id: "box", label: "Caja" },
-  { id: "delivery", label: "Logistica" },
-  { id: "finish", label: "Final" },
+export const saleSteps: { id: SaleStep; label: string; compactLabel: string }[] = [
+  { id: "client", label: "Remitente", compactLabel: "Remite" },
+  { id: "recipient", label: "Destinatario", compactLabel: "Destino" },
+  { id: "box", label: "Caja", compactLabel: "Caja" },
+  { id: "delivery", label: "Logistica", compactLabel: "Logíst." },
+  { id: "finish", label: "Final", compactLabel: "Final" },
 ];
+
+export function saleStepCompactLabel(stepId: SaleStep) {
+  return saleSteps.find((step) => step.id === stepId)?.compactLabel ?? stepId;
+}
 
 export type SaleStepBarItem = {
   id: SaleStep;

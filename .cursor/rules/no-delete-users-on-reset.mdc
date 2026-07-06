@@ -1,0 +1,26 @@
+---
+description: No borrar usuarios ni perfiles al resetear datos de demo
+alwaysApply: true
+---
+
+# Reset de datos sin tocar usuarios
+
+Al limpiar remitentes, envíos, inventario o historial de demo, **nunca** borres usuarios ni perfiles del equipo.
+
+## Usar siempre
+
+- `npm run db:reset:scgs` → `scripts/reset-scgs-demo-data.mjs`
+- `npm run db:clear:sales` → solo envíos/rutas/historial (conserva clientes e inventario)
+
+## Prohibido para reset de demo
+
+- `delete from auth.users`
+- `delete from public.profiles` (salvo tarea explícita de Pablo sobre una cuenta concreta)
+- Scripts que dejen la org "solo con el administrador"
+- `npm run db:wipe` sin pedido explícito en ese mensaje
+
+## Si Pablo pide reiniciar datos de prueba
+
+1. `npm run db:reset:scgs`
+2. `npm run db:seed:scgs-demo` (u otro seed acordado)
+3. No ejecutar `seed-conductors` salvo que falten conductores o pida recrearlos

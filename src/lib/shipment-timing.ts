@@ -9,6 +9,44 @@ const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
+export type SaleAgeTone = "fresh" | "recent" | "aging" | "stale" | "urgent";
+
+const SALE_AGE_TEXT_CLASS: Record<SaleAgeTone, string> = {
+  fresh: "text-slate-500",
+  recent: "text-slate-400",
+  aging: "text-slate-300",
+  stale: "text-amber-400",
+  urgent: "text-amber-300",
+};
+
+export function saleAgeTone(saleAgeMs: number): SaleAgeTone {
+  if (!Number.isFinite(saleAgeMs) || saleAgeMs < 0) {
+    return "fresh";
+  }
+
+  if (saleAgeMs < HOUR_MS) {
+    return "fresh";
+  }
+
+  if (saleAgeMs < 6 * HOUR_MS) {
+    return "recent";
+  }
+
+  if (saleAgeMs < DAY_MS) {
+    return "aging";
+  }
+
+  if (saleAgeMs < 2 * DAY_MS) {
+    return "stale";
+  }
+
+  return "urgent";
+}
+
+export function saleAgeTextClass(saleAgeMs: number): string {
+  return SALE_AGE_TEXT_CLASS[saleAgeTone(saleAgeMs)];
+}
+
 export type ShipmentStepGap = {
   fromKind: ShipmentProgressKind;
   toKind: ShipmentProgressKind;
@@ -37,13 +75,13 @@ export type ShipmentTimings = {
 
 const STEP_SHORT_NAMES: Record<ShipmentProgressKind, string> = {
   sale: "Venta",
-  empty_box: "Caja vacía",
-  full_box: "Recolección",
+  empty_box: "Dejar",
+  full_box: "Recoger",
   payment: "Cobro",
   office: "Oficina",
   pickup: "Salida",
   transit: "Tránsito",
-  delivered: "Entrega",
+  delivered: "Destino",
 };
 
 function planLeg(plan: Record<string, unknown>, key: "emptyBox" | "fullBox") {
@@ -52,7 +90,9 @@ function planLeg(plan: Record<string, unknown>, key: "emptyBox" | "fullBox") {
 }
 
 function taskByType(row: ShipmentRow, taskType: ShipmentLogisticsTaskRow["taskType"]) {
-  return row.logisticsTasks.find((task) => task.taskType === taskType);
+  return row.logisticsTasks.find(
+    (task) => task.taskType === taskType && task.status !== "cancelled",
+  );
 }
 
 function parseIso(value: string | null | undefined) {
@@ -249,10 +289,27 @@ export function buildShipmentTimings(
   const saleAgeMs = saleIso ? Math.max(0, nowMs - (parseIso(saleIso) || nowMs)) : 0;
 
   const gaps: ShipmentStepGap[] = [];
+  const timingSteps: ShipmentProgressStep[] = saleIso
+    ? [
+        {
+          id: "sale",
+          title: "Venta",
+          detail: "",
+          state: "done",
+          kind: "sale",
+          channel: "neutral",
+        },
+        ...steps,
+      ]
+    : steps;
 
-  for (let index = 1; index < steps.length; index += 1) {
-    const previous = steps[index - 1];
-    const current = steps[index];
+  if (saleIso) {
+    completedAtByKind.sale = saleIso;
+  }
+
+  for (let index = 1; index < timingSteps.length; index += 1) {
+    const previous = timingSteps[index - 1];
+    const current = timingSteps[index];
 
     if (!previous || !current || current.state === "pending") {
       continue;
@@ -339,21 +396,210 @@ export function buildShipmentTimings(
   };
 }
 
+export type LogisticsPhaseKey = "ordered" | "scheduled" | "assigned" | "loaded" | "completed";
+
+export type LogisticsPhase = {
+  key: LogisticsPhaseKey;
+  label: string;
+  at: string | null;
+  relative: string | null;
+  gapFromPreviousMs: number | null;
+  gapFromPreviousLabel: string | null;
+};
+
+export type LogisticsLegTiming = {
+  taskType: ShipmentLogisticsTaskRow["taskType"];
+  legLabel: string;
+  orderedAt: string | null;
+  scheduledAt: string | null;
+  assignedAt: string | null;
+  loadedAt: string | null;
+  completedAt: string | null;
+  phases: LogisticsPhase[];
+  activePhaseLabel: string | null;
+  activeElapsedMs: number | null;
+  activeElapsedLabel: string | null;
+  orderToCompleteMs: number | null;
+  orderToCompleteLabel: string | null;
+};
+
+export type LogisticsSubGap = {
+  fromLabel: string;
+  toLabel: string;
+  durationMs: number;
+  label: string;
+};
+
+export type ShipmentAuditTimings = ShipmentTimings & {
+  emptyBoxLeg: LogisticsLegTiming | null;
+  fullBoxLeg: LogisticsLegTiming | null;
+  logisticsGaps: LogisticsSubGap[];
+  logisticsGapsLine: string | null;
+};
+
+function subGapBetween(fromLabel: string, toLabel: string, fromIso: string | null, toIso: string | null) {
+  const fromMs = parseIso(fromIso);
+  const toMs = parseIso(toIso);
+
+  if (fromMs === null || toMs === null || toMs < fromMs) {
+    return null;
+  }
+
+  const durationMs = toMs - fromMs;
+  const label = formatShipmentDuration(durationMs);
+
+  if (!label) {
+    return null;
+  }
+
+  return { fromLabel, toLabel, durationMs, label };
+}
+
+function buildLogisticsLegTiming(
+  task: ShipmentLogisticsTaskRow | undefined,
+  legLabel: string,
+  nowMs = Date.now(),
+): LogisticsLegTiming | null {
+  if (!task || task.status === "cancelled") {
+    return null;
+  }
+
+  const orderedAt = task.orderedAt || task.createdAt || null;
+  const scheduledAt = task.scheduledAt;
+  const assignedAt = task.assignedAt;
+  const loadedAt = task.loadedAt || task.stockDeductedAt;
+  const completedAt = task.completedAt;
+
+  const phaseDefs: Array<{ key: LogisticsPhaseKey; label: string; at: string | null }> = [
+    { key: "ordered", label: "Ordenada en envíos", at: orderedAt },
+    { key: "scheduled", label: "Fecha programada", at: scheduledAt },
+    { key: "assigned", label: "Asignada a chofer", at: assignedAt },
+    { key: "loaded", label: "Cargada a ruta", at: loadedAt },
+    { key: "completed", label: "Completada", at: completedAt },
+  ];
+
+  let previousAt: string | null = null;
+  const phases: LogisticsPhase[] = phaseDefs.map((phase) => {
+    const gap =
+      previousAt && phase.at ? subGapBetween("anterior", phase.label, previousAt, phase.at) : null;
+
+    if (phase.at) {
+      previousAt = phase.at;
+    }
+
+    return {
+      key: phase.key,
+      label: phase.label,
+      at: phase.at,
+      relative: phase.at ? formatShipmentRelative(phase.at, nowMs) : null,
+      gapFromPreviousMs: gap?.durationMs ?? null,
+      gapFromPreviousLabel: gap?.label ?? null,
+    };
+  });
+
+  const orderToCompleteMs =
+    orderedAt && completedAt
+      ? Math.max(0, (parseIso(completedAt) || nowMs) - (parseIso(orderedAt) || nowMs))
+      : null;
+
+  let activePhaseLabel: string | null = null;
+  let activeElapsedMs: number | null = null;
+
+  if (!completedAt && orderedAt) {
+    const anchorMs = parseIso(orderedAt);
+    if (anchorMs !== null) {
+      activeElapsedMs = Math.max(0, nowMs - anchorMs);
+      activePhaseLabel = `desde que se ordenó en envíos (${formatShipmentDuration(activeElapsedMs)})`;
+    }
+  }
+
+  return {
+    taskType: task.taskType,
+    legLabel,
+    orderedAt,
+    scheduledAt,
+    assignedAt,
+    loadedAt,
+    completedAt,
+    phases,
+    activePhaseLabel,
+    activeElapsedMs,
+    activeElapsedLabel: activePhaseLabel,
+    orderToCompleteMs,
+    orderToCompleteLabel:
+      orderToCompleteMs !== null ? formatShipmentDuration(orderToCompleteMs) : null,
+  };
+}
+
+export function buildLogisticsLegTimings(row: ShipmentRow, nowMs = Date.now()) {
+  const emptyTask = taskByType(row, "deliver_empty_box");
+  const fullTask = taskByType(row, "pickup_full_box");
+
+  return {
+    emptyBoxLeg: buildLogisticsLegTiming(emptyTask, "Dejar caja vacía", nowMs),
+    fullBoxLeg: buildLogisticsLegTiming(fullTask, "Recoger caja llena", nowMs),
+  };
+}
+
+export function buildShipmentAuditTimings(
+  row: ShipmentRow,
+  steps: ShipmentProgressStep[],
+  nowMs = Date.now(),
+): ShipmentAuditTimings {
+  const base = buildShipmentTimings(row, steps, nowMs);
+  const { emptyBoxLeg, fullBoxLeg } = buildLogisticsLegTimings(row, nowMs);
+  const logisticsGaps: LogisticsSubGap[] = [];
+
+  for (const leg of [emptyBoxLeg, fullBoxLeg]) {
+    if (!leg) {
+      continue;
+    }
+
+    const ordered = leg.orderedAt;
+    const completed = leg.completedAt;
+    const gap = subGapBetween("Ordenada", "Completada", ordered, completed);
+    if (gap) {
+      logisticsGaps.push({
+        ...gap,
+        fromLabel: `${leg.legLabel} · ordenada`,
+        toLabel: `${leg.legLabel} · completada`,
+      });
+    }
+
+    for (let index = 1; index < leg.phases.length; index += 1) {
+      const previous = leg.phases[index - 1];
+      const current = leg.phases[index];
+      if (!previous?.at || !current?.at) {
+        continue;
+      }
+
+      const phaseGap = subGapBetween(previous.label, current.label, previous.at, current.at);
+      if (phaseGap) {
+        logisticsGaps.push({
+          ...phaseGap,
+          fromLabel: `${leg.legLabel} · ${previous.label.toLowerCase()}`,
+          toLabel: `${leg.legLabel} · ${current.label.toLowerCase()}`,
+        });
+      }
+    }
+  }
+
+  const logisticsGapsLine = logisticsGaps.length
+    ? logisticsGaps.map((gap) => `${gap.fromLabel} → ${gap.toLabel} · ${gap.label}`).join(" · ")
+    : null;
+
+  return {
+    ...base,
+    emptyBoxLeg,
+    fullBoxLeg,
+    logisticsGaps,
+    logisticsGapsLine,
+  };
+}
+
 export function stepTimingTooltip(
   step: ShipmentProgressStep,
-  timings: ShipmentTimings,
+  _timings?: ShipmentTimings,
 ): string | undefined {
-  const completedAt = timings.completedAtByKind[step.kind];
-  if (!completedAt) {
-    return step.title;
-  }
-
-  const relative = formatShipmentRelative(completedAt);
-  const absolute = formatShipmentAbsolute(completedAt);
-
-  if (!relative || !absolute) {
-    return step.title;
-  }
-
-  return `${step.title} · ${relative} (${absolute})`;
+  return step.title;
 }

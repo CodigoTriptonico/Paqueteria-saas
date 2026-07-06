@@ -9,13 +9,55 @@ import { recordActivityHistory } from "@/lib/activity-history";
 import { scheduleAtToTimestamp } from "@/components/sale/schedule-time";
 import { readBillingFromPlan } from "@/lib/invoice-billing";
 import { formatMoneyValue } from "@/lib/logistics-fees";
+import {
+  DEFAULT_PAYMENT_METHOD,
+  isPaymentMethod,
+  paymentMethodLabel,
+  type PaymentMethod,
+} from "@/lib/payment-methods";
 import { isAssignableRouteMemberRole } from "@/lib/route-members";
 import {
+  canManageAllShipments,
+  canChangeShipmentSalesOwner,
+  shipmentVisibilityScope,
+} from "@/lib/shipment-visibility";
+import {
+  shipmentContactLogAuditDescription,
+  summarizeShipmentContactChannelOthers,
+  validateShipmentContactLogInput,
+  type ShipmentContactChannel,
+  type ShipmentContactChannelOtherSummary,
+  type ShipmentContactLogInput,
+  type ShipmentContactLogRow,
+  type ShipmentContactOutcome,
+} from "@/lib/shipment-contact-log";
+import {
+  isSalesOwnerRole,
+  shipmentOwnershipInsert,
+} from "@/lib/shipment-sales-owner";
+import {
   describeLogisticsAuditChange,
+  describeLogisticsTaskOrdered,
   describeStatusAuditChange,
   logisticsLegSnapshot,
   type ShipmentAuditContext,
 } from "@/lib/shipment-audit";
+import {
+  applyScheduleChangeMetadata,
+  describeScheduleAuditChange,
+  detectLegScheduleChanges,
+  hasLogisticsPlanChangeBesidesSchedule,
+  isoToPlanScheduleAt,
+  planLegRecord,
+  scheduleAuditMetadata,
+  scheduleAuditTitle,
+  scheduleChangeFromTaskType,
+  SHIPMENT_SCHEDULE_UPDATED_ACTION,
+} from "@/lib/shipment-schedule-history";
+import {
+  EMPTY_BOX_LEG_LABELS,
+  FULL_BOX_LEG_LABELS,
+} from "@/lib/shipment-leg-labels";
 import {
   buildFirstMilestonePatch,
   milestoneKeyForLogisticsTask,
@@ -32,10 +74,26 @@ import {
   validateLogisticsPlanUpdate,
   type UpdateShipmentLogisticsPlanInput,
 } from "@/lib/shipment-logistics-edit";
+import {
+  isLogisticsTaskReactivation,
+  logisticsTaskAssignedPatch,
+  logisticsTaskCancelPatch,
+  logisticsTaskLoadedPatch,
+  logisticsTaskOrderInsertPatch,
+  logisticsTaskReactivatePatch,
+} from "@/lib/shipment-logistics-task-timestamps";
+import {
+  formatBoxQuantityLabel,
+  isPendingShipmentStatus,
+  resolveInitialShipmentStatus,
+  syncShipmentStatusPatch,
+} from "@/lib/shipment-display";
+import { buildDueSchedulePromotionInput } from "@/lib/shipment-schedule-due";
 import type { AppSession, RoleSlug } from "@/lib/auth/types";
 
 export type ShipmentStatus =
-  | "Pendiente"
+  | "Pendiente entrega caja vacía"
+  | "Pendiente recolección caja llena"
   | "En oficina"
   | "Pickup"
   | "Enviado"
@@ -54,6 +112,19 @@ export type LogisticsTaskStatus =
   | "completed"
   | "cancelled";
 
+export type ShipmentPaymentKind = "deposit" | "balance" | "full";
+
+export type ShipmentPaymentRow = {
+  id: string;
+  shipmentId: string;
+  amount: number;
+  method: PaymentMethod;
+  kind: ShipmentPaymentKind;
+  note: string;
+  createdBy: string | null;
+  createdAt: string;
+};
+
 export type ShipmentLogisticsTaskRow = {
   id: string;
   shipmentId: string;
@@ -65,6 +136,9 @@ export type ShipmentLogisticsTaskRow = {
   notes: string;
   stockDeductedAt: string | null;
   completedAt: string | null;
+  orderedAt: string | null;
+  assignedAt: string | null;
+  loadedAt: string | null;
   createdAt: string;
 };
 
@@ -74,6 +148,7 @@ export type ShipmentRow = {
   customerId: string | null;
   recipientId: string | null;
   recipientSnapshot: Record<string, unknown> | null;
+  customerPhone?: string | null;
   customer_name: string;
   country: string;
   carrier: string;
@@ -81,8 +156,12 @@ export type ShipmentRow = {
   profit: number;
   status: ShipmentStatus;
   assigned_to: string | null;
+  createdBy: string | null;
+  salesOwnerId: string | null;
+  salesOwnerName: string;
   sale_kind: ShipmentSaleKind;
   invoice_status: InvoiceStatus;
+  invoice_priority: boolean;
   accounting_status: AccountingStatus;
   created_at: string | null;
   finalized_at: string | null;
@@ -95,9 +174,17 @@ export type ShipmentRow = {
   delivery_notes: string;
   logistics_plan: Record<string, unknown>;
   logisticsTasks: ShipmentLogisticsTaskRow[];
+  payments: ShipmentPaymentRow[];
+  contactLogs?: ShipmentContactLogRow[];
 };
 
 export type RouteMemberRow = {
+  id: string;
+  label: string;
+  roleSlug: RoleSlug;
+};
+
+export type SalesOwnerRow = {
   id: string;
   label: string;
   roleSlug: RoleSlug;
@@ -122,6 +209,34 @@ type LogisticsTaskDbRow = {
   notes: string | null;
   stock_deducted_at: string | null;
   completed_at: string | null;
+  ordered_at: string | null;
+  assigned_at: string | null;
+  loaded_at: string | null;
+  created_at: string;
+};
+
+type ShipmentPaymentDbRow = {
+  id: string;
+  shipment_id: string;
+  amount: number;
+  method: string;
+  kind: ShipmentPaymentKind;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+type ShipmentContactLogDbRow = {
+  id: string;
+  shipment_id: string;
+  channel: ShipmentContactChannel;
+  channel_other?: string | null;
+  outcome: ShipmentContactOutcome;
+  note: string | null;
+  next_step: string | null;
+  follow_up_at: string | null;
+  created_by: string | null;
+  created_by_profile?: ProfileLabelRow | ProfileLabelRow[] | null;
   created_at: string;
 };
 
@@ -131,6 +246,7 @@ type ShipmentDbRow = {
   customer_id?: string | null;
   recipient_id?: string | null;
   recipient_snapshot?: Record<string, unknown> | null;
+  customer?: { phones?: string[] | null } | { phones?: string[] | null }[] | null;
   customer_name: string;
   country: string;
   carrier: string;
@@ -138,8 +254,12 @@ type ShipmentDbRow = {
   profit: number;
   status: ShipmentStatus;
   assigned_to: string | null;
+  created_by?: string | null;
+  sales_owner_id?: string | null;
+  sales_owner_profile?: ProfileLabelRow | ProfileLabelRow[] | null;
   sale_kind?: ShipmentSaleKind | null;
   invoice_status?: InvoiceStatus | null;
+  invoice_priority?: boolean | null;
   accounting_status?: AccountingStatus | null;
   created_at?: string | null;
   finalized_at?: string | null;
@@ -152,6 +272,13 @@ type ShipmentDbRow = {
   delivery_notes?: string | null;
   logistics_plan?: Record<string, unknown> | null;
   shipment_logistics_tasks?: LogisticsTaskDbRow[] | null;
+  shipment_payments?: ShipmentPaymentDbRow[] | null;
+  shipment_contact_logs?: ShipmentContactLogDbRow[] | null;
+};
+
+type ProfileLabelRow = {
+  full_name?: string | null;
+  email?: string | null;
 };
 
 type ShipmentQuote = {
@@ -163,12 +290,21 @@ type ShipmentQuote = {
 
 const SHIPMENT_SELECT = `
   id, code, customer_id, recipient_id, recipient_snapshot, customer_name, country, carrier, paid, profit, status, assigned_to,
-  sale_kind, invoice_status, accounting_status, created_at, finalized_at,
+  customer:customers!shipments_customer_id_fkey(phones),
+  created_by, sales_owner_id, sales_owner_profile:profiles!shipments_sales_owner_id_fkey(full_name, email),
+  sale_kind, invoice_status, invoice_priority, accounting_status, created_at, finalized_at,
   empty_box_delivered_at, full_box_collected_at, office_received_at, departed_at, shipped_at, delivered_at,
   delivery_notes, logistics_plan,
   shipment_logistics_tasks (
     id, shipment_id, task_type, status, assigned_to, scheduled_at, warehouse_id,
-    notes, stock_deducted_at, completed_at, created_at
+    notes, stock_deducted_at, completed_at, ordered_at, assigned_at, loaded_at, created_at
+  ),
+  shipment_payments (
+    id, shipment_id, amount, method, kind, note, created_by, created_at
+  ),
+  shipment_contact_logs (
+    id, shipment_id, channel, channel_other, outcome, note, next_step, follow_up_at, created_by, created_at,
+    created_by_profile:profiles!shipment_contact_logs_created_by_fkey(full_name, email)
   )
 `;
 
@@ -178,6 +314,22 @@ function parseMoney(value: string | number | null | undefined) {
   }
 
   return Number(String(value || "").replace(/[^\d.-]/g, "")) || 0;
+}
+
+function readPaymentMethod(value: unknown): PaymentMethod {
+  if (value === undefined || value === null || value === "") {
+    return DEFAULT_PAYMENT_METHOD;
+  }
+
+  if (isPaymentMethod(value)) {
+    return value;
+  }
+
+  throw new Error("Forma de pago invalida");
+}
+
+function cleanPaymentNote(value: unknown) {
+  return String(value || "").trim().slice(0, 160);
 }
 
 function normalizeInventoryText(value: string) {
@@ -199,7 +351,7 @@ function readQuoteFromPlan(value: unknown): ShipmentQuote | null {
 
   if (lines.length) {
     return {
-      label: lines.map((line) => `${line.label} x${line.quantity}`).join(" + "),
+      label: lines.map((line) => formatBoxQuantityLabel(line.label, line.quantity)).join(" + "),
       paid: formatMoneyValue(
         lines.reduce((sum, line) => sum + parseMoney(line.paid) * line.quantity, 0),
       ),
@@ -267,13 +419,62 @@ function mapTask(row: LogisticsTaskDbRow): ShipmentLogisticsTaskRow {
     notes: row.notes || "",
     stockDeductedAt: row.stock_deducted_at,
     completedAt: row.completed_at,
+    orderedAt: row.ordered_at,
+    assignedAt: row.assigned_at,
+    loadedAt: row.loaded_at,
     createdAt: row.created_at,
   };
+}
+
+function mapPayment(row: ShipmentPaymentDbRow): ShipmentPaymentRow {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    amount: Number(row.amount) || 0,
+    method: isPaymentMethod(row.method) ? row.method : DEFAULT_PAYMENT_METHOD,
+    kind: row.kind,
+    note: row.note || "",
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  };
+}
+
+function mapContactLog(row: ShipmentContactLogDbRow): ShipmentContactLogRow {
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id,
+    channel: row.channel,
+    channelOther: row.channel_other || "",
+    outcome: row.outcome,
+    note: row.note || "",
+    nextStep: row.next_step || "",
+    followUpAt: row.follow_up_at || null,
+    createdBy: row.created_by || null,
+    createdByName: profileLabel(row.created_by_profile) || "Sin vendedor",
+    createdAt: row.created_at,
+  };
+}
+
+function profileLabel(profile: ProfileLabelRow | ProfileLabelRow[] | null | undefined) {
+  const row = Array.isArray(profile) ? profile[0] : profile;
+  return ((row?.full_name || row?.email || "") as string).trim();
+}
+
+function customerPhone(row: ShipmentDbRow) {
+  const customer = Array.isArray(row.customer) ? row.customer[0] : row.customer;
+  const phones = Array.isArray(customer?.phones) ? customer.phones : [];
+  return String(phones[0] || "").trim() || null;
 }
 
 function mapShipment(row: ShipmentDbRow): ShipmentRow {
   const tasks = (row.shipment_logistics_tasks || [])
     .map(mapTask)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const payments = (row.shipment_payments || [])
+    .map(mapPayment)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const contactLogs = (row.shipment_contact_logs || [])
+    .map(mapContactLog)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
   return {
@@ -282,6 +483,7 @@ function mapShipment(row: ShipmentDbRow): ShipmentRow {
     customerId: row.customer_id || null,
     recipientId: row.recipient_id || null,
     recipientSnapshot: row.recipient_snapshot || null,
+    customerPhone: customerPhone(row),
     customer_name: row.customer_name,
     country: row.country,
     carrier: row.carrier,
@@ -289,8 +491,12 @@ function mapShipment(row: ShipmentDbRow): ShipmentRow {
     profit: Number(row.profit) || 0,
     status: row.status,
     assigned_to: row.assigned_to,
+    createdBy: row.created_by || null,
+    salesOwnerId: row.sales_owner_id || null,
+    salesOwnerName: profileLabel(row.sales_owner_profile) || "Sin vendedor",
     sale_kind: row.sale_kind || "full",
     invoice_status: row.invoice_status || (row.sale_kind === "empty_box_deposit" ? "open" : "paid"),
+    invoice_priority: row.invoice_priority === true,
     accounting_status:
       row.accounting_status ||
       (row.sale_kind === "empty_box_deposit" ? "not_exportable" : "exportable"),
@@ -305,7 +511,39 @@ function mapShipment(row: ShipmentDbRow): ShipmentRow {
     delivery_notes: row.delivery_notes || "",
     logistics_plan: row.logistics_plan || {},
     logisticsTasks: tasks,
+    payments,
+    contactLogs,
   };
+}
+
+async function recordShipmentPayment(
+  supabase: NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>,
+  session: AppSession,
+  input: {
+    shipmentId: string;
+    amount: number;
+    method: PaymentMethod;
+    kind: ShipmentPaymentKind;
+    note?: string;
+  },
+) {
+  if (input.amount <= 0) {
+    return;
+  }
+
+  const { error } = await supabase.from("shipment_payments").insert({
+    organization_id: session.organizationId,
+    shipment_id: input.shipmentId,
+    amount: input.amount,
+    method: input.method,
+    kind: input.kind,
+    note: cleanPaymentNote(input.note),
+    created_by: session.userId,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 async function recordShipmentMilestoneAudits(
@@ -389,7 +627,33 @@ async function applyShipmentMilestonePatch(
 
   await recordShipmentMilestoneAudits(supabase, session, updated, recorded, source, context);
 
-  return updated;
+  return persistShipmentStatusSync(supabase, session, updated);
+}
+
+async function persistShipmentStatusSync(
+  supabase: NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>,
+  session: AppSession,
+  shipment: ShipmentRow,
+): Promise<ShipmentRow> {
+  const statusPatch = syncShipmentStatusPatch(shipment);
+
+  if (!statusPatch.status || statusPatch.status === shipment.status) {
+    return shipment;
+  }
+
+  const { data, error } = await supabase
+    .from("shipments")
+    .update({ status: statusPatch.status })
+    .eq("id", shipment.id)
+    .eq("organization_id", session.organizationId)
+    .select(SHIPMENT_SELECT)
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || "No se pudo sincronizar el estado del envío");
+  }
+
+  return mapShipment(data as unknown as ShipmentDbRow);
 }
 
 function canManageRoutes(session: AppSession) {
@@ -399,11 +663,264 @@ function canManageRoutes(session: AppSession) {
   );
 }
 
+type PersistLogisticsPlanResult =
+  | { ok: true; shipment: ShipmentRow }
+  | { ok: false; error: string };
+
+async function persistShipmentLogisticsPlanUpdate(
+  supabase: NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>,
+  session: AppSession,
+  shipment: ShipmentRow,
+  input: UpdateShipmentLogisticsPlanInput,
+  audit?: ShipmentAuditContext,
+): Promise<PersistLogisticsPlanResult> {
+  const beforePlan = { ...(shipment.logistics_plan || {}) };
+  const { logisticsPlan: rawLogisticsPlan, deliveryNotes } = buildUpdatedLogisticsPlan(shipment, input);
+  const actorName = session.fullName || session.email;
+  const changedAt = new Date().toISOString();
+  const scheduleChanges = detectLegScheduleChanges(beforePlan, rawLogisticsPlan);
+  const logisticsPlan = applyScheduleChangeMetadata(
+    beforePlan,
+    rawLogisticsPlan,
+    actorName,
+    changedAt,
+  );
+  const nonScheduleChange = hasLogisticsPlanChangeBesidesSchedule(beforePlan, logisticsPlan);
+  const taskSync = logisticsTaskSyncPlan(shipment, input);
+  const orderedTaskEvents: Array<{
+    taskType: "deliver_empty_box" | "pickup_full_box";
+    orderedAt: string;
+    scheduleMode: string;
+    scheduleAt: string | null;
+  }> = [];
+
+  for (const spec of taskSync) {
+    if (!spec.existing) {
+      if (spec.needed) {
+        const orderedAt = new Date().toISOString();
+        const { error } = await supabase.from("shipment_logistics_tasks").insert({
+          organization_id: session.organizationId,
+          shipment_id: shipment.id,
+          task_type: spec.taskType,
+          status: spec.scheduleMode === "scheduled" && spec.scheduleAt ? "scheduled" : "pending",
+          scheduled_at: scheduleAtToTimestamp(spec.scheduleAt),
+          notes: String(shipment.logistics_plan?.notes || ""),
+          ...logisticsTaskOrderInsertPatch(orderedAt),
+        });
+
+        if (error) {
+          return { ok: false, error: error.message };
+        }
+
+        orderedTaskEvents.push({
+          taskType: spec.taskType,
+          orderedAt,
+          scheduleMode: spec.scheduleMode,
+          scheduleAt: spec.scheduleAt,
+        });
+      }
+
+      continue;
+    }
+
+    if (!spec.needed) {
+      if (spec.existing.status !== "completed" && spec.existing.status !== "cancelled") {
+        const { error } = await supabase
+          .from("shipment_logistics_tasks")
+          .update({
+            status: "cancelled",
+            updated_at: new Date().toISOString(),
+            ...logisticsTaskCancelPatch(),
+          })
+          .eq("id", spec.existing.id)
+          .eq("organization_id", session.organizationId);
+
+        if (error) {
+          return { ok: false, error: error.message };
+        }
+      }
+
+      continue;
+    }
+
+    if (spec.existing.status === "completed") {
+      continue;
+    }
+
+    const nextStatus =
+      spec.scheduleMode === "scheduled" && spec.scheduleAt ? "scheduled" : "pending";
+    const reactivating = isLogisticsTaskReactivation(spec.existing);
+    const orderedAt = reactivating ? new Date().toISOString() : spec.existing.orderedAt;
+
+    const { error } = await supabase
+      .from("shipment_logistics_tasks")
+      .update({
+        status: nextStatus,
+        scheduled_at: scheduleAtToTimestamp(spec.scheduleAt),
+        updated_at: new Date().toISOString(),
+        ...(reactivating ? logisticsTaskReactivatePatch(orderedAt as string) : {}),
+      })
+      .eq("id", spec.existing.id)
+      .eq("organization_id", session.organizationId);
+
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+
+    if (reactivating && orderedAt) {
+      orderedTaskEvents.push({
+        taskType: spec.taskType,
+        orderedAt,
+        scheduleMode: spec.scheduleMode,
+        scheduleAt: spec.scheduleAt,
+      });
+    }
+  }
+
+  const { error: updateError } = await supabase
+    .from("shipments")
+    .update({
+      logistics_plan: logisticsPlan,
+      delivery_notes: deliveryNotes,
+    })
+    .eq("id", shipment.id)
+    .eq("organization_id", session.organizationId);
+
+  if (updateError) {
+    return { ok: false, error: updateError.message };
+  }
+
+  if (nonScheduleChange) {
+    await recordActivityHistory(supabase, session, {
+      action: "shipment.logistics_plan_updated",
+      entityType: "shipment",
+      entityId: shipment.id,
+      title: `Logística · ${shipment.code}`,
+      description: audit
+        ? describeLogisticsAuditChange({
+            before: beforePlan,
+            after: logisticsPlan,
+            interaction: audit.interaction,
+            stepTitle: audit.stepTitle,
+          })
+        : deliveryNotes,
+      metadata: {
+        shipmentCode: shipment.code,
+        source: audit?.source || "envios",
+        interaction: audit?.interaction || null,
+        stepTitle: audit?.stepTitle || null,
+        stepKind: audit?.stepKind || null,
+        before: {
+          emptyBox: logisticsLegSnapshot(beforePlan, "emptyBox"),
+          fullBox: logisticsLegSnapshot(beforePlan, "fullBox"),
+        },
+        after: {
+          emptyBox: logisticsLegSnapshot(logisticsPlan, "emptyBox"),
+          fullBox: logisticsLegSnapshot(logisticsPlan, "fullBox"),
+        },
+        deliveryNotes,
+      },
+    });
+  }
+
+  for (const change of scheduleChanges) {
+    await recordActivityHistory(supabase, session, {
+      action: SHIPMENT_SCHEDULE_UPDATED_ACTION,
+      entityType: "shipment",
+      entityId: shipment.id,
+      title: scheduleAuditTitle(shipment.code),
+      description: describeScheduleAuditChange({
+        beforeScheduleAt: change.beforeScheduleAt,
+        afterScheduleAt: change.afterScheduleAt,
+        stepTitle: audit?.stepTitle || change.stepTitle,
+      }),
+      metadata: scheduleAuditMetadata({
+        shipmentCode: shipment.code,
+        change,
+        source: audit?.source || "envios",
+        interaction: audit?.interaction || null,
+        stepTitle: audit?.stepTitle || change.stepTitle,
+        stepKind: audit?.stepKind || change.stepKind,
+      }),
+    });
+  }
+
+  for (const event of orderedTaskEvents) {
+    await recordActivityHistory(supabase, session, {
+      action: "shipment.logistics_task_ordered",
+      entityType: "shipment",
+      entityId: shipment.id,
+      title: `Orden logística · ${shipment.code}`,
+      description: describeLogisticsTaskOrdered({
+        taskType: event.taskType,
+        orderedAt: event.orderedAt,
+        scheduleMode: event.scheduleMode,
+        scheduleAt: event.scheduleAt,
+        interaction: audit?.interaction || "context_menu",
+        stepTitle: audit?.stepTitle,
+      }),
+      metadata: {
+        shipmentCode: shipment.code,
+        taskType: event.taskType,
+        orderedAt: event.orderedAt,
+        scheduleMode: event.scheduleMode,
+        scheduleAt: event.scheduleAt,
+        source: audit?.source || "envios",
+        interaction: audit?.interaction || null,
+        stepTitle: audit?.stepTitle || null,
+        stepKind: audit?.stepKind || null,
+      },
+    });
+  }
+
+  const reloaded = await listShipmentById(supabase, session, shipment.id);
+  if (!reloaded) {
+    return { ok: false, error: "No se pudo recargar el envío" };
+  }
+
+  const synced = await persistShipmentStatusSync(supabase, session, reloaded);
+  return { ok: true, shipment: synced };
+}
+
+async function promoteDueScheduledLegsForListedShipments(
+  supabase: NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>,
+  session: AppSession,
+  shipments: ShipmentRow[],
+  reference = new Date(),
+): Promise<ShipmentRow[]> {
+  const promoted: ShipmentRow[] = [];
+
+  for (const shipment of shipments) {
+    const input = buildDueSchedulePromotionInput(shipment, reference);
+
+    if (!input) {
+      promoted.push(shipment);
+      continue;
+    }
+
+    const validationError = validateLogisticsPlanUpdate(shipment, input);
+    if (validationError) {
+      promoted.push(shipment);
+      continue;
+    }
+
+    const result = await persistShipmentLogisticsPlanUpdate(supabase, session, shipment, input, {
+      interaction: "schedule_due",
+      source: "envios.list",
+    });
+
+    promoted.push(result.ok ? result.shipment : shipment);
+  }
+
+  return promoted;
+}
+
 export async function listShipmentsAction(): Promise<ActionResult<ShipmentRow[]>> {
   try {
     const session = await requireAppSession();
+    const scope = shipmentVisibilityScope(session);
 
-    if (!sessionHasPermission(session, "routes.view")) {
+    if (scope === "none") {
       throw new Error("FORBIDDEN");
     }
 
@@ -416,22 +933,70 @@ export async function listShipmentsAction(): Promise<ActionResult<ShipmentRow[]>
       .from("shipments")
       .select(SHIPMENT_SELECT)
       .eq("organization_id", session.organizationId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
 
-    if (session.roleSlug === "conductor") {
+    if (scope === "driver") {
       query = query.eq("assigned_to", session.userId);
+    } else if (scope === "sales_owner") {
+      query = query.eq("sales_owner_id", session.userId);
     }
 
     const { data, error } = await query;
 
     if (error) {
-      if (error.code === "42P01" || error.code === "42703") {
+      if (error.code === "42P01") {
         return ok([]);
       }
       return fail(error.message);
     }
 
-    return ok(((data || []) as unknown as ShipmentDbRow[]).map(mapShipment));
+    return ok(
+      await promoteDueScheduledLegsForListedShipments(
+        supabase,
+        session,
+        ((data || []) as unknown as ShipmentDbRow[]).map(mapShipment),
+      ),
+    );
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function listShipmentsForRouteBoardAction(): Promise<ActionResult<ShipmentRow[]>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!sessionHasPermission(session, "routes.view")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data, error } = await supabase
+      .from("shipments")
+      .select(SHIPMENT_SELECT)
+      .eq("organization_id", session.organizationId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
+
+    if (error) {
+      if (error.code === "42P01") {
+        return ok([]);
+      }
+      return fail(error.message);
+    }
+
+    return ok(
+      await promoteDueScheduledLegsForListedShipments(
+        supabase,
+        session,
+        ((data || []) as unknown as ShipmentDbRow[]).map(mapShipment),
+      ),
+    );
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -479,6 +1044,48 @@ export async function listRouteMembersAction(): Promise<ActionResult<RouteMember
   }
 }
 
+export async function listSalesOwnersAction(): Promise<ActionResult<SalesOwnerRow[]>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canChangeShipmentSalesOwner(session)) {
+      return ok([]);
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return ok([]);
+    }
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, full_name, roles(slug, name)")
+      .eq("organization_id", session.organizationId)
+      .eq("is_active", true)
+      .order("full_name");
+
+    if (error) {
+      return fail(error.message);
+    }
+
+    const owners = (data || [])
+      .map((row) => {
+        const roleRow = row.roles as { slug: RoleSlug; name: string } | { slug: RoleSlug; name: string }[] | null;
+        const role = Array.isArray(roleRow) ? roleRow[0] : roleRow;
+        return {
+          id: row.id as string,
+          label: ((row.full_name as string | null) || (row.email as string) || "Usuario").trim(),
+          roleSlug: role?.slug || "vendedor",
+        };
+      })
+      .filter((row) => isSalesOwnerRole(row.roleSlug));
+
+    return ok(owners);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
 export async function createShipmentAction(input: {
   invoiceNumber: string;
   customerId?: string;
@@ -492,6 +1099,8 @@ export async function createShipmentAction(input: {
   saleKind?: ShipmentSaleKind;
   deliveryNotes?: string;
   logisticsPlan?: Record<string, unknown>;
+  paymentMethod?: PaymentMethod;
+  paymentNote?: string;
   invoiceStatus?: InvoiceStatus;
   accountingStatus?: AccountingStatus;
   logisticsTasks?: CreateLogisticsTaskInput[];
@@ -516,6 +1125,34 @@ export async function createShipmentAction(input: {
     const invoiceStatus = input.invoiceStatus || "paid";
     const accountingStatus =
       input.accountingStatus || (invoiceStatus === "paid" ? "exportable" : "not_exportable");
+    const paymentMethod = readPaymentMethod(input.paymentMethod);
+    const paymentNote = cleanPaymentNote(input.paymentNote);
+    const logisticsPlan = { ...(input.logisticsPlan || {}) };
+    const logisticsTasks = input.logisticsTasks || [];
+    const initialStatus = resolveInitialShipmentStatus({
+      saleKind,
+      logisticsPlan,
+      logisticsTasks: logisticsTasks.map((task, index) => ({
+        id: `draft-${index}`,
+        shipmentId: "",
+        taskType: task.taskType,
+        status: task.status || (task.scheduledAt ? "scheduled" : "pending"),
+        assignedTo: null,
+        scheduledAt: task.scheduledAt || null,
+        warehouseId: task.warehouseId || null,
+        notes: task.notes || "",
+        stockDeductedAt: null,
+        completedAt: null,
+        orderedAt: null,
+        assignedAt: null,
+        loadedAt: null,
+        createdAt: new Date().toISOString(),
+      })),
+      deliveryNotes,
+      emptyBoxDeliveredAt: shouldDeductCounterHandingStock(logisticsPlan)
+        ? new Date().toISOString()
+        : null,
+    });
 
     const { data, error } = await supabase
       .from("shipments")
@@ -527,7 +1164,8 @@ export async function createShipmentAction(input: {
         carrier: input.carrier || "Sin carrier",
         paid,
         profit: invoiceStatus === "paid" ? Math.max(paid - cost, 0) : 0,
-        status: "Pendiente",
+        status: initialStatus,
+        ...shipmentOwnershipInsert(session.userId),
         customer_id: input.customerId || null,
         recipient_id: input.recipientId || null,
         recipient_snapshot: input.recipientSnapshot || null,
@@ -545,9 +1183,24 @@ export async function createShipmentAction(input: {
       return fail(error?.message || "No se pudo registrar el envio");
     }
 
-    const shipment = mapShipment(data as unknown as ShipmentDbRow);
-    const logisticsTasks = input.logisticsTasks || [];
-    const logisticsPlan = { ...(input.logisticsPlan || {}) };
+    let shipment = mapShipment(data as unknown as ShipmentDbRow);
+    let shouldReloadShipment = false;
+
+    if (paid > 0) {
+      try {
+        await recordShipmentPayment(supabase, session, {
+          shipmentId: shipment.id,
+          amount: paid,
+          method: paymentMethod,
+          kind: invoiceStatus === "paid" ? "full" : "deposit",
+          note: paymentNote,
+        });
+        shouldReloadShipment = true;
+      } catch (paymentError) {
+        await deleteShipmentWithTasks(supabase, session, shipment.id);
+        return fail(actionErrorMessage(paymentError));
+      }
+    }
 
     if (logisticsTasks.length) {
       const { error: taskError } = await supabase.from("shipment_logistics_tasks").insert(
@@ -566,6 +1219,8 @@ export async function createShipmentAction(input: {
         await deleteShipmentWithTasks(supabase, session, shipment.id);
         return fail(taskError.message);
       }
+
+      shouldReloadShipment = true;
     }
 
     if (shouldDeductCounterHandingStock(logisticsPlan)) {
@@ -610,6 +1265,13 @@ export async function createShipmentAction(input: {
           [{ key: "empty_box_delivered_at", recordedAt: stockResult.deductedAt }],
           "counter_handoff",
         );
+
+        shipment = await persistShipmentStatusSync(supabase, session, {
+          ...shipment,
+          logistics_plan: nextPlan,
+          empty_box_delivered_at: stockResult.deductedAt,
+        });
+        shouldReloadShipment = true;
       } catch (stockError) {
         await deleteShipmentWithTasks(supabase, session, shipment.id);
         return fail(actionErrorMessage(stockError));
@@ -643,11 +1305,14 @@ export async function createShipmentAction(input: {
         invoiceStatus,
         accountingStatus,
         deliveryNotes,
+        paymentMethod: paid > 0 ? paymentMethod : null,
+        paymentMethodLabel: paid > 0 ? paymentMethodLabel(paymentMethod) : null,
+        paymentNote,
         logisticsPlan: shipment.logistics_plan,
       },
     });
 
-    if (!logisticsTasks.length) {
+    if (!shouldReloadShipment) {
       return ok(shipment);
     }
 
@@ -677,10 +1342,129 @@ async function listShipmentById(
   return data ? mapShipment(data as unknown as ShipmentDbRow) : null;
 }
 
+function canWriteShipmentContactLog(session: AppSession, shipment: ShipmentRow) {
+  return (
+    canManageAllShipments(session) ||
+    (sessionHasPermission(session, "sales.manage") && shipment.salesOwnerId === session.userId)
+  );
+}
+
+export async function createShipmentContactLogAction(
+  input: ShipmentContactLogInput,
+): Promise<ActionResult<ShipmentRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!sessionHasPermission(session, "sales.manage")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const validated = validateShipmentContactLogInput(input);
+
+    if (!validated.ok) {
+      return fail(validated.error);
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const shipment = await listShipmentById(supabase, session, validated.data.shipmentId);
+
+    if (!shipment) {
+      return fail("Invoice no encontrado");
+    }
+
+    if (!canWriteShipmentContactLog(session, shipment)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const { error } = await supabase.from("shipment_contact_logs").insert({
+      organization_id: session.organizationId,
+      shipment_id: shipment.id,
+      channel: validated.data.channel,
+      channel_other: validated.data.channelOther,
+      outcome: validated.data.outcome,
+      note: validated.data.note,
+      next_step: validated.data.nextStep,
+      follow_up_at: validated.data.followUpAt,
+      created_by: session.userId,
+    });
+
+    if (error) {
+      return fail(error.message);
+    }
+
+    await recordActivityHistory(supabase, session, {
+      action: "shipment.contact_log_created",
+      entityType: "shipment",
+      entityId: shipment.id,
+      title: `Seguimiento · ${shipment.code}`,
+      description: shipmentContactLogAuditDescription(validated.data),
+      metadata: {
+        shipmentCode: shipment.code,
+        customerName: shipment.customer_name,
+        channel: validated.data.channel,
+        channelOther: validated.data.channelOther,
+        outcome: validated.data.outcome,
+        nextStep: validated.data.nextStep,
+        followUpAt: validated.data.followUpAt,
+        source: "envios.contact_log",
+      },
+    });
+
+    const updated = await listShipmentById(supabase, session, shipment.id);
+    return updated ? ok(updated) : ok(shipment);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function listShipmentContactChannelOthersAction(): Promise<
+  ActionResult<ShipmentContactChannelOtherSummary[]>
+> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canManageAllShipments(session)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data, error } = await supabase
+      .from("shipment_contact_logs")
+      .select("channel, channel_other")
+      .eq("organization_id", session.organizationId)
+      .eq("channel", "other");
+
+    if (error) {
+      return fail(error.message);
+    }
+
+    return ok(
+      summarizeShipmentContactChannelOthers(
+        (data || []).map((row) => ({
+          channel: row.channel as ShipmentContactChannel,
+          channelOther: row.channel_other || "",
+        })),
+      ),
+    );
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
 export async function finalizeShipmentInvoiceAction(input: {
   shipmentId: string;
-  paid?: string;
+  amount?: string;
   cost?: string;
+  paymentMethod?: PaymentMethod;
+  paymentNote?: string;
 }): Promise<ActionResult<ShipmentRow>> {
   try {
     const session = await requireAppSession();
@@ -710,72 +1494,228 @@ export async function finalizeShipmentInvoiceAction(input: {
     const billing = readBillingFromPlan(shipment.logistics_plan);
     const cost = parseMoney(input.cost || quote?.cost || 0);
     const alreadyPaid = shipment.paid;
-    const balanceDue = billing
-      ? parseMoney(billing.balanceDue)
-      : Math.max(parseMoney(quote?.paid || "0") - alreadyPaid, 0);
     const quotedTotal = billing
       ? parseMoney(billing.quotedTotal)
       : parseMoney(quote?.paid || "0");
+    const balanceDue = Math.max(quotedTotal - alreadyPaid, 0);
 
     if (balanceDue <= 0) {
       return fail("No hay pendiente en este invoice");
     }
 
-    const paid = alreadyPaid + balanceDue;
+    const collectAmount =
+      input.amount !== undefined && input.amount.trim() !== ""
+        ? parseMoney(input.amount)
+        : balanceDue;
 
-    if (paid <= 0) {
-      return fail("No hay monto para cobrar en este invoice");
+    if (collectAmount <= 0) {
+      return fail("El monto debe ser mayor a cero");
+    }
+
+    if (collectAmount > balanceDue) {
+      return fail(`El monto no puede superar ${formatMoneyValue(balanceDue)}`);
+    }
+
+    const isFullPayment = collectAmount >= balanceDue;
+    const paid = alreadyPaid + collectAmount;
+    const paymentMethod = readPaymentMethod(input.paymentMethod);
+    const paymentNote = cleanPaymentNote(input.paymentNote);
+    const nextBalanceDue = Math.max(quotedTotal - paid, 0);
+    const nextInvoiceStatus = isFullPayment ? "paid" : "open";
+    const nextAccountingStatus = isFullPayment ? "exportable" : shipment.accounting_status;
+    const nextFinalizedAt = isFullPayment ? new Date().toISOString() : shipment.finalized_at;
+    const nextLogisticsPlan = {
+      ...asRecord(shipment.logistics_plan),
+      billing: billing
+        ? {
+            ...billing,
+            payNow: formatMoneyValue(paid),
+            balanceDue: formatMoneyValue(nextBalanceDue),
+          }
+        : {
+            quotedTotal: formatMoneyValue(quotedTotal),
+            payNow: formatMoneyValue(paid),
+            balanceDue: formatMoneyValue(nextBalanceDue),
+          },
+    };
+
+    const { error } = await supabase.rpc("collect_shipment_invoice_payment", {
+      target_shipment_id: input.shipmentId,
+      target_organization_id: session.organizationId,
+      next_paid: paid,
+      next_profit: isFullPayment ? Math.max(paid - cost, 0) : 0,
+      next_sale_kind: shipment.sale_kind === "empty_box_deposit" ? "empty_box_deposit" : "full",
+      next_invoice_status: nextInvoiceStatus,
+      next_accounting_status: nextAccountingStatus,
+      next_finalized_at: nextFinalizedAt,
+      next_logistics_plan: nextLogisticsPlan,
+      payment_amount: collectAmount,
+      payment_method: paymentMethod,
+      payment_kind: "balance",
+      payment_note: paymentNote,
+      payment_created_by: session.userId,
+    });
+
+    if (error) {
+      return fail(error?.message || "No se pudo cobrar el invoice");
+    }
+
+    const updatedWithPayments = await listShipmentById(supabase, session, input.shipmentId);
+
+    if (!updatedWithPayments) {
+      return fail("No se pudo recargar el invoice");
+    }
+
+    await recordActivityHistory(supabase, session, {
+      action: isFullPayment ? "sale.invoice_finalized" : "sale.invoice_partial_payment",
+      entityType: "shipment",
+      entityId: updatedWithPayments.id,
+      title: isFullPayment
+        ? `Invoice cobrado: ${updatedWithPayments.code}`
+        : `Abono registrado: ${updatedWithPayments.code}`,
+      description: isFullPayment
+        ? `${updatedWithPayments.customer_name} · cobrado ${formatMoneyValue(collectAmount)} · ${paymentMethodLabel(paymentMethod)} · total ${formatMoneyValue(paid)}`
+        : `${updatedWithPayments.customer_name} · abono ${formatMoneyValue(collectAmount)} · ${paymentMethodLabel(paymentMethod)} · pendiente ${formatMoneyValue(nextBalanceDue)}`,
+      metadata: {
+        paid,
+        collectAmount,
+        balanceDue: nextBalanceDue,
+        quotedTotal,
+        cost,
+        profit: isFullPayment ? Math.max(paid - cost, 0) : 0,
+        invoiceStatus: nextInvoiceStatus,
+        accountingStatus: nextAccountingStatus,
+        paymentMethod,
+        paymentMethodLabel: paymentMethodLabel(paymentMethod),
+        paymentNote,
+      },
+    });
+
+    return ok(updatedWithPayments);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function updateShipmentInvoicePriorityAction(input: {
+  shipmentId: string;
+  priority: boolean;
+}): Promise<ActionResult<ShipmentRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!sessionHasPermission(session, "sales.manage")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const before = await listShipmentById(supabase, session, input.shipmentId);
+    if (!before) {
+      return fail("Invoice no encontrado");
+    }
+
+    if (before.invoice_priority === input.priority) {
+      return ok(before);
     }
 
     const { data, error } = await supabase
       .from("shipments")
-      .update({
-        paid,
-        profit: Math.max(paid - cost, 0),
-        sale_kind: shipment.sale_kind === "empty_box_deposit" ? "empty_box_deposit" : "full",
-        invoice_status: "paid",
-        accounting_status: "exportable",
-        finalized_at: new Date().toISOString(),
-        logistics_plan: {
-          ...asRecord(shipment.logistics_plan),
-          billing: billing
-            ? {
-                ...billing,
-                payNow: billing.quotedTotal,
-                balanceDue: "$0",
-              }
-            : {
-                quotedTotal: formatMoneyValue(quotedTotal),
-                payNow: formatMoneyValue(paid),
-                balanceDue: "$0",
-              },
-        },
-      })
+      .update({ invoice_priority: input.priority })
       .eq("id", input.shipmentId)
       .eq("organization_id", session.organizationId)
       .select(SHIPMENT_SELECT)
       .single();
 
     if (error || !data) {
-      return fail(error?.message || "No se pudo cobrar el invoice");
+      return fail(error?.message || "No se pudo actualizar prioridad");
     }
 
     const updated = mapShipment(data as unknown as ShipmentDbRow);
 
     await recordActivityHistory(supabase, session, {
-      action: "sale.invoice_finalized",
+      action: "sale.invoice_priority_updated",
       entityType: "shipment",
       entityId: updated.id,
-      title: `Invoice cobrado: ${updated.code}`,
-      description: `${updated.customer_name} · pendiente $${balanceDue.toFixed(2)} · total $${paid.toFixed(2)}`,
+      title: `Prioridad invoice: ${updated.code}`,
+      description: input.priority ? "Marcado como prioridad" : "Prioridad removida",
       metadata: {
-        paid,
-        balanceDue,
-        quotedTotal,
-        cost,
-        profit: Math.max(paid - cost, 0),
-        invoiceStatus: "paid",
-        accountingStatus: "exportable",
+        shipmentCode: updated.code,
+        previousPriority: before.invoice_priority,
+        nextPriority: updated.invoice_priority,
+      },
+    });
+
+    return ok(updated);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function updateShipmentSalesOwnerAction(input: {
+  shipmentId: string;
+  salesOwnerId: string;
+}): Promise<ActionResult<ShipmentRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canChangeShipmentSalesOwner(session)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data: owner, error: ownerError } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, roles(slug)")
+      .eq("id", input.salesOwnerId)
+      .eq("organization_id", session.organizationId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (ownerError) {
+      return fail(ownerError.message);
+    }
+
+    const roleRow = owner?.roles as { slug: RoleSlug } | { slug: RoleSlug }[] | null | undefined;
+    const role = Array.isArray(roleRow) ? roleRow[0] : roleRow;
+
+    if (!owner || !isSalesOwnerRole(role?.slug)) {
+      return fail("Vendedor no valido");
+    }
+
+    const before = await listShipmentById(supabase, session, input.shipmentId);
+
+    const { data, error } = await supabase
+      .from("shipments")
+      .update({ sales_owner_id: input.salesOwnerId })
+      .eq("id", input.shipmentId)
+      .eq("organization_id", session.organizationId)
+      .select(SHIPMENT_SELECT)
+      .single();
+
+    if (error || !data) {
+      return fail(error?.message || "No se pudo cambiar vendedor");
+    }
+
+    const updated = mapShipment(data as unknown as ShipmentDbRow);
+
+    await recordActivityHistory(supabase, session, {
+      action: "shipment.sales_owner_updated",
+      entityType: "shipment",
+      entityId: updated.id,
+      title: `Vendedor · ${updated.code}`,
+      description: `${before?.salesOwnerName || "Sin vendedor"} → ${updated.salesOwnerName}`,
+      metadata: {
+        shipmentCode: updated.code,
+        previousSalesOwnerId: before?.salesOwnerId || null,
+        nextSalesOwnerId: updated.salesOwnerId,
       },
     });
 
@@ -1004,19 +1944,26 @@ export async function updateLogisticsTaskAction(input: {
     }
 
     const nextStatus = input.status || task.status;
+    const nowIso = new Date().toISOString();
     const patch: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     };
 
     if (input.status) {
       patch.status = nextStatus;
-      patch.completed_at = nextStatus === "completed" ? new Date().toISOString() : null;
+      patch.completed_at = nextStatus === "completed" ? nowIso : null;
+      if (nextStatus === "assigned") {
+        Object.assign(patch, logisticsTaskAssignedPatch(task, nowIso));
+      }
     }
 
     if (input.assignedTo !== undefined) {
       patch.assigned_to = input.assignedTo || null;
       if (input.assignedTo && nextStatus === "pending") {
         patch.status = "assigned";
+      }
+      if (input.assignedTo) {
+        Object.assign(patch, logisticsTaskAssignedPatch(task, nowIso));
       }
     }
 
@@ -1036,6 +1983,10 @@ export async function updateLogisticsTaskAction(input: {
 
     if (input.notes !== undefined) {
       patch.notes = input.notes;
+    }
+
+    if (nextStatus === "loaded_to_truck") {
+      Object.assign(patch, logisticsTaskLoadedPatch(task, nowIso));
     }
 
     if (nextStatus === "loaded_to_truck" && task.taskType === "deliver_empty_box" && !task.stockDeductedAt) {
@@ -1076,6 +2027,59 @@ export async function updateLogisticsTaskAction(input: {
         .eq("organization_id", session.organizationId);
     }
 
+    const actorName = session.fullName || session.email;
+
+    if (
+      input.scheduledAt !== undefined &&
+      (task.scheduledAt || "") !== (input.scheduledAt || "")
+    ) {
+      const legKey = scheduleChangeFromTaskType(updated.taskType);
+      const beforePlan = { ...(shipment.logistics_plan || {}) };
+      const existingLeg = planLegRecord(beforePlan, legKey) || {};
+      const beforeScheduleAt = String(existingLeg.scheduleAt || task.scheduledAt || "");
+      const nextPlanScheduleAt = input.scheduledAt
+        ? isoToPlanScheduleAt(input.scheduledAt, beforeScheduleAt)
+        : "";
+
+      const afterPlan = {
+        ...beforePlan,
+        [legKey]: {
+          ...existingLeg,
+          scheduleMode: nextPlanScheduleAt ? "scheduled" : "pending",
+          scheduleAt: nextPlanScheduleAt || null,
+        },
+      };
+      const enrichedPlan = applyScheduleChangeMetadata(beforePlan, afterPlan, actorName, nowIso);
+
+      await supabase
+        .from("shipments")
+        .update({ logistics_plan: enrichedPlan })
+        .eq("id", shipment.id)
+        .eq("organization_id", session.organizationId);
+
+      for (const change of detectLegScheduleChanges(beforePlan, enrichedPlan)) {
+        await recordActivityHistory(supabase, session, {
+          action: SHIPMENT_SCHEDULE_UPDATED_ACTION,
+          entityType: "shipment",
+          entityId: shipment.id,
+          title: scheduleAuditTitle(shipment.code),
+          description: describeScheduleAuditChange({
+            beforeScheduleAt: change.beforeScheduleAt,
+            afterScheduleAt: change.afterScheduleAt,
+              stepTitle:
+                change.taskType === "deliver_empty_box"
+                  ? EMPTY_BOX_LEG_LABELS.auditStep
+                  : FULL_BOX_LEG_LABELS.auditStep,
+          }),
+          metadata: scheduleAuditMetadata({
+            shipmentCode: shipment.code,
+            change,
+            source: "logistica",
+          }),
+        });
+      }
+    }
+
     const milestoneKey =
       updated.status === "completed" ? milestoneKeyForLogisticsTask(updated.taskType) : null;
 
@@ -1107,6 +2111,10 @@ export async function updateLogisticsTaskAction(input: {
         scheduledAt: updated.scheduledAt,
         warehouseId: updated.warehouseId,
         stockDeductedAt: updated.stockDeductedAt,
+        orderedAt: updated.orderedAt,
+        assignedAt: updated.assignedAt,
+        loadedAt: updated.loadedAt,
+        completedAt: updated.completedAt,
       },
     });
 
@@ -1144,117 +2152,15 @@ export async function updateShipmentLogisticsPlanAction(
       return fail(validationError);
     }
 
-    const beforePlan = { ...(shipment.logistics_plan || {}) };
-    const { logisticsPlan, deliveryNotes } = buildUpdatedLogisticsPlan(shipment, input);
-    const taskSync = logisticsTaskSyncPlan(shipment, input);
+    const persisted = await persistShipmentLogisticsPlanUpdate(
+      supabase,
+      session,
+      shipment,
+      input,
+      input.audit,
+    );
 
-    for (const spec of taskSync) {
-      if (!spec.existing) {
-        if (spec.needed) {
-          const { error } = await supabase.from("shipment_logistics_tasks").insert({
-            organization_id: session.organizationId,
-            shipment_id: shipment.id,
-            task_type: spec.taskType,
-            status: spec.scheduleMode === "scheduled" && spec.scheduleAt ? "scheduled" : "pending",
-            scheduled_at: scheduleAtToTimestamp(spec.scheduleAt),
-            notes: String(shipment.logistics_plan?.notes || ""),
-          });
-
-          if (error) {
-            return fail(error.message);
-          }
-        }
-
-        continue;
-      }
-
-      if (!spec.needed) {
-        if (spec.existing.status !== "completed" && spec.existing.status !== "cancelled") {
-          const { error } = await supabase
-            .from("shipment_logistics_tasks")
-            .update({
-              status: "cancelled",
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", spec.existing.id)
-            .eq("organization_id", session.organizationId);
-
-          if (error) {
-            return fail(error.message);
-          }
-        }
-
-        continue;
-      }
-
-      if (spec.existing.status === "completed") {
-        continue;
-      }
-
-      const nextStatus =
-        spec.scheduleMode === "scheduled" && spec.scheduleAt ? "scheduled" : "pending";
-
-      const { error } = await supabase
-        .from("shipment_logistics_tasks")
-        .update({
-          status: nextStatus,
-          scheduled_at: scheduleAtToTimestamp(spec.scheduleAt),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", spec.existing.id)
-        .eq("organization_id", session.organizationId);
-
-      if (error) {
-        return fail(error.message);
-      }
-    }
-
-    const { error: updateError } = await supabase
-      .from("shipments")
-      .update({
-        logistics_plan: logisticsPlan,
-        delivery_notes: deliveryNotes,
-      })
-      .eq("id", shipment.id)
-      .eq("organization_id", session.organizationId);
-
-    if (updateError) {
-      return fail(updateError.message);
-    }
-
-    await recordActivityHistory(supabase, session, {
-      action: "shipment.logistics_plan_updated",
-      entityType: "shipment",
-      entityId: shipment.id,
-      title: `Logística · ${shipment.code}`,
-      description: input.audit
-        ? describeLogisticsAuditChange({
-            before: beforePlan,
-            after: logisticsPlan,
-            interaction: input.audit.interaction,
-            stepTitle: input.audit.stepTitle,
-          })
-        : deliveryNotes,
-      metadata: {
-        shipmentCode: shipment.code,
-        source: input.audit?.source || "envios",
-        interaction: input.audit?.interaction || null,
-        stepTitle: input.audit?.stepTitle || null,
-        stepKind: input.audit?.stepKind || null,
-        before: {
-          emptyBox: logisticsLegSnapshot(beforePlan, "emptyBox"),
-          fullBox: logisticsLegSnapshot(beforePlan, "fullBox"),
-        },
-        after: {
-          emptyBox: logisticsLegSnapshot(logisticsPlan, "emptyBox"),
-          fullBox: logisticsLegSnapshot(logisticsPlan, "fullBox"),
-        },
-        deliveryNotes,
-      },
-    });
-
-    const reloaded = await listShipmentById(supabase, session, shipment.id);
-    return reloaded ? ok(reloaded) : fail("No se pudo recargar el envío");
+    return persisted.ok ? ok(persisted.shipment) : fail(persisted.error);
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -1284,6 +2190,10 @@ export async function updateShipmentStatusAction(
 
     if (current.status === status) {
       return ok(current);
+    }
+
+    if (isPendingShipmentStatus(status)) {
+      return fail("Este estado se asigna automáticamente según la logística");
     }
 
     const now = new Date().toISOString();

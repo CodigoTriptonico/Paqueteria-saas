@@ -93,6 +93,10 @@ function zipPrefix(value: string, length = 3) {
   return clean ? clean.slice(0, length) : "";
 }
 
+function logisticsCityLabel(address: Pick<LogisticsRouteStopAddress, "city">) {
+  return address.city.trim() || "Sin ciudad";
+}
+
 function scheduledDate(value: string | null, fallbackDate: string) {
   if (!value) {
     return fallbackDate;
@@ -121,10 +125,7 @@ export function logisticsZoneLabel(address: LogisticsRouteStopAddress) {
     return "Falta geo";
   }
 
-  const city = address.city.trim() || "Sin ciudad";
-  const postal = zipPrefix(address.postalCode) || "Sin CP";
-
-  return `${city} ${postal}`;
+  return logisticsCityLabel(address);
 }
 
 export function distanceKm(

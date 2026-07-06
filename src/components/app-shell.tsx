@@ -3,10 +3,12 @@
 import Link from "next/link";
 import {
   ArrowLeft,
+  BarChart3,
   Boxes,
   ClipboardList,
   CreditCard,
   House,
+  ListTodo,
   LucideIcon,
   Menu,
   Settings,
@@ -18,15 +20,24 @@ import { useEffect, useMemo, useState } from "react";
 import { UserAccountMenu } from "@/components/user-account-menu";
 import { BoxarioBrandHeader } from "@/components/notifications/notifications-center";
 import { canAccessPath, platformAdminNeedsClientContext } from "@/lib/auth/permissions";
+import { conductorTasksNavLabel } from "@/lib/conductor-tareas-view";
 import type { AppSession } from "@/lib/auth/types";
 
-const navItems: { label: string; href: string; icon: LucideIcon; hasSubmenu?: boolean; platformOnly?: boolean }[] = [
+const navItems: {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  hasSubmenu?: boolean;
+  platformOnly?: boolean;
+}[] = [
   { label: "Inicio", href: "/", icon: House },
   { label: "Nueva venta", href: "/venta", icon: CreditCard, hasSubmenu: true },
   { label: "Inventario", href: "/inventario", icon: Boxes, hasSubmenu: true },
   { label: "Envios", href: "/envios", icon: ClipboardList },
+  { label: "Tareas conductor", href: "/conductor/tareas", icon: ListTodo },
+  { label: "Inventario camion", href: "/conductor/inventario-camion", icon: Boxes },
   { label: "Logistica", href: "/logistica", icon: Truck },
-  { label: "Configuracion", href: "/configuracion", icon: Settings },
+  { label: "Estadisticas", href: "/estadisticas", icon: BarChart3 },
   { label: "Plataforma", href: "/platform", icon: Shield, platformOnly: true },
 ];
 
@@ -111,6 +122,14 @@ function CompactNavHeader({
 
 type NavItemDef = (typeof navItems)[number];
 
+function navItemLabel(item: NavItemDef, session: AppSession | null) {
+  if (item.href === "/conductor/tareas" && session) {
+    return conductorTasksNavLabel(session.roleSlug);
+  }
+
+  return item.label;
+}
+
 function navItemsForSession(session: AppSession | null) {
   if (!session) {
     return [];
@@ -140,13 +159,14 @@ const LOCKED_NAV_HINT = "Selecciona una paquetería en Plataforma y pulsa Operar
 
 type ShellNavItemProps = {
   item: NavItemDef;
+  label: string;
   session: AppSession | null;
   isActive: boolean;
   variant: "sidebar" | "mobile";
   onNavigate?: (isActive: boolean, hasSubmenu?: boolean) => void;
 };
 
-function ShellNavItem({ item, session, isActive, variant, onNavigate }: ShellNavItemProps) {
+function ShellNavItem({ item, label, session, isActive, variant, onNavigate }: ShellNavItemProps) {
   const Icon = item.icon;
   const locked = isNavItemLocked(session, item);
 
@@ -160,9 +180,9 @@ function ShellNavItem({ item, session, isActive, variant, onNavigate }: ShellNav
       <span key={item.href} className={lockedClass} title={LOCKED_NAV_HINT} aria-disabled="true">
         <Icon className={variant === "sidebar" ? "h-6 w-6 shrink-0" : "h-5 w-5 shrink-0"} />
         {variant === "sidebar" ? (
-          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
         ) : (
-          <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
         )}
       </span>
     );
@@ -182,7 +202,7 @@ function ShellNavItem({ item, session, isActive, variant, onNavigate }: ShellNav
         }`}
       >
         <Icon className="h-6 w-6 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
       </Link>
     );
   }
@@ -198,7 +218,7 @@ function ShellNavItem({ item, session, isActive, variant, onNavigate }: ShellNav
       }`}
     >
       <Icon className="h-5 w-5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
     </Link>
   );
 }
@@ -223,7 +243,7 @@ export function AppShell({
   const needsClientSelection = platformAdminNeedsClientContext(session);
   const sidebarNavItems = useMemo(() => navItemsForSession(session), [session]);
   const activeItem =
-    sidebarNavItems.find((item) => item.label === active) ??
+    sidebarNavItems.find((item) => navItemLabel(item, session) === active) ??
     sidebarNavItems[0] ??
     navItems[0];
   const mobileNavItems = useMemo(() => sidebarNavItems, [sidebarNavItems]);
@@ -337,8 +357,9 @@ export function AppShell({
                 <ShellNavItem
                   key={item.href}
                   item={item}
+                  label={navItemLabel(item, session)}
                   session={session}
-                  isActive={item.label === active}
+                  isActive={navItemLabel(item, session) === active}
                   variant="sidebar"
                   onNavigate={handleNavClick}
                 />
@@ -424,8 +445,9 @@ export function AppShell({
                       <ShellNavItem
                         key={item.href}
                         item={item}
+                        label={navItemLabel(item, session)}
                         session={session}
-                        isActive={item.label === active}
+                        isActive={navItemLabel(item, session) === active}
                         variant="mobile"
                         onNavigate={handleNavClick}
                       />

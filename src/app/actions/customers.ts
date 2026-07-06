@@ -8,6 +8,7 @@ import { isSalePersonCardVariantId } from "@/components/sale/sale-person-card-va
 import {
   canAccessCustomersSession,
   listCustomersForSession,
+  listRecipientsForCustomerSession,
   mapCustomerRow,
   mapRecipientRow,
   type CustomerRecipientRow,
@@ -49,6 +50,18 @@ export async function listCustomersWithRecipientsAction(
   try {
     const session = await requireAppSession();
     const data = await listCustomersForSession(session, params);
+    return ok(data);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function listRecipientsForCustomerAction(
+  customerId: string,
+): Promise<ActionResult<CustomerRecipientRow[]>> {
+  try {
+    const session = await requireAppSession();
+    const data = await listRecipientsForCustomerSession(session, customerId);
     return ok(data);
   } catch (error) {
     return fail(actionErrorMessage(error));

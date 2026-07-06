@@ -12,6 +12,7 @@ import {
 } from "@/components/sale/venta-parts";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { saleFinishActionLabel, type InvoiceBillingSnapshot } from "@/lib/invoice-billing";
+import type { SalePaymentChoice } from "@/lib/sale-payment-choice";
 import { SaleInvoiceConfirmDialog } from "@/components/sale/sale-invoice-confirm-dialog";
 import { useState } from "react";
 
@@ -19,11 +20,16 @@ type SaleQuickCheckoutModalProps = {
   invoiceNumber: string;
   draft: QuickEmptyBoxDraft;
   billing: InvoiceBillingSnapshot | null;
+  billingForPayment: InvoiceBillingSnapshot | null;
   selectedPromotionId: string;
   onPromotionChange: (promotionId: string) => void;
   payNowDraft: string;
   payNowDraftTouched?: boolean;
   onPayNowDraftChange: (value: string) => void;
+  paymentMethod: SalePaymentChoice;
+  paymentNote: string;
+  onPaymentMethodChange: (method: SalePaymentChoice) => void;
+  onPaymentNoteChange: (note: string) => void;
   completed?: boolean;
   stockMessage: string;
   onClose: () => void;
@@ -37,11 +43,16 @@ export function SaleQuickCheckoutModal({
   invoiceNumber,
   draft,
   billing,
+  billingForPayment,
   selectedPromotionId,
   onPromotionChange,
   payNowDraft,
   payNowDraftTouched = false,
   onPayNowDraftChange,
+  paymentMethod,
+  paymentNote,
+  onPaymentMethodChange,
+  onPaymentNoteChange,
   completed = false,
   stockMessage,
   onClose,
@@ -65,7 +76,7 @@ export function SaleQuickCheckoutModal({
         <div className="mb-5 flex items-start justify-between gap-4 border-b border-black pb-4">
           <div>
             <p className="text-sm font-black uppercase text-slate-400">
-              {completed ? "Invoice creado" : saleFinishActionLabel(billing)}
+              {completed ? "Invoice creado" : saleFinishActionLabel(billingForPayment)}
             </p>
             <h3 className="text-3xl font-black">Invoice {invoiceNumber}</h3>
             <p className="font-bold text-slate-400">Depósito de caja vacía</p>
@@ -165,7 +176,7 @@ export function SaleQuickCheckoutModal({
               >
                 {billing?.promotionSelectionRequired
                   ? "Elige promocion"
-                  : saleFinishActionLabel(billing)}
+                  : saleFinishActionLabel(billingForPayment)}
               </button>
             </>
           )}
@@ -176,17 +187,21 @@ export function SaleQuickCheckoutModal({
           title="¿Crear este invoice?"
           invoiceLabel={`Factura ${invoiceNumber}`}
           lines={
-            billing
+            billingForPayment
               ? [
                   { label: "Remitente", value: personFullName(draft.sender) },
-                  { label: "Total", value: billing.quotedTotal },
-                  { label: "Depósito", value: billing.payNow },
-                  { label: "Pendiente", value: billing.balanceDue },
+                  { label: "Total", value: billingForPayment.quotedTotal },
+                  { label: "Depósito", value: billingForPayment.payNow },
+                  { label: "Pendiente", value: billingForPayment.balanceDue },
                 ]
               : []
           }
-          confirmLabel={saleFinishActionLabel(billing)}
+          confirmLabel={saleFinishActionLabel(billingForPayment)}
           confirming={confirming}
+          paymentMethod={paymentMethod}
+          paymentNote={paymentNote}
+          onPaymentMethodChange={onPaymentMethodChange}
+          onPaymentNoteChange={onPaymentNoteChange}
           onCancel={() => {
             if (!confirming) {
               setConfirmOpen(false);

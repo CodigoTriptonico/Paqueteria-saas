@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { listInventoryMovementsAction } from "@/app/actions/inventory-assignments";
+import { DateInput } from "@/components/date-input";
 import {
   listOrgMembersForInventoryAction,
   type InventoryMemberRow,
@@ -21,7 +22,6 @@ import {
   InlineSearchCombobox,
   InlineSearchPicker,
 } from "@/components/inline-search-picker";
-import { inputClass } from "@/components/ui-blocks";
 import { AppTabs, type AppTabDefinition } from "@/components/app-tabs";
 import { InventoryToolbarIconButton } from "@/components/inventory/inventory-toolbar-icon-button";
 import type {
@@ -461,20 +461,22 @@ export function InventoryMovementsSidePanel({
             <div className="grid grid-cols-2 gap-2">
               <label className="grid gap-1 text-[11px] font-black uppercase text-slate-400">
                 Desde
-                <input
-                  type="date"
-                  className={`${inputClass} h-9 text-sm`}
+                <DateInput
+                  compact={false}
+                  className="w-full"
                   value={dateFrom}
-                  onChange={(event) => setDateFrom(event.target.value)}
+                  ariaLabel="Fecha desde"
+                  onChange={setDateFrom}
                 />
               </label>
               <label className="grid gap-1 text-[11px] font-black uppercase text-slate-400">
                 Hasta
-                <input
-                  type="date"
-                  className={`${inputClass} h-9 text-sm`}
+                <DateInput
+                  compact={false}
+                  className="w-full"
                   value={dateTo}
-                  onChange={(event) => setDateTo(event.target.value)}
+                  ariaLabel="Fecha hasta"
+                  onChange={setDateTo}
                 />
               </label>
             </div>

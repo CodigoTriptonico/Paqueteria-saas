@@ -6,6 +6,10 @@ import { isClientOrganization } from "@/lib/organizations/kind";
 import type { OrganizationSettings } from "@/lib/organizations/settings";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
+import {
+  isOnboardingTutorialEnabled,
+  onboardingTutorialDisabledProgress,
+} from "@/lib/onboarding/feature";
 
 export type OnboardingStepId =
   | "countries"
@@ -99,6 +103,11 @@ function buildSteps(input: {
 export async function getOnboardingProgressAction(): Promise<ActionResult<OnboardingProgress>> {
   try {
     const session = await requireAppSession();
+
+    if (!isOnboardingTutorialEnabled()) {
+      return ok(onboardingTutorialDisabledProgress());
+    }
+
     const supabase = await createScopedSupabase(session);
 
     if (!supabase) {

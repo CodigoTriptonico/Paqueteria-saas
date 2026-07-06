@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { NotificationProvider } from "@/components/notifications/notification-provider";
 import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
+import { conductorTasksNavLabel } from "@/lib/conductor-tareas-view";
 import type { AppSession } from "@/lib/auth/types";
 
 type ShellConfig = {
@@ -23,7 +24,7 @@ type ShellConfigPatch = (patch: ShellConfig) => void;
 
 const ShellConfigContext = createContext<ShellConfigPatch | null>(null);
 
-function activeFromPath(pathname: string) {
+function activeFromPath(pathname: string, session: AppSession | null) {
   if (pathname.startsWith("/venta")) {
     return "Nueva venta";
   }
@@ -36,8 +37,20 @@ function activeFromPath(pathname: string) {
     return "Envios";
   }
 
+  if (pathname.startsWith("/conductor/inventario-camion")) {
+    return "Inventario camion";
+  }
+
+  if (pathname.startsWith("/conductor")) {
+    return conductorTasksNavLabel(session?.roleSlug ?? "administrador");
+  }
+
   if (pathname.startsWith("/logistica")) {
     return "Logistica";
+  }
+
+  if (pathname.startsWith("/estadisticas") || pathname.startsWith("/vendedores")) {
+    return "Estadisticas";
   }
 
   if (pathname.startsWith("/configuracion")) {
@@ -64,7 +77,7 @@ export function AppFrame({
   const mergeShellConfig = useCallback((patch: ShellConfig) => {
     setConfig((current) => ({ ...current, ...patch }));
   }, []);
-  const active = useMemo(() => activeFromPath(pathname), [pathname]);
+  const active = useMemo(() => activeFromPath(pathname, session), [pathname, session]);
 
   const defaultContextNav = useMemo(() => {
     if (pathname === "/" || pathname.startsWith("/login")) {
@@ -75,7 +88,7 @@ export function AppFrame({
       session && platformAdminNeedsClientContext(session) ? "/platform" : "/";
 
     return {
-      contextNavLabel: activeFromPath(pathname),
+      contextNavLabel: activeFromPath(pathname, session),
       onContextNavBack: () => router.push(homeHref),
     };
   }, [pathname, router, session]);

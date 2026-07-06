@@ -1,14 +1,16 @@
 "use client";
 
 import { History } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   listShipmentActivityHistoryAction,
   type ActivityHistoryRow,
 } from "@/app/actions/history";
-import { historyDateLabel } from "@/components/sale/venta-parts";
+import { AuditHistoryEntry } from "@/components/audit-history-entry";
 import { secondaryButtonClass } from "@/components/ui-blocks";
-import { shipmentAuditActionLabel } from "@/lib/shipment-audit";
+import {
+  consolidateShipmentActivityHistory,
+} from "@/lib/shipment-step-history";
 
 type ShipmentAuditPanelProps = {
   shipmentId: string;
@@ -28,6 +30,7 @@ export function ShipmentAuditPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [rows, setRows] = useState<ActivityHistoryRow[]>([]);
+  const visibleRows = useMemo(() => consolidateShipmentActivityHistory(rows), [rows]);
 
   useEffect(() => {
     if (!open) {
@@ -93,24 +96,11 @@ export function ShipmentAuditPanel({
             <p className="text-sm font-bold text-slate-400">Cargando historial...</p>
           ) : error ? (
             <p className="text-sm font-bold text-rose-300">{error}</p>
-          ) : rows.length ? (
-            <ol className="grid max-h-64 gap-2 overflow-y-auto pr-1">
-              {rows.map((row) => (
-                <li
-                  key={row.id}
-                  className="rounded-lg border border-black/70 bg-surface-inset px-3 py-2.5"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[11px] font-black uppercase text-emerald-300">
-                      {shipmentAuditActionLabel(row.action)}
-                    </p>
-                    <p className="text-[11px] font-bold tabular-nums text-slate-500">
-                      {historyDateLabel(row.createdAt)}
-                    </p>
-                  </div>
-                  <p className="mt-1 text-sm font-black text-[#f8fafc]">{row.title}</p>
-                  <p className="mt-1 text-xs font-bold leading-snug text-slate-400">{row.description}</p>
-                  <p className="mt-2 text-[11px] font-black text-slate-500">Por {row.actorName}</p>
+          ) : visibleRows.length ? (
+            <ol className="grid max-h-64 gap-1.5 overflow-y-auto pr-1">
+              {visibleRows.map((row) => (
+                <li key={row.id}>
+                  <AuditHistoryEntry entry={row} className="bg-surface-inset" />
                 </li>
               ))}
             </ol>

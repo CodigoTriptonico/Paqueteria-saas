@@ -1,9 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { ShipmentRow } from "@/app/actions/shipments";
-import { shipmentLogisticsSteps } from "./shipment-display";
+import { shipmentLogisticsSteps, PENDING_FULL_BOX_STATUS } from "./shipment-display";
 import {
   buildShipmentTimings,
+  buildShipmentAuditTimings,
   formatActiveElapsed,
   formatGapSummary,
   formatShipmentDuration,
@@ -11,6 +12,8 @@ import {
   formatWaitingHeadline,
   formatWaitingSince,
   resolveStepCompletedAt,
+  saleAgeTextClass,
+  saleAgeTone,
   stepShortName,
 } from "./shipment-timing";
 
@@ -20,15 +23,22 @@ function baseShipment(overrides: Partial<ShipmentRow> = {}): ShipmentRow {
   return {
     id: "shipment-1",
     code: "INV-000001",
+    customerId: null,
+    recipientId: null,
+    recipientSnapshot: null,
     customer_name: "Sandra Ruiz",
     country: "Mexico",
     carrier: "14x14x14 x1",
     paid: 20,
     profit: 0,
-    status: "Pendiente",
+    status: PENDING_FULL_BOX_STATUS,
     assigned_to: null,
+    createdBy: "seller-1",
+    salesOwnerId: "seller-1",
+    salesOwnerName: "Seller",
     sale_kind: "full",
     invoice_status: "open",
+    invoice_priority: false,
     accounting_status: "not_exportable",
     finalized_at: null,
     created_at: "2026-03-08T12:00:00.000Z",
@@ -62,9 +72,13 @@ function baseShipment(overrides: Partial<ShipmentRow> = {}): ShipmentRow {
         notes: "",
         stockDeductedAt: null,
         completedAt: null,
+        orderedAt: "2026-03-09T08:00:00.000Z",
+        assignedAt: null,
+        loadedAt: null,
         createdAt: "2026-03-08T12:00:00.000Z",
       },
     ],
+    payments: [],
     ...overrides,
   };
 }
@@ -87,7 +101,7 @@ describe("shipment-timing", () => {
   });
 
   it("uses short step names for gaps", () => {
-    assert.equal(stepShortName("full_box"), "Recolección");
+    assert.equal(stepShortName("full_box"), "Recoger");
     assert.equal(
       formatGapSummary({
         fromKind: "sale",
@@ -95,14 +109,14 @@ describe("shipment-timing", () => {
         durationMs: 30_000,
         label: "inmediato",
       }),
-      "Venta → caja vacía · inmediato",
+      "Venta → dejar · inmediato",
     );
     assert.equal(
       formatActiveElapsed("3 días", "empty_box"),
-      "3 días desde caja vacía",
+      "3 días desde dejar",
     );
     assert.equal(formatWaitingHeadline("3 días"), "Lleva 3 días");
-    assert.equal(formatWaitingSince("empty_box"), "desde caja vacía");
+    assert.equal(formatWaitingSince("empty_box"), "desde dejar");
   });
 
   it("resolves step timestamps from milestone columns", () => {
@@ -123,16 +137,16 @@ describe("shipment-timing", () => {
     const timings = buildShipmentTimings(row, steps, NOW);
 
     assert.equal(timings.saleAgeLabel, "Venta hace 2 días");
-    assert.equal(timings.completedGapsLine, "Venta → caja vacía · 30 min");
-    assert.equal(timings.lastCompletedGap, "Venta → caja vacía · 30 min");
-    assert.equal(timings.progressStepLabel, "Paso 3 de 7");
-    assert.equal(timings.activeStepShortName, "Recolección");
+    assert.equal(timings.completedGapsLine, "Venta → dejar · 30 min");
+    assert.equal(timings.lastCompletedGap, "Venta → dejar · 30 min");
+    assert.equal(timings.progressStepLabel, "Paso 2 de 4");
+    assert.equal(timings.activeStepShortName, "Recoger");
     assert.equal(timings.waitingHeadline, "Lleva 2 días");
-    assert.equal(timings.waitingSinceLabel, "desde caja vacía");
-    assert.equal(timings.waitingText, "Lleva 2 días desde caja vacía");
-    assert.equal(timings.activeElapsedDetail, "2 días desde caja vacía");
+    assert.equal(timings.waitingSinceLabel, "desde dejar");
+    assert.equal(timings.waitingText, "Lleva 2 días desde dejar");
+    assert.equal(timings.activeElapsedDetail, "2 días desde dejar");
     assert.equal(timings.isLongWait, true);
-    assert.equal(steps.find((step) => step.state === "active")?.title, "Recolección de caja llena");
+    assert.equal(steps.find((step) => step.state === "active")?.title, "Recoger");
   });
 
   it("omits completed line when milestone data is missing", () => {
@@ -153,8 +167,11 @@ describe("shipment-timing", () => {
           warehouseId: null,
           notes: "",
           stockDeductedAt: null,
-          completedAt: null,
-          createdAt: "2026-03-08T12:00:00.000Z",
+        completedAt: null,
+        orderedAt: null,
+        assignedAt: null,
+        loadedAt: null,
+        createdAt: "2026-03-08T12:00:00.000Z",
         },
       ],
     });
@@ -185,9 +202,12 @@ describe("shipment-timing", () => {
           scheduledAt: "2026-03-11T10:00:00.000Z",
           warehouseId: null,
           notes: "",
-          stockDeductedAt: null,
-          completedAt: null,
-          createdAt: "2026-03-10T12:00:00.000Z",
+        stockDeductedAt: null,
+        completedAt: null,
+        orderedAt: null,
+        assignedAt: null,
+        loadedAt: null,
+        createdAt: "2026-03-10T12:00:00.000Z",
         },
       ],
     });
@@ -219,14 +239,63 @@ describe("shipment-timing", () => {
     const steps = shipmentLogisticsSteps(row);
     const timings = buildShipmentTimings(row, steps, NOW);
 
-    const officeGap = timings.gaps.find(
-      (gap) => gap.fromKind === "office" && gap.toKind === "pickup",
+    const fullBoxToPickupGap = timings.gaps.find(
+      (gap) => gap.fromKind === "full_box" && gap.toKind === "pickup",
     );
     const deliveredGap = timings.gaps.find(
-      (gap) => gap.fromKind === "transit" && gap.toKind === "delivered",
+      (gap) => gap.fromKind === "pickup" && gap.toKind === "delivered",
     );
 
-    assert.equal(officeGap?.label, "6 horas");
-    assert.equal(deliveredGap?.label, "16 horas");
+    assert.equal(fullBoxToPickupGap?.label, "6 horas");
+    assert.equal(deliveredGap?.label, "20 horas");
+  });
+
+  it("builds logistics leg audit timings from ordered to completed", () => {
+    const row = baseShipment({
+      logisticsTasks: [
+        {
+          id: "task-1",
+          shipmentId: "shipment-1",
+          taskType: "pickup_full_box",
+          status: "completed",
+          assignedTo: "driver-1",
+          scheduledAt: "2026-03-11T10:00:00.000Z",
+          warehouseId: null,
+          notes: "",
+          stockDeductedAt: null,
+          completedAt: "2026-03-11T16:00:00.000Z",
+          orderedAt: "2026-03-09T08:00:00.000Z",
+          assignedAt: "2026-03-10T09:00:00.000Z",
+          loadedAt: "2026-03-11T08:00:00.000Z",
+          createdAt: "2026-03-09T08:00:00.000Z",
+        },
+      ],
+    });
+    const audit = buildShipmentAuditTimings(row, shipmentLogisticsSteps(row), NOW);
+
+    assert.equal(audit.fullBoxLeg?.orderToCompleteLabel, "2 días");
+    assert.match(audit.logisticsGapsLine || "", /ordenada/i);
+    assert.match(audit.logisticsGapsLine || "", /completada/i);
+  });
+});
+
+describe("saleAgeTone", () => {
+  const HOUR = 60 * 60_000;
+  const DAY = 24 * HOUR;
+
+  it("ramps color tone as sale age increases", () => {
+    assert.equal(saleAgeTone(5 * 60_000), "fresh");
+    assert.equal(saleAgeTone(2 * HOUR), "recent");
+    assert.equal(saleAgeTone(22 * HOUR), "aging");
+    assert.equal(saleAgeTone(36 * HOUR), "stale");
+    assert.equal(saleAgeTone(3 * DAY), "urgent");
+  });
+
+  it("maps each tone to a readable text class", () => {
+    assert.equal(saleAgeTextClass(30 * 60_000), "text-slate-500");
+    assert.equal(saleAgeTextClass(3 * HOUR), "text-slate-400");
+    assert.equal(saleAgeTextClass(22 * HOUR), "text-slate-300");
+    assert.equal(saleAgeTextClass(36 * HOUR), "text-amber-400");
+    assert.equal(saleAgeTextClass(4 * DAY), "text-amber-300");
   });
 });

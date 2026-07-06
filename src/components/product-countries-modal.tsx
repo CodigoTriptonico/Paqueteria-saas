@@ -54,7 +54,7 @@ export function ProductCountriesModal({
 
   function updateAssignment(
     countryName: string,
-    patch: Partial<Pick<ProductCountryAssignment, "active" | "price">>,
+    patch: Partial<Pick<ProductCountryAssignment, "active" | "price" | "cost">>,
   ) {
     setDraft((current) =>
       current.map((entry) =>
@@ -74,7 +74,7 @@ export function ProductCountriesModal({
 
   return (
     <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-lg rounded-xl border border-black bg-surface-panel shadow-2xl">
+      <div className="w-full max-w-xl rounded-xl border border-black bg-surface-panel shadow-2xl">
         <div className="flex items-start justify-between gap-3 border-b border-black px-5 py-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
@@ -95,7 +95,17 @@ export function ProductCountriesModal({
 
         <div className="max-h-[24rem] space-y-2 overflow-y-auto px-5 py-4">
           {sortedDraft.length ? (
-            sortedDraft.map((entry) => {
+            <>
+              <div className="flex items-center gap-3 px-3 pb-1">
+                <span className="min-w-0 flex-1" />
+                <span className="w-24 text-center text-[10px] font-black uppercase tracking-wide text-slate-500">
+                  Público
+                </span>
+                <span className="w-24 text-center text-[10px] font-black uppercase tracking-wide text-slate-500">
+                  Costo
+                </span>
+              </div>
+              {sortedDraft.map((entry) => {
               const country = countries.find((item) => item.name === entry.countryName);
               const code = resolveCountryCode(
                 country || { code: "", name: entry.countryName },
@@ -130,11 +140,26 @@ export function ProductCountriesModal({
                         price: digits ? `$${digits}` : "$0",
                       });
                     }}
-                    aria-label={`Precio para ${entry.countryName}`}
+                    inputMode="decimal"
+                    aria-label={`Precio público para ${entry.countryName}`}
+                  />
+                  <input
+                    className={`${inputClass} h-10 w-24 text-center text-sm font-black`}
+                    value={entry.cost.replace("$", "")}
+                    disabled={!entry.active}
+                    onChange={(event) => {
+                      const digits = event.target.value.replace(/[^\d.]/g, "");
+                      updateAssignment(entry.countryName, {
+                        cost: digits ? `$${digits}` : "$0",
+                      });
+                    }}
+                    inputMode="decimal"
+                    aria-label={`Costo interno para ${entry.countryName}`}
                   />
                 </div>
               );
-            })
+            })}
+            </>
           ) : (
             <div className="rounded-lg border border-dashed border-slate-600/60 px-4 py-8 text-center">
               <Globe2 className="mx-auto h-8 w-8 text-slate-500" aria-hidden />

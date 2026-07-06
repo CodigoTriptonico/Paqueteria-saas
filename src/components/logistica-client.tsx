@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
-  CalendarClock,
   CheckCircle2,
   ClipboardList,
   Loader2,
   MapPin,
   PackageCheck,
   PackageOpen,
+  Phone,
   PlusCircle,
   Route,
   Search,
@@ -19,6 +21,7 @@ import {
   Truck,
   Warehouse,
   Wand2,
+  X,
   XCircle,
 } from "lucide-react";
 import {
@@ -44,21 +47,46 @@ import {
   type ShipmentRow,
 } from "@/app/actions/shipments";
 import { listWarehousesAction } from "@/app/actions/warehouses";
+import { ActionConfirmDialog } from "@/components/action-confirm-dialog";
 import { CountryName } from "@/components/country-flag";
-import { InlineSearchCombobox } from "@/components/inline-search-picker";
+import { DateInput } from "@/components/date-input";
+import { InvoicePriorityBadge } from "@/components/invoice-priority-badge";
+import { LogisticsDriverChangeDialog } from "@/components/logistica/logistics-driver-change-dialog";
+import { LogisticsSectionNav } from "@/components/logistica/logistics-section-nav";
+import { LogisticsTaskStatusBadge } from "@/components/logistica/logistics-task-status-badge";
+import { InlineSearchCombobox, InlineSearchPicker } from "@/components/inline-search-picker";
 import { PageLoading } from "@/components/page-loading";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import {
   cardClass,
-  inputClass,
   Panel,
   primaryButtonClass,
   secondaryButtonClass,
   textMutedClass,
 } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
-import { splitLogisticsTasksByOpenState } from "@/lib/logistics-view";
-import { hasNativePicker, openNativePicker } from "@/lib/native-picker";
+import {
+  buildDriverPickerOptions,
+  driverLabel,
+  formatLogisticsTaskStatusLabel,
+  logisticsScheduleDisplayParts,
+  logisticsActionIconWellClass,
+  logisticsPriorityCardClass,
+  logisticsPriorityHeaderClass,
+  logisticsPriorityAwaitingDriver,
+  logisticsTaskWaitingParts,
+  logisticsUnroutedTaskCardClass,
+  logisticsWaitingToneClass,
+  prioritizeLogisticsTasks,
+  resolveLogisticsInvoiceStep,
+  sortLogisticsInvoiceItemsByPriority,
+  resolveLogisticsShipmentDeepLink,
+  resolveRouteConfirmCopy,
+  shouldConfirmDriverChange,
+  splitLogisticsTasksByOpenState,
+  type LogisticsInvoiceStep,
+} from "@/lib/logistics-view";
+import { quoteFromShipment, type ShipmentQuote } from "@/lib/shipment-display";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { WarehouseRow } from "@/lib/auth/types";
 import type {
@@ -69,16 +97,43 @@ import type {
   LogisticsRouteTaskInput,
 } from "@/lib/logistics-routing";
 
-type ShipmentQuote = {
-  label: string;
-  paid: string;
-  cost: string;
-};
-
 type LogisticsTaskItem = ShipmentLogisticsTaskRow & {
   shipment: ShipmentRow;
   quote: ShipmentQuote | null;
 };
+
+type LogisticsInvoiceItem = {
+  shipment: ShipmentRow;
+  quote: ShipmentQuote | null;
+  step: LogisticsInvoiceStep<LogisticsTaskItem>;
+  currentTask: LogisticsTaskItem | null;
+  nextTask: LogisticsTaskItem | null;
+};
+
+const LOGISTICS_CARD_PICKER_SHELL =
+  "box-border inline-flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md border-0 bg-transparent px-0";
+
+type PendingDriverChange = {
+  task: LogisticsTaskItem;
+  nextAssignedTo: string | null;
+};
+
+type PendingRouteConfirm =
+  | {
+      kind: "cancel";
+      route: LogisticsRouteRow;
+    }
+  | {
+      kind: "remove-stop";
+      route: LogisticsRouteRow;
+      stop: LogisticsRouteStopRow;
+      shipmentCode: string;
+    }
+  | {
+      kind: "driver";
+      route: LogisticsRouteRow;
+      nextAssignedTo: string | null;
+    };
 
 type TaskAddressMeta = LogisticsTaskAddressRow & {
   routeId?: string;
@@ -114,23 +169,19 @@ declare global {
   }
 }
 
-const taskStatusLabel: Record<LogisticsTaskStatus, string> = {
-  pending: "Pendiente",
-  scheduled: "Con fecha",
-  assigned: "Asignada",
-  loaded_to_truck: "En ruta",
-  completed: "Completada",
-  cancelled: "Cancelada",
-};
-
 const taskTypeLabel: Record<LogisticsTaskType, string> = {
-  deliver_empty_box: "Entregar caja vacia",
-  pickup_full_box: "Recoger caja llena",
+  deliver_empty_box: "Dejar",
+  pickup_full_box: "Recoger",
 };
 
 const taskTypeShortLabel: Record<LogisticsTaskType, string> = {
-  deliver_empty_box: "Entrega",
-  pickup_full_box: "Recoleccion",
+  deliver_empty_box: "Dejar",
+  pickup_full_box: "Recoger",
+};
+
+const taskActionVerb: Record<LogisticsTaskType, string> = {
+  deliver_empty_box: "Entregar",
+  pickup_full_box: "Recoger",
 };
 
 const routeStatusLabel: Record<LogisticsRouteStatus, string> = {
@@ -140,81 +191,58 @@ const routeStatusLabel: Record<LogisticsRouteStatus, string> = {
   completed: "Completada",
 };
 
+const WIDE_LAYOUT_MEDIA_QUERY = "(min-width: 1536px)";
+
+function useWideLogisticsLayout() {
+  const [isWide, setIsWide] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia(WIDE_LAYOUT_MEDIA_QUERY);
+    const update = () => setIsWide(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return isWide;
+}
+
 function todayInput() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function quoteFromShipment(row: ShipmentRow): ShipmentQuote | null {
-  const plan = row.logistics_plan || {};
-  const boxLines = Array.isArray(plan.boxLines)
-    ? (plan.boxLines as Record<string, unknown>[])
-    : [];
+function formatSchedule(value: string | null) {
+  return logisticsScheduleDisplayParts(value).primary;
+}
 
-  if (boxLines.length) {
-    const labels = boxLines
-      .map((line) => {
-        const label = String(line.label || "").trim();
-        const quantity = Math.max(Number(line.quantity) || 1, 1);
-        return label ? `${label} x${quantity}` : "";
-      })
-      .filter(Boolean);
+function LogisticsTaskWaitingBanner({
+  taskType,
+  orderedAt,
+  createdAt,
+}: {
+  taskType: LogisticsTaskType | null | undefined;
+  orderedAt: string | null | undefined;
+  createdAt: string | null | undefined;
+}) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
-    return {
-      label: labels.join(" + "),
-      paid: String(boxLines[0]?.paid || "0"),
-      cost: String(boxLines[0]?.cost || "0"),
-    };
-  }
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
-  const box =
-    plan.box && typeof plan.box === "object" && !Array.isArray(plan.box)
-      ? (plan.box as Record<string, unknown>)
-      : null;
-  const label = String(box?.label || box?.name || "").trim();
-
-  if (!label) {
+  const waiting = logisticsTaskWaitingParts(taskType, orderedAt, createdAt, nowMs);
+  if (!waiting) {
     return null;
   }
 
-  return {
-    label,
-    paid: String(box?.paid || "0"),
-    cost: String(box?.cost || "0"),
-  };
-}
-
-function toDatetimeInput(value: string | null) {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 16);
-}
-
-function fromDatetimeInput(value: string) {
-  return value ? new Date(value).toISOString() : null;
-}
-
-function formatSchedule(value: string | null) {
-  if (!value) {
-    return "Sin fecha";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Fecha invalida";
-  }
-
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return (
+    <div
+      className={`rounded-md border px-2.5 py-2 ${logisticsWaitingToneClass(waiting.elapsedMs)}`}
+    >
+      <p className="text-base font-black tabular-nums leading-tight">{waiting.waitingText}</p>
+    </div>
+  );
 }
 
 function taskSortValue(task: LogisticsTaskItem) {
@@ -263,12 +291,32 @@ function routeStatusClass(status: LogisticsRouteStatus) {
   return "border-black bg-surface-inset text-slate-300";
 }
 
-function taskTypeIcon(taskType: LogisticsTaskType) {
+function taskTypeIcon(taskType: LogisticsTaskType, className = "h-4 w-4") {
   return taskType === "deliver_empty_box" ? (
-    <PackageOpen className="h-4 w-4" />
+    <PackageOpen className={className} aria-hidden />
   ) : (
-    <PackageCheck className="h-4 w-4" />
+    <PackageCheck className={className} aria-hidden />
   );
+}
+
+function invoiceActionLabel(taskType: LogisticsTaskType) {
+  return taskActionVerb[taskType];
+}
+
+const LOGISTICS_FIELD_BASE = "border-black bg-surface-inset";
+
+function invoiceActionFieldClass(_taskType: LogisticsTaskType) {
+  return `${LOGISTICS_FIELD_BASE} text-slate-200`;
+}
+
+function invoiceDriverFieldClass(assignedTo: string | null | undefined, hasTask: boolean) {
+  if (!hasTask) {
+    return `${LOGISTICS_FIELD_BASE} text-slate-400`;
+  }
+
+  return assignedTo
+    ? `${LOGISTICS_FIELD_BASE} text-slate-200`
+    : "logistics-unassigned-alert border-rose-500/90 bg-rose-950/50 text-rose-50";
 }
 
 function routeStopPoint(stop: LogisticsRouteStopRow) {
@@ -433,6 +481,9 @@ export function LogisticaClient({
   initialTaskAddresses?: LogisticsTaskAddressRow[];
 }) {
   const notify = useNotify();
+  const searchParams = useSearchParams();
+  const isWideLayout = useWideLogisticsLayout();
+  const appliedDeepLinkRef = useRef(false);
   const supabaseReady = isSupabaseConfigured();
   const [shipments, setShipments] = useState<ShipmentRow[]>(initialShipments || []);
   const [routeMembers, setRouteMembers] = useState<RouteMemberRow[]>(initialRouteMembers || []);
@@ -442,12 +493,15 @@ export function LogisticaClient({
     initialTaskAddresses || [],
   );
   const [query, setQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState(todayInput());
+  const [dateFilter, setDateFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [driverFilter, setDriverFilter] = useState("");
   const [warehouseFilter, setWarehouseFilter] = useState("");
   const [zoneFilter, setZoneFilter] = useState("");
   const [selectedRouteId, setSelectedRouteId] = useState<string>("");
+  const [advancedRoutesOpen, setAdvancedRoutesOpen] = useState(false);
+  const [routeDetailDrawerOpen, setRouteDetailDrawerOpen] = useState(false);
+  const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<LogisticsRouteSuggestion[]>([]);
   const [loaded, setLoaded] = useState(
     !supabaseReady ||
@@ -460,6 +514,23 @@ export function LogisticaClient({
       ),
   );
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDriverChange, setPendingDriverChange] = useState<PendingDriverChange | null>(null);
+  const [pendingRouteConfirm, setPendingRouteConfirm] = useState<PendingRouteConfirm | null>(null);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      if (isWideLayout) {
+        setRouteDetailDrawerOpen(false);
+        return;
+      }
+
+      if (selectedRouteId) {
+        setRouteDetailDrawerOpen(true);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isWideLayout, selectedRouteId]);
 
   async function reloadShipments() {
     const result = await listShipmentsAction();
@@ -560,6 +631,58 @@ export function LogisticaClient({
     return new Map(routeMembers.map((member) => [member.id, member.label]));
   }, [routeMembers]);
 
+  const taskDriverPickerOptions = useMemo(
+    () => buildDriverPickerOptions(routeMembers, "Sin asignar"),
+    [routeMembers],
+  );
+
+  const routeDriverPickerOptions = useMemo(
+    () => buildDriverPickerOptions(routeMembers, "Sin chofer"),
+    [routeMembers],
+  );
+
+  const pendingRouteDialogCopy = useMemo(() => {
+    if (!pendingRouteConfirm) {
+      return null;
+    }
+
+    if (pendingRouteConfirm.kind === "cancel") {
+      return resolveRouteConfirmCopy(
+        {
+          kind: "cancel",
+          routeName: pendingRouteConfirm.route.name,
+          stopCount: pendingRouteConfirm.route.stops.length,
+        },
+        memberById,
+      );
+    }
+
+    if (pendingRouteConfirm.kind === "remove-stop") {
+      return resolveRouteConfirmCopy(
+        {
+          kind: "remove-stop",
+          shipmentCode: pendingRouteConfirm.shipmentCode,
+        },
+        memberById,
+      );
+    }
+
+    return resolveRouteConfirmCopy(
+      {
+        kind: "driver",
+        routeName: pendingRouteConfirm.route.name,
+        currentAssignedTo: pendingRouteConfirm.route.assignedTo,
+        nextAssignedTo: pendingRouteConfirm.nextAssignedTo,
+      },
+      memberById,
+    );
+  }, [memberById, pendingRouteConfirm]);
+
+  const filterDriverPickerOptions = useMemo(
+    () => buildDriverPickerOptions(routeMembers, "Todo chofer"),
+    [routeMembers],
+  );
+
   const warehouseById = useMemo(() => {
     return new Map(warehouses.map((warehouse) => [warehouse.id, warehouse.name]));
   }, [warehouses]);
@@ -612,27 +735,79 @@ export function LogisticaClient({
     return new Map(allTasks.map((task) => [task.id, task]));
   }, [allTasks]);
 
+  const invoiceItems = useMemo<LogisticsInvoiceItem[]>(() => {
+    return shipments
+      .map((shipment) => {
+        const quote = quoteFromShipment(shipment);
+        const tasks = shipment.logisticsTasks.map((task) => ({
+          ...task,
+          shipment,
+          quote,
+        }));
+        const step = resolveLogisticsInvoiceStep({
+          empty_box_delivered_at: shipment.empty_box_delivered_at,
+          logistics_plan: shipment.logistics_plan,
+          logisticsTasks: tasks,
+        });
+
+        if (!step) {
+          return null;
+        }
+
+        return {
+          shipment,
+          quote,
+          step,
+          currentTask: step.currentTask,
+          nextTask: step.nextTask,
+        };
+      })
+      .filter((item): item is LogisticsInvoiceItem => Boolean(item));
+  }, [shipments]);
+
+  const invoiceStepByTaskId = useMemo(() => {
+    const map = new Map<string, LogisticsInvoiceStep<LogisticsTaskItem>>();
+
+    invoiceItems.forEach((item) => {
+      if (item.currentTask) {
+        map.set(item.currentTask.id, item.step);
+      }
+      if (item.nextTask) {
+        map.set(item.nextTask.id, item.step);
+      }
+    });
+
+    return map;
+  }, [invoiceItems]);
+
   const taskSearchOptions = useMemo(
     () =>
-      allTasks.map((task) => ({
-        value: task.id,
-        label: `${task.shipment.code} - ${task.shipment.customer_name}`,
-        searchText: [
-          task.shipment.code,
-          task.shipment.customer_name,
-          task.shipment.country,
-          task.shipment.carrier,
-          taskTypeLabel[task.taskType],
-          taskStatusLabel[task.status],
-          task.quote?.label,
-          task.notes,
-          memberById.get(task.assignedTo || ""),
-          addressByTaskId.get(task.id)?.zoneLabel,
-        ]
-          .filter(Boolean)
-          .join(" "),
-      })),
-    [addressByTaskId, allTasks, memberById],
+      invoiceItems.map((item) => {
+        const task = item.currentTask || item.nextTask;
+        const address = task ? addressByTaskId.get(task.id) : undefined;
+
+        return {
+          value: item.shipment.id,
+          label: `${item.shipment.code} - ${item.shipment.customer_name}`,
+          searchText: [
+            item.shipment.code,
+            item.shipment.customer_name,
+            item.shipment.customerPhone,
+            item.shipment.country,
+            item.shipment.carrier,
+            task ? taskTypeLabel[item.step.stepType] : null,
+            task ? formatLogisticsTaskStatusLabel(task.status, task.assignedTo, memberById) : null,
+            item.quote?.label,
+            task?.notes,
+            memberById.get(task?.assignedTo || ""),
+            address?.zoneLabel,
+            address?.address.formattedAddress,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        };
+      }),
+    [addressByTaskId, invoiceItems, memberById],
   );
 
   const zoneOptions = useMemo(() => {
@@ -640,6 +815,63 @@ export function LogisticaClient({
     taskAddresses.forEach((address) => zones.set(address.zoneKey, address.zoneLabel));
     return Array.from(zones.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [taskAddresses]);
+
+  const filteredInvoiceItems = useMemo(() => {
+    const cleanQuery = query.trim().toLowerCase();
+    const cleanType = typeFilter.trim();
+    const cleanDriver = driverFilter.trim();
+    const cleanWarehouse = warehouseFilter.trim();
+    const cleanZone = zoneFilter.trim();
+
+    return sortLogisticsInvoiceItemsByPriority(
+      invoiceItems.filter((item) => {
+        const task = item.currentTask;
+        const fallbackTask = item.currentTask || item.nextTask;
+        const address = fallbackTask ? addressByTaskId.get(fallbackTask.id) : undefined;
+        const routeInfo = task ? routeByTaskId.get(task.id) : undefined;
+        const dateMatches =
+          !dateFilter || Boolean(task?.scheduledAt && task.scheduledAt.slice(0, 10) === dateFilter);
+        const haystack = [
+          item.shipment.code,
+          item.shipment.customer_name,
+          item.shipment.customerPhone,
+          item.shipment.country,
+          item.shipment.carrier,
+          item.shipment.invoice_priority ? "prioridad" : null,
+          taskTypeLabel[item.step.stepType],
+          fallbackTask?.notes,
+          item.quote?.label,
+          memberById.get(task?.assignedTo || ""),
+          address?.zoneLabel,
+          address?.address.formattedAddress,
+          routeInfo?.route.name,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return (
+          dateMatches &&
+          (!cleanQuery || haystack.includes(cleanQuery)) &&
+          (!cleanType || item.step.stepType === cleanType) &&
+          (!cleanDriver || task?.assignedTo === cleanDriver || routeInfo?.route.assignedTo === cleanDriver) &&
+          (!cleanWarehouse || task?.warehouseId === cleanWarehouse || routeInfo?.route.warehouseId === cleanWarehouse) &&
+          (!cleanZone || address?.zoneKey === cleanZone)
+        );
+      }),
+    );
+  }, [
+    addressByTaskId,
+    dateFilter,
+    driverFilter,
+    invoiceItems,
+    memberById,
+    query,
+    routeByTaskId,
+    typeFilter,
+    warehouseFilter,
+    zoneFilter,
+  ]);
 
   const filteredTasks = useMemo(() => {
     const cleanQuery = query.trim().toLowerCase();
@@ -656,10 +888,11 @@ export function LogisticaClient({
       const haystack = [
         task.shipment.code,
         task.shipment.customer_name,
+        task.shipment.customerPhone,
         task.shipment.country,
         task.shipment.carrier,
         taskTypeLabel[task.taskType],
-        taskStatusLabel[task.status],
+        formatLogisticsTaskStatusLabel(task.status, task.assignedTo, memberById),
         task.quote?.label,
         task.notes,
         memberById.get(task.assignedTo || ""),
@@ -699,9 +932,68 @@ export function LogisticaClient({
   );
 
   const unroutedTasks = useMemo(
-    () => openTasks.filter((task) => !routeByTaskId.has(task.id)),
-    [openTasks, routeByTaskId],
+    () =>
+      prioritizeLogisticsTasks(
+        openTasks.filter((task) => {
+          const step = invoiceStepByTaskId.get(task.id);
+          return step?.currentTask?.id === task.id && !routeByTaskId.has(task.id);
+        }),
+        {
+          missingGeo: (task) => !addressByTaskId.get(task.id)?.hasGeo,
+          shipment: (task) => task.shipment,
+        },
+      ),
+    [addressByTaskId, invoiceStepByTaskId, openTasks, routeByTaskId],
   );
+
+  useEffect(() => {
+    if (!loaded || appliedDeepLinkRef.current) {
+      return;
+    }
+
+    const shipmentCode = searchParams.get("q")?.trim();
+    if (!shipmentCode) {
+      return;
+    }
+
+    appliedDeepLinkRef.current = true;
+    const focus = resolveLogisticsShipmentDeepLink(shipmentCode, allTasks, routeByTaskId);
+
+    const frame = window.requestAnimationFrame(() => {
+      setQuery(focus.query);
+      if (focus.clearDateFilter) {
+        setDateFilter("");
+      }
+      if (focus.routeId) {
+        setSelectedRouteId(focus.routeId);
+      }
+      if (focus.highlightTaskId) {
+        setHighlightTaskId(focus.highlightTaskId);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [allTasks, loaded, routeByTaskId, searchParams]);
+
+  useEffect(() => {
+    if (!highlightTaskId) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const element = document.querySelector(`[data-logistics-task-id="${highlightTaskId}"]`);
+      element?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+
+    const timeout = window.setTimeout(() => {
+      setHighlightTaskId(null);
+    }, 4000);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [highlightTaskId, unroutedTasks, selectedRouteId]);
 
   const filteredRoutes = useMemo(() => {
     return routes
@@ -717,13 +1009,9 @@ export function LogisticaClient({
     return routes.find((route) => route.id === selectedRouteId) || filteredRoutes[0] || null;
   }, [filteredRoutes, routes, selectedRouteId]);
 
-  const openCount = allTasks.filter(
-    (task) => task.status !== "completed" && task.status !== "cancelled",
-  ).length;
-  const routedCount = openTasks.filter((task) => routeByTaskId.has(task.id)).length;
-  const missingGeoCount = openTasks.filter((task) => !addressByTaskId.get(task.id)?.hasGeo).length;
+  const openCount = filteredInvoiceItems.length;
   const hasFilters = Boolean(
-    query.trim() || typeFilter || driverFilter || warehouseFilter || zoneFilter,
+    query.trim() || dateFilter || typeFilter || driverFilter || warehouseFilter || zoneFilter,
   );
 
   async function changeTask(
@@ -745,6 +1033,79 @@ export function LogisticaClient({
     await reloadAll();
     setBusyId(null);
     notify.success("Tarea actualizada");
+  }
+
+  function requestDriverChange(task: LogisticsTaskItem, nextAssignedTo: string | null) {
+    if (nextAssignedTo === task.assignedTo) {
+      return;
+    }
+
+    if (shouldConfirmDriverChange(task.assignedTo, nextAssignedTo)) {
+      setPendingDriverChange({ task, nextAssignedTo });
+      return;
+    }
+
+    void saveDriverChange(task, nextAssignedTo);
+  }
+
+  async function saveDriverChange(task: LogisticsTaskItem, nextAssignedTo: string | null) {
+    setBusyId(task.id);
+    const result = await updateLogisticsTaskAction({
+      taskId: task.id,
+      assignedTo: nextAssignedTo,
+    });
+
+    if (!result.ok) {
+      notify.error(result.error);
+      setBusyId(null);
+      return false;
+    }
+
+    await reloadAll();
+    setBusyId(null);
+    notify.success("Chofer actualizado");
+    return true;
+  }
+
+  async function confirmDriverChange() {
+    if (!pendingDriverChange) {
+      return;
+    }
+
+    const { task, nextAssignedTo } = pendingDriverChange;
+    const saved = await saveDriverChange(task, nextAssignedTo);
+    if (saved) {
+      setPendingDriverChange(null);
+    }
+  }
+
+  function cancelDriverChange() {
+    if (busyId === pendingDriverChange?.task.id) {
+      return;
+    }
+
+    setPendingDriverChange(null);
+  }
+
+  function canChangeTaskDriver(task: LogisticsTaskItem, routeInfo?: { route: LogisticsRouteRow }) {
+    if (task.status === "completed" || task.status === "cancelled") {
+      return false;
+    }
+
+    const invoiceStep = invoiceStepByTaskId.get(task.id);
+    if (invoiceStep && (invoiceStep.currentTask?.id !== task.id || !invoiceStep.canAssignDriver)) {
+      return false;
+    }
+
+    if (routeInfo) {
+      return false;
+    }
+
+    if (busyId === task.id) {
+      return false;
+    }
+
+    return true;
   }
 
   async function loadSuggestions() {
@@ -826,6 +1187,86 @@ export function LogisticaClient({
     notify.success("Parada liberada");
   }
 
+  function requestRemoveStop(stop: LogisticsRouteStopRow) {
+    if (!selectedRoute) {
+      return;
+    }
+
+    const task = taskById.get(stop.taskId);
+    const shipmentCode = task?.shipment.code || stop.address.name || stop.taskId;
+    setPendingRouteConfirm({
+      kind: "remove-stop",
+      route: selectedRoute,
+      stop,
+      shipmentCode,
+    });
+  }
+
+  async function confirmPendingRouteAction() {
+    if (!pendingRouteConfirm) {
+      return;
+    }
+
+    if (pendingRouteConfirm.kind === "cancel") {
+      await cancelRoute(pendingRouteConfirm.route);
+      setPendingRouteConfirm(null);
+      return;
+    }
+
+    if (pendingRouteConfirm.kind === "remove-stop") {
+      await removeStop(pendingRouteConfirm.stop);
+      setPendingRouteConfirm(null);
+      return;
+    }
+
+    await assignRoute(
+      pendingRouteConfirm.route.id,
+      pendingRouteConfirm.nextAssignedTo,
+    );
+    setPendingRouteConfirm(null);
+  }
+
+  function cancelPendingRouteAction() {
+    if (
+      pendingRouteConfirm?.kind === "cancel" &&
+      busyId === `cancel:${pendingRouteConfirm.route.id}`
+    ) {
+      return;
+    }
+
+    if (
+      pendingRouteConfirm?.kind === "remove-stop" &&
+      busyId === `remove:${pendingRouteConfirm.stop.id}`
+    ) {
+      return;
+    }
+
+    if (
+      pendingRouteConfirm?.kind === "driver" &&
+      busyId === `driver:${pendingRouteConfirm.route.id}`
+    ) {
+      return;
+    }
+
+    setPendingRouteConfirm(null);
+  }
+
+  function requestRouteDriverChange(nextAssignedTo: string | null) {
+    if (!selectedRoute || nextAssignedTo === (selectedRoute.assignedTo || null)) {
+      return;
+    }
+
+    setPendingRouteConfirm({
+      kind: "driver",
+      route: selectedRoute,
+      nextAssignedTo,
+    });
+  }
+
+  function requestCancelRoute(route: LogisticsRouteRow) {
+    setPendingRouteConfirm({ kind: "cancel", route });
+  }
+
   async function moveStop(stop: LogisticsRouteStopRow, direction: -1 | 1) {
     if (!selectedRoute) {
       return;
@@ -880,16 +1321,178 @@ export function LogisticaClient({
     }
 
     setSelectedRouteId("");
+    setRouteDetailDrawerOpen(false);
     await reloadAll();
     notify.success("Ruta cancelada");
+  }
+
+  function selectRoute(routeId: string) {
+    setSelectedRouteId(routeId);
+    if (!isWideLayout) {
+      setRouteDetailDrawerOpen(true);
+    }
+  }
+
+  function closeRouteDetailDrawer() {
+    setRouteDetailDrawerOpen(false);
+  }
+
+  function renderInvoiceCard(item: LogisticsInvoiceItem) {
+    const task = item.currentTask;
+    const nextTask = item.nextTask;
+    const displayTask = task || nextTask;
+    const address = displayTask ? addressByTaskId.get(displayTask.id) : undefined;
+    const routeInfo = task ? routeByTaskId.get(task.id) : undefined;
+    const highlighted =
+      highlightTaskId === task?.id || Boolean(nextTask && highlightTaskId === nextTask.id);
+    const missingGeo = Boolean(displayTask && !address?.hasGeo);
+    const canChangeDriver = task ? canChangeTaskDriver(task, routeInfo) : false;
+    const priorityCardClass = logisticsPriorityCardClass(
+      item.shipment.invoice_priority,
+      task?.assignedTo,
+      Boolean(task),
+    );
+    const priorityHeaderClass = logisticsPriorityHeaderClass(
+      item.shipment.invoice_priority,
+      task?.assignedTo,
+      Boolean(task),
+    );
+    const priorityAwaitingDriver = logisticsPriorityAwaitingDriver(
+      item.shipment.invoice_priority,
+      task?.assignedTo,
+      Boolean(task),
+    );
+
+    return (
+      <article
+        key={item.shipment.id}
+        data-logistics-task-id={task?.id || nextTask?.id || item.shipment.id}
+        className={`rounded-lg border bg-surface-card shadow-[0_6px_18px_rgba(0,0,0,0.18)] ${priorityCardClass} ${highlighted ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#1a2320]" : ""}`}
+      >
+        <div className={`relative border-b border-black px-3 py-2.5 ${priorityHeaderClass}`}>
+          {item.shipment.invoice_priority ? (
+            <div className="absolute right-2 top-2 z-10">
+              <InvoicePriorityBadge variant="chip" pulsing={priorityAwaitingDriver} />
+            </div>
+          ) : null}
+          <div className={`mx-auto min-w-0 text-center ${item.shipment.invoice_priority ? "pr-14" : ""}`}>
+            <p className="truncate text-base font-black text-[#f8fafc]">
+              <span className="truncate">{item.shipment.code}</span>
+            </p>
+            <p className="truncate text-xs font-black text-slate-300">
+              {item.shipment.customer_name}
+            </p>
+            {item.shipment.customerPhone ? (
+              <p className="mt-0.5 inline-flex max-w-full items-center justify-center gap-1 truncate text-[11px] font-black text-slate-400">
+                <Phone className="h-3 w-3 shrink-0" />
+                <span className="truncate">{item.shipment.customerPhone}</span>
+              </p>
+            ) : null}
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+              <CountryName name={item.shipment.country} size="xs" labelClassName={textMutedClass} />
+              {missingGeo ? (
+                <span className="inline-flex items-center gap-1 rounded-md border border-amber-700/70 bg-amber-400/15 px-2 py-0.5 text-[10px] font-black text-amber-100">
+                  <AlertTriangle className="h-3 w-3" />
+                  Falta geo
+                </span>
+              ) : null}
+              {routeInfo ? (
+                <span className="inline-flex items-center gap-1 rounded-md border border-black bg-surface-inset px-2 py-0.5 text-[10px] font-black text-emerald-300">
+                  <Route className="h-3 w-3" />
+                  {routeInfo.route.name}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3 p-3">
+          <p
+            className={`line-clamp-2 rounded-md border px-2 py-1 text-xs font-bold leading-snug ${
+              missingGeo
+                ? "border-amber-700 bg-amber-400/15 text-amber-100"
+                : "border-black bg-surface-inset text-slate-300"
+            }`}
+          >
+            {address?.address.formattedAddress || displayTask?.notes || "Sin direccion"}
+          </p>
+
+          <LogisticsTaskWaitingBanner
+            taskType={task?.taskType ?? item.step.stepType}
+            orderedAt={task?.orderedAt}
+            createdAt={task?.createdAt}
+          />
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div
+              className={`relative flex items-center gap-2.5 rounded-md border px-2 py-2 ${invoiceActionFieldClass(item.step.stepType)}`}
+            >
+              <span
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border ${logisticsActionIconWellClass(item.step.stepType)}`}
+                aria-hidden
+              >
+                {taskTypeIcon(item.step.stepType, "h-5 w-5")}
+              </span>
+              <div className="min-w-0">
+                <span className="pointer-events-none block text-[10px] font-black uppercase opacity-70">
+                  Accion
+                </span>
+                <span className="pointer-events-none block truncate text-sm font-black">
+                  {invoiceActionLabel(item.step.stepType)}
+                </span>
+              </div>
+            </div>
+
+            <div
+              className={`relative grid gap-1 rounded-md border px-2 py-2 ${invoiceDriverFieldClass(task?.assignedTo, Boolean(task))}`}
+            >
+              <span
+                className={`inline-flex items-center gap-1 text-[10px] font-black uppercase ${
+                  task && !task.assignedTo ? "text-rose-400" : "opacity-70"
+                }`}
+              >
+                <Truck className="h-3.5 w-3.5" />
+                Chofer
+              </span>
+              {task ? (
+                <InlineSearchPicker
+                  className="w-full min-w-0"
+                  minWidthClass="w-full min-w-0"
+                  shellClassName={LOGISTICS_CARD_PICKER_SHELL}
+                  value={task.assignedTo || ""}
+                  onChange={(nextValue) => requestDriverChange(task, nextValue || null)}
+                  options={taskDriverPickerOptions}
+                  placeholder="Sin chofer"
+                  searchPlaceholder="Buscar chofer…"
+                  emptyLabel="Sin conductores"
+                  ariaLabel={`Chofer de ${item.shipment.code}`}
+                  disabled={!canChangeDriver}
+                  formatSelectedLabel={(option) => option?.label || "Sin chofer"}
+                />
+              ) : (
+                <span className="truncate text-sm font-black">Primero entrega</span>
+              )}
+              {task && busyId === task.id ? (
+                <Loader2 className="pointer-events-none absolute right-2 top-2 h-3.5 w-3.5 animate-spin text-emerald-300" />
+              ) : null}
+            </div>
+          </div>
+
+          {item.quote?.label ? (
+            <p className="rounded-md border border-black bg-[#26312c] px-3 py-2 text-center text-sm font-black tabular-nums tracking-tight text-[#f8fafc] sm:text-base">
+              {item.quote.label}
+            </p>
+          ) : null}
+        </div>
+      </article>
+    );
   }
 
   function renderTaskCard(task: LogisticsTaskItem, mode: "unrouted" | "route" = "unrouted") {
     const address = addressByTaskId.get(task.id);
     const routeInfo = routeByTaskId.get(task.id);
-    const driverLabel = task.assignedTo
-      ? memberById.get(task.assignedTo) || task.assignedTo
-      : "Sin asignar";
+    const missingGeo = mode === "unrouted" && !address?.hasGeo;
+    const highlighted = highlightTaskId === task.id;
     const warehouseLabel = task.warehouseId
       ? warehouseById.get(task.warehouseId) || task.warehouseId
       : "Default";
@@ -899,19 +1502,54 @@ export function LogisticaClient({
       selectedRoute.status !== "cancelled" &&
       selectedRoute.status !== "completed" &&
       address?.hasGeo;
+    const showChoferPicker = mode === "unrouted";
+    const priorityHeaderClass = logisticsPriorityHeaderClass(
+      task.shipment.invoice_priority,
+      task.assignedTo,
+      true,
+    );
+    const priorityAwaitingDriver = logisticsPriorityAwaitingDriver(
+      task.shipment.invoice_priority,
+      task.assignedTo,
+      true,
+    );
 
     return (
       <article
         key={task.id}
-        className="rounded-lg border border-black bg-surface-card shadow-[0_6px_18px_rgba(0,0,0,0.18)]"
+        data-logistics-task-id={task.id}
+        className={logisticsUnroutedTaskCardClass({
+          missingGeo,
+          highlighted,
+          invoicePriority: task.shipment.invoice_priority,
+          assignedTo: task.assignedTo,
+          canAssignDriver: true,
+        })}
       >
-        <div className="border-b border-black bg-surface-card-header px-3 py-2">
-          <div className="flex items-start justify-between gap-2">
+        <div
+          className={`relative border-b border-black px-3 py-2 ${
+            missingGeo ? "bg-amber-950/55" : priorityHeaderClass
+          }`}
+        >
+          {task.shipment.invoice_priority ? (
+            <div className="absolute right-2 top-2 z-10">
+              <InvoicePriorityBadge variant="chip" pulsing={priorityAwaitingDriver} />
+            </div>
+          ) : null}
+          <div className={`flex items-start justify-between gap-2 ${task.shipment.invoice_priority ? "pr-14" : ""}`}>
             <div className="min-w-0">
-              <p className="truncate text-base font-black text-[#f8fafc]">{task.shipment.code}</p>
+              <p className="truncate text-base font-black text-[#f8fafc]">
+                <span className="truncate">{task.shipment.code}</span>
+              </p>
               <p className="truncate text-xs font-black text-slate-300">
                 {task.shipment.customer_name}
               </p>
+              {task.shipment.customerPhone ? (
+                <p className="mt-0.5 inline-flex max-w-full items-center gap-1 truncate text-[11px] font-black text-slate-400">
+                  <Phone className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{task.shipment.customerPhone}</span>
+                </p>
+              ) : null}
             </div>
             {busyId === task.id || busyId === `add:${task.id}` ? (
               <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-300" />
@@ -923,13 +1561,20 @@ export function LogisticaClient({
               {taskTypeIcon(task.taskType)}
               {taskTypeShortLabel[task.taskType]}
             </span>
-            <span
-              className={`rounded-md border px-2 py-1 text-[11px] font-black ${statusBadgeClass(task.status)}`}
-            >
-              {taskStatusLabel[task.status]}
-            </span>
+            <LogisticsTaskStatusBadge
+              status={task.status}
+              assignedTo={task.assignedTo}
+              memberById={memberById}
+              routeMembers={routeMembers}
+              disabled={!canChangeTaskDriver(task, routeInfo)}
+              shipmentCode={task.shipment.code}
+              onDriverChangeRequest={(nextAssignedTo) =>
+                requestDriverChange(task, nextAssignedTo)
+              }
+              statusBadgeClass={statusBadgeClass}
+            />
             {!address?.hasGeo ? (
-              <span className="inline-flex items-center gap-1 rounded-md border border-amber-700 bg-amber-400 px-2 py-1 text-[11px] font-black text-slate-950">
+              <span className="inline-flex items-center gap-1 rounded-md border border-amber-700/70 bg-amber-400/15 px-2 py-0.5 text-[10px] font-black text-amber-100">
                 <AlertTriangle className="h-3 w-3" />
                 Falta geo
               </span>
@@ -938,78 +1583,48 @@ export function LogisticaClient({
         </div>
 
         <div className="grid gap-2 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <CountryName name={task.shipment.country} size="xs" labelClassName={textMutedClass} />
-            <span className="rounded-md border border-black bg-surface-inset px-2 py-1 text-xs font-black text-slate-300">
-              {address?.zoneLabel || "Sin zona"}
-            </span>
-          </div>
-
-          <p className="line-clamp-2 rounded-md border border-black bg-surface-inset px-2 py-1 text-xs font-bold leading-snug text-slate-300">
-            {address?.address.formattedAddress || task.notes || "Sin direccion para ruta"}
+          <p
+            className={`line-clamp-2 rounded-md border px-2 py-1 text-xs font-bold leading-snug ${
+              missingGeo
+                ? "border-amber-700 bg-amber-400/15 text-amber-100"
+                : "border-black bg-surface-inset text-slate-300"
+            }`}
+          >
+            {missingGeo
+              ? address?.address.formattedAddress || task.notes || "Sin geolocalizacion para ruta"
+              : address?.address.formattedAddress || task.notes || "Sin direccion para ruta"}
           </p>
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="relative grid gap-1 rounded-md border border-black bg-[#26312c] px-2 py-2">
-              <span className="pointer-events-none inline-flex items-center gap-1 text-[10px] font-black uppercase text-slate-500">
-                <Truck className="h-3.5 w-3.5 text-emerald-300" />
-                Chofer
-              </span>
-              <span className="pointer-events-none truncate text-sm font-black text-[#f8fafc]">
-                {driverLabel}
-              </span>
-              <select
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                value={task.assignedTo || ""}
-                disabled={Boolean(routeInfo) || busyId === task.id}
-                aria-label="Chofer"
-                onChange={(event) =>
-                  void changeTask(task, {
-                    assignedTo: event.target.value || null,
-                  })
-                }
-              >
-                <option value="">Sin asignar</option>
-                {routeMembers.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <LogisticsTaskWaitingBanner
+            taskType={task.taskType}
+            orderedAt={task.orderedAt}
+            createdAt={task.createdAt}
+          />
 
-            <label className="relative grid gap-1 rounded-md border border-black bg-[#26312c] px-2 py-2">
-              <span className="pointer-events-none inline-flex items-center gap-1 text-[10px] font-black uppercase text-slate-500">
-                <CalendarClock className="h-3.5 w-3.5 text-amber-300" />
-                Fecha
-              </span>
-              <span className="pointer-events-none truncate text-sm font-black text-[#f8fafc]">
-                {formatSchedule(task.scheduledAt)}
-              </span>
-              <input
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                type="datetime-local"
-                value={toDatetimeInput(task.scheduledAt)}
-                disabled={Boolean(routeInfo) || busyId === task.id}
-                aria-label="Fecha"
-                onPointerDown={(event) => {
-                  if (openNativePicker(event.currentTarget)) {
-                    event.preventDefault();
+          {showChoferPicker ? (
+            <div className="relative grid gap-1 rounded-md border border-black bg-[#26312c] px-2 py-2">
+                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-slate-500">
+                  <Truck className="h-3.5 w-3.5 text-emerald-300" />
+                  Chofer
+                </span>
+                <InlineSearchPicker
+                  className="w-full min-w-0"
+                  minWidthClass="w-full min-w-0"
+                  shellClassName={LOGISTICS_CARD_PICKER_SHELL}
+                  value={task.assignedTo || ""}
+                  onChange={(nextValue) => requestDriverChange(task, nextValue || null)}
+                  options={taskDriverPickerOptions}
+                  placeholder="Sin asignar"
+                  searchPlaceholder="Buscar chofer…"
+                  emptyLabel="Sin conductores"
+                  ariaLabel="Chofer"
+                  disabled={!canChangeTaskDriver(task, routeInfo)}
+                  formatSelectedLabel={(option) =>
+                    option?.label || driverLabel(task.assignedTo, memberById)
                   }
-                }}
-                onClick={(event) => {
-                  if (hasNativePicker(event.currentTarget)) {
-                    event.preventDefault();
-                  }
-                }}
-                onChange={(event) =>
-                  void changeTask(task, {
-                    scheduledAt: fromDatetimeInput(event.target.value),
-                  })
-                }
-              />
-            </label>
-          </div>
+                />
+              </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1 text-[11px] font-black text-slate-500">
@@ -1038,6 +1653,228 @@ export function LogisticaClient({
     );
   }
 
+  function renderRouteDetailContent(options?: { scrollClass?: string; showTitle?: boolean }) {
+    const scrollClass = options?.scrollClass ?? "max-h-[70vh]";
+    const showTitle = options?.showTitle ?? true;
+
+    return (
+      <>
+        <div className="border-b border-black bg-surface-card-header px-3 py-3">
+          {showTitle ? (
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-base font-black text-[#f8fafc]">
+                  {selectedRoute?.name || "Detalle ruta"}
+                </p>
+                <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
+                  {selectedRoute
+                    ? `${selectedRoute.routeDate} · ${selectedRoute.stops.length} paradas`
+                    : "Selecciona una ruta"}
+                </p>
+              </div>
+              {selectedRoute ? (
+                <span
+                  className={`rounded-md border px-2 py-1 text-[11px] font-black ${routeStatusClass(selectedRoute.status)}`}
+                >
+                  {routeStatusLabel[selectedRoute.status]}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {selectedRoute ? (
+            <div className={`grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] ${showTitle ? "mt-3" : ""}`}>
+              <InlineSearchPicker
+                className="w-full min-w-0"
+                minWidthClass="w-full min-w-0"
+                compact={false}
+                value={selectedRoute.assignedTo || ""}
+                onChange={(nextValue) => requestRouteDriverChange(nextValue || null)}
+                options={routeDriverPickerOptions}
+                placeholder="Sin chofer"
+                searchPlaceholder="Buscar chofer…"
+                emptyLabel="Sin conductores"
+                ariaLabel="Chofer de ruta"
+                disabled={busyId === `driver:${selectedRoute.id}`}
+                leadingIcon={<Truck className="h-4 w-4 text-emerald-300" aria-hidden />}
+              />
+              <button
+                type="button"
+                className={`${secondaryButtonClass} h-11 justify-center text-rose-200 disabled:opacity-50`}
+                disabled={
+                  busyId === `cancel:${selectedRoute.id}` ||
+                  (selectedRoute.status !== "draft" && selectedRoute.status !== "planned")
+                }
+                onClick={() => requestCancelRoute(selectedRoute)}
+              >
+                {busyId === `cancel:${selectedRoute.id}` ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Cancelar
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        <div className={`grid ${scrollClass} gap-3 overflow-y-auto p-3`}>
+          {selectedRoute?.stops.length ? (
+            selectedRoute.stops.map((stop, index) => {
+              const task = taskById.get(stop.taskId);
+              const highlighted = highlightTaskId === stop.taskId;
+
+              return (
+                <article
+                  key={stop.id}
+                  data-logistics-task-id={stop.taskId}
+                  className={`relative rounded-lg border border-black bg-surface-card p-3 ${
+                    highlighted ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#1a2320]" : ""
+                  }`}
+                >
+                  {task?.shipment.invoice_priority ? (
+                    <div className="absolute right-2 top-2 z-10">
+                      <InvoicePriorityBadge
+                        variant="chip"
+                        pulsing={logisticsPriorityAwaitingDriver(
+                          task.shipment.invoice_priority,
+                          task.assignedTo,
+                          true,
+                        )}
+                      />
+                    </div>
+                  ) : null}
+                  <div
+                    className={`flex items-start justify-between gap-2 ${task?.shipment.invoice_priority ? "pr-14" : ""}`}
+                  >
+                    <div className="flex min-w-0 gap-2">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black bg-emerald-400 text-sm font-black text-slate-950">
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-[#f8fafc]">
+                          {task?.shipment.code || stop.address.name || stop.taskId}
+                        </p>
+                        <p className="truncate text-xs font-bold text-slate-400">
+                          {task?.shipment.customer_name || stop.address.name}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-black bg-surface-inset text-slate-300 disabled:opacity-40"
+                        disabled={index === 0 || busyId === `reorder:${stop.id}`}
+                        onClick={() => void moveStop(stop, -1)}
+                        aria-label="Subir parada"
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-black bg-surface-inset text-slate-300 disabled:opacity-40"
+                        disabled={
+                          index === selectedRoute.stops.length - 1 ||
+                          busyId === `reorder:${stop.id}`
+                        }
+                        onClick={() => void moveStop(stop, 1)}
+                        aria-label="Bajar parada"
+                      >
+                        <ArrowDown className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-black bg-surface-inset text-rose-200 disabled:opacity-40"
+                        disabled={busyId === `remove:${stop.id}`}
+                        onClick={() => requestRemoveStop(stop)}
+                        aria-label="Quitar parada"
+                      >
+                        {busyId === `remove:${stop.id}` ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="mt-2 line-clamp-2 rounded-md border border-black bg-surface-inset px-2 py-1 text-xs font-bold leading-snug text-slate-300">
+                    {stop.address.formattedAddress || "Sin direccion"}
+                  </p>
+                  {task ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-black pt-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-black bg-surface-inset px-2 py-1 text-[11px] font-black text-slate-200">
+                        {taskTypeIcon(task.taskType)}
+                        {taskTypeShortLabel[task.taskType]}
+                      </span>
+                      <LogisticsTaskStatusBadge
+                        status={task.status}
+                        assignedTo={task.assignedTo}
+                        memberById={memberById}
+                        routeMembers={routeMembers}
+                        disabled={!canChangeTaskDriver(task, { route: selectedRoute })}
+                        shipmentCode={task.shipment.code}
+                        onDriverChangeRequest={(nextAssignedTo) =>
+                          requestDriverChange(task, nextAssignedTo)
+                        }
+                        statusBadgeClass={statusBadgeClass}
+                      />
+                      <span className="rounded-md border border-black bg-surface-inset px-2 py-1 text-[11px] font-black text-slate-400">
+                        {formatSchedule(task.scheduledAt)}
+                      </span>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })
+          ) : (
+            <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-black bg-surface-inset px-4 text-center">
+              <div>
+                <CheckCircle2 className="mx-auto h-7 w-7 text-slate-600" />
+                <p className="mt-2 text-sm font-black text-slate-300">Sin paradas</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  }
+
+  const routeDetailDrawer =
+    typeof document !== "undefined" && routeDetailDrawerOpen && selectedRoute && !isWideLayout ? (
+      <div className="fixed inset-0 z-[135] flex justify-end 2xl:hidden">
+        <button
+          type="button"
+          className="absolute inset-0 bg-black/50"
+          aria-label="Cerrar detalle de ruta"
+          onClick={closeRouteDetailDrawer}
+        />
+        <aside className="relative flex h-full w-full max-w-lg flex-col border-l border-black bg-[#1a2320] shadow-[-20px_0_50px_rgba(0,0,0,0.45)]">
+          <header className="flex shrink-0 items-start justify-between gap-3 border-b border-black/70 px-4 py-4">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">
+                Logistica
+              </p>
+              <h2 className="truncate text-lg font-black text-[#f8fafc]">{selectedRoute.name}</h2>
+              <p className="mt-0.5 text-sm font-bold text-slate-400">
+                {selectedRoute.routeDate} · {selectedRoute.stops.length} paradas
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={closeRouteDetailDrawer}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#111827] text-slate-300"
+              aria-label="Cerrar"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </header>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {renderRouteDetailContent({ scrollClass: "h-full max-h-none", showTitle: false })}
+          </div>
+        </aside>
+      </div>
+    ) : null;
+
   if (!loaded) {
     return <PageLoading inline />;
   }
@@ -1050,22 +1887,17 @@ export function LogisticaClient({
 
       {supabaseReady ? (
         <div className="grid gap-4">
-          <div className={`${cardClass} overflow-visible`}>
-            <div className="grid gap-2 p-3 2xl:grid-cols-[auto_minmax(18rem,1fr)_10rem_12rem_12rem_12rem_12rem_auto] 2xl:items-center">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h1 className="mr-1 truncate text-xl font-black text-[#f8fafc]">Logistica</h1>
-                <span className="inline-flex h-11 items-center gap-2 rounded-md border border-black bg-surface-inset px-2">
-                  <span className="text-[10px] font-black uppercase text-slate-500">Abiertas</span>
-                  <span className="text-lg font-black text-[#f8fafc]">{openCount}</span>
-                </span>
-                <span className="inline-flex h-11 items-center gap-2 rounded-md border border-black bg-surface-inset px-2">
-                  <span className="text-[10px] font-black uppercase text-slate-500">En ruta</span>
-                  <span className="text-lg font-black text-emerald-300">{routedCount}</span>
-                </span>
-                <span className="inline-flex h-11 items-center gap-2 rounded-md border border-black bg-surface-inset px-2">
-                  <span className="text-[10px] font-black uppercase text-slate-500">Sin geo</span>
-                  <span className="text-lg font-black text-amber-300">{missingGeoCount}</span>
-                </span>
+          <div className={`${cardClass} overflow-visible p-2`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex h-9 shrink-0 divide-x divide-black overflow-hidden rounded-lg border border-black bg-surface-inset">
+                <div className="flex min-w-[5rem] items-center gap-1.5 px-2">
+                  <span className="text-[9px] font-black uppercase leading-none text-slate-500">
+                    Invoices
+                  </span>
+                  <span className="text-sm font-black tabular-nums leading-none text-[#f8fafc]">
+                    {openCount}
+                  </span>
+                </div>
               </div>
 
               <InlineSearchCombobox
@@ -1076,51 +1908,49 @@ export function LogisticaClient({
                 emptyLabel="Sin tareas"
                 ariaLabel="Buscar tareas de logistica"
                 leadingIcon={<Search className="h-4 w-4" aria-hidden />}
-                className="w-full"
+                className="min-w-[14rem] flex-[1_1_18rem]"
                 minWidthClass="w-full min-w-0"
                 onSelectOption={(option) => {
-                  const task = allTasks.find((entry) => entry.id === option.value);
-                  if (task) {
-                    setQuery(task.shipment.code);
+                  const item = invoiceItems.find((entry) => entry.shipment.id === option.value);
+                  if (item) {
+                    setQuery(item.shipment.code);
                   }
                 }}
               />
 
-              <input
-                className={inputClass}
-                type="date"
+              <DateInput
+                className="w-[8.5rem] shrink-0"
                 value={dateFilter}
-                aria-label="Fecha de ruta"
-                onChange={(event) => setDateFilter(event.target.value)}
+                ariaLabel="Fecha"
+                onChange={setDateFilter}
               />
 
               <select
-                className={inputClass}
+                className="h-9 w-[8rem] shrink-0 rounded-lg border border-black bg-surface-inset px-2.5 text-sm font-black text-[#f8fafc] outline-none"
                 value={typeFilter}
                 onChange={(event) => setTypeFilter(event.target.value)}
                 aria-label="Filtrar por tipo de tarea"
               >
                 <option value="">Todo tipo</option>
-                <option value="deliver_empty_box">Entregas</option>
-                <option value="pickup_full_box">Recolecciones</option>
+                <option value="deliver_empty_box">Dejar</option>
+                <option value="pickup_full_box">Recoger</option>
               </select>
 
-              <select
-                className={inputClass}
+              <InlineSearchPicker
+                className="w-[9rem] shrink-0"
+                minWidthClass="w-full min-w-0"
                 value={driverFilter}
-                onChange={(event) => setDriverFilter(event.target.value)}
-                aria-label="Filtrar por chofer"
-              >
-                <option value="">Todo chofer</option>
-                {routeMembers.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.label}
-                  </option>
-                ))}
-              </select>
+                onChange={setDriverFilter}
+                options={filterDriverPickerOptions}
+                placeholder="Todo chofer"
+                searchPlaceholder="Buscar chofer…"
+                emptyLabel="Sin conductores"
+                ariaLabel="Filtrar por chofer"
+                leadingIcon={<Truck className="h-4 w-4 text-emerald-300" aria-hidden />}
+              />
 
               <select
-                className={inputClass}
+                className="h-9 w-[9rem] shrink-0 rounded-lg border border-black bg-surface-inset px-2.5 text-sm font-black text-[#f8fafc] outline-none"
                 value={warehouseFilter}
                 onChange={(event) => setWarehouseFilter(event.target.value)}
                 aria-label="Filtrar por bodega"
@@ -1134,7 +1964,7 @@ export function LogisticaClient({
               </select>
 
               <select
-                className={inputClass}
+                className="h-9 w-[8rem] shrink-0 rounded-lg border border-black bg-surface-inset px-2.5 text-sm font-black text-[#f8fafc] outline-none"
                 value={zoneFilter}
                 onChange={(event) => setZoneFilter(event.target.value)}
                 aria-label="Filtrar por zona"
@@ -1147,40 +1977,64 @@ export function LogisticaClient({
                 ))}
               </select>
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className={`${secondaryButtonClass} h-11 justify-center disabled:opacity-50`}
-                  disabled={!hasFilters}
-                  onClick={() => {
-                    setQuery("");
-                    setTypeFilter("");
-                    setDriverFilter("");
-                    setWarehouseFilter("");
-                    setZoneFilter("");
-                  }}
-                >
-                  <XCircle className="h-4 w-4" />
-                  Limpiar
-                </button>
-                <button
-                  type="button"
-                  className={`${primaryButtonClass} h-11 justify-center disabled:opacity-50`}
-                  disabled={busyId === "suggestions"}
-                  onClick={() => void loadSuggestions()}
-                >
-                  {busyId === "suggestions" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Wand2 className="h-4 w-4" />
-                  )}
-                  Sugerir
-                </button>
-              </div>
+              <button
+                type="button"
+                className={`${secondaryButtonClass} h-9 shrink-0 px-2.5 disabled:opacity-50`}
+                disabled={!hasFilters}
+                onClick={() => {
+                  setQuery("");
+                  setDateFilter("");
+                  setTypeFilter("");
+                  setDriverFilter("");
+                  setWarehouseFilter("");
+                  setZoneFilter("");
+                }}
+              >
+                <XCircle className="h-4 w-4" />
+                Limpiar
+              </button>
+
+              <LogisticsSectionNav
+                active="routes"
+                className="ml-auto"
+                routesOnClick={() => setAdvancedRoutesOpen((current) => !current)}
+                extraActions={
+                  advancedRoutesOpen ? (
+                    <button
+                      type="button"
+                      className={`${primaryButtonClass} h-9 shrink-0 px-2.5 disabled:opacity-50`}
+                      disabled={busyId === "suggestions"}
+                      onClick={() => void loadSuggestions()}
+                    >
+                      {busyId === "suggestions" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Wand2 className="h-4 w-4" />
+                      )}
+                      Sugerir
+                    </button>
+                  ) : null
+                }
+              />
             </div>
           </div>
 
-          {suggestions.length ? (
+          <section className="overflow-hidden rounded-xl border border-black bg-surface-panel">
+            <div className="grid max-h-[72vh] auto-rows-max gap-3 overflow-y-auto p-3 xl:grid-cols-2 2xl:grid-cols-3">
+              {filteredInvoiceItems.length ? (
+                filteredInvoiceItems.map((item) => renderInvoiceCard(item))
+              ) : (
+                <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-black bg-surface-inset px-4 text-center">
+                  <div>
+                    <ClipboardList className="mx-auto h-7 w-7 text-slate-600" />
+                    <p className="mt-2 text-sm font-black text-slate-300">Sin invoices</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {advancedRoutesOpen && suggestions.length ? (
             <section className="overflow-hidden rounded-xl border border-black bg-surface-panel">
               <div className="border-b border-black bg-surface-card-header px-3 py-3">
                 <p className="text-base font-black text-[#f8fafc]">Sugerencias</p>
@@ -1234,7 +2088,8 @@ export function LogisticaClient({
             </section>
           ) : null}
 
-          <div className="grid gap-3 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.05fr)_minmax(22rem,0.8fr)]">
+          {advancedRoutesOpen ? (
+          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.05fr)_minmax(22rem,0.8fr)]">
             <section className="overflow-hidden rounded-xl border border-black bg-surface-panel">
               <div className="border-b border-black bg-surface-card-header px-3 py-3">
                 <div className="flex items-start justify-between gap-2">
@@ -1273,9 +2128,20 @@ export function LogisticaClient({
                       Draft y planeadas
                     </p>
                   </div>
-                  <span className="rounded-md border border-black bg-surface-inset px-2 py-1 text-sm font-black text-slate-200">
-                    {filteredRoutes.length}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {!isWideLayout && selectedRoute ? (
+                      <button
+                        type="button"
+                        className={`${secondaryButtonClass} h-8 px-2.5 text-[11px]`}
+                        onClick={() => setRouteDetailDrawerOpen(true)}
+                      >
+                        Ver detalle
+                      </button>
+                    ) : null}
+                    <span className="rounded-md border border-black bg-surface-inset px-2 py-1 text-sm font-black text-slate-200">
+                      {filteredRoutes.length}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1290,7 +2156,7 @@ export function LogisticaClient({
                           ? "border-emerald-600 bg-emerald-950/45"
                           : "border-black bg-surface-card hover:bg-surface-card-hover"
                       }`}
-                      onClick={() => setSelectedRouteId(route.id)}
+                      onClick={() => selectRoute(route.id)}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -1328,160 +2194,11 @@ export function LogisticaClient({
               </div>
             </section>
 
-            <section className="overflow-hidden rounded-xl border border-black bg-surface-panel">
-              <div className="border-b border-black bg-surface-card-header px-3 py-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-base font-black text-[#f8fafc]">
-                      {selectedRoute?.name || "Detalle ruta"}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
-                      {selectedRoute
-                        ? `${selectedRoute.routeDate} · ${selectedRoute.stops.length} paradas`
-                        : "Selecciona una ruta"}
-                    </p>
-                  </div>
-                  {selectedRoute ? (
-                    <span
-                      className={`rounded-md border px-2 py-1 text-[11px] font-black ${routeStatusClass(selectedRoute.status)}`}
-                    >
-                      {routeStatusLabel[selectedRoute.status]}
-                    </span>
-                  ) : null}
-                </div>
-
-                {selectedRoute ? (
-                  <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                    <select
-                      className={inputClass}
-                      value={selectedRoute.assignedTo || ""}
-                      disabled={busyId === `driver:${selectedRoute.id}`}
-                      aria-label="Chofer de ruta"
-                      onChange={(event) =>
-                        void assignRoute(selectedRoute.id, event.target.value || null)
-                      }
-                    >
-                      <option value="">Sin chofer</option>
-                      {routeMembers.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className={`${secondaryButtonClass} h-11 justify-center text-rose-200 disabled:opacity-50`}
-                      disabled={
-                        busyId === `cancel:${selectedRoute.id}` ||
-                        (selectedRoute.status !== "draft" && selectedRoute.status !== "planned")
-                      }
-                      onClick={() => void cancelRoute(selectedRoute)}
-                    >
-                      {busyId === `cancel:${selectedRoute.id}` ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                      Cancelar
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="grid max-h-[70vh] gap-3 overflow-y-auto p-3">
-                {selectedRoute?.stops.length ? (
-                  selectedRoute.stops.map((stop, index) => {
-                    const task = taskById.get(stop.taskId);
-                    return (
-                      <article
-                        key={stop.id}
-                        className="rounded-lg border border-black bg-surface-card p-3"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex min-w-0 gap-2">
-                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black bg-emerald-400 text-sm font-black text-slate-950">
-                              {index + 1}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-black text-[#f8fafc]">
-                                {task?.shipment.code || stop.address.name || stop.taskId}
-                              </p>
-                              <p className="truncate text-xs font-bold text-slate-400">
-                                {task?.shipment.customer_name || stop.address.name}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 gap-1">
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-black bg-surface-inset text-slate-300 disabled:opacity-40"
-                              disabled={index === 0 || busyId === `reorder:${stop.id}`}
-                              onClick={() => void moveStop(stop, -1)}
-                              aria-label="Subir parada"
-                            >
-                              <ArrowUp className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-black bg-surface-inset text-slate-300 disabled:opacity-40"
-                              disabled={
-                                index === selectedRoute.stops.length - 1 ||
-                                busyId === `reorder:${stop.id}`
-                              }
-                              onClick={() => void moveStop(stop, 1)}
-                              aria-label="Bajar parada"
-                            >
-                              <ArrowDown className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-black bg-surface-inset text-rose-200 disabled:opacity-40"
-                              disabled={busyId === `remove:${stop.id}`}
-                              onClick={() => void removeStop(stop)}
-                              aria-label="Quitar parada"
-                            >
-                              {busyId === `remove:${stop.id}` ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                        <p className="mt-2 line-clamp-2 rounded-md border border-black bg-surface-inset px-2 py-1 text-xs font-bold leading-snug text-slate-300">
-                          {stop.address.formattedAddress || "Sin direccion"}
-                        </p>
-                        {task ? (
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-black pt-2">
-                            <span className="inline-flex items-center gap-1.5 rounded-md border border-black bg-surface-inset px-2 py-1 text-[11px] font-black text-slate-200">
-                              {taskTypeIcon(task.taskType)}
-                              {taskTypeShortLabel[task.taskType]}
-                            </span>
-                            <span
-                              className={`rounded-md border px-2 py-1 text-[11px] font-black ${statusBadgeClass(task.status)}`}
-                            >
-                              {taskStatusLabel[task.status]}
-                            </span>
-                            <span className="rounded-md border border-black bg-surface-inset px-2 py-1 text-[11px] font-black text-slate-400">
-                              {formatSchedule(task.scheduledAt)}
-                            </span>
-                          </div>
-                        ) : null}
-                      </article>
-                    );
-                  })
-                ) : (
-                  <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-black bg-surface-inset px-4 text-center">
-                    <div>
-                      <CheckCircle2 className="mx-auto h-7 w-7 text-slate-600" />
-                      <p className="mt-2 text-sm font-black text-slate-300">Sin paradas</p>
-                    </div>
-                  </div>
-                )}
-              </div>
+            <section className="hidden overflow-hidden rounded-xl border border-black bg-surface-panel 2xl:block">
+              {renderRouteDetailContent()}
             </section>
 
-            <section className="overflow-hidden rounded-xl border border-black bg-surface-panel">
+            <section className="overflow-hidden rounded-xl border border-black bg-surface-panel lg:col-span-2 2xl:col-span-1">
               <div className="border-b border-black bg-surface-card-header px-3 py-3">
                 <p className="text-base font-black text-[#f8fafc]">Mapa</p>
                 <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
@@ -1493,8 +2210,48 @@ export function LogisticaClient({
               </div>
             </section>
           </div>
+          ) : null}
         </div>
       ) : null}
+
+      {routeDetailDrawer ? createPortal(routeDetailDrawer, document.body) : null}
+
+      <LogisticsDriverChangeDialog
+        open={Boolean(pendingDriverChange)}
+        shipmentCode={pendingDriverChange?.task.shipment.code || ""}
+        customerName={pendingDriverChange?.task.shipment.customer_name || ""}
+        taskTypeLabel={
+          pendingDriverChange ? taskTypeLabel[pendingDriverChange.task.taskType] : ""
+        }
+        currentAssignedTo={pendingDriverChange?.task.assignedTo || null}
+        nextAssignedTo={pendingDriverChange?.nextAssignedTo ?? null}
+        memberById={memberById}
+        confirming={
+          pendingDriverChange ? busyId === pendingDriverChange.task.id : false
+        }
+        onCancel={cancelDriverChange}
+        onConfirm={() => void confirmDriverChange()}
+      />
+
+      <ActionConfirmDialog
+        open={Boolean(pendingRouteConfirm && pendingRouteDialogCopy)}
+        dialogId="logistics-route-confirm"
+        title={pendingRouteDialogCopy?.title || ""}
+        message={pendingRouteDialogCopy?.message || ""}
+        confirmLabel={pendingRouteDialogCopy?.confirmLabel}
+        tone={pendingRouteDialogCopy?.tone}
+        confirming={
+          pendingRouteConfirm?.kind === "cancel"
+            ? busyId === `cancel:${pendingRouteConfirm.route.id}`
+            : pendingRouteConfirm?.kind === "remove-stop"
+              ? busyId === `remove:${pendingRouteConfirm.stop.id}`
+              : pendingRouteConfirm?.kind === "driver"
+                ? busyId === `driver:${pendingRouteConfirm.route.id}`
+                : false
+        }
+        onCancel={cancelPendingRouteAction}
+        onConfirm={() => void confirmPendingRouteAction()}
+      />
     </Panel>
   );
 }

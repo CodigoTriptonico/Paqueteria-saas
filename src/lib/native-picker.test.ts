@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { hasNativePicker, openNativePicker } from "./native-picker";
+import {
+  hasNativePicker,
+  isNativeDateTimeInput,
+  openNativePicker,
+  shouldSuppressDismissForNativePicker,
+} from "./native-picker";
 
 describe("native picker", () => {
   it("detects native picker support", () => {
@@ -31,6 +36,55 @@ describe("native picker", () => {
           throw new Error("blocked");
         },
       }),
+      false,
+    );
+  });
+
+  it("detects native date and time inputs", () => {
+    assert.equal(
+      isNativeDateTimeInput({ tagName: "INPUT", type: "time" } as HTMLInputElement),
+      true,
+    );
+    assert.equal(
+      isNativeDateTimeInput({ tagName: "INPUT", type: "date" } as HTMLInputElement),
+      true,
+    );
+    assert.equal(
+      isNativeDateTimeInput({ tagName: "INPUT", type: "text" } as HTMLInputElement),
+      false,
+    );
+    assert.equal(isNativeDateTimeInput(null), false);
+  });
+
+  it("suppresses dismiss while a native picker input stays focused outside the container", () => {
+    const inside = { nodeType: 1, id: "inside" } as unknown as Node;
+    const outside = { nodeType: 1, id: "outside" } as unknown as Node;
+    const container = {
+      contains(node: Node) {
+        return node === inside;
+      },
+    };
+
+    const timeInput = { tagName: "INPUT", type: "time" } as HTMLInputElement;
+
+    assert.equal(
+      shouldSuppressDismissForNativePicker({ target: outside }, container, timeInput),
+      true,
+    );
+    assert.equal(
+      shouldSuppressDismissForNativePicker({ target: inside }, container, timeInput),
+      false,
+    );
+    assert.equal(
+      shouldSuppressDismissForNativePicker({ target: outside }, container, null),
+      false,
+    );
+    assert.equal(
+      shouldSuppressDismissForNativePicker(
+        { target: outside },
+        container,
+        { tagName: "INPUT", type: "text" } as HTMLInputElement,
+      ),
       false,
     );
   });

@@ -2563,7 +2563,7 @@ export function ConfiguracionClient({
                 ]
               : [
                   {
-                    title: "Entrega de caja vacía",
+                    title: "Dejar",
                     text: "Horarios para llevar la caja al cliente.",
                     daysKey: "deliveryDays" as const,
                     rangesKey: "deliveryRanges" as const,
@@ -2571,7 +2571,7 @@ export function ConfiguracionClient({
                     setNewRange: setNewDeliveryRange,
                   },
                   {
-                    title: "Recolección de caja llena",
+                    title: "Recoger",
                     text: "Horarios para recoger la caja en domicilio.",
                     daysKey: "pickupDays" as const,
                     rangesKey: "pickupRanges" as const,

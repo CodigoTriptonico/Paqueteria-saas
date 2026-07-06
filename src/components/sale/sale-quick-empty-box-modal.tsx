@@ -2,6 +2,7 @@
 
 import { CalendarDays, Clock, Minus, Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { DateInput } from "@/components/date-input";
 import { ScheduleTimeField } from "@/components/sale/schedule-time-field";
 import { scheduleTimeComplete } from "@/components/sale/schedule-time";
 import {
@@ -243,13 +244,14 @@ export function SaleQuickEmptyBoxModal({
                 <div className="grid gap-3">
                   <label className="grid gap-1.5">
                     <span className="text-[11px] font-black uppercase text-slate-500">Fecha</span>
-                    <input
-                      className={inputClass}
-                      type="date"
+                    <DateInput
+                      compact={false}
+                      className="w-full"
                       min={minScheduleDateInput()}
                       value={routeDate}
-                      onChange={(event) =>
-                        updateRouteSchedule(resolveScheduleDate(event.target.value), routeTime)
+                      ariaLabel="Fecha de entrega"
+                      onChange={(nextValue) =>
+                        updateRouteSchedule(resolveScheduleDate(nextValue), routeTime)
                       }
                     />
                   </label>

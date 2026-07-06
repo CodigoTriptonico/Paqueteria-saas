@@ -1,25 +1,26 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { describeLogisticsAuditChange, describeStatusAuditChange, shipmentAuditActionLabel } from "./shipment-audit";
+import { PENDING_FULL_BOX_STATUS } from "./shipment-display";
 
 describe("shipment-audit", () => {
   it("describes status changes with interaction and step", () => {
     const description = describeStatusAuditChange({
-      previousStatus: "Pendiente",
+      previousStatus: PENDING_FULL_BOX_STATUS,
       nextStatus: "En oficina",
       interaction: "left_click",
       stepTitle: "En oficina",
     });
 
     assert.match(description, /Clic izquierdo/i);
-    assert.match(description, /Pendiente → En oficina/);
+    assert.match(description, /Pendiente recolección caja llena → En oficina/);
     assert.match(description, /Paso: En oficina/);
   });
 
   it("describes logistics changes with before and after legs", () => {
     const description = describeLogisticsAuditChange({
       interaction: "context_menu",
-      stepTitle: "Recolección de caja llena",
+      stepTitle: "Recoger",
       before: {
         fullBox: {
           mode: "Cliente trae caja llena a oficina",
@@ -39,5 +40,7 @@ describe("shipment-audit", () => {
 
   it("labels milestone audit events", () => {
     assert.equal(shipmentAuditActionLabel("shipment.milestone_recorded"), "Hito del envío");
+    assert.equal(shipmentAuditActionLabel("sale.invoice_priority_updated"), "Prioridad");
+    assert.equal(shipmentAuditActionLabel("sale.invoice_partial_payment"), "Abono");
   });
 });

@@ -44,6 +44,8 @@ function senderCardHint(sender: Sender, referralCount: number) {
 
   if (sender.recipients.length > 0) {
     parts.push(`${sender.recipients.length} dest.`);
+  } else {
+    parts.push("Sin dest.");
   }
 
   if (referralCount > 0) {

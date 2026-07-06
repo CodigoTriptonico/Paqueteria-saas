@@ -1,11 +1,15 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronDown, ClipboardList, PackagePlus, Truck, Users } from "lucide-react";
+import { listConductorDriverTasksAction } from "@/app/actions/conductor-tasks";
+import { ConductorHomePanel } from "@/components/conductor/conductor-home-panel";
 import { DashboardSummary } from "@/components/dashboard-summary";
 import { BigAction, cardClass, labelMutedClass, Panel, textMutedClass } from "@/components/ui-blocks";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
 import { getAppSession } from "@/lib/auth/session";
+import { summarizeConductorTasks } from "@/lib/conductor-dashboard";
+import { isConductorRole } from "@/lib/conductor-tareas-view";
 import { loadDashboardSummaryForSession } from "@/lib/dashboard/summary";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -48,15 +52,31 @@ export default async function Home() {
     redirect("/platform");
   }
 
+  const isConductor = Boolean(session && isConductorRole(session.roleSlug));
   const supabaseReady = isSupabaseConfigured() && Boolean(session);
   let initialSummary = null;
+  let conductorSummary = summarizeConductorTasks([]);
 
   if (supabaseReady && session) {
-    try {
-      initialSummary = await loadDashboardSummaryForSession(session);
-    } catch {
-      initialSummary = null;
+    if (isConductor) {
+      const tasksResult = await listConductorDriverTasksAction(session.userId);
+      conductorSummary = summarizeConductorTasks(tasksResult.ok ? tasksResult.data : []);
+    } else {
+      try {
+        initialSummary = await loadDashboardSummaryForSession(session);
+      } catch {
+        initialSummary = null;
+      }
     }
+  }
+
+  if (isConductor) {
+    return (
+      <ConductorHomePanel
+        driverLabel={session?.fullName || session?.email || "Conductor"}
+        summary={conductorSummary}
+      />
+    );
   }
 
   return (

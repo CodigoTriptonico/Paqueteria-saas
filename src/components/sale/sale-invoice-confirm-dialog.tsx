@@ -1,6 +1,8 @@
 "use client";
 
+import { SalePaymentMethodField } from "@/components/sale/sale-payment-method-field";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import type { SalePaymentChoice } from "@/lib/sale-payment-choice";
 
 type SaleInvoiceConfirmDialogProps = {
   open: boolean;
@@ -8,7 +10,12 @@ type SaleInvoiceConfirmDialogProps = {
   invoiceLabel: string;
   lines: Array<{ label: string; value: string }>;
   confirmLabel: string;
+  confirmingLabel?: string;
   confirming?: boolean;
+  paymentMethod: SalePaymentChoice;
+  paymentNote?: string;
+  onPaymentMethodChange: (method: SalePaymentChoice) => void;
+  onPaymentNoteChange?: (note: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -19,7 +26,12 @@ export function SaleInvoiceConfirmDialog({
   invoiceLabel,
   lines,
   confirmLabel,
+  confirmingLabel = "Creando...",
   confirming = false,
+  paymentMethod,
+  paymentNote = "",
+  onPaymentMethodChange,
+  onPaymentNoteChange,
   onCancel,
   onConfirm,
 }: SaleInvoiceConfirmDialogProps) {
@@ -49,6 +61,15 @@ export function SaleInvoiceConfirmDialog({
           ))}
         </dl>
 
+        <SalePaymentMethodField
+          className="mt-4"
+          value={paymentMethod}
+          note={paymentNote}
+          disabled={confirming}
+          onChange={onPaymentMethodChange}
+          onNoteChange={onPaymentNoteChange}
+        />
+
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <button
             type="button"
@@ -64,7 +85,7 @@ export function SaleInvoiceConfirmDialog({
             disabled={confirming}
             className={`${primaryButtonClass} h-11 text-sm font-black disabled:opacity-40`}
           >
-            {confirming ? "Creando..." : confirmLabel}
+            {confirming ? confirmingLabel : confirmLabel}
           </button>
         </div>
       </div>

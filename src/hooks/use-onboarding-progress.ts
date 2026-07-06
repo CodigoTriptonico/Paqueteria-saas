@@ -6,6 +6,10 @@ import {
   type OnboardingProgress,
 } from "@/app/actions/onboarding";
 import { ONBOARDING_PROGRESS_CHANGED } from "@/lib/onboarding/refresh";
+import {
+  isOnboardingTutorialEnabled,
+  onboardingTutorialDisabledProgress,
+} from "@/lib/onboarding/feature";
 
 const CACHE_TTL_MS = 60_000;
 
@@ -14,6 +18,12 @@ let cacheTimestamp = 0;
 let inflightRequest: Promise<OnboardingProgress | null> | null = null;
 
 async function fetchOnboardingProgress(force = false): Promise<OnboardingProgress | null> {
+  if (!isOnboardingTutorialEnabled()) {
+    cachedProgress = onboardingTutorialDisabledProgress();
+    cacheTimestamp = Date.now();
+    return cachedProgress;
+  }
+
   const cacheFresh = cachedProgress && Date.now() - cacheTimestamp < CACHE_TTL_MS;
 
   if (!force && cacheFresh) {
@@ -49,6 +59,16 @@ export function useOnboardingProgress() {
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
+    if (!isOnboardingTutorialEnabled()) {
+      const disabled = onboardingTutorialDisabledProgress();
+      cachedProgress = disabled;
+      cacheTimestamp = Date.now();
+      setProgress(disabled);
+      setLoading(false);
+      setError("");
+      return disabled;
+    }
+
     setLoading((current) => current || !cachedProgress);
     setError("");
 
@@ -70,6 +90,16 @@ export function useOnboardingProgress() {
 
   const load = useCallback(
     async (force = false) => {
+      if (!isOnboardingTutorialEnabled()) {
+        const disabled = onboardingTutorialDisabledProgress();
+        cachedProgress = disabled;
+        cacheTimestamp = Date.now();
+        setProgress(disabled);
+        setLoading(false);
+        setError("");
+        return disabled;
+      }
+
       const cacheFresh = cachedProgress && Date.now() - cacheTimestamp < CACHE_TTL_MS;
 
       if (!force && cacheFresh) {

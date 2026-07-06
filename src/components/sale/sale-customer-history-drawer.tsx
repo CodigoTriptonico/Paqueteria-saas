@@ -8,6 +8,8 @@ import {
   type CustomerSaleHistoryRow,
 } from "@/app/actions/sale-customer-history";
 import { historyDateLabel, personFullName, type Sender } from "@/components/sale/venta-parts";
+import type { ShipmentStatus } from "@/app/actions/shipments";
+import { shipmentStatusDisplayLabel } from "@/lib/shipment-display";
 
 type SaleCustomerHistoryDrawerProps = {
   open: boolean;
@@ -173,7 +175,7 @@ export function SaleCustomerHistoryDrawer({
                 </div>
                 <div className="mt-2 grid gap-1 text-xs font-bold text-slate-300">
                   <p>Total: ${row.paid.toFixed(2)}</p>
-                  <p>Estado: {row.status}</p>
+                  <p>Estado: {shipmentStatusDisplayLabel(row.status as ShipmentStatus)}</p>
                   {row.recipientName ? <p>Destinatario: {row.recipientName}</p> : null}
                   {row.deliveryNotes ? (
                     <p className="text-slate-400">{row.deliveryNotes}</p>

@@ -15,27 +15,37 @@ if (-not (Test-Path -LiteralPath $cloudflared)) {
   throw "Missing tools\cloudflared.exe. Download it first from Cloudflare."
 }
 
+function Stop-ListenerOnPort([int]$listenPort) {
+  $connections = netstat -ano | Select-String ":\s*$listenPort\s+.*LISTENING"
+  foreach ($line in $connections) {
+    $processId = ($line -split '\s+')[-1]
+    if ($processId -match '^\d+$' -and $processId -ne '0') {
+      Write-Host "Stopping process $processId on port $listenPort..."
+      Stop-Process -Id ([int]$processId) -Force -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+Write-Host "Modo PRODUCCION (sin hot reload; requiere build en cada cambio)."
 Write-Host "Building Next..."
 npm.cmd run build
+if ($LASTEXITCODE -ne 0) {
+  throw "npm run build failed with exit code $LASTEXITCODE"
+}
 
-Write-Host "Starting local app..."
+Write-Host "Restarting local app..."
+Stop-ListenerOnPort $port
+Start-Sleep -Seconds 1
+
+Remove-Item -LiteralPath $nextOut,$nextErr -Force -ErrorAction SilentlyContinue
+Start-Process -FilePath "npm.cmd" `
+  -ArgumentList "run","start" `
+  -WorkingDirectory $root `
+  -RedirectStandardOutput $nextOut `
+  -RedirectStandardError $nextErr `
+  -WindowStyle Hidden
+
 $isUp = $false
-try {
-  $response = Invoke-WebRequest -UseBasicParsing $localUrl -TimeoutSec 3
-  $isUp = $response.StatusCode -ge 200 -and $response.StatusCode -lt 500
-} catch {
-  $isUp = $false
-}
-
-if (-not $isUp) {
-  Start-Process -FilePath "npm.cmd" `
-    -ArgumentList "run","start" `
-    -WorkingDirectory $root `
-    -RedirectStandardOutput $nextOut `
-    -RedirectStandardError $nextErr `
-    -WindowStyle Hidden
-}
-
 for ($i = 0; $i -lt 20; $i++) {
   try {
     $response = Invoke-WebRequest -UseBasicParsing $localUrl -TimeoutSec 3
@@ -85,7 +95,8 @@ if (-not $publicUrl) {
 }
 
 Write-Host ""
-Write-Host "PUBLIC URL:"
+Write-Host "PRODUCCION + TUNNEL:"
 Write-Host $publicUrl
 Write-Host ""
+Write-Host "Sin hot reload. Para UI en vivo desde el celular usa: npm run phone"
 Write-Host "Keep PC on. If PC sleeps, app goes down."

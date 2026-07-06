@@ -14,6 +14,7 @@ import {
   createCustomerAction,
   createRecipientAction,
   listCustomersWithRecipientsAction,
+  listRecipientsForCustomerAction,
   updateCustomerAction,
   updateCustomerCardStyleAction,
   updateRecipientAction,
@@ -29,7 +30,7 @@ import { useNotify } from "@/hooks/use-notify";
 import { useSetShellConfig } from "@/components/app-frame";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import { Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
-import { customerRowToSender } from "@/lib/customers/mappers";
+import { customerRowToSender, recipientRowToSaleRecipient } from "@/lib/customers/mappers";
 import {
   flowCardGridClass,
   flowPageShellWideClass,
@@ -66,9 +67,12 @@ import {
 import { SaleRecipientList } from "@/components/sale/sale-recipient-list";
 import { SaleSenderList } from "@/components/sale/sale-sender-list";
 import { configPricesCountryHref } from "@/lib/country-options";
+import { formatBoxQuantityLabel } from "@/lib/shipment-display";
 import {
+  billingWithRecordedPayment,
   computeInvoiceBilling,
   defaultInvoiceBillingConfig,
+  invoiceAccountingStateForPayment,
   resolvePayNowFromDraft,
   saleFinishActionLabel,
   type InvoiceBillingCartLine,
@@ -84,6 +88,7 @@ import {
   readRecentSaleShortcuts,
   recordRecentSale,
 } from "@/lib/sale-recent-storage";
+import { resolveSalePaymentInput, type SalePaymentChoice } from "@/lib/sale-payment-choice";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 let activeSaleScrollFrame: number | null = null;
@@ -148,6 +153,7 @@ import {
   EMPTY_BOX_DRIVER_MODE,
   EMPTY_BOX_OFFICE_MODE,
   formatDateInput,
+  FULL_BOX_DEFERRED_SUMMARY,
   resolveScheduleDate,
   FULL_BOX_DRIVER_MODE,
   FULL_BOX_OFFICE_MODE,
@@ -155,6 +161,8 @@ import {
   logisticsDriverTaskCount,
   logisticsLegComplete,
   logisticsSummary,
+  saleLogisticsContinueHint,
+  saleLogisticsPlanReady,
   normalizePhoneList,
   personFullName,
   RECIPIENTS_PER_PAGE,
@@ -179,7 +187,6 @@ import {
   unselectedDimClass,
   applyAddressSuggestResult,
 } from "@/components/sale/venta-parts";
-import { scheduleAtToTimestamp } from "@/components/sale/schedule-time";
 
 type CreatedInvoiceSnapshot = {
   invoiceNumber: string;
@@ -189,6 +196,17 @@ type CreatedInvoiceSnapshot = {
   deliveryLine: string;
   billing: InvoiceBillingSnapshot;
 };
+
+function billingForPaymentChoice(
+  billing: InvoiceBillingSnapshot | null,
+  choice: SalePaymentChoice,
+) {
+  if (!billing) {
+    return null;
+  }
+
+  return billingWithRecordedPayment(billing, choice === "pending" ? "$0" : billing.payNow);
+}
 
 function buildAddressSuggestQuery(parts: string[]) {
   const cleanParts = parts.map((part) => part.trim()).filter(Boolean);
@@ -263,7 +281,7 @@ function saleCartLineId(box: string[]) {
 }
 
 function saleCartLineLabel(line: SaleBoxCartLine) {
-  return `${line.box[0]} x${line.quantity}`;
+  return formatBoxQuantityLabel(line.box[0] || "", line.quantity);
 }
 
 function saleCartSummary(lines: SaleBoxCartLine[]) {
@@ -357,6 +375,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [payNowDraftTouched, setPayNowDraftTouched] = useState(false);
   const [quickPayNowDraft, setQuickPayNowDraft] = useState("");
   const [quickPayNowDraftTouched, setQuickPayNowDraftTouched] = useState(false);
+  const [invoicePaymentMethod, setInvoicePaymentMethod] =
+    useState<SalePaymentChoice>("pending");
+  const [invoicePaymentNote, setInvoicePaymentNote] = useState("");
+  const [quickPaymentMethod, setQuickPaymentMethod] =
+    useState<SalePaymentChoice>("pending");
+  const [quickPaymentNote, setQuickPaymentNote] = useState("");
   const [createdInvoice, setCreatedInvoice] = useState<CreatedInvoiceSnapshot | null>(null);
   const [quickCheckoutCompleted, setQuickCheckoutCompleted] = useState(false);
   const [invoiceConfirmOpen, setInvoiceConfirmOpen] = useState(false);
@@ -492,30 +516,41 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const countries = useMemo(() => Object.keys(countryBoxes), [countryBoxes]);
   const [stockMessage, setStockMessage] = useState("");
   const [emptyBoxMode, setEmptyBoxMode] = useState("");
-  const [emptyBoxHandingNow, setEmptyBoxHandingNow] = useState(true);
   const [emptyBoxScheduleMode, setEmptyBoxScheduleMode] = useState("");
   const [emptyBoxScheduleAt, setEmptyBoxScheduleAt] = useState("");
   const [fullBoxMode, setFullBoxMode] = useState("");
   const [fullBoxScheduleMode, setFullBoxScheduleMode] = useState("");
   const [fullBoxScheduleAt, setFullBoxScheduleAt] = useState("");
+  const [fullBoxPickupExpanded, setFullBoxPickupExpanded] = useState(false);
   const [logisticsNotes, setLogisticsNotes] = useState("");
-  const [deliveryStepConfirmed, setDeliveryStepConfirmed] = useState(false);
   const clientRef = useRef<HTMLDivElement | null>(null);
   const recipientsRef = useRef<HTMLDivElement | null>(null);
   const boxesRef = useRef<HTMLDivElement | null>(null);
   const deliveryRef = useRef<HTMLDivElement | null>(null);
   const finishRef = useRef<HTMLDivElement | null>(null);
-  const routeDateInputRef = useRef<HTMLInputElement | null>(null);
-  const fullBoxDateInputRef = useRef<HTMLInputElement | null>(null);
   const nextInvoiceNumber = `INV-${String(invoiceSequence).padStart(6, "0")}`;
   const emptyBoxRouteDate = emptyBoxScheduleAt.split("T")[0] || "";
   const emptyBoxRouteTime = emptyBoxScheduleAt.split("T")[1] || "";
   const fullBoxRouteDate = fullBoxScheduleAt.split("T")[0] || "";
   const fullBoxRouteTime = fullBoxScheduleAt.split("T")[1] || "";
   const emptyBoxComplete = logisticsLegComplete(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt);
-  const fullBoxComplete = logisticsLegComplete(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt);
-  const logisticsPlanReady = emptyBoxComplete && fullBoxComplete;
-  const deliveryComplete = deliveryStepConfirmed && logisticsPlanReady;
+  const logisticsPlanReady = saleLogisticsPlanReady(
+    emptyBoxMode,
+    emptyBoxScheduleMode,
+    emptyBoxScheduleAt,
+    fullBoxMode,
+    fullBoxScheduleMode,
+    fullBoxScheduleAt,
+  );
+  const logisticsContinueHint = saleLogisticsContinueHint(
+    emptyBoxMode,
+    emptyBoxScheduleMode,
+    emptyBoxScheduleAt,
+    fullBoxMode,
+    fullBoxScheduleMode,
+    fullBoxScheduleAt,
+    fullBoxPickupExpanded,
+  );
   const currentLogisticsSummary = logisticsSummary(
     emptyBoxMode,
     emptyBoxScheduleMode,
@@ -524,7 +559,6 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     fullBoxScheduleMode,
     fullBoxScheduleAt,
     logisticsNotes,
-    emptyBoxHandingNow,
   );
   const currentDriverTaskCount = logisticsDriverTaskCount(emptyBoxMode, fullBoxMode);
   const selectedBoxPromotions = useMemo(
@@ -597,6 +631,15 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     });
   }, [quickSaleDraft, logisticsFees, quickPayNowDraft, quickPayNowDraftTouched, quickBoxPromotions, quickSelectedPromotionId]);
 
+  const invoiceBillingForPayment = useMemo(
+    () => billingForPaymentChoice(invoiceBilling, invoicePaymentMethod),
+    [invoiceBilling, invoicePaymentMethod],
+  );
+  const quickInvoiceBillingForPayment = useMemo(
+    () => billingForPaymentChoice(quickInvoiceBilling, quickPaymentMethod),
+    [quickInvoiceBilling, quickPaymentMethod],
+  );
+
   useEffect(() => {
     queueMicrotask(() => {
       setPayNowDraft("");
@@ -617,6 +660,15 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     }
   }
 
+  function continueFromLogistics() {
+    if (!logisticsPlanReady) {
+      return;
+    }
+
+    setActiveStep("finish");
+    scrollToStep("finish");
+  }
+
   useEffect(() => {
     queueMicrotask(() => {
       setQuickPayNowDraft("");
@@ -624,7 +676,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     });
   }, [quickSaleDraft, logisticsFees]);
 
-  const completedStep: SaleStep = deliveryComplete
+  const completedStep: SaleStep = logisticsPlanReady
     ? "finish"
     : selectedBox
       ? "delivery"
@@ -836,6 +888,16 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     });
   }, [editingCustomerId, newClientPhoneList, senderList]);
 
+  const recipientsHydratingRef = useRef<string | null>(null);
+
+  const activeSender = useMemo(() => {
+    if (!selectedSender) {
+      return null;
+    }
+
+    return senderList.find((sender) => sender.id === selectedSender.id) ?? selectedSender;
+  }, [selectedSender, senderList]);
+
   const duplicateRecipient = useMemo(() => {
     if (
       !selectedSender ||
@@ -851,12 +913,13 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       lastName: newRecipientLastName.trim(),
     };
 
-    return selectedSender.recipients.find(
+    return activeSender?.recipients.find(
       (recipient) =>
         recipient.id !== editingRecipientId &&
         samePersonName(recipient, candidate) && recipient.country === newRecipientCountry,
     );
   }, [
+    activeSender,
     editingRecipientId,
     newRecipientCountry,
     newRecipientFirstName,
@@ -864,7 +927,18 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     selectedSender,
   ]);
 
-  const filteredSenders = senderList;
+  const filteredSenders = useMemo(() => {
+    return [...senderList].sort((left, right) => {
+      const leftHasRecipients = left.recipients.length > 0 ? 1 : 0;
+      const rightHasRecipients = right.recipients.length > 0 ? 1 : 0;
+
+      if (rightHasRecipients !== leftHasRecipients) {
+        return rightHasRecipients - leftHasRecipients;
+      }
+
+      return 0;
+    });
+  }, [senderList]);
 
   const senderPageCount = Math.max(1, Math.ceil(filteredSenders.length / SENDERS_PER_PAGE));
   const safeSenderPage = Math.min(senderPage, senderPageCount - 1);
@@ -874,17 +948,17 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   );
 
   const filteredRecipients = useMemo(() => {
-    if (!selectedSender) {
+    if (!activeSender) {
       return [];
     }
 
     const query = recipientQuery.trim().toLowerCase();
 
     if (!query) {
-      return selectedSender.recipients;
+      return activeSender.recipients;
     }
 
-    return selectedSender.recipients.filter((recipient) =>
+    return activeSender.recipients.filter((recipient) =>
       [
         personFullName(recipient),
         recipient.firstName,
@@ -901,14 +975,14 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         .toLowerCase()
         .includes(query),
     );
-  }, [recipientQuery, selectedSender]);
+  }, [activeSender, recipientQuery]);
 
   const recipientSearchOptions = useMemo(() => {
-    if (!selectedSender) {
+    if (!activeSender) {
       return [];
     }
 
-    return selectedSender.recipients.map((recipient) => ({
+    return activeSender.recipients.map((recipient) => ({
       value: recipientIdentityKey(recipient),
       label: personFullName(recipient),
       searchText: [
@@ -924,7 +998,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         .filter(Boolean)
         .join(" "),
     }));
-  }, [selectedSender]);
+  }, [activeSender]);
 
   const boxesForCountry = useMemo(
     () =>
@@ -1133,14 +1207,24 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
   function resetSaleLogistics() {
     setEmptyBoxMode("");
-    setEmptyBoxHandingNow(true);
     setEmptyBoxScheduleMode("");
     setEmptyBoxScheduleAt("");
     setFullBoxMode("");
     setFullBoxScheduleMode("");
     setFullBoxScheduleAt("");
+    setFullBoxPickupExpanded(false);
     setLogisticsNotes("");
-    setDeliveryStepConfirmed(false);
+  }
+
+  function expandFullBoxPickup() {
+    setFullBoxPickupExpanded(true);
+  }
+
+  function deferFullBoxPickup() {
+    setFullBoxMode("");
+    setFullBoxScheduleMode("");
+    setFullBoxScheduleAt("");
+    setFullBoxPickupExpanded(false);
   }
 
   function startNewSale() {
@@ -1152,6 +1236,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setActiveStep("client");
     setPayNowDraft("");
     setPayNowDraftTouched(false);
+    setInvoicePaymentMethod("pending");
+    setInvoicePaymentNote("");
     setSelectedPromotionId("");
     setStockMessage("");
     setInvoiceSequence((current) => current + 1);
@@ -1163,6 +1249,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setQuickInvoiceNumber("");
     setQuickPayNowDraft("");
     setQuickPayNowDraftTouched(false);
+    setQuickPaymentMethod("pending");
+    setQuickPaymentNote("");
     setQuickCheckoutCompleted(false);
     setQuickSelectedPromotionId("");
   }
@@ -1183,20 +1271,50 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     closeQuickCheckout();
   }
 
-  function confirmDeliveryStep() {
-    if (!logisticsPlanReady) {
-      return;
-    }
-
-    setDeliveryStepConfirmed(true);
-    setMode("sale");
-    setActiveStep("finish");
-    scrollToStep("finish");
+  function patchSenderRecipients(senderId: string, recipients: Recipient[]) {
+    setSenderList((current) =>
+      current.map((sender) => (sender.id === senderId ? { ...sender, recipients } : sender)),
+    );
+    setSelectedSender((current) =>
+      current?.id === senderId ? { ...current, recipients } : current,
+    );
+    setQuickSaleSender((current) =>
+      current?.id === senderId ? { ...current, recipients } : current,
+    );
   }
 
-  function chooseSender(sender: Sender) {
+  const ensureSenderRecipients = useCallback(
+    async (sender: Sender) => {
+      if (!sender.id || sender.id.startsWith("local-")) {
+        return sender;
+      }
+
+      const latest = senderList.find((entry) => entry.id === sender.id) ?? sender;
+      if (latest.recipients.length > 0) {
+        return latest;
+      }
+
+      const result = await listRecipientsForCustomerAction(sender.id);
+      if (!result.ok) {
+        notify.error(result.error);
+        return latest;
+      }
+
+      if (result.data.length === 0) {
+        return latest;
+      }
+
+      const recipients = result.data.map(recipientRowToSaleRecipient);
+      patchSenderRecipients(sender.id, recipients);
+      return { ...latest, recipients };
+    },
+    [notify, senderList],
+  );
+
+  async function chooseSender(sender: Sender) {
+    const resolved = senderList.find((entry) => entry.id === sender.id) ?? sender;
     const isSameSender =
-      selectedSender !== null && senderPhoneKey(selectedSender) === senderPhoneKey(sender);
+      selectedSender !== null && senderPhoneKey(selectedSender) === senderPhoneKey(resolved);
 
     if (isSameSender) {
       setSelectedSender(null);
@@ -1208,11 +1326,13 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       return;
     }
 
-    setSelectedSender(sender);
+    const withRecipients = await ensureSenderRecipients(resolved);
+    setSelectedSender(withRecipients);
     setSelectedRecipient(null);
     setSelectedBoxLines([]);
     resetSaleLogistics();
     setRecipientPage(0);
+    setRecipientQuery("");
     setActiveStep("recipient");
   }
 
@@ -1274,7 +1394,15 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       return;
     }
 
-    setSenderList(result.data.map(customerRowToSender));
+    const mapped = result.data.map(customerRowToSender);
+    setSenderList(mapped);
+    setSelectedSender((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return mapped.find((sender) => sender.id === current.id) ?? current;
+    });
   }, []);
 
   async function saveSenderCardStyle(sender: Sender, cardStyle: SalePersonCardVariantId) {
@@ -1347,6 +1475,41 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   }, []);
 
   const prevSenderQueryRef = useRef("");
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void reloadCustomers("", { showLoading: !initialData?.senders?.length });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialData?.senders?.length, reloadCustomers]);
+
+  useEffect(() => {
+    if (!activeSender?.id || activeSender.id.startsWith("local-") || activeSender.recipients.length > 0) {
+      return;
+    }
+
+    if (recipientsHydratingRef.current === activeSender.id) {
+      return;
+    }
+
+    recipientsHydratingRef.current = activeSender.id;
+    void ensureSenderRecipients(activeSender).finally(() => {
+      if (recipientsHydratingRef.current === activeSender.id) {
+        recipientsHydratingRef.current = null;
+      }
+    });
+  }, [activeSender, ensureSenderRecipients]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -1621,7 +1784,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         return;
       }
 
-      chooseSender(duplicateClient);
+      void chooseSender(duplicateClient);
       setMode("sale");
       return;
     }
@@ -1833,19 +1996,20 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         ...recipientPayload,
         cardStyle:
           (editingRecipientId
-            ? selectedSender.recipients.find((recipient) => recipient.id === editingRecipientId)
+            ? activeSender?.recipients.find((recipient) => recipient.id === editingRecipientId)
                 ?.cardStyle
             : undefined) || "amber-warm",
       };
     }
 
+    const senderRecipients = activeSender?.recipients ?? selectedSender.recipients;
     const nextSender = {
       ...selectedSender,
       recipients: editingRecipientId
-        ? selectedSender.recipients.map((recipient) =>
+        ? senderRecipients.map((recipient) =>
             recipient.id === editingRecipientId ? nextRecipient : recipient,
           )
-        : [nextRecipient, ...selectedSender.recipients],
+        : [nextRecipient, ...senderRecipients],
     };
 
     setSenderList((current) =>
@@ -1941,11 +2105,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     if (mode === EMPTY_BOX_OFFICE_MODE) {
       setEmptyBoxScheduleMode("");
       setEmptyBoxScheduleAt("");
-      setEmptyBoxHandingNow(true);
       return;
     }
-
-    setEmptyBoxHandingNow(false);
 
     setEmptyBoxScheduleMode("pending");
     setEmptyBoxScheduleAt("");
@@ -1964,6 +2125,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   }
 
   function selectFullBoxMode(mode: string) {
+    setFullBoxPickupExpanded(true);
     setFullBoxMode(mode);
 
     if (mode === FULL_BOX_OFFICE_MODE) {
@@ -2090,7 +2252,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     return defaultClass;
   }
 
-  function buildLogisticsPlan() {
+  function buildLogisticsPlan(billingSnapshot: InvoiceBillingSnapshot | null = invoiceBilling) {
     const boxLines = selectedBoxLines.map((line) => ({
       label: line.box[0],
       paid: line.box[1] || "0",
@@ -2116,60 +2278,46 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       emptyBox: {
         label: "empty_box",
         mode: emptyBoxMode,
-        handingNow: emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? emptyBoxHandingNow : null,
+        handingNow: emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? true : null,
         scheduleMode: emptyBoxScheduleMode || null,
         scheduleAt: emptyBoxScheduleAt || null,
         driverTaskNeeded: emptyBoxMode === EMPTY_BOX_DRIVER_MODE,
         driverTaskType: emptyBoxMode === EMPTY_BOX_DRIVER_MODE ? "deliver_empty_box" : null,
       },
-      fullBox: {
-        label: "full_box",
-        mode: fullBoxMode,
-        scheduleMode: fullBoxScheduleMode || null,
-        scheduleAt: fullBoxScheduleAt || null,
-        driverTaskNeeded: fullBoxMode === FULL_BOX_DRIVER_MODE,
-        driverTaskType: fullBoxMode === FULL_BOX_DRIVER_MODE ? "pickup_full_box" : null,
-      },
-      driverTaskCount: currentDriverTaskCount,
-      fees: invoiceBilling
+      fullBox: fullBoxMode
         ? {
-            emptyBoxDelivery: invoiceBilling.emptyBoxDelivery,
-            fullBoxPickup: invoiceBilling.fullBoxPickup,
-            total: invoiceBilling.logisticsSubtotal,
+            label: "full_box",
+            mode: fullBoxMode,
+            scheduleMode: fullBoxScheduleMode || null,
+            scheduleAt: fullBoxScheduleAt || null,
+            driverTaskNeeded: fullBoxMode === FULL_BOX_DRIVER_MODE,
+            driverTaskType: fullBoxMode === FULL_BOX_DRIVER_MODE ? "pickup_full_box" : null,
+          }
+        : {
+            label: "full_box",
+            mode: "",
+            deferred: true,
+            scheduleMode: null,
+            scheduleAt: null,
+            driverTaskNeeded: false,
+            driverTaskType: null,
+          },
+      driverTaskCount: currentDriverTaskCount,
+      fees: billingSnapshot
+        ? {
+            emptyBoxDelivery: billingSnapshot.emptyBoxDelivery,
+            fullBoxPickup: billingSnapshot.fullBoxPickup,
+            total: billingSnapshot.logisticsSubtotal,
           }
         : {
             emptyBoxDelivery: "$0",
             fullBoxPickup: "$0",
             total: "$0",
           },
-      billing: invoiceBilling,
+      billing: billingSnapshot,
       notes: logisticsNotes.trim(),
       summary: currentLogisticsSummary,
     };
-  }
-
-  function buildLogisticsTasks() {
-    const tasks = [];
-
-    if (emptyBoxMode === EMPTY_BOX_DRIVER_MODE) {
-      tasks.push({
-        taskType: "deliver_empty_box" as const,
-        status: emptyBoxScheduleMode === "scheduled" ? ("scheduled" as const) : ("pending" as const),
-        scheduledAt: scheduleAtToTimestamp(emptyBoxScheduleAt),
-        notes: logisticsNotes.trim(),
-      });
-    }
-
-    if (fullBoxMode === FULL_BOX_DRIVER_MODE) {
-      tasks.push({
-        taskType: "pickup_full_box" as const,
-        status: fullBoxScheduleMode === "scheduled" ? ("scheduled" as const) : ("pending" as const),
-        scheduledAt: scheduleAtToTimestamp(fullBoxScheduleAt),
-        notes: logisticsNotes.trim(),
-      });
-    }
-
-    return tasks;
   }
 
   async function createOpenInvoice() {
@@ -2209,6 +2357,14 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         setInvoiceSequence(Number(match[1]));
       }
 
+      const payment = resolveSalePaymentInput({
+        choice: invoicePaymentMethod,
+        payNow: invoiceBilling.payNow,
+        paymentNote: invoicePaymentNote,
+      });
+      const recordedBilling = billingWithRecordedPayment(invoiceBilling, payment.paid);
+      const invoiceState = invoiceAccountingStateForPayment(invoiceBilling, payment.paid);
+
       const shipmentResult = await createShipmentAction({
         invoiceNumber: invoice,
         customerId: selectedSender.id.startsWith("local-") ? undefined : selectedSender.id,
@@ -2219,14 +2375,16 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           selectedBoxLines.length > 1
             ? selectedCartSummary
             : selectedBox[3] || selectedCartSummary || "Sin carrier",
-        paid: invoiceBilling.payNow,
+        paid: payment.paid,
         cost: selectedBoxTotalCost(),
         saleKind: "full",
-        invoiceStatus: "open",
-        accountingStatus: "not_exportable",
+        invoiceStatus: invoiceState.invoiceStatus,
+        accountingStatus: invoiceState.accountingStatus,
         deliveryNotes: currentLogisticsSummary,
-        logisticsPlan: buildLogisticsPlan(),
-        logisticsTasks: buildLogisticsTasks(),
+        logisticsPlan: buildLogisticsPlan(recordedBilling),
+        paymentMethod: payment.paymentMethod,
+        paymentNote: payment.paymentNote,
+        logisticsTasks: [],
         recipientSnapshot: {
           firstName: selectedRecipient.firstName,
           lastName: selectedRecipient.lastName,
@@ -2260,9 +2418,11 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         recipient: selectedRecipient,
         box: selectedBox,
         deliveryLine: currentLogisticsSummary,
-        billing: invoiceBilling,
+        billing: recordedBilling,
       });
       setInvoiceConfirmOpen(false);
+      setInvoicePaymentMethod("pending");
+      setInvoicePaymentNote("");
       notify.success(`Invoice ${invoice} creado.`);
     } finally {
       setCreatingOpenInvoice(false);
@@ -2272,6 +2432,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   async function proceedQuickEmptyBox(draft: QuickEmptyBoxDraft) {
     setQuickSaleDraft(draft);
     setQuickSelectedPromotionId("");
+    setQuickPaymentMethod("pending");
+    setQuickPaymentNote("");
     setQuickSaleSender(null);
     setContextMenu(null);
     setActiveCopyGroup(null);
@@ -2307,79 +2469,83 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setCreatingQuickInvoice(true);
 
     try {
-    const shipmentResult = await createShipmentAction({
-      invoiceNumber: invoice,
-      customerId: quickSaleDraft.sender.id.startsWith("local-")
-        ? undefined
-        : quickSaleDraft.sender.id,
-      customerName: personFullName(quickSaleDraft.sender),
-      country: "USA",
-      carrier: quickSaleDraft.box[3] || "Deposito caja vacia",
-      paid: quickInvoiceBilling.payNow,
-      cost: formatMoneyValue(
-        parseMoneyValue(quickSaleDraft.box[2] || "$0") * quickSaleDraft.boxCount,
-      ),
-      saleKind: "empty_box_deposit",
-      invoiceStatus: "open",
-      accountingStatus: "not_exportable",
-      deliveryNotes: quickSaleDraft.deliverySummary,
-      logisticsPlan: {
-        box: {
-          label: quickSaleDraft.box[0],
-          paid: quickSaleDraft.box[1] || "0",
-          cost: quickSaleDraft.box[2] || "0",
-          carrier: quickSaleDraft.box[3] || "",
-          time: quickSaleDraft.box[4] || "",
+      const payment = resolveSalePaymentInput({
+        choice: quickPaymentMethod,
+        payNow: quickInvoiceBilling.payNow,
+        paymentNote: quickPaymentNote,
+      });
+      const recordedBilling = billingWithRecordedPayment(quickInvoiceBilling, payment.paid);
+      const invoiceState = invoiceAccountingStateForPayment(quickInvoiceBilling, payment.paid);
+
+      const shipmentResult = await createShipmentAction({
+        invoiceNumber: invoice,
+        customerId: quickSaleDraft.sender.id.startsWith("local-")
+          ? undefined
+          : quickSaleDraft.sender.id,
+        customerName: personFullName(quickSaleDraft.sender),
+        country: "USA",
+        carrier: quickSaleDraft.box[3] || "Deposito caja vacia",
+        paid: payment.paid,
+        cost: formatMoneyValue(
+          parseMoneyValue(quickSaleDraft.box[2] || "$0") * quickSaleDraft.boxCount,
+        ),
+        saleKind: "empty_box_deposit",
+        invoiceStatus: invoiceState.invoiceStatus,
+        accountingStatus: invoiceState.accountingStatus,
+        deliveryNotes: quickSaleDraft.deliverySummary,
+        paymentMethod: payment.paymentMethod,
+        paymentNote: payment.paymentNote,
+        logisticsPlan: {
+          box: {
+            label: quickSaleDraft.box[0],
+            paid: quickSaleDraft.box[1] || "0",
+            cost: quickSaleDraft.box[2] || "0",
+            carrier: quickSaleDraft.box[3] || "",
+            time: quickSaleDraft.box[4] || "",
+          },
+          boxCount: quickSaleDraft.boxCount,
+          emptyBox: {
+            label: "empty_box",
+            mode: quickSaleDraft.emptyBoxMode,
+            handingNow:
+              quickSaleDraft.emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? true : null,
+            scheduleMode: quickSaleDraft.emptyBoxScheduleMode || null,
+            scheduleAt: quickSaleDraft.emptyBoxScheduleAt || null,
+            driverTaskNeeded: quickSaleDraft.emptyBoxMode === EMPTY_BOX_DRIVER_MODE,
+            driverTaskType:
+              quickSaleDraft.emptyBoxMode === EMPTY_BOX_DRIVER_MODE ? "deliver_empty_box" : null,
+          },
+          fullBox: null,
+          driverTaskCount: quickSaleDraft.emptyBoxMode === EMPTY_BOX_DRIVER_MODE ? 1 : 0,
+          fees: {
+            emptyBoxDelivery: recordedBilling.emptyBoxDelivery,
+            fullBoxPickup: recordedBilling.fullBoxPickup,
+            total: recordedBilling.logisticsSubtotal,
+          },
+          billing: recordedBilling,
+          notes: "",
+          summary: quickSaleDraft.deliverySummary,
         },
-        boxCount: quickSaleDraft.boxCount,
-        emptyBox: {
-          label: "empty_box",
-          mode: quickSaleDraft.emptyBoxMode,
-          handingNow:
-            quickSaleDraft.emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? true : null,
-          scheduleMode: quickSaleDraft.emptyBoxScheduleMode || null,
-          scheduleAt: quickSaleDraft.emptyBoxScheduleAt || null,
-          driverTaskNeeded: quickSaleDraft.emptyBoxMode === EMPTY_BOX_DRIVER_MODE,
-          driverTaskType: quickSaleDraft.emptyBoxMode === EMPTY_BOX_DRIVER_MODE ? "deliver_empty_box" : null,
-        },
-        fullBox: null,
-        driverTaskCount: quickSaleDraft.emptyBoxMode === EMPTY_BOX_DRIVER_MODE ? 1 : 0,
-        fees: {
-          emptyBoxDelivery: quickInvoiceBilling.emptyBoxDelivery,
-          fullBoxPickup: quickInvoiceBilling.fullBoxPickup,
-          total: quickInvoiceBilling.logisticsSubtotal,
-        },
-        billing: quickInvoiceBilling,
-        notes: "",
-        summary: quickSaleDraft.deliverySummary,
-      },
-      logisticsTasks:
-        quickSaleDraft.emptyBoxMode === EMPTY_BOX_DRIVER_MODE
-          ? [
-              {
-                taskType: "deliver_empty_box",
-                status: quickSaleDraft.emptyBoxScheduleMode === "scheduled" ? "scheduled" : "pending",
-                scheduledAt: scheduleAtToTimestamp(quickSaleDraft.emptyBoxScheduleAt),
-              },
-            ]
-          : [],
-    });
+        logisticsTasks: [],
+      });
 
-    if (!shipmentResult.ok) {
-      setStockMessage(shipmentResult.error);
-      return false;
-    }
+      if (!shipmentResult.ok) {
+        setStockMessage(shipmentResult.error);
+        return false;
+      }
 
-    if (quickSaleDraft.sender.id) {
-      recordRecentSale(quickSaleDraft.sender.id);
-    }
+      if (quickSaleDraft.sender.id) {
+        recordRecentSale(quickSaleDraft.sender.id);
+      }
 
-    void reloadHistory();
-    void reloadSaleShortcuts();
+      void reloadHistory();
+      void reloadSaleShortcuts();
 
-    setQuickCheckoutCompleted(true);
-    notify.success(`Invoice ${invoice} creado.`);
-    return true;
+      setQuickCheckoutCompleted(true);
+      setQuickPaymentMethod("pending");
+      setQuickPaymentNote("");
+      notify.success(`Invoice ${invoice} creado.`);
+      return true;
     } finally {
       setCreatingQuickInvoice(false);
     }
@@ -2466,46 +2632,6 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     nextDate.setDate(nextDate.getDate() + daysFromToday);
     updateFullBoxSchedule(formatDateInput(nextDate), fullBoxRouteTime || "10:00");
   }
-
-  function openRouteDatePicker() {
-    const input = routeDateInputRef.current;
-
-    if (!input) {
-      return;
-    }
-
-    try {
-      input.showPicker?.();
-    } catch {
-      // Some browsers only allow showPicker directly from a click gesture.
-    }
-  }
-
-  function openFullBoxDatePicker() {
-    const input = fullBoxDateInputRef.current;
-
-    if (!input) {
-      return;
-    }
-
-    try {
-      input.showPicker?.();
-    } catch {
-      // Some browsers only allow showPicker directly from a click gesture.
-    }
-  }
-
-  useEffect(() => {
-    queueMicrotask(() => setDeliveryStepConfirmed(false));
-  }, [
-    emptyBoxMode,
-    emptyBoxScheduleMode,
-    emptyBoxScheduleAt,
-    fullBoxMode,
-    fullBoxScheduleMode,
-    fullBoxScheduleAt,
-    emptyBoxHandingNow,
-  ]);
 
   function fullAddress() {
     if (!contextMenu) {
@@ -2639,9 +2765,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       return;
     }
 
-    if (contextMenu.type === "destinatario" && selectedSender) {
+    if (contextMenu.type === "destinatario" && activeSender) {
       const recipientKey = contextMenu.targetKey.replace(/^recipient:/, "");
-      const recipient = selectedSender.recipients.find(
+      const recipient = activeSender.recipients.find(
         (item) => recipientIdentityKey(item) === recipientKey,
       );
 
@@ -2713,15 +2839,19 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 ? selectedCartSummary
                 : "Seleccionar"
               : step.id === "delivery"
-                ? deliveryComplete
+                ? logisticsPlanReady
                   ? currentDriverTaskCount
                     ? `${currentDriverTaskCount} tarea chofer`
-                    : "Sin chofer"
-                  : logisticsPlanReady
-                    ? "Confirmar"
+                    : fullBoxMode
+                      ? "Sin chofer"
+                      : FULL_BOX_DEFERRED_SUMMARY
+                  : emptyBoxComplete
+                    ? fullBoxMode
+                      ? "Pendiente"
+                      : FULL_BOX_DEFERRED_SUMMARY
                     : "Pendiente"
-                : deliveryComplete
-                  ? saleFinishActionLabel(invoiceBilling)
+                : logisticsPlanReady
+                  ? saleFinishActionLabel(invoiceBillingForPayment)
                   : "Pendiente";
 
       const detail =
@@ -2738,10 +2868,14 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 ? `${selectedBoxCount} producto${selectedBoxCount === 1 ? "" : "s"}`
                 : ""
               : step.id === "delivery"
-                ? deliveryComplete
+                ? logisticsPlanReady
                   ? currentLogisticsSummary
-                  : "Logistica"
-                : deliveryComplete
+                  : emptyBoxComplete
+                    ? fullBoxMode
+                      ? currentLogisticsSummary
+                      : FULL_BOX_DEFERRED_SUMMARY
+                    : "Logistica"
+                : logisticsPlanReady
                   ? nextInvoiceNumber
                   : "";
 
@@ -2782,12 +2916,13 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     selectedBoxLines,
     selectedBoxCount,
     selectedCartSummary,
-    deliveryComplete,
     logisticsPlanReady,
+    emptyBoxComplete,
+    fullBoxMode,
     currentDriverTaskCount,
     currentLogisticsSummary,
     nextInvoiceNumber,
-    invoiceBilling,
+    invoiceBillingForPayment,
   ]);
 
   return (
@@ -3067,11 +3202,11 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 className="min-w-0 w-full"
                 minWidthClass="w-full min-w-0"
                 onSelectOption={(option) => {
-                  if (!selectedSender) {
+                  if (!activeSender) {
                     return;
                   }
 
-                  const recipient = selectedSender.recipients.find(
+                  const recipient = activeSender.recipients.find(
                     (entry) => recipientIdentityKey(entry) === option.value,
                   );
 
@@ -3152,6 +3287,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   suggestedRecipientId={suggestedRecipientId}
                   emptySlots={emptyRecipientSlots}
                   safePage={safeRecipientPage}
+                  searchActive={Boolean(recipientQuery.trim())}
                   onChoose={chooseRecipient}
                   onIconClick={(event, recipient) => {
                     const rect = event.currentTarget.getBoundingClientRect();
@@ -3372,7 +3508,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
       {selectedSender && selectedRecipient && selectedBox ? (
         <div
-          className="mt-3 grid gap-3"
+          className="mt-3 grid gap-3 pb-6 sm:pb-8"
         >
           {activeStep === "delivery" ? (
           <div
@@ -3381,14 +3517,13 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           >
           <Panel
             className={flowPanelFlushClass}
-            contentClassName={flowPanelContentClass}
+            contentClassName={`${flowPanelContentClass} pb-4 sm:pb-5`}
+            clipContent={false}
             hideHeader
             title="Opciones del envio"
           >
             <div className={flowStepBodyClass}>
               <SaleLogisticsStep
-                emptyBoxHandingNow={emptyBoxHandingNow}
-                onEmptyBoxHandingNowChange={setEmptyBoxHandingNow}
                 emptyBoxMode={emptyBoxMode}
                 emptyBoxScheduleMode={emptyBoxScheduleMode}
                 emptyBoxScheduleAt={emptyBoxScheduleAt}
@@ -3399,21 +3534,36 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 emptyBoxRouteTime={routeTime}
                 fullBoxRouteDate={fullBoxRouteDate}
                 fullBoxRouteTime={fullBoxRouteTime}
-                emptyDateInputRef={routeDateInputRef}
-                fullDateInputRef={fullBoxDateInputRef}
                 onSelectEmptyBoxMode={selectEmptyBoxMode}
                 onSelectEmptyBoxScheduleMode={selectEmptyBoxScheduleMode}
                 onUpdateEmptyBoxSchedule={updateRouteSchedule}
                 onQuickEmptyBoxDate={setQuickRouteDate}
-                onOpenEmptyBoxDatePicker={openRouteDatePicker}
                 onSelectFullBoxMode={selectFullBoxMode}
                 onSelectFullBoxScheduleMode={selectFullBoxScheduleMode}
                 onUpdateFullBoxSchedule={updateFullBoxSchedule}
                 onQuickFullBoxDate={setQuickFullBoxDate}
-                onOpenFullBoxDatePicker={openFullBoxDatePicker}
-                canContinue={logisticsPlanReady}
-                onContinue={confirmDeliveryStep}
+                fullBoxPickupExpanded={fullBoxPickupExpanded}
+                onExpandFullBoxPickup={expandFullBoxPickup}
+                onDeferFullBoxPickup={deferFullBoxPickup}
               />
+              <div className="flex justify-center border-t border-black/80 pt-4">
+                <div className="flex w-full max-w-md flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!logisticsPlanReady}
+                    onClick={continueFromLogistics}
+                    className={`${primaryButtonClass} flex h-12 w-full items-center justify-center gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-35`}
+                  >
+                    Siguiente
+                    <ChevronRight className="h-4 w-4" aria-hidden />
+                  </button>
+                  {!logisticsPlanReady ? (
+                    <p className="text-center text-xs font-bold text-slate-500">
+                      {logisticsContinueHint}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </Panel>
           </div>
@@ -3503,10 +3653,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
               className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 text-sm font-black text-slate-950 disabled:opacity-40"
             >
               {creatingOpenInvoice
-                ? saleFinishActionLabel(invoiceBilling, { creating: true })
+                ? saleFinishActionLabel(invoiceBillingForPayment, { creating: true })
                 : invoiceBilling?.promotionSelectionRequired
                   ? "Elige promocion"
-                  : saleFinishActionLabel(invoiceBilling)}
+                  : saleFinishActionLabel(invoiceBillingForPayment)}
             </button>
             </div>
               </div>
@@ -3609,6 +3759,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           invoiceNumber={quickInvoiceNumber}
           draft={quickSaleDraft}
           billing={quickInvoiceBilling}
+          billingForPayment={quickInvoiceBillingForPayment}
           selectedPromotionId={quickSelectedPromotionId}
           onPromotionChange={setQuickSelectedPromotionId}
           payNowDraft={quickPayNowDraft}
@@ -3617,6 +3768,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             setQuickPayNowDraftTouched(true);
             setQuickPayNowDraft(value.replace(/[^\d]/g, ""));
           }}
+          paymentMethod={quickPaymentMethod}
+          paymentNote={quickPaymentNote}
+          onPaymentMethodChange={setQuickPaymentMethod}
+          onPaymentNoteChange={setQuickPaymentNote}
           completed={quickCheckoutCompleted}
           stockMessage={stockMessage}
           onClose={closeQuickCheckout}
@@ -3632,18 +3787,22 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         title="¿Crear este invoice?"
         invoiceLabel={`Factura ${nextInvoiceNumber}`}
         lines={
-          invoiceBilling && selectedSender && selectedRecipient
+          invoiceBillingForPayment && selectedSender && selectedRecipient
             ? [
                 { label: "Remitente", value: personFullName(selectedSender) },
                 { label: "Destinatario", value: personFullName(selectedRecipient) },
-                { label: "Total", value: invoiceBilling.quotedTotal },
-                { label: "Depósito", value: invoiceBilling.payNow },
-                { label: "Pendiente", value: invoiceBilling.balanceDue },
+                { label: "Total", value: invoiceBillingForPayment.quotedTotal },
+                { label: "Depósito", value: invoiceBillingForPayment.payNow },
+                { label: "Pendiente", value: invoiceBillingForPayment.balanceDue },
               ]
             : []
         }
-        confirmLabel={saleFinishActionLabel(invoiceBilling)}
+        confirmLabel={saleFinishActionLabel(invoiceBillingForPayment)}
         confirming={creatingOpenInvoice}
+        paymentMethod={invoicePaymentMethod}
+        paymentNote={invoicePaymentNote}
+        onPaymentMethodChange={setInvoicePaymentMethod}
+        onPaymentNoteChange={setInvoicePaymentNote}
         onCancel={() => {
           if (!creatingOpenInvoice) {
             setInvoiceConfirmOpen(false);

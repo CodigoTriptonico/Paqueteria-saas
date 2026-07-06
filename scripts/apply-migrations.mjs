@@ -148,6 +148,8 @@ async function main() {
     }
   }
 
+  await client.query(`NOTIFY pgrst, 'reload schema'`);
+
   const { rows } = await client.query(`
     select table_name
     from information_schema.tables

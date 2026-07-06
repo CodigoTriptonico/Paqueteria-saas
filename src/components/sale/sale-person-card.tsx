@@ -22,7 +22,7 @@ export const salePersonCardAddClass =
   "flex h-full min-h-[12.5rem] w-full min-w-0 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-amber-900/25 bg-[#2f281f]/50 p-4 text-center transition-colors hover:border-amber-600/40 hover:bg-amber-400/5";
 
 export const salePersonCardEmptyClass =
-  "col-span-full flex min-h-[5.25rem] items-center justify-center rounded-xl border border-amber-950/50 bg-[#2f281f] px-4 text-center text-sm font-black text-amber-200/45";
+  "col-span-full flex min-h-[5.25rem] items-center justify-center rounded-xl border border-amber-800/40 bg-[#2f281f] px-4 text-center text-sm font-black text-amber-100/85";
 
 type SalePersonCardProps = {
   name: string;

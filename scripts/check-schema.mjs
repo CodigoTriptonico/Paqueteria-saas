@@ -23,6 +23,7 @@ const requiredTables = [
   "inventory_assignments",
   "shipments",
   "shipment_logistics_tasks",
+  "shipment_payments",
   "platform_admins",
   "customers",
   "customer_recipients",

@@ -7,6 +7,7 @@ import type { OnboardingProgress } from "@/app/actions/onboarding";
 import { OnboardingPanel, type OnboardingSummaryFocus } from "@/components/onboarding/onboarding-panel";
 import { iconWellEmerald, labelMutedClass } from "@/components/ui-blocks";
 import { useOnboardingProgress } from "@/hooks/use-onboarding-progress";
+import { isOnboardingTutorialEnabled } from "@/lib/onboarding/feature";
 import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
 import type { AppSession } from "@/lib/auth/types";
 
@@ -144,6 +145,20 @@ function NotificationsSummary({
         active={activeFocus === "completed"}
         onClick={onCompletedClick}
       />
+    </div>
+  );
+}
+
+function TutorialPausedState() {
+  return (
+    <div className="flex flex-col items-center rounded-xl border border-black bg-gradient-to-b from-[#243029] to-[#1f2724] px-5 py-8 text-center shadow-[0_10px_28px_rgba(0,0,0,0.22)]">
+      <span className={`h-10 w-10 ${iconWellEmerald}`}>
+        <Sparkles className="h-5 w-5" />
+      </span>
+      <p className="mt-3 text-base font-black text-[#f8fafc]">Tutorial en pausa</p>
+      <p className="mt-1.5 max-w-[14rem] text-xs font-bold leading-relaxed text-slate-400">
+        La guía de configuración inicial está desactivada por ahora. Te avisaremos aquí cuando haya novedades.
+      </p>
     </div>
   );
 }
@@ -337,7 +352,9 @@ export function NotificationsCenter({
             summaryFocus={summaryFocus}
           />
 
-          {ready && !hasOnboarding ? <NotificationsEmptyState /> : null}
+          {ready && !hasOnboarding ? (
+            isOnboardingTutorialEnabled() ? <NotificationsEmptyState /> : <TutorialPausedState />
+          ) : null}
         </div>
       </div>
     ) : null;

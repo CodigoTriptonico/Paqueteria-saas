@@ -75,6 +75,11 @@ async function ensureSupabase(config) {
   log("supabase", "listo");
 }
 
+async function ensureMigrations() {
+  log("db", "aplicando migraciones pendientes");
+  run("npm", ["run", "db:apply"], { inherit: true });
+}
+
 async function ensureEnv(config) {
   if (existsSync(config.envPath) && config.envSynced) {
     log("env", ".env.local coincide con config.toml");
@@ -86,7 +91,10 @@ async function ensureEnv(config) {
 
 async function ensureApp(config) {
   if (await isReachable(config.appUrl)) {
-    log("next", `ya responde en ${config.appUrl}`);
+    log(
+      "next",
+      `ya responde en ${config.appUrl} — si es preview/produccion, los cambios no se ven al guardar; usa npm run phone o mata :3000 y corre npm run up`,
+    );
     openApp(config.appUrl);
     return;
   }
@@ -109,6 +117,7 @@ async function main() {
   warnWindowsPortReservations(config.ports.apiPort, config.ports.dbPort);
   await ensureEnv(loadDevUpConfig(root));
   await ensureSupabase(loadDevUpConfig(root));
+  await ensureMigrations();
   await ensureApp(loadDevUpConfig(root));
 }
 

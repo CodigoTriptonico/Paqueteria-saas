@@ -30,6 +30,7 @@ import { OnboardingMicroStepChecklist } from "@/components/onboarding/onboarding
 import { useOnboardingHelpSeen } from "@/hooks/use-onboarding-help-seen";
 import { useOnboardingProgress } from "@/hooks/use-onboarding-progress";
 import { resolveOnboardingGuideForStep } from "@/lib/onboarding/micro-steps";
+import { isOnboardingTutorialEnabled } from "@/lib/onboarding/feature";
 
 const stepIcons: Record<OnboardingStepId, typeof Globe2> = {
   countries: Globe2,
@@ -274,6 +275,10 @@ export function OnboardingPanel({
 
     return new Map(progress.steps.map((step, index) => [step.id, index + 1]));
   }, [progress]);
+
+  if (!isOnboardingTutorialEnabled()) {
+    return null;
+  }
 
   if (loading) {
     return <OnboardingGroupSkeleton />;

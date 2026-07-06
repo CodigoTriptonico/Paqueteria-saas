@@ -35,6 +35,13 @@ function lineSubtotal(line: SaleCartPanelLine) {
   return formatMoneyValue(parseMoneyValue(line.unitPrice) * line.quantity);
 }
 
+function cartShowsSubtotalBreakdown(billing: InvoiceBillingSnapshot) {
+  return (
+    parseMoneyValue(billing.promotionDiscount) > 0 ||
+    parseMoneyValue(billing.logisticsSubtotal) > 0
+  );
+}
+
 function CartContents({
   lines,
   billing,
@@ -115,12 +122,14 @@ function CartContents({
 
       {billing ? (
         <div className="grid gap-2 border-t border-black pt-3 text-sm">
-          <div className="flex items-center justify-between gap-3 font-bold text-slate-300">
-            <span>Subtotal ({itemCount})</span>
-            <span className="tabular-nums text-[#f8fafc]">
-              {billing.boxSubtotalBeforeDiscount}
-            </span>
-          </div>
+          {cartShowsSubtotalBreakdown(billing) ? (
+            <div className="flex items-center justify-between gap-3 font-bold text-slate-300">
+              <span>Subtotal ({itemCount})</span>
+              <span className="tabular-nums text-[#f8fafc]">
+                {billing.boxSubtotalBeforeDiscount}
+              </span>
+            </div>
+          ) : null}
           <PromotionSelector
             candidates={billing.promotionCandidates}
             selectedPromotionId={selectedPromotionId}
@@ -132,8 +141,18 @@ function CartContents({
               <span className="tabular-nums">-{billing.promotionDiscount}</span>
             </div>
           ) : null}
-          <div className="flex items-center justify-between gap-3 border-t border-black/70 pt-2 font-black text-[#f8fafc]">
-            <span>Total</span>
+          {parseMoneyValue(billing.logisticsSubtotal) > 0 ? (
+            <div className="flex items-center justify-between gap-3 font-bold text-slate-300">
+              <span>Logística</span>
+              <span className="tabular-nums text-[#f8fafc]">{billing.logisticsSubtotal}</span>
+            </div>
+          ) : null}
+          <div
+            className={`flex items-center justify-between gap-3 font-black text-[#f8fafc] ${
+              cartShowsSubtotalBreakdown(billing) ? "border-t border-black/70 pt-2" : ""
+            }`}
+          >
+            <span>{cartShowsSubtotalBreakdown(billing) ? "Total" : `Total (${itemCount})`}</span>
             <span className="tabular-nums">{billing.quotedTotal}</span>
           </div>
         </div>

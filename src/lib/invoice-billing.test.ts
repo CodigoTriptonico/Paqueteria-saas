@@ -1,6 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { computeInvoiceBilling, readBillingFromPlan } from "./invoice-billing";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  billingWithRecordedPayment,
+  computeInvoiceBilling,
+  invoiceAccountingStateForPayment,
+  readBillingFromPlan,
+} from "./invoice-billing";
 import type { PricingPromotionConfig } from "./pricing-promotions";
 import { legacyPromotionToRule } from "./combo-rules";
 
@@ -85,7 +93,7 @@ const mixedBundlePromo: PricingPromotionConfig = {
 };
 
 describe("invoice-billing", () => {
-  it("totals box without logistics fees", () => {
+  it("adds configured logistics fees for driver legs", () => {
     const billing = computeInvoiceBilling({
       boxUnitPrice: "$150",
       emptyBoxDriver: true,
@@ -93,10 +101,12 @@ describe("invoice-billing", () => {
       fees,
     });
 
-    assert.equal(billing.logisticsSubtotal, "$0");
-    assert.equal(billing.quotedTotal, "$150");
+    assert.equal(billing.emptyBoxDelivery, "$15");
+    assert.equal(billing.fullBoxPickup, "$10");
+    assert.equal(billing.logisticsSubtotal, "$25");
+    assert.equal(billing.quotedTotal, "$175");
     assert.equal(billing.payNow, "$20");
-    assert.equal(billing.balanceDue, "$130");
+    assert.equal(billing.balanceDue, "$155");
   });
 
   it("multiplies box price by box count", () => {
@@ -109,8 +119,8 @@ describe("invoice-billing", () => {
     });
 
     assert.equal(billing.boxSubtotal, "$150");
-    assert.equal(billing.emptyBoxDelivery, "$0");
-    assert.equal(billing.quotedTotal, "$150");
+    assert.equal(billing.emptyBoxDelivery, "$45");
+    assert.equal(billing.quotedTotal, "$195");
   });
 
   it("allows paying more than the minimum deposit", () => {
@@ -163,6 +173,40 @@ describe("invoice-billing", () => {
 
     assert.equal(billing.payNow, "$2");
     assert.equal(billing.balanceDue, "$98");
+  });
+
+  it("stores billing from recorded payment instead of draft payment", () => {
+    const billing = computeInvoiceBilling({
+      boxUnitPrice: "$150",
+      emptyBoxDriver: false,
+      fullBoxDriver: false,
+      fees,
+      payNow: 150,
+    });
+
+    const stored = billingWithRecordedPayment(billing, "$0");
+
+    assert.equal(stored.payNow, "$0");
+    assert.equal(stored.balanceDue, "$150");
+  });
+
+  it("marks accounting paid only when recorded payment covers total", () => {
+    const billing = computeInvoiceBilling({
+      boxUnitPrice: "$150",
+      emptyBoxDriver: false,
+      fullBoxDriver: false,
+      fees,
+      payNow: 150,
+    });
+
+    assert.deepEqual(invoiceAccountingStateForPayment(billing, "$0"), {
+      invoiceStatus: "open",
+      accountingStatus: "not_exportable",
+    });
+    assert.deepEqual(invoiceAccountingStateForPayment(billing, "$150"), {
+      invoiceStatus: "paid",
+      accountingStatus: "exportable",
+    });
   });
 
   it("applies 2 boxes for a special price", () => {
@@ -295,5 +339,19 @@ describe("invoice-billing", () => {
     assert.equal(billing?.boxSubtotalBeforeDiscount, "$100");
     assert.equal(billing?.promotionDiscount, "$0");
     assert.equal(billing?.promotion, null);
+  });
+});
+
+describe("sale invoice state eval", () => {
+  it("creates sale invoices from recorded payment state", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../components/venta-client.tsx"),
+      "utf8",
+    );
+
+    assert.match(source, /invoiceAccountingStateForPayment\(invoiceBilling, payment\.paid\)/);
+    assert.match(source, /logisticsPlan: buildLogisticsPlan\(recordedBilling\)/);
+    assert.match(source, /invoiceStatus: invoiceState\.invoiceStatus/);
+    assert.match(source, /accountingStatus: invoiceState\.accountingStatus/);
   });
 });

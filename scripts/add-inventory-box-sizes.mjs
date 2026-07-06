@@ -8,6 +8,7 @@ import { connectPg } from "./lib/db-connection.mjs";
 const DEFAULT_ORG_ID = "2029bf0c-e766-4840-9d90-f4b252cc3fe9";
 const DEFAULT_CATEGORY = "cajas";
 const DEFAULT_SIZES = ["14x14x14", "16x16x16", "18x18x18"];
+const DEFAULT_STOCK_QTY = Number(process.env.INVENTORY_STOCK_QTY || "10");
 
 function normalizeLabel(value) {
   return value
@@ -67,7 +68,8 @@ try {
   }
 
   console.log(`Agregando cajas a: ${orgCheck.rows[0].name}`);
-  console.log(`Medidas: ${sizes.join(", ")}\n`);
+  console.log(`Medidas: ${sizes.join(", ")}`);
+  console.log(`Stock por bodega: ${DEFAULT_STOCK_QTY}\n`);
 
   await client.query("BEGIN");
 
@@ -156,14 +158,20 @@ try {
       );
 
       if (stockRow.rows.length) {
+        await client.query(
+          `UPDATE public.inventory_stock
+           SET stock = $3
+           WHERE warehouse_id = $1 AND item_id = $2`,
+          [warehouse.id, itemId, DEFAULT_STOCK_QTY],
+        );
         continue;
       }
 
       await client.query(
         `INSERT INTO public.inventory_stock (
            organization_id, warehouse_id, item_id, stock, reserved, assigned, unavailable, min_stock
-         ) VALUES ($1, $2, $3, 0, 0, 0, 0, 2)`,
-        [orgId, warehouse.id, itemId],
+         ) VALUES ($1, $2, $3, $4, 0, 0, 0, 2)`,
+        [orgId, warehouse.id, itemId, DEFAULT_STOCK_QTY],
       );
       stockCreated += 1;
     }

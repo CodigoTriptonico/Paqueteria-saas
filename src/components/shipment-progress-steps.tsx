@@ -13,8 +13,17 @@ import {
   Truck,
   type LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { ShipmentRow, ShipmentStatus } from "@/app/actions/shipments";
+import {
+  legHasScheduleChange,
+  planLegRecord,
+  type LogisticsLegKey,
+} from "@/lib/shipment-schedule-history";
+import {
+  EMPTY_BOX_LEG_LABELS,
+  FULL_BOX_LEG_LABELS,
+} from "@/lib/shipment-leg-labels";
 import type { ShipmentAuditContext } from "@/lib/shipment-audit";
 import {
   EMPTY_BOX_DRIVER_MODE,
@@ -26,6 +35,7 @@ import {
   ShipmentStepContextMenu,
   isLogisticsLegKind,
   isStatusStepKind,
+  logisticsLegMenuSummary,
   statusForProgressKind,
   type ShipmentStepMenuState,
 } from "@/components/shipment-step-context-menu";
@@ -44,6 +54,8 @@ import type {
   ShipmentProgressStep,
 } from "@/lib/shipment-display";
 import {
+  saleAgeTextClass,
+  stepShortName,
   stepTimingTooltip,
   type ShipmentTimings,
 } from "@/lib/shipment-timing";
@@ -53,6 +65,8 @@ type ShipmentProgressStepsProps = {
   timings?: ShipmentTimings;
   row?: ShipmentRow;
   canEdit?: boolean;
+  canEditLogistics?: boolean;
+  canEditStatus?: boolean;
   saving?: boolean;
   compact?: boolean;
   onLogisticsPatch?: (patch: Partial<ShipmentLogisticsEditorState>, audit: ShipmentAuditContext) => void;
@@ -134,6 +148,59 @@ function stepIcon(kind: ShipmentProgressKind, channel: ShipmentProgressChannel):
   return MapPinCheck;
 }
 
+function compactLogisticsLegUsesOutline(step: ShipmentProgressStep) {
+  if (step.state !== "active") {
+    return false;
+  }
+
+  if (step.kind !== "empty_box" && step.kind !== "full_box") {
+    return false;
+  }
+
+  return !step.driverTaskOrdered;
+}
+
+export function compactStepClass(
+  step: ShipmentProgressStep,
+  isDetailOpen: boolean,
+) {
+  const detailRing = isDetailOpen
+    ? "z-10 ring-2 ring-emerald-400 ring-offset-1 ring-offset-surface-card shadow-[0_0_10px_rgba(52,211,153,0.45)]"
+    : "";
+  const activePulse = step.state === "active" ? "shipment-step-active-pulse border-amber-500" : "";
+  const activeOutlineClass = `border-amber-500 bg-surface-card-header text-amber-100 ${detailRing} ${activePulse}`;
+
+  if (compactLogisticsLegUsesOutline(step)) {
+    return activeOutlineClass;
+  }
+
+  if (step.state === "done") {
+    return `border-emerald-700 bg-emerald-400/90 text-slate-950 ${detailRing}`;
+  }
+
+  if (step.state === "active") {
+    return `border-amber-600 bg-amber-400 text-slate-950 ${detailRing} ${activePulse}`;
+  }
+
+  return `border-black bg-surface-card-header text-slate-500 ${detailRing}`;
+}
+
+function compactStepName(kind: ShipmentProgressKind) {
+  if (kind === "empty_box") {
+    return EMPTY_BOX_LEG_LABELS.short;
+  }
+
+  if (kind === "full_box") {
+    return FULL_BOX_LEG_LABELS.short;
+  }
+
+  if (kind === "pickup") {
+    return "Salida";
+  }
+
+  return stepShortName(kind);
+}
+
 function legLockReason(row: ShipmentRow, kind: ShipmentProgressKind) {
   if (kind === "empty_box") {
     return emptyBoxLegLocked(row) ? emptyBoxLegLockReason(row) : "";
@@ -144,6 +211,10 @@ function legLockReason(row: ShipmentRow, kind: ShipmentProgressKind) {
   }
 
   return "";
+}
+
+export function stepIsReachable(step: ShipmentProgressStep) {
+  return step.state === "active" || step.state === "done";
 }
 
 function toggleLegPatch(
@@ -175,6 +246,8 @@ export function ShipmentProgressSteps({
   timings,
   row,
   canEdit = false,
+  canEditLogistics,
+  canEditStatus,
   saving = false,
   compact = false,
   onLogisticsPatch,
@@ -183,14 +256,127 @@ export function ShipmentProgressSteps({
 }: ShipmentProgressStepsProps) {
   const [menu, setMenu] = useState<ShipmentStepMenuState>(null);
   const [detailStepId, setDetailStepId] = useState<string | null>(null);
+  const [detailAnchor, setDetailAnchor] = useState<DOMRect | null>(null);
+  const [detailStepAnchor, setDetailStepAnchor] = useState<DOMRect | null>(null);
+  const progressCardRef = useRef<HTMLDivElement>(null);
+  const stepButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const editorState = row ? shipmentLogisticsEditorState(row) : null;
+  const logisticsEditable = canEditLogistics ?? canEdit;
+  const statusEditable = canEditStatus ?? canEdit;
 
-  function handleLeftClick(step: ShipmentProgressStep) {
-    if (!canEdit || saving || !row) {
+  function stepAllowsEdit(step: ShipmentProgressStep) {
+    if (isLogisticsLegKind(step.kind)) {
+      return logisticsEditable;
+    }
+
+    if (isStatusStepKind(step.kind)) {
+      return statusEditable;
+    }
+
+    return false;
+  }
+
+  function menuLockReason(kind: ShipmentProgressKind) {
+    if (isLogisticsLegKind(kind) && !logisticsEditable) {
+      return "Sin permiso para cambiar esta etapa";
+    }
+
+    if (isStatusStepKind(kind) && !statusEditable) {
+      return "Sin permiso para cambiar el estado";
+    }
+
+    if (!row || !isLogisticsLegKind(kind)) {
+      return "";
+    }
+
+    return legLockReason(row, kind);
+  }
+
+  function menuLegContext(kind: ShipmentProgressKind) {
+    if (!editorState || !isLogisticsLegKind(kind)) {
+      return {
+        currentLegMode: "",
+        legOrdered: false,
+        currentSummary: "",
+      };
+    }
+
+    const taskType = kind === "empty_box" ? "deliver_empty_box" : "pickup_full_box";
+    const legOrdered = Boolean(
+      row?.logisticsTasks.some(
+        (task) => task.taskType === taskType && task.status !== "cancelled",
+      ),
+    );
+
+    return {
+      currentLegMode: kind === "empty_box" ? editorState.emptyBoxMode : editorState.fullBoxMode,
+      legOrdered,
+      emptyBoxHandingNow: editorState.emptyBoxHandingNow,
+      currentSummary: logisticsLegMenuSummary(kind, editorState),
+      scheduleChanged: legHasScheduleChange(
+        planLegRecord(row?.logistics_plan, (kind === "empty_box" ? "emptyBox" : "fullBox") as LogisticsLegKey),
+      ),
+    };
+  }
+
+  const syncDetailAnchors = useCallback((stepId: string | null = detailStepId) => {
+    setDetailAnchor(progressCardRef.current?.getBoundingClientRect() ?? null);
+    setDetailStepAnchor(
+      stepId ? stepButtonRefs.current[stepId]?.getBoundingClientRect() ?? null : null,
+    );
+  }, [detailStepId]);
+
+  function shouldOpenLegMenuOnClick(step: ShipmentProgressStep) {
+    return (step.kind === "empty_box" || step.kind === "full_box") && step.state === "active";
+  }
+
+  function openStepMenu(
+    step: ShipmentProgressStep,
+    x: number,
+    y: number,
+    trigger: "left_click" | "context_menu",
+  ) {
+    setMenu({
+      kind: step.kind,
+      title: step.title,
+      x,
+      y,
+      trigger,
+    });
+  }
+
+  function openStepMenuFromButton(
+    step: ShipmentProgressStep,
+    stepId: string,
+    fallbackEvent?: React.MouseEvent,
+  ) {
+    const rect = stepButtonRefs.current[stepId]?.getBoundingClientRect();
+
+    openStepMenu(
+      step,
+      rect ? Math.min(rect.left, window.innerWidth - 300) : fallbackEvent?.clientX ?? 0,
+      rect ? rect.bottom + 6 : fallbackEvent?.clientY ?? 0,
+      "left_click",
+    );
+  }
+
+  function handleLeftClick(step: ShipmentProgressStep, event?: React.MouseEvent) {
+    if (!stepIsInteractive(step)) {
+      return;
+    }
+
+    if (!stepAllowsEdit(step) || saving || !row) {
       return;
     }
 
     if (isLogisticsLegKind(step.kind)) {
+      if (shouldOpenLegMenuOnClick(step)) {
+        if (event) {
+          openStepMenu(step, event.clientX, event.clientY, "left_click");
+        }
+        return;
+      }
+
       const lock = legLockReason(row, step.kind);
       if (lock) {
         onLockedLeg?.(lock);
@@ -224,7 +410,11 @@ export function ShipmentProgressSteps({
   }
 
   function handleContextMenu(event: React.MouseEvent, step: ShipmentProgressStep) {
-    if (!canEdit || saving || !row) {
+    if (!stepIsInteractive(step)) {
+      return;
+    }
+
+    if (!stepAllowsEdit(step) || saving || !row) {
       return;
     }
 
@@ -240,6 +430,7 @@ export function ShipmentProgressSteps({
       title: step.title,
       x: event.clientX,
       y: event.clientY,
+      trigger: "context_menu",
     });
   }
 
@@ -258,12 +449,7 @@ export function ShipmentProgressSteps({
         : "";
 
   function stepIsInteractive(step: ShipmentProgressStep) {
-    return (
-      canEdit &&
-      !saving &&
-      Boolean(row) &&
-      (isLogisticsLegKind(step.kind) || isStatusStepKind(step.kind))
-    );
+    return stepAllowsEdit(step) && !saving && Boolean(row) && stepIsReachable(step);
   }
 
   function openContextMenu(event: React.MouseEvent, step: ShipmentProgressStep) {
@@ -278,34 +464,61 @@ export function ShipmentProgressSteps({
   const detailStep = detailStepId ? steps.find((step) => step.id === detailStepId) : null;
   const detailStepNumber = detailStep ? steps.findIndex((step) => step.id === detailStep.id) + 1 : 0;
 
+  useLayoutEffect(() => {
+    if (!detailStepId) {
+      return;
+    }
+
+    syncDetailAnchors(detailStepId);
+
+    function handleViewportChange() {
+      syncDetailAnchors(detailStepId);
+    }
+
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [detailStepId, syncDetailAnchors]);
+
   if (compact) {
     const waiting = activeStep?.state === "active";
     const focusStep = waiting ? activeStep : steps.filter((step) => step.state === "done").at(-1) ?? activeStep;
+    const focusIndex = focusStep ? steps.findIndex((step) => step.id === focusStep.id) + 1 : 0;
     const panelTint = waiting
       ? timings?.isLongWait
         ? "border-amber-500/60 bg-amber-950/20"
         : "border-black bg-surface-inset"
       : "border-emerald-600/40 bg-emerald-950/15";
-    const waitingText = waiting ? timings?.waitingText || "" : "";
 
     return (
       <>
         <div className="min-w-0">
           <div
+            ref={progressCardRef}
             onContextMenu={(event) => {
               if (focusStep) {
                 openContextMenu(event, focusStep);
               }
             }}
             title={focusStep && stepIsInteractive(focusStep) ? "Clic derecho: más opciones" : undefined}
-            className={`relative rounded-lg border p-2.5 ${panelTint}`}
+            className={`relative rounded-lg border p-2.5 [contain:paint] ${panelTint}`}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="inline-flex h-6 items-center rounded border border-black bg-surface-card-header px-2 text-[10px] font-black uppercase leading-none text-slate-400">
-                {timings?.progressStepLabel || "Progreso"}
-              </p>
+              <div className="min-w-0">
+                <p className="inline-flex max-w-full items-center rounded border border-black bg-surface-card-header px-2 py-1 text-[10px] font-black uppercase leading-none text-slate-400">
+                  Paso {focusIndex || steps.length} de {steps.length}
+                </p>
+              </div>
               {timings?.saleAgeLabel ? (
-                <p className="truncate text-[10px] font-black text-slate-500">{timings.saleAgeLabel}</p>
+                <p
+                  className={`truncate text-[10px] font-black ${saleAgeTextClass(timings.saleAgeMs)}`}
+                >
+                  {timings.saleAgeLabel}
+                </p>
               ) : null}
             </div>
 
@@ -313,79 +526,61 @@ export function ShipmentProgressSteps({
               className="mt-2 grid gap-1"
               style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
             >
-              {steps.map((step, index) => (
-                <button
-                  type="button"
-                  key={step.id}
-                  title={timings ? stepTimingTooltip(step, timings) : step.title}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setDetailStepId((current) => (current === step.id ? null : step.id));
-                  }}
-                  onContextMenu={(event) => openContextMenu(event, step)}
-                  className={`flex h-6 min-w-0 items-center justify-center rounded border text-[10px] font-black tabular-nums transition hover:brightness-110 ${
-                    step.state === "done"
-                      ? "border-emerald-700 bg-emerald-400 text-slate-950"
-                      : step.state === "active"
-                        ? "border-amber-700 bg-amber-400 text-slate-950"
-                        : "border-black bg-surface-card-header text-slate-500"
-                  }`}
-                  aria-label={step.title}
-                  aria-expanded={detailStepId === step.id}
-                >
-                  {index + 1}
-                </button>
-              ))}
+              {steps.map((step) => {
+                const isDetailOpen = detailStepId === step.id;
+                const Icon = stepIcon(step.kind, step.channel);
+
+                return (
+                  <button
+                    type="button"
+                    key={step.id}
+                    disabled={!stepIsInteractive(step)}
+                    ref={(element) => {
+                      stepButtonRefs.current[step.id] = element;
+                    }}
+                    title={timings ? stepTimingTooltip(step, timings) : step.title}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!stepIsReachable(step)) {
+                        return;
+                      }
+
+                      if (shouldOpenLegMenuOnClick(step) && stepIsInteractive(step)) {
+                        openStepMenuFromButton(step, step.id, event);
+                        setDetailStepId(null);
+                        return;
+                      }
+
+                      const nextStepId = detailStepId === step.id ? null : step.id;
+                      setDetailStepId(nextStepId);
+                      if (nextStepId) {
+                        queueMicrotask(() => syncDetailAnchors(nextStepId));
+                      } else {
+                        setDetailStepAnchor(null);
+                      }
+                    }}
+                    onContextMenu={(event) => openContextMenu(event, step)}
+                    className={`relative flex h-10 min-w-0 items-center gap-1.5 rounded border px-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${stepIsInteractive(step) ? "hover:opacity-90" : ""} ${compactStepClass(step, isDetailOpen)}`}
+                    aria-label={step.title}
+                    aria-expanded={isDetailOpen}
+                    aria-current={step.state === "active" ? "step" : undefined}
+                  >
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-black/30 bg-black/10">
+                      <Icon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+                    </span>
+                    <span className="min-w-0 truncate text-[11px] font-black leading-tight">
+                      {compactStepName(step.kind)}
+                    </span>
+                    {isDetailOpen ? (
+                      <span
+                        className="pointer-events-none absolute -bottom-2 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[6px] border-x-transparent border-t-emerald-400"
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
-
-            {row && detailStep ? (
-              <ShipmentStepDetailPanel
-                row={row}
-                step={detailStep}
-                stepNumber={detailStepNumber}
-                totalSteps={steps.length}
-                timings={timings}
-                onClose={() => setDetailStepId(null)}
-              />
-            ) : null}
-
-            {focusStep ? (
-              <div className="mt-2 min-w-0 border-t border-black/40 pt-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10px] font-black uppercase text-slate-500">Ahora</p>
-                  {focusStep.channelLabel ? (
-                    <p className="truncate text-[10px] font-black uppercase text-slate-500">
-                      {focusStep.channelLabel}
-                    </p>
-                  ) : null}
-                </div>
-
-                <p
-                  className={`mt-1 text-base font-black leading-snug ${
-                    waiting ? "text-amber-100" : "text-emerald-200"
-                  }`}
-                >
-                  {focusStep.title}
-                </p>
-
-                {waitingText ? (
-                  <p className="mt-1 text-lg font-black tabular-nums leading-tight text-amber-100">
-                    {waitingText}
-                  </p>
-                ) : null}
-
-                {!waiting && focusStep.state === "done" ? (
-                  <p className="mt-1 text-[11px] font-bold text-emerald-200/80">Completado</p>
-                ) : null}
-
-                {focusStep.detail ? (
-                  <p className="mt-2 rounded border border-black/40 bg-surface-card-header px-2 py-1.5 text-[11px] font-bold leading-snug text-slate-300">
-                    <span className="font-black uppercase text-slate-500">Acción:</span>{" "}
-                    {focusStep.detail}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
 
             {timings?.lastCompletedGap ? (
               <p className="mt-2 border-t border-black/30 pt-1.5 text-[10px] font-bold leading-snug text-slate-500">
@@ -395,12 +590,26 @@ export function ShipmentProgressSteps({
           </div>
         </div>
 
+        {row && detailStep ? (
+          <ShipmentStepDetailPanel
+            row={row}
+            step={detailStep}
+            stepNumber={detailStepNumber}
+            totalSteps={steps.length}
+            timings={timings}
+            anchorRect={detailAnchor}
+            stepAnchorRect={detailStepAnchor}
+            onClose={() => setDetailStepId(null)}
+          />
+        ) : null}
+
         {row && menu ? (
           <ShipmentStepContextMenu
             menu={menu}
-            lockReason={isLogisticsLegKind(menu.kind) ? legLockReason(row, menu.kind) : ""}
+            lockReason={menuLockReason(menu.kind)}
             scheduleMode={menuScheduleMode}
             scheduleAt={menuScheduleAt}
+            {...menuLegContext(menu.kind)}
             currentStatus={row.status}
             onClose={() => setMenu(null)}
             onApply={(patch) => {
@@ -439,12 +648,20 @@ export function ShipmentProgressSteps({
               <div className="flex w-8 shrink-0 flex-col items-center">
                 <DotTag
                   type={interactive ? "button" : undefined}
-                  onClick={interactive ? () => handleLeftClick(step) : undefined}
+                  onClick={
+                    interactive
+                      ? (event) => handleLeftClick(step, event)
+                      : undefined
+                  }
                   onContextMenu={(event) => openContextMenu(event, step)}
                   title={
                     interactive
                       ? isLogisticsLegKind(step.kind)
-                        ? "Clic: alternar oficina / domicilio · Clic derecho: más opciones"
+                        ? step.kind === "full_box" && step.state === "active"
+                          ? `Programar o marcar ${FULL_BOX_LEG_LABELS.short.toLowerCase()}`
+                          : step.kind === "empty_box" && step.state === "active"
+                            ? `Programar o marcar ${EMPTY_BOX_LEG_LABELS.short.toLowerCase()}`
+                            : "Clic: alternar oficina / domicilio · Clic derecho: más opciones"
                         : "Clic: marcar estado · Clic derecho: elegir otro"
                       : undefined
                   }
@@ -462,8 +679,8 @@ export function ShipmentProgressSteps({
 
               <div
                 className={`mb-3 min-w-0 flex-1 ${timelineRowClass(step.state, interactive, false)}`}
-                onClick={() => handleLeftClick(step)}
-                onContextMenu={(event) => openContextMenu(event, step)}
+                onClick={interactive ? (event) => handleLeftClick(step, event) : undefined}
+                onContextMenu={interactive ? (event) => openContextMenu(event, step) : undefined}
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <p
@@ -478,6 +695,11 @@ export function ShipmentProgressSteps({
                   ) : null}
                 </div>
                 <p className="mt-0.5 text-xs font-bold leading-snug text-slate-300">{step.detail}</p>
+                {step.scheduleChanged ? (
+                  <span className="mt-1 inline-flex rounded border border-amber-700/50 bg-amber-950/30 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-200">
+                    Fecha modificada
+                  </span>
+                ) : null}
               </div>
             </li>
           );
@@ -487,9 +709,10 @@ export function ShipmentProgressSteps({
       {row && menu ? (
         <ShipmentStepContextMenu
           menu={menu}
-          lockReason={isLogisticsLegKind(menu.kind) ? legLockReason(row, menu.kind) : ""}
+          lockReason={menuLockReason(menu.kind)}
           scheduleMode={menuScheduleMode}
           scheduleAt={menuScheduleAt}
+          {...menuLegContext(menu.kind)}
           currentStatus={row.status}
           onClose={() => setMenu(null)}
           onApply={(patch) => {

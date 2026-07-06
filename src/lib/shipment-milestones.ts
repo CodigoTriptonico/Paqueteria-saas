@@ -1,5 +1,6 @@
 import type { ShipmentStatus } from "@/app/actions/shipments";
 import type { ShipmentProgressKind } from "@/lib/shipment-display";
+import { formatShipmentAbsolute } from "@/lib/shipment-timing";
 
 /** Milestone keys stored as timestamptz columns on public.shipments. */
 export type ShipmentMilestoneKey =
@@ -111,12 +112,14 @@ export type ShipmentMilestoneAuditInput = {
 };
 
 export function shipmentMilestoneAuditPayload(input: ShipmentMilestoneAuditInput) {
+  const label = MILESTONE_LABELS[input.milestone];
+
   return {
     action: SHIPMENT_MILESTONE_ACTION,
     entityType: "shipment",
     entityId: input.shipmentId,
-    title: `${MILESTONE_LABELS[input.milestone]} · ${input.shipmentCode}`,
-    description: `${MILESTONE_LABELS[input.milestone]} registrado · ${input.recordedAt}`,
+    title: label,
+    description: milestoneHistoryDescription(input),
     metadata: {
       milestone: input.milestone,
       milestoneLabel: MILESTONE_LABELS[input.milestone],
@@ -134,6 +137,23 @@ export function shipmentMilestoneAuditPayload(input: ShipmentMilestoneAuditInput
       stepKind: input.stepKind || null,
     },
   };
+}
+
+function milestoneHistoryDescription(input: ShipmentMilestoneAuditInput) {
+  if (input.source === "counter_handoff") {
+    return "Entregada en mostrador";
+  }
+
+  if (input.source === "logistics_task") {
+    return "Completada en logística";
+  }
+
+  if (input.nextStatus) {
+    return `Estado marcado: ${input.nextStatus}`;
+  }
+
+  const formatted = formatShipmentAbsolute(input.recordedAt);
+  return formatted ? `Registrado ${formatted}` : "Registrado";
 }
 
 export function readShipmentMilestones(row: ShipmentMilestoneTimestamps): ShipmentMilestoneTimestamps {

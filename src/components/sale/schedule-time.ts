@@ -8,16 +8,16 @@ export type ScheduleTimeValue = {
 
 export function parseScheduleTime(timePart: string): ScheduleTimeValue {
   if (!timePart) {
-    return { kind: "exact", start: "10:00" };
+    return { kind: "exact", start: "" };
   }
 
   if (timePart.endsWith("+")) {
-    return { kind: "from", start: timePart.slice(0, -1) || "10:00" };
+    return { kind: "from", start: timePart.slice(0, -1) };
   }
 
   if (timePart.includes("-")) {
     const [start, end] = timePart.split("-");
-    return { kind: "range", start: start || "10:00", end: end || "" };
+    return { kind: "range", start: start || "", end: end || "" };
   }
 
   return { kind: "exact", start: timePart };
@@ -58,6 +58,38 @@ export function formatScheduleTimeLabel(timePart: string) {
   return `a las ${formatTime12Hour(parsed.start)}`;
 }
 
+const MONTH_NAMES_ES = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+
+export function formatScheduleDateLabel(date: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+
+  if (!match) {
+    return date;
+  }
+
+  const [, year, month, day] = match;
+  const monthName = MONTH_NAMES_ES[Number(month) - 1];
+
+  if (!monthName) {
+    return date;
+  }
+
+  return `${Number(day)} de ${monthName} de ${year}`;
+}
+
 export function formatScheduleAtDisplay(scheduleAt: string) {
   const [date, timePart] = scheduleAt.split("T");
 
@@ -65,11 +97,13 @@ export function formatScheduleAtDisplay(scheduleAt: string) {
     return scheduleAt;
   }
 
+  const dateLabel = formatScheduleDateLabel(date);
+
   if (!timePart) {
-    return date;
+    return dateLabel;
   }
 
-  return `${date} ${formatScheduleTimeLabel(timePart)}`;
+  return `${dateLabel} ${formatScheduleTimeLabel(timePart)}`;
 }
 
 export function scheduleTimeComplete(timePart: string) {
@@ -120,6 +154,30 @@ export function scheduleAtToTimestamp(scheduleAt: string | null | undefined) {
   return null;
 }
 
-export function scheduleTimePresetMatches(timePart: string, time: string) {
-  return parseScheduleTime(timePart).kind === "exact" && parseScheduleTime(timePart).start === time;
+export function scheduleTimePresetMatches(
+  timePart: string,
+  time: string,
+  target: "start" | "end" = "start",
+) {
+  const parsed = parseScheduleTime(timePart);
+
+  if (parsed.kind === "range" && target === "end") {
+    return parsed.end === time;
+  }
+
+  return parsed.start === time;
+}
+
+export function applyScheduleTimePreset(
+  timePart: string,
+  time: string,
+  target: "start" | "end" = "start",
+) {
+  const parsed = parseScheduleTime(timePart);
+
+  if (parsed.kind === "range" && target === "end") {
+    return formatScheduleTimePart({ ...parsed, end: time });
+  }
+
+  return formatScheduleTimePart({ ...parsed, start: time });
 }

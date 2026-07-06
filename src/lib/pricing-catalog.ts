@@ -18,6 +18,7 @@ export type InventoryCatalogProduct = {
 export type ProductCountryAssignment = {
   countryName: string;
   price: string;
+  cost: string;
   active: boolean;
 };
 
@@ -189,10 +190,11 @@ export function setProductCountryAssignments(
     }
 
     const price = assignment.price || "$0";
+    const cost = assignment.cost || existing?.cost || "$0";
     const nextBox: PricingBoxConfig = {
       size: product.label,
       price,
-      cost: existing?.cost || "$0",
+      cost,
       catalogKey: product.catalogKey,
     };
 
@@ -220,6 +222,7 @@ export function productCountryAssignments(
     return {
       countryName: country.name,
       price: box?.price || "$0",
+      cost: box?.cost || "$0",
       active: Boolean(box),
     };
   });

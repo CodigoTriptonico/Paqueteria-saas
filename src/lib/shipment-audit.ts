@@ -1,4 +1,10 @@
-export type ShipmentAuditInteraction = "left_click" | "right_click" | "context_menu";
+import { formatShipmentAbsolute } from "@/lib/shipment-timing";
+
+export type ShipmentAuditInteraction =
+  | "left_click"
+  | "right_click"
+  | "context_menu"
+  | "schedule_due";
 
 export type ShipmentAuditContext = {
   interaction: ShipmentAuditInteraction;
@@ -14,6 +20,10 @@ export function shipmentAuditInteractionLabel(interaction: ShipmentAuditInteract
 
   if (interaction === "right_click") {
     return "Clic derecho en tarjeta";
+  }
+
+  if (interaction === "schedule_due") {
+    return "Fecha programada cumplida";
   }
 
   return "Menú contextual";
@@ -64,6 +74,40 @@ export function describeLogisticsAuditChange(input: {
   return chunks.join(" · ");
 }
 
+export function logisticsTaskTypeLabel(
+  taskType: "deliver_empty_box" | "pickup_full_box",
+) {
+  return taskType === "deliver_empty_box" ? "Entrega de caja vacía" : "Recolección de caja llena";
+}
+
+export function describeLogisticsTaskOrdered(input: {
+  taskType: "deliver_empty_box" | "pickup_full_box";
+  orderedAt: string;
+  scheduleMode: string;
+  scheduleAt: string | null;
+  interaction: ShipmentAuditInteraction;
+  stepTitle?: string;
+}) {
+  const chunks = [
+    shipmentAuditInteractionLabel(input.interaction),
+    logisticsTaskTypeLabel(input.taskType),
+    `Ordenada ${formatShipmentAbsolute(input.orderedAt)}`,
+  ];
+
+  if (input.stepTitle) {
+    chunks.push(`Paso: ${input.stepTitle}`);
+  }
+
+  if (input.scheduleMode === "scheduled" && input.scheduleAt) {
+    const scheduled = formatShipmentAbsolute(input.scheduleAt);
+    if (scheduled) {
+      chunks.push(`Programada para ${scheduled}`);
+    }
+  }
+
+  return chunks.join(" · ");
+}
+
 function legModeLabel(leg: NonNullable<ReturnType<typeof logisticsLegSnapshot>>) {
   const mode = leg.mode;
 
@@ -77,7 +121,8 @@ function legModeLabel(leg: NonNullable<ReturnType<typeof logisticsLegSnapshot>>)
 
   if (mode.includes("Programar")) {
     if (leg.scheduleMode === "scheduled" && leg.scheduleAt) {
-      return `Domicilio (${leg.scheduleAt})`;
+      const formatted = formatShipmentAbsolute(leg.scheduleAt);
+      return formatted ? `Domicilio (${formatted})` : "Domicilio (programado)";
     }
 
     return "Domicilio (sin fecha)";
@@ -117,13 +162,45 @@ export function shipmentAuditActionLabel(action: string) {
     return "Logística";
   }
 
+  if (action === "shipment.schedule_updated") {
+    return "Cambio de fecha";
+  }
+
+  if (action === "shipment.logistics_task_ordered") {
+    return "Orden en envíos";
+  }
+
+  if (action === "shipment.logistics_task_updated") {
+    return "Tarea logística";
+  }
+
+  if (action === "shipment.logistics_task_failed") {
+    return "Visita fallida";
+  }
+
   if (action === "sale.invoice_finalized") {
     return "Cierre de invoice";
   }
 
-  if (action === "sale.open_invoice_created") {
-    return "Venta / invoice";
+  if (action === "sale.invoice_partial_payment") {
+    return "Abono";
   }
 
-  return action;
+  if (action === "sale.invoice_priority_updated") {
+    return "Prioridad";
+  }
+
+  if (action === "sale.created") {
+    return "Venta";
+  }
+
+  if (action === "shipment.sales_owner_updated") {
+    return "Vendedor";
+  }
+
+  if (action === "sale.open_invoice_created") {
+    return "Venta";
+  }
+
+  return action.replace(/^[^.]+\./, "").replaceAll("_", " ");
 }

@@ -53,6 +53,41 @@ export type InvoiceBillingSnapshot = {
   balanceDue: string;
 };
 
+export type InvoiceAccountingState = {
+  invoiceStatus: "open" | "paid";
+  accountingStatus: "not_exportable" | "exportable";
+};
+
+function parseRecordedPayment(value: string | number) {
+  return typeof value === "number" ? value : parseMoneyValue(value);
+}
+
+export function billingWithRecordedPayment(
+  billing: InvoiceBillingSnapshot,
+  recordedPayment: string | number,
+): InvoiceBillingSnapshot {
+  const quotedTotal = parseMoneyValue(billing.quotedTotal);
+  const paid = Math.max(0, Math.min(parseRecordedPayment(recordedPayment), quotedTotal));
+
+  return {
+    ...billing,
+    payNow: formatMoneyValue(paid),
+    balanceDue: formatMoneyValue(Math.max(quotedTotal - paid, 0)),
+  };
+}
+
+export function invoiceAccountingStateForPayment(
+  billing: InvoiceBillingSnapshot,
+  recordedPayment: string | number,
+): InvoiceAccountingState {
+  const adjusted = billingWithRecordedPayment(billing, recordedPayment);
+  const paidInFull = parseMoneyValue(adjusted.balanceDue) <= 0;
+
+  return paidInFull
+    ? { invoiceStatus: "paid", accountingStatus: "exportable" }
+    : { invoiceStatus: "open", accountingStatus: "not_exportable" };
+}
+
 export function computeInvoiceBilling(input: {
   boxCount?: number;
   boxUnitPrice: string;
@@ -101,8 +136,13 @@ export function computeInvoiceBilling(input: {
   const promotionDiscount = promotion ? parseMoneyValue(promotion.discountTotal) : 0;
   const boxSubtotal = Math.max(boxSubtotalBeforeDiscount - promotionDiscount, 0);
   const mode = input.fees.logisticsFeeMode;
-  const emptyBoxDelivery = 0;
-  const fullBoxPickup = 0;
+  const feeMultiplier = mode === "per_box" ? boxCount : 1;
+  const emptyBoxDelivery = input.emptyBoxDriver
+    ? Math.max(parseMoneyValue(input.fees.emptyBoxDeliveryFee), 0) * feeMultiplier
+    : 0;
+  const fullBoxPickup = input.fullBoxDriver
+    ? Math.max(parseMoneyValue(input.fees.fullBoxPickupFee), 0) * feeMultiplier
+    : 0;
   const logisticsSubtotal = emptyBoxDelivery + fullBoxPickup;
   const quotedTotal = boxSubtotal + logisticsSubtotal;
 

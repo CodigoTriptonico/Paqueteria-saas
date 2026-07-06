@@ -96,19 +96,26 @@ describe("pricing-catalog", () => {
     const product = listCatalogProducts(sampleTree)[0]!;
     const countries = [mexicoCountry, colombiaCountry];
     const next = setProductCountryAssignments(countries, product, [
-      { countryName: "México", price: "$25", active: true },
-      { countryName: "Colombia", price: "$30", active: true },
+      { countryName: "México", price: "$25", cost: "$12", active: true },
+      { countryName: "Colombia", price: "$30", cost: "$15", active: true },
     ]);
 
     assert.equal(next[0]?.boxes[0]?.price, "$25");
+    assert.equal(next[0]?.boxes[0]?.cost, "$12");
     assert.equal(next[1]?.boxes[0]?.price, "$30");
+    assert.equal(next[1]?.boxes[0]?.cost, "$15");
 
     const assignments = productCountryAssignments(next, product.catalogKey);
     assert.deepEqual(
-      assignments.map((entry) => ({ name: entry.countryName, active: entry.active })),
+      assignments.map((entry) => ({
+        name: entry.countryName,
+        price: entry.price,
+        cost: entry.cost,
+        active: entry.active,
+      })),
       [
-        { name: "México", active: true },
-        { name: "Colombia", active: true },
+        { name: "México", price: "$25", cost: "$12", active: true },
+        { name: "Colombia", price: "$30", cost: "$15", active: true },
       ],
     );
   });

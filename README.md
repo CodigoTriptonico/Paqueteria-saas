@@ -59,6 +59,12 @@ http://localhost:3000/login
 - Permisos por ruta en layouts con `requirePathAccess()`
 - Super-admin en `/platform`
 
+## Envios
+
+- `/envios`: vendedores gestionan ventas, estado operativo y seguimiento del cliente.
+- Seguimiento por invoice en `shipment_contact_logs`: llamada/medio, resultado, nota, proximo paso y recordatorio.
+- RLS: vendedor solo ve/escribe seguimiento de sus invoices; administrador ve todos.
+
 ## Docs
 
 - Setup y pruebas: [SETUP.md](./SETUP.md)
