@@ -408,6 +408,16 @@ export function formatAuditHistoryDetail(entry: ActivityHistoryRow) {
     return scheduleHistoryDetailFromMetadata(entry.metadata || {}) || stepHistoryEntryDetail(entry);
   }
 
+  if (entry.action === "shipment.logistics_task_failed") {
+    const reason = metaText(entry, "failureReason");
+    const note = metaText(entry, "note");
+    const parts = [reason, note].filter(Boolean);
+
+    if (parts.length) {
+      return parts.join(" · ");
+    }
+  }
+
   if (SALE_HISTORY_ACTIONS.has(entry.action)) {
     const moment = entry.description ? saleHistoryMoment(entry.description) : "";
     return moment;

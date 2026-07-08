@@ -21,7 +21,7 @@ function initialsFromSession(session: AppSession) {
 
 type UserAccountMenuProps = {
   session: AppSession | null;
-  variant?: "bar" | "sidebar";
+  variant?: "bar" | "sidebar" | "rail";
 };
 
 export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuProps) {
@@ -79,15 +79,24 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
 
   const initials = initialsFromSession(session);
   const isSidebar = variant === "sidebar";
+  const isRail = variant === "rail";
   const settingsLocked = platformAdminNeedsClientContext(session);
   const settingsLockedHint = "Selecciona una paquetería en Plataforma y pulsa Operar";
 
-  const triggerClass = isSidebar
-    ? "flex w-full items-center gap-3 overflow-hidden rounded-lg border border-black bg-surface-card px-3 py-2.5 text-left transition-colors hover:bg-[#2f3834]"
-    : "flex items-center gap-2 overflow-hidden rounded-lg border border-black bg-surface-card px-2 py-1.5 pr-3 transition-colors hover:bg-[#2f3834] sm:gap-3 sm:px-3 sm:py-2";
+  const triggerClass = isRail
+    ? "flex w-full items-center justify-center rounded-lg border border-black bg-surface-card p-2 transition-colors hover:bg-[#2f3834]"
+    : isSidebar
+      ? "flex w-full items-center gap-3 overflow-hidden rounded-lg border border-black bg-surface-card px-3 py-2.5 text-left transition-colors hover:bg-[#2f3834]"
+      : "flex items-center gap-2 overflow-hidden rounded-lg border border-black bg-surface-card px-2 py-1.5 pr-3 transition-colors hover:bg-[#2f3834] sm:gap-3 sm:px-3 sm:py-2";
+
+  const menuPositionClass = isRail
+    ? "left-full top-0 ml-2 w-72"
+    : isSidebar
+      ? "bottom-full left-0 right-0 mb-2"
+      : "right-0 top-full mt-2 w-72";
 
   return (
-    <div ref={rootRef} className={`relative ${isSidebar ? "w-full" : ""}`}>
+    <div ref={rootRef} className={`relative ${isSidebar || isRail ? "w-full" : ""}`}>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -95,6 +104,7 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label="Menu de cuenta"
+        title={isRail ? displayName : undefined}
       >
         <span
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black bg-emerald-600 text-sm font-black text-white"
@@ -102,22 +112,24 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
         >
           {initials}
         </span>
-        <span className="relative min-w-0 flex-1">
-          <span className="block truncate text-sm font-black text-emerald-200">{primaryLine}</span>
-          <span className="block truncate text-xs text-slate-400">{secondaryLine}</span>
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
-          aria-hidden
-        />
+        {isRail ? null : (
+          <>
+            <span className="relative min-w-0 flex-1">
+              <span className="block truncate text-sm font-black text-emerald-200">{primaryLine}</span>
+              <span className="block truncate text-xs text-slate-400">{secondaryLine}</span>
+            </span>
+            <ChevronDown
+              className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+              aria-hidden
+            />
+          </>
+        )}
       </button>
 
       {open ? (
         <div
           role="menu"
-          className={`absolute z-[200] overflow-hidden rounded-lg border border-black bg-surface-panel shadow-lg ${
-            isSidebar ? "bottom-full left-0 right-0 mb-2" : "right-0 top-full mt-2 w-72"
-          }`}
+          className={`absolute z-[200] overflow-hidden rounded-lg border border-black bg-surface-panel shadow-lg ${menuPositionClass}`}
         >
           <div className="border-b border-black/40 bg-surface-card px-4 py-3 text-center">
             {session.isActingAsClient ? (

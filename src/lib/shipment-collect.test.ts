@@ -74,7 +74,7 @@ describe("invoice collection atomicity eval", () => {
       "utf8",
     );
     const migrationSource = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "../../supabase/migrations/042_atomic_invoice_collection.sql"),
+      join(dirname(fileURLToPath(import.meta.url)), "../../supabase/migrations/043_atomic_invoice_collection.sql"),
       "utf8",
     );
 

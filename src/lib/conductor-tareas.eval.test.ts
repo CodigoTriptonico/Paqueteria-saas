@@ -43,7 +43,9 @@ describe("conductor tareas shell eval", () => {
     assert.match(conductorPageSource, /requirePathAccess\("\/conductor\/tareas"\)/);
     assert.match(conductorPageSource, /resolveConductorTasksView/);
     assert.match(conductorPageSource, /listConductorDriverTasksAction/);
+    assert.match(conductorPageSource, /listConductorTaskActivityHistoryAction/);
     assert.match(conductorPageSource, /initialTasks=/);
+    assert.match(conductorPageSource, /initialHistory=/);
   });
 
   it("wires admin preview picker into the conductor tasks client", () => {
@@ -66,5 +68,17 @@ describe("conductor tareas shell eval", () => {
     assert.doesNotMatch(conductorClientSource, /Destinatario/);
     assert.doesNotMatch(conductorClientSource, /CountryName/);
     assert.doesNotMatch(conductorClientSource, /task\.country/);
+  });
+
+  it("loads conductor task history and renders audit entries", () => {
+    assert.match(conductorClientSource, /initialHistory/);
+    assert.match(conductorClientSource, /AuditHistoryEntry/);
+    assert.match(conductorClientSource, /Historial/);
+    assert.match(conductorClientSource, /listConductorTaskActivityHistoryAction/);
+  });
+
+  it("opens history after marking no se pudo", () => {
+    assert.match(conductorClientSource, /setHistoryOpen\(true\)/);
+    assert.match(conductorClientSource, /dialog\.result === "failed"/);
   });
 });

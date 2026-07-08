@@ -16,9 +16,7 @@ const actionsSource = readFileSync(
 describe("envios invoice priority eval", () => {
   it("keeps priority as a compact icon action on each invoice card", () => {
     assert.equal(enviosSource.includes("updateShipmentInvoicePriorityAction"), true);
-    assert.equal(enviosSource.includes("orderShipmentsByStableIds(filteredShipments, displayOrderIds)"), true);
-    assert.equal(enviosSource.includes("resolveEnviosDisplayOrderIds"), true);
-    assert.equal(enviosSource.includes("writeEnviosDisplayOrder"), true);
+    assert.equal(enviosSource.includes("sortShipmentsByArrivalOrder(filteredShipments)"), true);
     assert.equal(enviosSource.includes("<Star"), true);
     assert.equal(enviosSource.includes("Marcar prioridad"), true);
     assert.equal(enviosSource.includes("Quitar prioridad"), true);

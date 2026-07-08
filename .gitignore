@@ -24,6 +24,7 @@
 .DS_Store
 *.pem
 tools/cloudflared.exe
+.codex-remote-attachments/
 
 # debug
 npm-debug.log*
@@ -33,13 +34,15 @@ yarn-error.log*
 codex-next-*.log
 next-live-debug.log
 .cloudflared*.log
+.next-dev*.log
 .next-prod*.log
+.dev-tunnel.url
+.playwright-cli/
 
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
 !.env.local.template
-.next-dev.log
 
 # typescript
 *.tsbuildinfo

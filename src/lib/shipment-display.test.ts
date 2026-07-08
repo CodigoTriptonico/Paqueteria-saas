@@ -5,6 +5,10 @@ import {
   PENDING_EMPTY_BOX_STATUS,
   PENDING_FULL_BOX_STATUS,
   ENVIOS_STATUS_FILTER_OPTIONS,
+  filterShipmentsForEnviosMode,
+  isActiveShipment,
+  isCompletedShipment,
+  matchesEnviosSearchQuery,
   matchesEnviosStatusFilter,
   resolveInitialShipmentStatus,
   resolvePendingShipmentStatus,
@@ -629,10 +633,10 @@ describe("shipmentOperationalStatusLabel", () => {
 });
 
 describe("envios status filter buckets", () => {
-  it("exposes the five operational buckets without pendiente labels", () => {
+  it("exposes the four tracking buckets without pendiente labels", () => {
     assert.deepEqual(
       ENVIOS_STATUS_FILTER_OPTIONS.map((option) => option.label),
-      ["Recolecciones", "Entregas", "En oficina", "En tránsito", "Ya en destino final"],
+      ["Recolecciones", "Entregas", "En oficina", "En tránsito"],
     );
   });
 
@@ -641,6 +645,112 @@ describe("envios status filter buckets", () => {
 
     assert.equal(matchesEnviosStatusFilter(row, "recolecciones"), true);
     assert.equal(matchesEnviosStatusFilter(row, "entregas"), false);
+  });
+});
+
+describe("envios tracking vs history", () => {
+  const activeRow = baseShipment({ id: "active-1", status: "Enviado" });
+  const deliveredRow = baseShipment({ id: "delivered-1", status: "Entregado" });
+  const rows = [activeRow, deliveredRow];
+
+  it("classifies completed and active shipments", () => {
+    assert.equal(isCompletedShipment(deliveredRow), true);
+    assert.equal(isCompletedShipment(activeRow), false);
+    assert.equal(isActiveShipment(activeRow), true);
+    assert.equal(isActiveShipment(deliveredRow), false);
+  });
+
+  it("excludes Entregado from tracking mode", () => {
+    const tracking = filterShipmentsForEnviosMode(rows, "tracking");
+
+    assert.equal(tracking.length, 1);
+    assert.equal(tracking[0]?.id, "active-1");
+  });
+
+  it("includes only Entregado in history mode", () => {
+    const history = filterShipmentsForEnviosMode(rows, "history");
+
+    assert.equal(history.length, 1);
+    assert.equal(history[0]?.id, "delivered-1");
+  });
+});
+
+describe("matchesEnviosSearchQuery", () => {
+  it("matches sender names, phones and customer zip text", () => {
+    const row = baseShipment({
+      customer_name: "Carlos Diaz",
+      customerPhone: "+1 (323) 555-0199",
+      customerSearchText: "Carlos Diaz 742 Maple Ave Los Angeles CA 90001",
+    });
+
+    assert.equal(matchesEnviosSearchQuery(row, "diaz"), true);
+    assert.equal(matchesEnviosSearchQuery(row, "5550199"), true);
+    assert.equal(matchesEnviosSearchQuery(row, "90001"), true);
+  });
+
+  it("matches recipient apellido, phone, cp and address snapshot", () => {
+    const row = baseShipment({
+      recipientSnapshot: {
+        firstName: "Maria",
+        lastName: "Ochoa",
+        phone: "+52 33 2222 1111",
+        street: "Calle Lago",
+        city: "Guadalajara",
+        state: "Jalisco",
+        postalCode: "44100",
+      },
+    });
+
+    assert.equal(matchesEnviosSearchQuery(row, "ochoa"), true);
+    assert.equal(matchesEnviosSearchQuery(row, "3322221111"), true);
+    assert.equal(matchesEnviosSearchQuery(row, "44100"), true);
+    assert.equal(matchesEnviosSearchQuery(row, "lago guadalajara"), true);
+  });
+
+  it("matches logistics plan, task notes and contact follow-up text", () => {
+    const row = baseShipment({
+      logistics_plan: {
+        notes: "Cliente pide manejar fragil",
+        boxLines: [{ label: "Caja grande", quantity: 2 }],
+      },
+      logisticsTasks: [
+        {
+          id: "task-1",
+          shipmentId: "shipment-1",
+          taskType: "pickup_full_box",
+          status: "scheduled",
+          assignedTo: "driver-1",
+          scheduledAt: "2026-07-10T17:00:00.000Z",
+          warehouseId: null,
+          notes: "Porton azul",
+          stockDeductedAt: null,
+          completedAt: null,
+          orderedAt: null,
+          assignedAt: null,
+          loadedAt: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      contactLogs: [
+        {
+          id: "log-1",
+          shipmentId: "shipment-1",
+          channel: "call",
+          channelOther: "",
+          outcome: "answered",
+          note: "Confirmo pickup",
+          nextStep: "Llamar antes de llegar",
+          followUpAt: null,
+          createdBy: "seller-1",
+          createdByName: "Seller",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+
+    assert.equal(matchesEnviosSearchQuery(row, "fragil"), true);
+    assert.equal(matchesEnviosSearchQuery(row, "porton azul"), true);
+    assert.equal(matchesEnviosSearchQuery(row, "llamar llegar"), true);
   });
 });
 

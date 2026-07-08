@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { CSSProperties } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { signUpAction } from "@/app/actions/auth";
 import { getCurrentSessionAction } from "@/app/actions/session";
@@ -79,7 +80,7 @@ const fallbackStyles = {
   link: { color: "#a7f3d0", textDecoration: "underline", fontWeight: 700 },
 } satisfies Record<string, CSSProperties>;
 
-export function LoginForm() {
+export function LoginForm({ allowSignup = false }: { allowSignup?: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<FormMode>("login");
@@ -89,6 +90,7 @@ export function LoginForm() {
   const [fullName, setFullName] = useState("");
   const [error, setError] = useState(searchParams.get("error") || "");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   useEffect(() => {
@@ -145,22 +147,30 @@ export function LoginForm() {
       return;
     }
 
-    event.preventDefault();
-    setLoading(true);
-    setError("");
+    if (mode === "signup") {
+      event.preventDefault();
 
-    const nextParam = searchParams.get("next");
-    const result = await signUpAction(email, password, organizationName, fullName, nextParam);
+      if (!allowSignup) {
+        setError("El registro publico no esta disponible. Contacta al administrador.");
+        return;
+      }
 
-    setLoading(false);
+      setLoading(true);
+      setError("");
 
-    if (!result.ok) {
-      setError(result.error);
-      return;
+      const nextParam = searchParams.get("next");
+      const result = await signUpAction(email, password, organizationName, fullName, nextParam);
+
+      setLoading(false);
+
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      router.replace(result.data.redirectTo);
+      router.refresh();
     }
-
-    router.replace(result.data.redirectTo);
-    router.refresh();
   }
 
   const title =
@@ -194,16 +204,7 @@ export function LoginForm() {
               </button>
             </div>
           ) : (
-            <form
-              className="grid gap-4"
-              style={fallbackStyles.form}
-              action={mode === "login" ? "/api/auth/sign-in" : undefined}
-              method={mode === "login" ? "post" : undefined}
-              onSubmit={handleSubmit}
-            >
-              {mode === "login" ? (
-                <input type="hidden" name="nextPath" value={searchParams.get("next") || ""} />
-              ) : null}
+            <form className="grid gap-4" style={fallbackStyles.form} onSubmit={handleSubmit}>
               {mode === "signup" ? (
                 <>
                   <label className="grid gap-2" style={fallbackStyles.label}>
@@ -253,16 +254,26 @@ export function LoginForm() {
                 <span className="text-sm font-black uppercase text-slate-400" style={fallbackStyles.labelText}>
                   Contrasena
                 </span>
-                <input
-                  className={inputClass}
-                  style={fallbackStyles.input}
-                  name="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  minLength={6}
-                  required
-                />
+                <div className="relative">
+                  <input
+                    className={`${inputClass} pr-10`}
+                    style={{ ...fallbackStyles.input, paddingRight: 40 }}
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    minLength={6}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-white/5 hover:text-slate-100"
+                    onClick={() => setShowPassword((value) => !value)}
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </label>
 
               {error ? (
@@ -291,14 +302,16 @@ export function LoginForm() {
                 </button>
               ) : null}
 
-              <button
-                type="button"
-                className={secondaryButtonClass}
-                style={fallbackStyles.secondaryButton}
-                onClick={() => switchMode(mode === "login" ? "signup" : "login")}
-              >
-                {mode === "login" ? "Crear cuenta nueva" : "Ya tengo cuenta"}
-              </button>
+              {allowSignup ? (
+                <button
+                  type="button"
+                  className={secondaryButtonClass}
+                  style={fallbackStyles.secondaryButton}
+                  onClick={() => switchMode(mode === "login" ? "signup" : "login")}
+                >
+                  {mode === "login" ? "Crear cuenta nueva" : "Ya tengo cuenta"}
+                </button>
+              ) : null}
             </form>
           )}
 

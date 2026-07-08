@@ -15,6 +15,7 @@ import {
   type CustomerWithRecipientsRow,
 } from "@/lib/customers/load";
 import type { ListCustomersParams } from "@/lib/customers/list-params";
+import { assertSameOrgCustomerIds } from "@/lib/security/org-scope";
 
 export type { CustomerRecipientRow, CustomerWithRecipientsRow } from "@/lib/customers/load";
 
@@ -102,6 +103,10 @@ export async function createCustomerAction(input: {
     if (!phones.length) {
       return fail("Agrega al menos un telefono");
     }
+
+    await assertSameOrgCustomerIds(supabase, session.organizationId, [
+      input.referredByCustomerId || "",
+    ]);
 
     const { data, error } = await supabase
       .from("customers")
@@ -409,6 +414,8 @@ export async function createRecipientAction(input: {
     if (!supabase) {
       return fail("Supabase no configurado");
     }
+
+    await assertSameOrgCustomerIds(supabase, session.organizationId, [input.customerId]);
 
     const { data, error } = await supabase
       .from("customer_recipients")

@@ -68,3 +68,73 @@ export function conductorPreviewSearchParam(driverId: string | null) {
 
   return `conductor=${encodeURIComponent(driverId)}`;
 }
+
+export function isConductorAdminActing(input: {
+  roleSlug: string;
+  actorUserId: string;
+  effectiveDriverId: string | null;
+}) {
+  return (
+    canPreviewConductorTasks(input.roleSlug) &&
+    Boolean(input.effectiveDriverId) &&
+    input.actorUserId !== input.effectiveDriverId
+  );
+}
+
+export function conductorAdminActorLabel(actorName: string) {
+  const label = String(actorName || "").trim();
+  return label || "Administrador";
+}
+
+export function conductorAdminAuditMetadata(input: {
+  roleSlug: string;
+  actorUserId: string;
+  actorName: string;
+  effectiveDriverId: string | null;
+}) {
+  if (!isConductorAdminActing(input)) {
+    return {};
+  }
+
+  return {
+    actedByAdmin: true,
+    actorUserId: input.actorUserId,
+    actorName: conductorAdminActorLabel(input.actorName),
+    assignedDriverId: input.effectiveDriverId,
+  };
+}
+
+export function formatConductorAdminActionNote(
+  note: string,
+  input: {
+    roleSlug: string;
+    actorUserId: string;
+    actorName: string;
+    effectiveDriverId: string | null;
+  },
+) {
+  const cleanNote = String(note || "").trim();
+
+  if (!isConductorAdminActing(input)) {
+    return cleanNote;
+  }
+
+  const prefix = `[Admin: ${conductorAdminActorLabel(input.actorName)}]`;
+  return cleanNote ? `${prefix} ${cleanNote}` : prefix;
+}
+
+export function formatConductorAdminActorDescription(
+  input: {
+    roleSlug: string;
+    actorUserId: string;
+    actorName: string;
+    effectiveDriverId: string | null;
+  },
+  fallbackLabel = "conductor",
+) {
+  if (!isConductorAdminActing(input)) {
+    return fallbackLabel;
+  }
+
+  return `admin ${conductorAdminActorLabel(input.actorName)} por conductor`;
+}

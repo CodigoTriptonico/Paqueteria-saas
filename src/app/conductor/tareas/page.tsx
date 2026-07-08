@@ -1,6 +1,8 @@
+import type { ActivityHistoryRow } from "@/app/actions/history";
 import {
   getConductorTruckInventoryAction,
   listConductorDriverTasksAction,
+  listConductorTaskActivityHistoryAction,
 } from "@/app/actions/conductor-tasks";
 import { listRouteMembersAction } from "@/app/actions/shipments";
 import { ConductorTareasClient } from "@/components/conductor/conductor-tareas-client";
@@ -26,6 +28,7 @@ export default async function ConductorTareasPage({
   let drivers: { id: string; label: string }[] = [];
   let initialTasks: ConductorDriverTask[] = [];
   let initialTruckSummary: ConductorTruckInventorySummary | null = null;
+  let initialHistory: ActivityHistoryRow[] = [];
 
   if (canPreview && isSupabaseConfigured() && session) {
     const membersResult = await listRouteMembersAction();
@@ -41,12 +44,14 @@ export default async function ConductorTareasPage({
   });
 
   if (isSupabaseConfigured() && session && view.effectiveDriverId) {
-    const [tasksResult, truckResult] = await Promise.all([
+    const [tasksResult, truckResult, historyResult] = await Promise.all([
       listConductorDriverTasksAction(view.effectiveDriverId),
       getConductorTruckInventoryAction(view.effectiveDriverId),
+      listConductorTaskActivityHistoryAction(view.effectiveDriverId),
     ]);
     initialTasks = tasksResult.ok ? tasksResult.data : [];
     initialTruckSummary = truckResult.ok ? truckResult.data.summary : null;
+    initialHistory = historyResult.ok ? historyResult.data : [];
   }
 
   return (
@@ -58,6 +63,7 @@ export default async function ConductorTareasPage({
       effectiveDriverLabel={view.effectiveDriverLabel}
       initialTasks={initialTasks}
       initialTruckSummary={initialTruckSummary}
+      initialHistory={initialHistory}
     />
   );
 }

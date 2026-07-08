@@ -18,38 +18,44 @@ export function ShipmentPaymentProgress({
   progress,
   action,
   compact = false,
+  summaryRow = false,
 }: {
   progress: ShipmentPaymentProgressData;
   action?: ReactNode;
   compact?: boolean;
+  summaryRow?: boolean;
 }) {
   const fillWidth = progress.status === "void" ? 0 : progress.percentPaid;
 
   if (compact) {
     return (
-      <div className="min-w-0 rounded-lg border border-black bg-surface-inset p-2">
+      <div
+        className={`w-full min-w-0 rounded-lg border border-black bg-surface-inset ${summaryRow ? "p-1.5" : "p-2"}`}
+      >
         <div className="grid grid-cols-3 divide-x divide-black/50 overflow-hidden rounded border border-black/40 bg-surface-card-header">
-          <div className="min-w-0 px-2 py-1">
-            <p className="text-[9px] font-black uppercase leading-none text-slate-500">Total</p>
-            <p className="mt-1 truncate text-xs font-black tabular-nums text-[#f8fafc]">
+          <div className="min-w-0 px-1.5 py-1">
+            <p className="text-[8px] font-black uppercase leading-none text-slate-500">Total</p>
+            <p className="mt-0.5 truncate text-[11px] font-black tabular-nums text-[#f8fafc]">
               {formatMoneyValue(progress.total)}
             </p>
           </div>
-          <div className="min-w-0 px-2 py-1">
-            <p className="text-[9px] font-black uppercase leading-none text-slate-500">Pagado</p>
-            <p className="mt-1 truncate text-xs font-black tabular-nums text-emerald-300">
+          <div className="min-w-0 px-1.5 py-1">
+            <p className="text-[8px] font-black uppercase leading-none text-slate-500">Pagado</p>
+            <p className="mt-0.5 truncate text-[11px] font-black tabular-nums text-emerald-300">
               {formatMoneyValue(progress.paid)}
             </p>
           </div>
-          <div className="min-w-0 px-2 py-1">
-            <p className="text-[9px] font-black uppercase leading-none text-slate-500">Pendiente</p>
-            <p className="mt-1 truncate text-xs font-black tabular-nums text-amber-200">
+          <div className="min-w-0 px-1.5 py-1">
+            <p className="text-[8px] font-black uppercase leading-none text-slate-500">Debe</p>
+            <p className="mt-0.5 truncate text-[11px] font-black tabular-nums text-amber-200">
               {formatMoneyValue(progress.pending)}
             </p>
           </div>
         </div>
 
-        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full border border-black bg-surface-inset">
+        <div
+          className={`overflow-hidden rounded-full border border-black bg-surface-inset ${summaryRow ? "mt-1 h-1" : "mt-1.5 h-1.5"}`}
+        >
           <div
             className={`h-full rounded-full transition-[width] ${barFillClass(progress.status)}`}
             style={{ width: `${fillWidth}%` }}
@@ -60,10 +66,16 @@ export function ShipmentPaymentProgress({
             aria-label={`${fillWidth}% pagado`}
           />
         </div>
-        <div className="mt-1 flex items-center justify-between gap-2 text-[10px] font-black leading-none text-slate-500">
-          <span>{progress.statusLabel}</span>
-          {action}
-        </div>
+        {!summaryRow ? (
+          <div className="mt-1 flex items-center justify-between gap-2 text-[10px] font-black leading-none text-slate-500">
+            <span>{progress.statusLabel}</span>
+            {action}
+          </div>
+        ) : (
+          <p className="mt-0.5 truncate text-[9px] font-black leading-none text-slate-500">
+            {progress.statusLabel}
+          </p>
+        )}
       </div>
     );
   }

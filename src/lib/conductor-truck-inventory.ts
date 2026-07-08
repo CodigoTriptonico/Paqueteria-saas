@@ -1,5 +1,6 @@
 import { catalogKeyFromStockItem } from "@/lib/pricing-catalog";
 import { normalizeInventoryText } from "@/lib/inventory-tree";
+import { formatScheduleDateInput } from "@/lib/schedule-date";
 
 export const LOGISTICS_TASK_EVIDENCE_BUCKET = "logistics-task-evidence";
 
@@ -80,10 +81,17 @@ export type ConductorTruckInventoryLine = {
   routeIds: string[];
 };
 
+export type ConductorTruckInventoryScope = {
+  date: string;
+  routeIds: string[];
+  taskIds: string[];
+};
+
 export type ConductorTruckInventorySummary = {
   lines: ConductorTruckInventoryLine[];
   requiredTotal: number;
   loadedTotal: number;
+  deliveredTotal: number;
   currentTotal: number;
   shortageTotal: number;
   ready: boolean;
@@ -198,6 +206,104 @@ function eventKey(event: Pick<ConductorTruckInventoryEvent, "catalogKey" | "item
   });
 }
 
+export function conductorTruckBoxLineIdentity(catalogKey: string, itemLabel: string) {
+  return conductorTruckLineKey({ catalogKey, label: itemLabel });
+}
+
+export function eventCreatedAtScopeDate(createdAt?: string) {
+  if (!createdAt) {
+    return null;
+  }
+
+  const parsed = new Date(createdAt);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return formatScheduleDateInput(parsed);
+}
+
+export function buildConductorTruckInventoryScope(
+  tasks: ReadonlyArray<ConductorTruckTaskInput>,
+  scopeDate: string,
+): ConductorTruckInventoryScope {
+  const taskIds: string[] = [];
+  const routeIds: string[] = [];
+
+  for (const task of tasks) {
+    if (!taskIds.includes(task.id)) {
+      taskIds.push(task.id);
+    }
+
+    if (task.routeId && !routeIds.includes(task.routeId)) {
+      routeIds.push(task.routeId);
+    }
+  }
+
+  return {
+    date: scopeDate,
+    taskIds,
+    routeIds,
+  };
+}
+
+export function isConductorTruckEventInScope(
+  event: ConductorTruckInventoryEvent,
+  scope: ConductorTruckInventoryScope,
+) {
+  if (
+    !event.taskId &&
+    (event.eventType === "load" || event.eventType === "return")
+  ) {
+    return eventCreatedAtScopeDate(event.createdAt) === scope.date;
+  }
+
+  if (event.taskId && scope.taskIds.includes(event.taskId)) {
+    return true;
+  }
+
+  if (event.routeId && scope.routeIds.includes(event.routeId)) {
+    return true;
+  }
+
+  if (!event.taskId && !event.routeId) {
+    return eventCreatedAtScopeDate(event.createdAt) === scope.date;
+  }
+
+  return false;
+}
+
+export function hasDeliverEventForTaskLine(
+  events: ReadonlyArray<ConductorTruckInventoryEvent>,
+  taskId: string,
+  boxLine: Pick<ConductorTruckBoxLine, "catalogKey" | "label">,
+) {
+  const identity = conductorTruckBoxLineIdentity(boxLine.catalogKey, boxLine.label);
+
+  return events.some(
+    (event) =>
+      event.eventType === "deliver" &&
+      event.taskId === taskId &&
+      eventKey(event) === identity,
+  );
+}
+
+export function hasPickupReturnEventForTaskLine(
+  events: ReadonlyArray<ConductorTruckInventoryEvent>,
+  taskId: string,
+  boxLine: Pick<ConductorTruckBoxLine, "catalogKey" | "label">,
+) {
+  const identity = conductorTruckBoxLineIdentity(boxLine.catalogKey, boxLine.label);
+
+  return events.some(
+    (event) =>
+      event.eventType === "return" &&
+      event.taskId === taskId &&
+      eventKey(event) === identity,
+  );
+}
+
 function eventDelta(event: ConductorTruckInventoryEvent) {
   const qty = Number(event.qty) || 0;
 
@@ -224,8 +330,12 @@ export function buildConductorTruckInventory(input: {
   tasks: ReadonlyArray<ConductorTruckTaskInput>;
   events: ReadonlyArray<ConductorTruckInventoryEvent>;
   stock: ReadonlyArray<ConductorTruckStockItem>;
+  scope?: ConductorTruckInventoryScope;
 }): ConductorTruckInventorySummary {
   const requirements = new Map<string, ConductorTruckInventoryLine>();
+  const scopedEvents = input.scope
+    ? input.events.filter((event) => isConductorTruckEventInScope(event, input.scope!))
+    : input.events;
 
   for (const task of input.tasks) {
     if (!isOpenTruckDeliveryTask(task)) {
@@ -266,7 +376,7 @@ export function buildConductorTruckInventory(input: {
     }
   }
 
-  for (const event of input.events) {
+  for (const event of scopedEvents) {
     const key = eventKey(event);
     const line = requirements.get(key);
 
@@ -306,6 +416,7 @@ export function buildConductorTruckInventory(input: {
 
   const requiredTotal = lines.reduce((sum, line) => sum + line.requiredQty, 0);
   const loadedTotal = lines.reduce((sum, line) => sum + line.loadedQty, 0);
+  const deliveredTotal = lines.reduce((sum, line) => sum + line.deliveredQty, 0);
   const currentTotal = lines.reduce((sum, line) => sum + line.currentQty, 0);
   const shortageTotal = lines.reduce((sum, line) => sum + line.shortageQty, 0);
 
@@ -313,10 +424,52 @@ export function buildConductorTruckInventory(input: {
     lines,
     requiredTotal,
     loadedTotal,
+    deliveredTotal,
     currentTotal,
     shortageTotal,
     ready: shortageTotal <= 0,
   };
+}
+
+export function validateConductorTruckDeliver(
+  line: ConductorTruckInventoryLine | null,
+  qty: number,
+) {
+  const requestedQty = Math.max(Math.floor(Number(qty) || 0), 0);
+
+  if (!line) {
+    return "Caja no encontrada en camion";
+  }
+
+  if (requestedQty <= 0) {
+    return "Cantidad invalida";
+  }
+
+  if (line.currentQty < requestedQty) {
+    return `Faltan cajas en camion para ${line.label}`;
+  }
+
+  return "";
+}
+
+export function getConductorTruckLoadBlockReason(line: ConductorTruckInventoryLine) {
+  if (line.shortageQty <= 0) {
+    return "Ya no falta cargar esta caja";
+  }
+
+  if (!line.itemId || !line.warehouseId) {
+    return `No hay item de inventario vinculado para ${line.label}`;
+  }
+
+  if (line.stockQty < line.shortageQty) {
+    return `Stock insuficiente en bodega (${line.stockQty} disponibles)`;
+  }
+
+  return "";
+}
+
+export function canConductorTruckLineLoad(line: ConductorTruckInventoryLine) {
+  return getConductorTruckLoadBlockReason(line) === "";
 }
 
 export function validateConductorTruckLoad(line: ConductorTruckInventoryLine, qty: number) {

@@ -13,12 +13,12 @@ const enviosSource = readFileSync(
 );
 
 describe("envios status filter buckets eval", () => {
-  it("defines the five bucket labels without pendiente wording", () => {
+  it("defines the four tracking bucket labels without pendiente wording", () => {
     assert.match(displaySource, /label: "Recolecciones"/);
     assert.match(displaySource, /label: "Entregas"/);
     assert.match(displaySource, /label: "En oficina"/);
     assert.match(displaySource, /label: "En tránsito"/);
-    assert.match(displaySource, /label: "Ya en destino final"/);
+    assert.doesNotMatch(displaySource, /label: "Ya en destino final"/);
     assert.doesNotMatch(displaySource, /SHIPMENT_STATUS_FILTER_OPTIONS/);
   });
 

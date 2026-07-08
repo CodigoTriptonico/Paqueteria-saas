@@ -25,6 +25,6 @@ describe("inline search picker panel eval", () => {
   it("gives envios status filter enough room for bucket labels", () => {
     assert.match(enviosSource, /ENVIOS_STATUS_FILTER_OPTIONS/);
     assert.match(enviosSource, /matchesEnviosStatusFilter/);
-    assert.match(enviosSource, /min-w-\[13rem\]/);
+    assert.match(enviosSource, /sm:min-w-\[11rem\] sm:w-\[13rem\]/);
   });
 });

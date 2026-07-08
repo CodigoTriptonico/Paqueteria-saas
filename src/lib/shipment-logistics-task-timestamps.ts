@@ -19,6 +19,19 @@ export function logisticsTaskReactivatePatch(now = new Date().toISOString()) {
   };
 }
 
+export function logisticsTaskReactivatePatchPreservingStock(
+  task: { stockDeductedAt?: string | null },
+  now = new Date().toISOString(),
+) {
+  return {
+    ordered_at: now,
+    assigned_at: null,
+    loaded_at: null,
+    completed_at: null,
+    stock_deducted_at: task.stockDeductedAt || null,
+  };
+}
+
 export function logisticsTaskCancelPatch() {
   return {
     ordered_at: null,

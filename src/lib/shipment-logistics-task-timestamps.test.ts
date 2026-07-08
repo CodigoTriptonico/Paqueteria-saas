@@ -6,6 +6,7 @@ import {
   logisticsTaskCancelPatch,
   logisticsTaskOrderInsertPatch,
   logisticsTaskReactivatePatch,
+  logisticsTaskReactivatePatchPreservingStock,
 } from "@/lib/shipment-logistics-task-timestamps";
 
 describe("shipment logistics task timestamps", () => {
@@ -67,5 +68,16 @@ describe("shipment logistics task timestamps", () => {
       }),
       true,
     );
+  });
+
+  it("preserves stock deduction on reactivation patch", () => {
+    const patch = logisticsTaskReactivatePatchPreservingStock(
+      { stockDeductedAt: "2026-07-08T10:00:00.000Z" },
+      "2026-07-08T12:00:00.000Z",
+    );
+
+    assert.equal(patch.stock_deducted_at, "2026-07-08T10:00:00.000Z");
+    assert.equal(patch.ordered_at, "2026-07-08T12:00:00.000Z");
+    assert.equal(patch.assigned_at, null);
   });
 });

@@ -33,8 +33,13 @@ describe("sale recipient empty state eval", () => {
     assert.equal(senderListSource.includes('"Sin dest."'), true);
   });
 
+  it("uses row list shell instead of card grid", () => {
+    assert.equal(senderListSource.includes("SalePersonRow"), true);
+    assert.equal(recipientListSource.includes("SalePersonRow"), true);
+    assert.equal(recipientListSource.includes("SalePersonAddRow"), true);
+  });
+
   it("keeps empty-state text readable on dark surfaces", () => {
-    assert.equal(personCardSource.includes("text-amber-200/45"), false);
-    assert.equal(personCardSource.includes("text-amber-100/85"), true);
+    assert.equal(personCardSource.includes("salePersonRowEmptyClass"), true);
   });
 });

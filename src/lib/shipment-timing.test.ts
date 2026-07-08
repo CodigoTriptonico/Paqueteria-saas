@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { ShipmentRow } from "@/app/actions/shipments";
 import { shipmentLogisticsSteps, PENDING_FULL_BOX_STATUS } from "./shipment-display";
 import {
+  buildShipmentMilestoneAges,
   buildShipmentTimings,
   buildShipmentAuditTimings,
   formatActiveElapsed,
@@ -11,6 +12,8 @@ import {
   formatShipmentRelative,
   formatWaitingHeadline,
   formatWaitingSince,
+  milestoneAgeDisplayValue,
+  milestoneAgeIndicatorButtonClass,
   resolveStepCompletedAt,
   saleAgeTextClass,
   saleAgeTone,
@@ -147,6 +150,60 @@ describe("shipment-timing", () => {
     assert.equal(timings.activeElapsedDetail, "2 días desde dejar");
     assert.equal(timings.isLongWait, true);
     assert.equal(steps.find((step) => step.state === "active")?.title, "Recoger");
+  });
+
+  it("builds milestone ages for sold, delivered, and waiting pickup", () => {
+    const row = baseShipment();
+    const steps = shipmentLogisticsSteps(row);
+    const ages = buildShipmentMilestoneAges(row, steps, NOW);
+
+    assert.deepEqual(
+      ages.map((age) => age.key),
+      ["sale", "empty_box", "full_box"],
+    );
+    assert.equal(ages[0]?.status, "done");
+    assert.equal(ages[0]?.elapsedLabel, "hace 2 días");
+    assert.equal(milestoneAgeDisplayValue(ages[0]!), "2 días");
+    assert.equal(ages[1]?.status, "done");
+    assert.equal(milestoneAgeDisplayValue(ages[1]!), "2 días");
+    assert.equal(ages[2]?.status, "waiting");
+    assert.equal(milestoneAgeDisplayValue(ages[2]!), "2 días");
+    assert.equal(ages[2]?.detailLabel, "Recolección · lleva 2 días desde la entrega");
+  });
+
+  it("marks undelivered milestones as pending", () => {
+    const row = baseShipment({
+      empty_box_delivered_at: null,
+      full_box_collected_at: null,
+      logistics_plan: {
+        emptyBox: { mode: "Programar entrega de caja vacia" },
+        fullBox: { mode: "Programar recoleccion caja llena" },
+      },
+      logisticsTasks: [],
+    });
+    const steps = shipmentLogisticsSteps(row);
+    const ages = buildShipmentMilestoneAges(row, steps, NOW);
+
+    assert.equal(ages[1]?.status, "waiting");
+    assert.equal(milestoneAgeDisplayValue(ages[1]!), "2 días");
+    assert.equal(ages[2]?.status, "pending");
+  });
+
+  it("uses Venta, Entrega and Recolección labels", () => {
+    const row = baseShipment();
+    const ages = buildShipmentMilestoneAges(row, shipmentLogisticsSteps(row), NOW);
+
+    assert.deepEqual(
+      ages.map((age) => age.label),
+      ["Venta", "Entrega", "Recolección"],
+    );
+  });
+
+  it("colors the indicator from the active waiting milestone", () => {
+    const row = baseShipment();
+    const ages = buildShipmentMilestoneAges(row, shipmentLogisticsSteps(row), NOW);
+
+    assert.match(milestoneAgeIndicatorButtonClass(ages), /amber/);
   });
 
   it("omits completed line when milestone data is missing", () => {

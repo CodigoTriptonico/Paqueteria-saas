@@ -43,7 +43,18 @@ export async function proxy(request: NextRequest) {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !key) {
-    return NextResponse.next();
+    if (pathname.startsWith("/login")) {
+      return NextResponse.next();
+    }
+
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { ok: false, error: "Servicio no configurado" },
+        { status: 503 },
+      );
+    }
+
+    return redirectToLogin(request, { error: "Servicio no configurado" });
   }
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));

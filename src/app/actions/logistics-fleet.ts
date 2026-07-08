@@ -1,9 +1,9 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { requireAppSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
+import { createStorageSignedUrl, buildStorageObjectPath, extractStorageObjectPath } from "@/lib/supabase/storage-url";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { recordActivityHistory } from "@/lib/activity-history";
 import {
@@ -163,14 +163,46 @@ async function clearDriverFromOtherVehicles(
   }
 }
 
-function mapVehicle(row: VehicleDbRow, driverById: Map<string, DriverLabelRow>): LogisticsVehicleRow {
+function normalizeVehiclePhotoStoragePath(photoUrl: string): string {
+  return extractStorageObjectPath(LOGISTICS_VEHICLE_PHOTO_BUCKET, photoUrl) || photoUrl;
+}
+
+async function resolveVehiclePhotoUrl(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  photoUrl: string | null | undefined,
+): Promise<string> {
+  if (!photoUrl?.trim()) {
+    return "";
+  }
+
+  if (!admin) {
+    return photoUrl;
+  }
+
+  return createStorageSignedUrl(admin, LOGISTICS_VEHICLE_PHOTO_BUCKET, photoUrl);
+}
+
+async function mapVehicleRows(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  rows: VehicleDbRow[],
+  driverById: Map<string, DriverLabelRow>,
+): Promise<LogisticsVehicleRow[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      const photoUrl = await resolveVehiclePhotoUrl(admin, row.photo_url);
+      return mapVehicle(row, driverById, photoUrl);
+    }),
+  );
+}
+
+function mapVehicle(row: VehicleDbRow, driverById: Map<string, DriverLabelRow>, photoUrl: string): LogisticsVehicleRow {
   const driver = row.assigned_driver_id ? driverById.get(row.assigned_driver_id) : null;
 
   return {
     id: row.id,
     name: row.name,
     plate: row.plate,
-    photoUrl: row.photo_url,
+    photoUrl,
     cargoBoxSize: row.cargo_box_size,
     cargoCapacity: row.cargo_capacity,
     notes: row.notes,
@@ -564,8 +596,9 @@ export async function listLogisticsVehiclesAction(): Promise<ActionResult<Logist
       session,
       rows.map((row) => row.assigned_driver_id || ""),
     );
+    const admin = createSupabaseAdminClient();
 
-    return ok(rows.map((row) => mapVehicle(row, driverById)));
+    return ok(await mapVehicleRows(admin, rows, driverById));
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -596,7 +629,7 @@ export async function createLogisticsVehicleAction(
         organization_id: session.organizationId,
         name: validation.data.name,
         plate: validation.data.plate,
-        photo_url: validation.data.photoUrl,
+        photo_url: normalizeVehiclePhotoStoragePath(validation.data.photoUrl),
         cargo_box_size: validation.data.cargoBoxSize,
         cargo_capacity: validation.data.cargoCapacity,
         notes: validation.data.notes,
@@ -609,12 +642,13 @@ export async function createLogisticsVehicleAction(
       return fail(duplicateFleetMessage(error || {}));
     }
 
+    const admin = createSupabaseAdminClient();
     const driverById = await loadDriverLabels(
       supabase,
       session,
       [validation.data.assignedDriverId || ""],
     );
-    const vehicle = mapVehicle(data as VehicleDbRow, driverById);
+    const [vehicle] = await mapVehicleRows(admin, [data as VehicleDbRow], driverById);
 
     await recordActivityHistory(supabase, session, {
       action: "logistics.vehicle_created",
@@ -661,7 +695,7 @@ export async function updateLogisticsVehicleAction(input: {
       .update({
         name: validation.data.name,
         plate: validation.data.plate,
-        photo_url: validation.data.photoUrl,
+        photo_url: normalizeVehiclePhotoStoragePath(validation.data.photoUrl),
         cargo_box_size: validation.data.cargoBoxSize,
         cargo_capacity: validation.data.cargoCapacity,
         notes: validation.data.notes,
@@ -678,12 +712,13 @@ export async function updateLogisticsVehicleAction(input: {
       return fail(duplicateFleetMessage(error || {}));
     }
 
+    const admin = createSupabaseAdminClient();
     const driverById = await loadDriverLabels(
       supabase,
       session,
       [validation.data.assignedDriverId || ""],
     );
-    const vehicle = mapVehicle(data as VehicleDbRow, driverById);
+    const [vehicle] = await mapVehicleRows(admin, [data as VehicleDbRow], driverById);
 
     await recordActivityHistory(supabase, session, {
       action: "logistics.vehicle_updated",
@@ -759,8 +794,7 @@ export async function uploadLogisticsVehiclePhotoAction(
       return fail(validation.error);
     }
 
-    const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "webp";
-    const path = `${session.organizationId}/${randomUUID()}.${extension}`;
+    const path = buildStorageObjectPath(session.organizationId, file.name);
     const { error } = await admin.storage
       .from(LOGISTICS_VEHICLE_PHOTO_BUCKET)
       .upload(path, file, {
@@ -772,9 +806,9 @@ export async function uploadLogisticsVehiclePhotoAction(
       return fail(error.message);
     }
 
-    const { data } = admin.storage.from(LOGISTICS_VEHICLE_PHOTO_BUCKET).getPublicUrl(path);
+    const previewUrl = await createStorageSignedUrl(admin, LOGISTICS_VEHICLE_PHOTO_BUCKET, path);
 
-    return ok(data.publicUrl);
+    return ok(previewUrl);
   } catch (error) {
     return fail(actionErrorMessage(error));
   }

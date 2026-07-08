@@ -6,14 +6,10 @@
 import fs from "fs";
 import path from "path";
 import { connectPg, projectRoot } from "./lib/db-connection.mjs";
-import { listMigrationFiles } from "./lib/migrations.mjs";
+import { LEGACY_MIGRATION_ALIASES, listMigrationFiles } from "./lib/migrations.mjs";
 
 const root = projectRoot;
 const MIGRATIONS = listMigrationFiles(root);
-
-const LEGACY_MIGRATION_ALIASES = {
-  "032_shipment_sale_kind.sql": "013_shipment_sale_kind.sql",
-};
 
 async function ensureMigrationsTable(client) {
   await client.query(`

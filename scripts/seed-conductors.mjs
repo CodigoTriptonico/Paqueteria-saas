@@ -58,7 +58,6 @@ async function ensureAuthUser(user) {
 
   if (existing) {
     const { error } = await admin.auth.admin.updateUserById(existing.id, {
-      password: user.password,
       email_confirm: true,
       user_metadata: { full_name: user.fullName },
     });
@@ -159,7 +158,7 @@ try {
   console.log(`Organizacion: ${org.name}`);
   console.log("Rol: conductor");
   for (const user of users) {
-    console.log(`Usuario: ${user.email} / ${user.password}`);
+    console.log(`Usuario: ${user.email} / ${user.password} (solo al crear; existentes sin cambio)`);
   }
 } catch (error) {
   await client.query("rollback");

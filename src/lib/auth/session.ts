@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth/session-build";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isDevAuthBypassEnabled } from "@/lib/auth/dev-auth-bypass";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { isClientOrganization } from "@/lib/organizations/kind";
 import type { OrganizationSettings } from "@/lib/organizations/settings";
@@ -53,7 +54,7 @@ async function loadActingOrganization(organizationId: string) {
 }
 
 async function loadDevelopmentPlatformOwnerId() {
-  if (process.env.VERCEL_ENV === "production") {
+  if (!isDevAuthBypassEnabled()) {
     return null;
   }
 

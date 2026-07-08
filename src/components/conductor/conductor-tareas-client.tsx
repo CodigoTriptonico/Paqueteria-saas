@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Camera,
   CheckCircle2,
   DollarSign,
+  History,
   ListTodo,
   Loader2,
   MapPin,
@@ -18,9 +19,12 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import type { ActivityHistoryRow } from "@/app/actions/history";
 import {
+  listConductorTaskActivityHistoryAction,
   submitConductorTaskResultAction,
 } from "@/app/actions/conductor-tasks";
+import { AuditHistoryEntry } from "@/components/audit-history-entry";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
 import {
   cardClass,
@@ -46,7 +50,9 @@ import {
   CONDUCTOR_TASK_FAILURE_REASONS,
   type ConductorTruckInventorySummary,
 } from "@/lib/conductor-truck-inventory";
-import { logisticsTaskStatusLabel } from "@/lib/logistics-view";
+import { buildLogisticaShipmentDeepLink } from "@/lib/logistics-view";
+import { buildMapsNavigationUrl } from "@/lib/logistics-navigation";
+import { estimateRouteStopEtaMinutes, formatEtaMinutes } from "@/lib/logistics-eta";
 import { formatScheduleAtDisplay } from "@/components/sale/schedule-time";
 
 type ConductorTareasClientProps = {
@@ -57,6 +63,7 @@ type ConductorTareasClientProps = {
   effectiveDriverLabel: string;
   initialTasks?: ConductorDriverTask[];
   initialTruckSummary?: ConductorTruckInventorySummary | null;
+  initialHistory?: ActivityHistoryRow[];
 };
 
 type TaskDialogState = {
@@ -72,6 +79,7 @@ export function ConductorTareasClient({
   effectiveDriverLabel,
   initialTasks = [],
   initialTruckSummary = null,
+  initialHistory = [],
 }: ConductorTareasClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -80,6 +88,8 @@ export function ConductorTareasClient({
   const [doneTaskIds, setDoneTaskIds] = useState<string[]>([]);
   const [dialog, setDialog] = useState<TaskDialogState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<ActivityHistoryRow[]>(initialHistory);
   const [failureReason, setFailureReason] = useState<string>(CONDUCTOR_TASK_FAILURE_REASONS[0]);
   const [note, setNote] = useState("");
   const [evidence, setEvidence] = useState<File | null>(null);
@@ -90,6 +100,38 @@ export function ConductorTareasClient({
     () => initialTasks.filter((task) => !doneTaskIds.includes(task.id)),
     [doneTaskIds, initialTasks],
   );
+
+  useEffect(() => {
+    setHistory(initialHistory);
+  }, [initialHistory]);
+
+  const refreshHistory = useCallback(async () => {
+    if (!effectiveDriverId) {
+      return;
+    }
+
+    const historyResult = await listConductorTaskActivityHistoryAction(effectiveDriverId);
+
+    if (historyResult.ok) {
+      setHistory(historyResult.data);
+    }
+  }, [effectiveDriverId]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+      }
+    };
+
+    const interval = window.setInterval(refresh, 30_000);
+    document.addEventListener("visibilitychange", refresh);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [router]);
 
   const handlePreviewDriverChange = useCallback(
     (nextDriverId: string) => {
@@ -149,6 +191,10 @@ export function ConductorTareasClient({
       formData.set("paymentAmount", paymentAmount);
       formData.set("paymentMethod", paymentMethod);
 
+      if (effectiveDriverId) {
+        formData.set("driverId", effectiveDriverId);
+      }
+
       if (evidence) {
         formData.set("evidence", evidence);
       }
@@ -163,8 +209,15 @@ export function ConductorTareasClient({
       setDoneTaskIds((current) =>
         current.includes(dialog.task.id) ? current : [...current, dialog.task.id],
       );
+      const failed = dialog.result === "failed";
       setDialog(null);
       notify.success(dialog.result === "completed" ? "Tarea completada" : "Visita cancelada");
+
+      if (failed) {
+        setHistoryOpen(true);
+        await refreshHistory();
+      }
+
       router.refresh();
     } finally {
       setSaving(false);
@@ -179,7 +232,7 @@ export function ConductorTareasClient({
 
   const emptyDetail = canPreview
     ? effectiveDriverId
-      ? `Vista previa de ${effectiveDriverLabel}. Aqui aparecen recogidas, entregas y paradas asignadas a ese conductor.`
+      ? `Vista de ${effectiveDriverLabel}. Puedes completar tareas en su nombre; queda registrado como admin.`
       : "Crea o activa conductores en Logistica para previsualizar su vista."
     : "Aqui veras recogidas, entregas y paradas de tu ruta del dia.";
 
@@ -197,7 +250,7 @@ export function ConductorTareasClient({
             <div className="min-w-0">
               <p className="text-xs font-black uppercase text-sky-300">Vista previa admin</p>
               <p className="text-sm font-bold text-sky-100">
-                Estas viendo la pantalla como la veria un conductor.
+                Vista del conductor. Puedes actuar en su nombre; queda registrado como admin.
               </p>
             </div>
             <InlineSearchPicker
@@ -222,10 +275,65 @@ export function ConductorTareasClient({
             <p className="text-xs font-black uppercase text-slate-500">Conductor</p>
             <p className="truncate text-lg font-black text-[#f8fafc]">{effectiveDriverLabel}</p>
           </div>
-          <p className="text-sm font-black text-slate-400">
-            {tasks.length} {tasks.length === 1 ? "tarea" : "tareas"}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-black text-slate-400">
+              {tasks.length} {tasks.length === 1 ? "tarea" : "tareas"}
+            </p>
+            <button
+              type="button"
+              className={`${secondaryButtonClass} h-10 text-xs`}
+              onClick={() => setHistoryOpen((current) => !current)}
+            >
+              <History className="h-4 w-4" />
+              Historial
+              {history.length ? (
+                <span className="rounded-full border border-black bg-surface-inset px-2 py-0.5 text-[10px] font-black text-slate-300">
+                  {history.length}
+                </span>
+              ) : null}
+            </button>
+          </div>
         </div>
+
+        {historyOpen ? (
+          <div className="mb-4 rounded-xl border border-black bg-surface-card p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-black uppercase text-slate-400">Historial</p>
+              <span className="rounded-full border border-black bg-surface-inset px-2 py-0.5 text-[10px] font-black text-slate-300">
+                {history.length}
+              </span>
+            </div>
+            {history.length ? (
+              <ol className="grid max-h-64 gap-2 overflow-y-auto pr-1">
+                {history.map((entry) => {
+                  const shipmentCode =
+                    typeof entry.metadata?.shipmentCode === "string"
+                      ? entry.metadata.shipmentCode
+                      : "";
+                  const logisticaHref = shipmentCode
+                    ? buildLogisticaShipmentDeepLink(shipmentCode)
+                    : null;
+
+                  return (
+                  <li key={entry.id}>
+                    <AuditHistoryEntry entry={entry} className="bg-surface-inset" />
+                    {entry.action === "shipment.logistics_task_failed" && logisticaHref ? (
+                      <Link
+                        href={logisticaHref}
+                        className="mt-1 inline-flex text-xs font-black text-emerald-300"
+                      >
+                        Reprogramar en logística
+                      </Link>
+                    ) : null}
+                  </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="text-sm font-bold text-slate-400">Sin movimientos registrados todavía.</p>
+            )}
+          </div>
+        ) : null}
 
         {routeBlocked ? (
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-rose-800/70 bg-rose-950/35 px-4 py-3 sm:flex-row sm:items-center">
@@ -244,8 +352,7 @@ export function ConductorTareasClient({
             <div className="grid items-start gap-2.5 lg:grid-cols-2 xl:grid-cols-3">
               {tasks.map((task) => {
                 const successDisabled =
-                  canPreview ||
-                  (task.taskType === "deliver_empty_box" && routeBlocked && task.status !== "loaded_to_truck");
+                  task.taskType === "deliver_empty_box" && routeBlocked && task.status !== "loaded_to_truck";
 
                 return (
                   <article key={task.id} className={`${cardClass} flex flex-col overflow-hidden p-0`}>
@@ -278,13 +385,49 @@ export function ConductorTareasClient({
 
                     <div className="flex flex-1 flex-col gap-3 p-3">
                       {task.addressLine ? (
-                        <p className="line-clamp-2 rounded-md border border-black bg-surface-inset px-2 py-1 text-xs font-bold leading-snug text-slate-300">
-                          <MapPin className="mr-1 inline h-3.5 w-3.5 shrink-0 text-slate-500" />
-                          {task.addressLine}
-                          {task.zoneLabel ? (
-                            <span className="text-slate-500"> · {task.zoneLabel}</span>
+                        <div className="grid gap-2">
+                          <p className="line-clamp-2 rounded-md border border-black bg-surface-inset px-2 py-1 text-xs font-bold leading-snug text-slate-300">
+                            <MapPin className="mr-1 inline h-3.5 w-3.5 shrink-0 text-slate-500" />
+                            {task.addressLine}
+                            {task.zoneLabel ? (
+                              <span className="text-slate-500"> · {task.zoneLabel}</span>
+                            ) : null}
+                          </p>
+                          {buildMapsNavigationUrl({
+                            lat: task.lat,
+                            lng: task.lng,
+                            label: task.addressLine,
+                          }) ? (
+                            <div className="flex flex-wrap gap-2">
+                              <a
+                                href={
+                                  buildMapsNavigationUrl({
+                                    lat: task.lat,
+                                    lng: task.lng,
+                                    label: task.addressLine,
+                                  })!.google
+                                }
+                                target="_blank"
+                                rel="noreferrer"
+                                className={`${secondaryButtonClass} h-8 px-2.5 text-[11px]`}
+                              >
+                                Google Maps
+                              </a>
+                              <a
+                                href={
+                                  buildMapsNavigationUrl({
+                                    lat: task.lat,
+                                    lng: task.lng,
+                                    label: task.addressLine,
+                                  })!.apple
+                                }
+                                className={`${secondaryButtonClass} h-8 px-2.5 text-[11px]`}
+                              >
+                                Apple Maps
+                              </a>
+                            </div>
                           ) : null}
-                        </p>
+                        </div>
                       ) : null}
 
                       {task.scheduledAt ? (
@@ -297,7 +440,12 @@ export function ConductorTareasClient({
                         <p className="text-sm font-bold text-slate-400">
                           Ruta {task.routeName}
                           {task.stopOrder ? ` - parada ${task.stopOrder}` : ""}
+                          {task.stopOrder &&
+                          formatEtaMinutes(estimateRouteStopEtaMinutes(task.stopOrder))
+                            ? ` · ETA ~${formatEtaMinutes(estimateRouteStopEtaMinutes(task.stopOrder))}`
+                            : ""}
                           {task.routeDate ? ` - ${task.routeDate}` : ""}
+                          {task.vehicleLabel ? ` · ${task.vehicleLabel}` : ""}
                         </p>
                       ) : null}
 
@@ -338,7 +486,6 @@ export function ConductorTareasClient({
                       <button
                         type="button"
                         className={`${secondaryButtonClass} h-11 text-xs disabled:cursor-not-allowed disabled:opacity-40`}
-                        disabled={canPreview}
                         onClick={() => openDialog(task, "failed")}
                       >
                         <XCircle className="h-4 w-4" />

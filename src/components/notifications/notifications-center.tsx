@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Bell, CheckCircle2, Sparkles, X } from "lucide-react";
+import { ArrowLeft, Bell, CheckCircle2, PanelLeftClose, PanelLeftOpen, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { OnboardingProgress } from "@/app/actions/onboarding";
@@ -34,6 +34,11 @@ type BoxarioBrandHeaderProps = {
   onBack?: () => void;
   title?: string;
   backTitle?: string;
+  railOnly?: boolean;
+  sidebarToggle?: {
+    collapsed: boolean;
+    onToggle: () => void;
+  };
 };
 
 export function BoxarioBrandHeader({
@@ -43,34 +48,67 @@ export function BoxarioBrandHeader({
   onBack,
   title = "Boxario",
   backTitle = "Volver",
+  railOnly = false,
+  sidebarToggle,
 }: BoxarioBrandHeaderProps) {
-  const shellClass = `flex items-center justify-between gap-2 rounded-xl border border-black bg-surface-card text-[#f8fafc] shadow-sm ${
-    compact ? "h-12 px-3" : "h-16 px-4"
+  const shellClass = `flex flex-col rounded-xl border border-black bg-surface-card text-[#f8fafc] shadow-sm ${
+    compact ? "h-12 justify-center px-3" : "h-16 justify-center px-4"
   } ${className}`;
   const titleClass = `min-w-0 truncate font-black ${compact ? "text-xl" : "text-2xl"}`;
   const backButtonClass =
     "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#1a2320] text-emerald-300/90 transition hover:bg-[#243029] hover:text-emerald-200 active:scale-[0.98]";
+  const sidebarToggleButtonClass =
+    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-black/70 bg-[#1a2320] text-slate-400 transition hover:bg-[#243029] hover:text-slate-200 active:scale-[0.98]";
   const showNotifications = Boolean(session && !platformAdminNeedsClientContext(session));
+
+  const sidebarToggleButton = sidebarToggle ? (
+    <button
+      type="button"
+      onClick={sidebarToggle.onToggle}
+      className={sidebarToggleButtonClass}
+      aria-label={sidebarToggle.collapsed ? "Expandir menu lateral" : "Colapsar menu lateral"}
+      title={sidebarToggle.collapsed ? "Expandir menu" : "Colapsar menu"}
+    >
+      {sidebarToggle.collapsed ? (
+        <PanelLeftOpen className="h-3.5 w-3.5" />
+      ) : (
+        <PanelLeftClose className="h-3.5 w-3.5" />
+      )}
+    </button>
+  ) : null;
+
+  if (railOnly && sidebarToggleButton) {
+    return (
+      <div className={`flex justify-center rounded-xl border border-black bg-surface-card p-1.5 ${className}`}>
+        {sidebarToggleButton}
+      </div>
+    );
+  }
 
   return (
     <div className={shellClass}>
-      {onBack ? (
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <button
-            type="button"
-            onClick={onBack}
-            title={backTitle}
-            aria-label={`${backTitle}: ${title}`}
-            className={backButtonClass}
-          >
-            <ArrowLeft className="h-4 w-4" strokeWidth={2.5} />
-          </button>
-          <span className={titleClass}>{title}</span>
+      <div className="flex min-h-8 items-center justify-between gap-2">
+        {onBack ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <button
+              type="button"
+              onClick={onBack}
+              title={backTitle}
+              aria-label={`${backTitle}: ${title}`}
+              className={backButtonClass}
+            >
+              <ArrowLeft className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+            <span className={titleClass}>{title}</span>
+          </div>
+        ) : (
+          <h1 className={titleClass}>Boxario</h1>
+        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {sidebarToggleButton}
+          {showNotifications ? <NotificationsCenter session={session} variant="brand" /> : null}
         </div>
-      ) : (
-        <h1 className={titleClass}>Boxario</h1>
-      )}
-      {showNotifications ? <NotificationsCenter session={session} variant="brand" /> : null}
+      </div>
     </div>
   );
 }

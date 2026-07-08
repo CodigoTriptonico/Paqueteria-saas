@@ -67,14 +67,13 @@ export type EnviosStatusFilterBucket =
   | "en_destino_final";
 
 export const ENVIOS_STATUS_FILTER_OPTIONS: ReadonlyArray<{
-  value: EnviosStatusFilterBucket;
+  value: Exclude<EnviosStatusFilterBucket, "en_destino_final">;
   label: string;
 }> = [
   { value: "recolecciones", label: "Recolecciones" },
   { value: "entregas", label: "Entregas" },
   { value: "en_oficina", label: "En oficina" },
   { value: "en_transito", label: "En tránsito" },
-  { value: "en_destino_final", label: "Ya en destino final" },
 ];
 
 export const ENVIOS_STATUS_BUCKET_LABEL: Record<EnviosStatusFilterBucket, string> = {
@@ -82,8 +81,106 @@ export const ENVIOS_STATUS_BUCKET_LABEL: Record<EnviosStatusFilterBucket, string
   entregas: "Entregas",
   en_oficina: "En oficina",
   en_transito: "En tránsito",
-  en_destino_final: "Ya en destino final",
+  en_destino_final: "Entregado",
 };
+
+export function isCompletedShipment(row: ShipmentRow) {
+  return row.status === "Entregado";
+}
+
+export function isActiveShipment(row: ShipmentRow) {
+  return row.status !== "Entregado";
+}
+
+export type EnviosClientMode = "tracking" | "history";
+
+export function filterShipmentsForEnviosMode(
+  shipments: ShipmentRow[],
+  mode: EnviosClientMode,
+) {
+  return shipments.filter((row) =>
+    mode === "tracking" ? isActiveShipment(row) : isCompletedShipment(row),
+  );
+}
+
+function normalizeEnviosSearchText(value: unknown) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase("es-MX")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function digitsOnly(value: unknown) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function primitiveSearchValues(value: unknown, seen = new WeakSet<object>()): string[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return [String(value)];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => primitiveSearchValues(entry, seen));
+  }
+
+  if (typeof value === "object") {
+    if (seen.has(value)) {
+      return [];
+    }
+
+    seen.add(value);
+    return Object.values(value).flatMap((entry) => primitiveSearchValues(entry, seen));
+  }
+
+  return [];
+}
+
+export function matchesEnviosSearchQuery(row: ShipmentRow, query: string) {
+  const cleanQuery = normalizeEnviosSearchText(query);
+  const queryDigits = digitsOnly(query);
+
+  if (!cleanQuery && !queryDigits) {
+    return true;
+  }
+
+  const fields = [
+    row.id,
+    row.code,
+    row.customer_name,
+    row.customerPhone,
+    row.customerSearchText,
+    row.carrier,
+    row.country,
+    row.status,
+    row.salesOwnerName,
+    row.delivery_notes,
+    row.invoice_status,
+    row.accounting_status,
+    ...primitiveSearchValues(row.recipientSnapshot),
+    ...primitiveSearchValues(row.logistics_plan),
+    ...primitiveSearchValues(row.logisticsTasks),
+    ...primitiveSearchValues(row.payments),
+    ...primitiveSearchValues(row.contactLogs),
+  ];
+  const haystack = normalizeEnviosSearchText(fields.join(" "));
+  const haystackDigits = digitsOnly(fields.join(" "));
+  const queryIsDigitsOnly = Boolean(queryDigits) && digitsOnly(cleanQuery) === queryDigits;
+
+  if (queryIsDigitsOnly) {
+    return haystackDigits.includes(queryDigits) || haystack.includes(cleanQuery);
+  }
+
+  return cleanQuery
+    .split(" ")
+    .filter(Boolean)
+    .every((term) => haystack.includes(term));
+}
 
 export function classifyEnviosStatusFilterBucket(row: ShipmentRow): EnviosStatusFilterBucket {
   if (row.status === "Entregado") {

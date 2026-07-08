@@ -2,7 +2,8 @@
  * Recrea el super-admin de plataforma (PLATFORM_OWNER_EMAIL en .env.local).
  *
  * Opcional en .env.local:
- *   PLATFORM_OWNER_PASSWORD=...   (si no está, se genera una temporal)
+ *   PLATFORM_OWNER_PASSWORD=...   (solo al crear usuario; no sobrescribe si ya existe)
+ *   --reset-password                (fuerza contraseña en usuario existente)
  *   PLATFORM_OWNER_FULL_NAME=...
  *   PLATFORM_OWNER_ORG_NAME=...   (default: Boxario)
  */
@@ -10,7 +11,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
-import { randomBytes } from "crypto";
+const LOCAL_CANONICAL_PASSWORD = "123456789";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -27,10 +28,6 @@ function loadEnvLocal() {
     const value = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
     if (!process.env[key]) process.env[key] = value;
   }
-}
-
-function tempPassword() {
-  return `Pm-${randomBytes(9).toString("base64url")}!`;
 }
 
 async function main() {
@@ -50,8 +47,8 @@ async function main() {
     process.exit(1);
   }
 
-  const password = process.env.PLATFORM_OWNER_PASSWORD?.trim() || tempPassword();
-  const generated = !process.env.PLATFORM_OWNER_PASSWORD?.trim();
+  const resetPassword = process.argv.includes("--reset-password");
+  const password = process.env.PLATFORM_OWNER_PASSWORD?.trim() || LOCAL_CANONICAL_PASSWORD;
   const fullName = process.env.PLATFORM_OWNER_FULL_NAME?.trim() || "Pablo Isaza";
   const orgName = process.env.PLATFORM_OWNER_ORG_NAME?.trim() || "Boxario";
   const orgKind = "platform";
@@ -66,15 +63,20 @@ async function main() {
   let userId = existing?.id;
 
   if (existing) {
-    const { error } = await admin.auth.admin.updateUserById(existing.id, {
-      password,
-      email_confirm: true,
-    });
+    const updatePayload = resetPassword
+      ? { password, email_confirm: true }
+      : { email_confirm: true };
+
+    const { error } = await admin.auth.admin.updateUserById(existing.id, updatePayload);
     if (error) {
       console.error("No se pudo actualizar el usuario:", error.message);
       process.exit(1);
     }
-    console.log("Usuario auth ya existía; contraseña actualizada.");
+    console.log(
+      resetPassword
+        ? "Usuario auth ya existía; contraseña actualizada (--reset-password)."
+        : "Usuario auth ya existía; contraseña sin cambios.",
+    );
   } else {
     const { data, error } = await admin.auth.admin.createUser({
       email,
@@ -144,11 +146,15 @@ async function main() {
   console.log("  Login: http://localhost:3000/login");
   console.log("  Panel: http://localhost:3000/platform");
 
-  if (generated) {
-    console.log("\nContraseña temporal (guárdala o define PLATFORM_OWNER_PASSWORD en .env.local):");
+  if (!existing) {
+    console.log("\nContraseña asignada al crear usuario:");
+    console.log(password);
+  } else if (resetPassword) {
+    console.log("\nContraseña actualizada:");
     console.log(password);
   } else {
-    console.log("\nContraseña: la de PLATFORM_OWNER_PASSWORD en .env.local");
+    console.log(`\nContraseña: sin cambios. Canónica local: ${LOCAL_CANONICAL_PASSWORD}`);
+    console.log("  (npm run db:restore-owner -- --reset-password para forzar)");
   }
 }
 

@@ -6,7 +6,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { recordActivityHistory } from "@/lib/activity-history";
-import { scheduleAtToTimestamp } from "@/components/sale/schedule-time";
+import { scheduleAtToTimestamp } from "@/lib/sale/schedule-time";
 import { readBillingFromPlan } from "@/lib/invoice-billing";
 import { formatMoneyValue } from "@/lib/logistics-fees";
 import {
@@ -81,6 +81,7 @@ import {
   logisticsTaskLoadedPatch,
   logisticsTaskOrderInsertPatch,
   logisticsTaskReactivatePatch,
+  logisticsTaskReactivatePatchPreservingStock,
 } from "@/lib/shipment-logistics-task-timestamps";
 import {
   formatBoxQuantityLabel,
@@ -89,6 +90,14 @@ import {
   syncShipmentStatusPatch,
 } from "@/lib/shipment-display";
 import { buildDueSchedulePromotionInput } from "@/lib/shipment-schedule-due";
+import {
+  assertSameOrgCustomerIds,
+  assertSameOrgProfileIds,
+  assertSameOrgRecipientIds,
+  assertSameOrgWarehouseIds,
+} from "@/lib/security/org-scope";
+import { recordInventoryMovementAtomic } from "@/lib/security/inventory-movement";
+import { readPositiveIntegerQty } from "@/lib/security/qty";
 import type { AppSession, RoleSlug } from "@/lib/auth/types";
 
 export type ShipmentStatus =
@@ -149,6 +158,7 @@ export type ShipmentRow = {
   recipientId: string | null;
   recipientSnapshot: Record<string, unknown> | null;
   customerPhone?: string | null;
+  customerSearchText?: string | null;
   customer_name: string;
   country: string;
   carrier: string;
@@ -246,7 +256,36 @@ type ShipmentDbRow = {
   customer_id?: string | null;
   recipient_id?: string | null;
   recipient_snapshot?: Record<string, unknown> | null;
-  customer?: { phones?: string[] | null } | { phones?: string[] | null }[] | null;
+  customer?:
+    | {
+        first_name?: string | null;
+        last_name?: string | null;
+        phones?: string[] | null;
+        email?: string | null;
+        street?: string | null;
+        house_number?: string | null;
+        neighborhood?: string | null;
+        city?: string | null;
+        state?: string | null;
+        postal_code?: string | null;
+        country?: string | null;
+        formatted_address?: string | null;
+      }
+    | {
+        first_name?: string | null;
+        last_name?: string | null;
+        phones?: string[] | null;
+        email?: string | null;
+        street?: string | null;
+        house_number?: string | null;
+        neighborhood?: string | null;
+        city?: string | null;
+        state?: string | null;
+        postal_code?: string | null;
+        country?: string | null;
+        formatted_address?: string | null;
+      }[]
+    | null;
   customer_name: string;
   country: string;
   carrier: string;
@@ -290,7 +329,7 @@ type ShipmentQuote = {
 
 const SHIPMENT_SELECT = `
   id, code, customer_id, recipient_id, recipient_snapshot, customer_name, country, carrier, paid, profit, status, assigned_to,
-  customer:customers!shipments_customer_id_fkey(phones),
+  customer:customers!shipments_customer_id_fkey(first_name, last_name, phones, email, street, house_number, neighborhood, city, state, postal_code, country, formatted_address),
   created_by, sales_owner_id, sales_owner_profile:profiles!shipments_sales_owner_id_fkey(full_name, email),
   sale_kind, invoice_status, invoice_priority, accounting_status, created_at, finalized_at,
   empty_box_delivered_at, full_box_collected_at, office_received_at, departed_at, shipped_at, delivered_at,
@@ -466,6 +505,32 @@ function customerPhone(row: ShipmentDbRow) {
   return String(phones[0] || "").trim() || null;
 }
 
+function customerSearchText(row: ShipmentDbRow) {
+  const customer = Array.isArray(row.customer) ? row.customer[0] : row.customer;
+
+  if (!customer) {
+    return null;
+  }
+
+  return [
+    customer.first_name,
+    customer.last_name,
+    ...(Array.isArray(customer.phones) ? customer.phones : []),
+    customer.email,
+    customer.street,
+    customer.house_number,
+    customer.neighborhood,
+    customer.city,
+    customer.state,
+    customer.postal_code,
+    customer.country,
+    customer.formatted_address,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 function mapShipment(row: ShipmentDbRow): ShipmentRow {
   const tasks = (row.shipment_logistics_tasks || [])
     .map(mapTask)
@@ -484,6 +549,7 @@ function mapShipment(row: ShipmentDbRow): ShipmentRow {
     recipientId: row.recipient_id || null,
     recipientSnapshot: row.recipient_snapshot || null,
     customerPhone: customerPhone(row),
+    customerSearchText: customerSearchText(row),
     customer_name: row.customer_name,
     country: row.country,
     carrier: row.carrier,
@@ -915,7 +981,10 @@ async function promoteDueScheduledLegsForListedShipments(
   return promoted;
 }
 
-export async function listShipmentsAction(): Promise<ActionResult<ShipmentRow[]>> {
+export async function listShipmentsAction(options?: {
+  limit?: number;
+  offset?: number;
+}): Promise<ActionResult<ShipmentRow[]>> {
   try {
     const session = await requireAppSession();
     const scope = shipmentVisibilityScope(session);
@@ -929,12 +998,16 @@ export async function listShipmentsAction(): Promise<ActionResult<ShipmentRow[]>
       return fail("Supabase no configurado");
     }
 
+    const limit = Math.min(Math.max(options?.limit ?? 500, 1), 1000);
+    const offset = Math.max(options?.offset ?? 0, 0);
+
     let query = supabase
       .from("shipments")
       .select(SHIPMENT_SELECT)
       .eq("organization_id", session.organizationId)
       .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+      .order("id", { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (scope === "driver") {
       query = query.eq("assigned_to", session.userId);
@@ -963,7 +1036,10 @@ export async function listShipmentsAction(): Promise<ActionResult<ShipmentRow[]>
   }
 }
 
-export async function listShipmentsForRouteBoardAction(): Promise<ActionResult<ShipmentRow[]>> {
+export async function listShipmentsForRouteBoardAction(options?: {
+  limit?: number;
+  offset?: number;
+}): Promise<ActionResult<ShipmentRow[]>> {
   try {
     const session = await requireAppSession();
 
@@ -976,12 +1052,16 @@ export async function listShipmentsForRouteBoardAction(): Promise<ActionResult<S
       return fail("Supabase no configurado");
     }
 
+    const limit = Math.min(Math.max(options?.limit ?? 500, 1), 500);
+    const offset = Math.max(options?.offset ?? 0, 0);
+
     const { data, error } = await supabase
       .from("shipments")
       .select(SHIPMENT_SELECT)
       .eq("organization_id", session.organizationId)
       .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+      .order("id", { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) {
       if (error.code === "42P01") {
@@ -1117,6 +1197,19 @@ export async function createShipmentAction(input: {
       return fail("Supabase no configurado");
     }
 
+    await assertSameOrgCustomerIds(supabase, session.organizationId, [
+      input.customerId || "",
+    ]);
+    await assertSameOrgRecipientIds(supabase, session.organizationId, [
+      input.recipientId || "",
+    ]);
+
+    const taskWarehouseIds = (input.logisticsTasks || [])
+      .map((task) => task.warehouseId || "")
+      .filter(Boolean);
+
+    await assertSameOrgWarehouseIds(supabase, session.organizationId, taskWarehouseIds);
+
     const paid = parseMoney(input.paid);
     const cost = parseMoney(input.cost);
     const saleKind = input.saleKind || (input.recipientId ? "full" : "empty_box_deposit");
@@ -1197,7 +1290,7 @@ export async function createShipmentAction(input: {
         });
         shouldReloadShipment = true;
       } catch (paymentError) {
-        await deleteShipmentWithTasks(supabase, session, shipment.id);
+        await deleteShipmentWithTasks(supabase, session, shipment.id, shipment.code);
         return fail(actionErrorMessage(paymentError));
       }
     }
@@ -1216,7 +1309,7 @@ export async function createShipmentAction(input: {
       );
 
       if (taskError) {
-        await deleteShipmentWithTasks(supabase, session, shipment.id);
+        await deleteShipmentWithTasks(supabase, session, shipment.id, shipment.code);
         return fail(taskError.message);
       }
 
@@ -1273,7 +1366,7 @@ export async function createShipmentAction(input: {
         });
         shouldReloadShipment = true;
       } catch (stockError) {
-        await deleteShipmentWithTasks(supabase, session, shipment.id);
+        await deleteShipmentWithTasks(supabase, session, shipment.id, shipment.code);
         return fail(actionErrorMessage(stockError));
       }
     }
@@ -1692,6 +1785,8 @@ export async function updateShipmentSalesOwnerAction(input: {
 
     const before = await listShipmentById(supabase, session, input.shipmentId);
 
+    await assertSameOrgProfileIds(supabase, session.organizationId, [input.salesOwnerId]);
+
     const { data, error } = await supabase
       .from("shipments")
       .update({ sales_owner_id: input.salesOwnerId })
@@ -1784,6 +1879,11 @@ async function deductEmptyBoxStock(input: {
   assigneeId?: string | null;
   movementNote: string;
 }) {
+  const plan = asRecord(input.shipment.logistics_plan);
+  if (emptyBoxStockAlreadyDeducted(plan)) {
+    throw new Error("El stock de caja vacia ya fue descontado para este envio");
+  }
+
   const quoteLines = readQuoteLinesFromPlan(input.shipment.logistics_plan);
   if (!quoteLines.length) {
     throw new Error("Este invoice no tiene caja guardada en el plan logistico");
@@ -1838,32 +1938,20 @@ async function deductEmptyBoxStock(input: {
   });
 
   for (const deduction of deductions) {
-    const { quote, match, item } = deduction;
-    const { error: updateError } = await admin
-      .from("inventory_stock")
-      .update({ stock: Number(match.stock) - quote.quantity })
-      .eq("id", match.id)
-      .eq("organization_id", input.session.organizationId);
+    const { quote, item } = deduction;
+    const qty = readPositiveIntegerQty(quote.quantity);
 
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
-
-    const { error: movementError } = await admin.from("inventory_movements").insert({
-      organization_id: input.session.organizationId,
-      warehouse_id: warehouseId,
-      item_id: item.id,
-      item_name: item.name || item.kind,
+    await recordInventoryMovementAtomic(admin, {
+      organizationId: input.session.organizationId,
+      warehouseId,
+      itemId: item.id,
+      itemName: item.name || item.kind,
       type: "salida",
-      qty: quote.quantity,
+      qty,
       note: input.movementNote,
-      created_by: input.session.userId,
-      assignee_id: input.assigneeId || input.session.userId,
+      createdBy: input.session.userId,
+      assigneeId: input.assigneeId || input.session.userId,
     });
-
-    if (movementError) {
-      throw new Error(movementError.message);
-    }
   }
 
   return { warehouseId, deductedAt: new Date().toISOString() };
@@ -1888,11 +1976,56 @@ async function deductEmptyBoxStockForTask(input: {
   });
 }
 
+async function reverseInventorySalidasForShipment(
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  session: AppSession,
+  shipmentCode: string,
+) {
+  const { data: movements, error } = await admin
+    .from("inventory_movements")
+    .select("warehouse_id, item_id, item_name, qty")
+    .eq("organization_id", session.organizationId)
+    .eq("type", "salida")
+    .ilike("note", `%${shipmentCode}%`);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  for (const movement of movements || []) {
+    const qty = readPositiveIntegerQty(movement.qty);
+
+    await recordInventoryMovementAtomic(admin, {
+      organizationId: session.organizationId,
+      warehouseId: movement.warehouse_id,
+      itemId: movement.item_id,
+      itemName: movement.item_name,
+      type: "entrada",
+      qty,
+      note: `Reverso rollback envio ${shipmentCode}`,
+      createdBy: session.userId,
+    });
+  }
+}
+
 async function deleteShipmentWithTasks(
   supabase: NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>,
   session: AppSession,
   shipmentId: string,
+  shipmentCode?: string,
 ) {
+  const admin = createSupabaseAdminClient();
+
+  await supabase
+    .from("shipment_payments")
+    .delete()
+    .eq("shipment_id", shipmentId)
+    .eq("organization_id", session.organizationId);
+
+  if (admin && shipmentCode) {
+    await reverseInventorySalidasForShipment(admin, session, shipmentCode);
+  }
+
   await supabase
     .from("shipment_logistics_tasks")
     .delete()
@@ -1943,6 +2076,14 @@ export async function updateLogisticsTaskAction(input: {
       return fail("Invoice no encontrado");
     }
 
+    if (input.assignedTo) {
+      await assertSameOrgProfileIds(supabase, session.organizationId, [input.assignedTo]);
+    }
+
+    if (input.warehouseId) {
+      await assertSameOrgWarehouseIds(supabase, session.organizationId, [input.warehouseId]);
+    }
+
     const nextStatus = input.status || task.status;
     const nowIso = new Date().toISOString();
     const patch: Record<string, unknown> = {
@@ -1989,21 +2130,10 @@ export async function updateLogisticsTaskAction(input: {
       Object.assign(patch, logisticsTaskLoadedPatch(task, nowIso));
     }
 
-    if (nextStatus === "loaded_to_truck" && task.taskType === "deliver_empty_box" && !task.stockDeductedAt) {
-      const stockResult = await deductEmptyBoxStockForTask({
-        session,
-        shipment,
-        task: {
-          ...task,
-          assignedTo: input.assignedTo !== undefined ? input.assignedTo : task.assignedTo,
-          warehouseId: input.warehouseId !== undefined ? input.warehouseId : task.warehouseId,
-        },
-        warehouseId: input.warehouseId !== undefined ? input.warehouseId : task.warehouseId,
-      });
-
-      patch.warehouse_id = stockResult.warehouseId;
-      patch.stock_deducted_at = stockResult.deductedAt;
-    }
+    const stockDeductionNeeded =
+      nextStatus === "loaded_to_truck" &&
+      task.taskType === "deliver_empty_box" &&
+      !task.stockDeductedAt;
 
     const { data, error } = await supabase
       .from("shipment_logistics_tasks")
@@ -2017,7 +2147,66 @@ export async function updateLogisticsTaskAction(input: {
       return fail(error?.message || "No se pudo actualizar la tarea");
     }
 
-    const updated = mapTask(data as LogisticsTaskDbRow);
+    let updated = mapTask(data as LogisticsTaskDbRow);
+
+    if (stockDeductionNeeded) {
+      try {
+        const stockResult = await deductEmptyBoxStockForTask({
+          session,
+          shipment,
+          task: {
+            ...task,
+            assignedTo: input.assignedTo !== undefined ? input.assignedTo : task.assignedTo,
+            warehouseId: input.warehouseId !== undefined ? input.warehouseId : task.warehouseId,
+          },
+          warehouseId: input.warehouseId !== undefined ? input.warehouseId : task.warehouseId,
+        });
+
+        const { data: stockPatchData, error: stockPatchError } = await supabase
+          .from("shipment_logistics_tasks")
+          .update({
+            warehouse_id: stockResult.warehouseId,
+            stock_deducted_at: stockResult.deductedAt,
+          })
+          .eq("id", input.taskId)
+          .eq("organization_id", session.organizationId)
+          .select("*")
+          .single();
+
+        if (stockPatchError || !stockPatchData) {
+          const rollbackAdmin = createSupabaseAdminClient();
+          if (rollbackAdmin) {
+            await reverseInventorySalidasForShipment(rollbackAdmin, session, shipment.code);
+          }
+          await supabase
+            .from("shipment_logistics_tasks")
+            .update({
+              status: task.status,
+              stock_deducted_at: task.stockDeductedAt,
+              warehouse_id: task.warehouseId,
+              loaded_at: task.loadedAt,
+              updated_at: task.createdAt,
+            })
+            .eq("id", input.taskId)
+            .eq("organization_id", session.organizationId);
+          return fail(stockPatchError?.message || "No se pudo registrar descuento de stock");
+        }
+
+        updated = mapTask(stockPatchData as LogisticsTaskDbRow);
+      } catch (stockError) {
+        await supabase
+          .from("shipment_logistics_tasks")
+          .update({
+            status: task.status,
+            stock_deducted_at: task.stockDeductedAt,
+            warehouse_id: task.warehouseId,
+            loaded_at: task.loadedAt,
+          })
+          .eq("id", input.taskId)
+          .eq("organization_id", session.organizationId);
+        return fail(actionErrorMessage(stockError));
+      }
+    }
 
     if (input.assignedTo !== undefined) {
       await supabase
@@ -2115,6 +2304,138 @@ export async function updateLogisticsTaskAction(input: {
         assignedAt: updated.assignedAt,
         loadedAt: updated.loadedAt,
         completedAt: updated.completedAt,
+      },
+    });
+
+    return ok(updated);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function reactivateLogisticsTaskAction(input: {
+  taskId: string;
+  scheduledAt?: string | null;
+  assignedTo?: string | null;
+  warehouseId?: string | null;
+  notes?: string;
+}): Promise<ActionResult<ShipmentLogisticsTaskRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canManageRoutes(session)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data: taskData, error: taskError } = await supabase
+      .from("shipment_logistics_tasks")
+      .select("*")
+      .eq("id", input.taskId)
+      .eq("organization_id", session.organizationId)
+      .single();
+
+    if (taskError || !taskData) {
+      return fail(taskError?.message || "Tarea no encontrada");
+    }
+
+    const task = mapTask(taskData as LogisticsTaskDbRow);
+
+    if (task.status !== "cancelled") {
+      return fail("Solo puedes reprogramar tareas canceladas");
+    }
+
+    const shipment = await listShipmentById(supabase, session, task.shipmentId);
+    if (!shipment) {
+      return fail("Invoice no encontrado");
+    }
+
+    if (input.assignedTo) {
+      await assertSameOrgProfileIds(supabase, session.organizationId, [input.assignedTo]);
+    }
+
+    if (input.warehouseId) {
+      await assertSameOrgWarehouseIds(supabase, session.organizationId, [input.warehouseId]);
+    }
+
+    if (
+      input.warehouseId !== undefined &&
+      task.stockDeductedAt &&
+      input.warehouseId !== task.warehouseId
+    ) {
+      return fail("No puedes cambiar bodega despues de descontar stock");
+    }
+
+    const nowIso = new Date().toISOString();
+    const scheduledAt =
+      input.scheduledAt !== undefined ? input.scheduledAt : task.scheduledAt;
+    const assignedTo =
+      input.assignedTo !== undefined ? input.assignedTo : task.assignedTo;
+    const warehouseId =
+      input.warehouseId !== undefined ? input.warehouseId : task.warehouseId;
+    const notes = input.notes !== undefined ? input.notes : task.notes;
+
+    const nextStatus = scheduledAt
+      ? "scheduled"
+      : assignedTo
+        ? "assigned"
+        : "pending";
+
+    const patch: Record<string, unknown> = {
+      status: nextStatus,
+      scheduled_at: scheduledAt || null,
+      assigned_to: assignedTo || null,
+      warehouse_id: warehouseId || null,
+      notes,
+      updated_at: nowIso,
+      ...logisticsTaskReactivatePatchPreservingStock(task, nowIso),
+    };
+
+    if (assignedTo) {
+      Object.assign(patch, logisticsTaskAssignedPatch(task, nowIso));
+    }
+
+    const { data, error } = await supabase
+      .from("shipment_logistics_tasks")
+      .update(patch)
+      .eq("id", input.taskId)
+      .eq("organization_id", session.organizationId)
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      return fail(error?.message || "No se pudo reprogramar la tarea");
+    }
+
+    const updated = mapTask(data as LogisticsTaskDbRow);
+
+    if (input.assignedTo !== undefined) {
+      await supabase
+        .from("shipments")
+        .update({ assigned_to: input.assignedTo || null })
+        .eq("id", updated.shipmentId)
+        .eq("organization_id", session.organizationId);
+    }
+
+    await recordActivityHistory(supabase, session, {
+      action: "shipment.logistics_task_reactivated",
+      entityType: "shipment",
+      entityId: updated.shipmentId,
+      title: `Tarea reprogramada: ${shipment.code}`,
+      description: `${updated.taskType} · ${nextStatus}`,
+      metadata: {
+        taskId: updated.id,
+        taskType: updated.taskType,
+        status: updated.status,
+        assignedTo: updated.assignedTo,
+        scheduledAt: updated.scheduledAt,
+        warehouseId: updated.warehouseId,
+        stockDeductedAt: updated.stockDeductedAt,
+        source: "logistica",
       },
     });
 

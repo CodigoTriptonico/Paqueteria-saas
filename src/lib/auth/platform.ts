@@ -1,3 +1,4 @@
+import { isDevAuthBypassEnabled } from "@/lib/auth/dev-auth-bypass";
 import { getAppSession, requireAppSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AppSession } from "@/lib/auth/types";
@@ -22,7 +23,7 @@ export async function requirePlatformAdmin(): Promise<AppSession> {
   try {
     session = await requireAppSession();
   } catch (error) {
-    if (process.env.VERCEL_ENV !== "production" && process.env.PLATFORM_OWNER_EMAIL) {
+    if (isDevAuthBypassEnabled() && process.env.PLATFORM_OWNER_EMAIL) {
       const admin = createSupabaseAdminClient();
       const { data: profile } = admin
         ? await admin

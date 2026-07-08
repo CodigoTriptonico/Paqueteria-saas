@@ -12,6 +12,7 @@ import {
   Package2,
   Palette,
   Plus,
+  Route,
   Search,
   Tags,
   Trash2,
@@ -32,6 +33,7 @@ import {
   useState,
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
 import { CompanySettingsPanel } from "@/components/config/company-settings-panel";
@@ -73,6 +75,7 @@ import {
   type PricingPromotionConfig,
 } from "@/lib/pricing-promotions";
 import { moneyInputDisplayValue, parseMoneyValue } from "@/lib/logistics-fees";
+import { CONFIG_MENU_GROUPS } from "@/lib/config-menu-groups";
 
 const ComboBuilder = dynamic(
   () => import("@/components/config/combo-builder").then((mod) => mod.ComboBuilder),
@@ -123,7 +126,7 @@ const sections = [
     id: "deliveries" as Section,
     title: "Logística",
     text: "Horarios y tarifas de entrega y recolección.",
-    icon: Truck,
+    icon: Route,
   },
   {
     id: "appearance" as Section,
@@ -145,8 +148,32 @@ const sections = [
   },
 ];
 
+const configSectionById = new Map(sections.map((section) => [section.id, section]));
+
 const configNavCardClass =
-  "group flex min-h-[10.5rem] min-w-0 flex-col rounded-xl border border-black bg-surface-card p-5 text-left shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition hover:border-emerald-700/35 hover:bg-surface-card-hover";
+  "group flex min-h-[9.5rem] min-w-0 flex-col rounded-xl border border-black bg-surface-card p-4 text-left shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition hover:border-emerald-700/35 hover:bg-surface-card-hover sm:p-5";
+
+function ConfigNavGroup({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-black bg-[#171d1b] shadow-[0_8px_24px_rgba(0,0,0,0.22)]">
+      <header className="border-b border-black bg-surface-card-header px-4 py-3 sm:px-5">
+        <h2 className="text-sm font-black text-[#f8fafc]">{title}</h2>
+        <p className="mt-1 text-sm font-bold text-slate-400">{description}</p>
+      </header>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 p-4 sm:gap-4 sm:p-5">
+        {children}
+      </div>
+    </section>
+  );
+}
 
 function ConfigNavCard({
   href,
@@ -163,10 +190,10 @@ function ConfigNavCard({
 }) {
   return (
     <Link href={href} className={configNavCardClass}>
-      <span className={`h-12 w-12 shrink-0 ${iconWellEmerald}`}>
-        <Icon className="h-7 w-7" />
+      <span className={`h-11 w-11 shrink-0 ${iconWellEmerald}`}>
+        <Icon className="h-6 w-6" />
       </span>
-      <span className="mt-5 block break-words text-2xl font-black leading-snug text-[#f8fafc]">
+      <span className="mt-4 block break-words text-xl font-black leading-snug text-[#f8fafc] sm:text-2xl">
         {title}
       </span>
       <span className="mt-2 block flex-1 break-words text-sm font-bold leading-snug text-slate-300 sm:text-base">
@@ -1620,19 +1647,28 @@ export function ConfiguracionClient({
       ) : null}
 
       {section === "menu" ? (
-        <>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
-            {sections.map((item) => (
-              <ConfigNavCard
-                key={item.id}
-                href={`/configuracion?view=${item.id}`}
-                title={item.title}
-                text={item.text}
-                icon={item.icon}
-              />
-            ))}
-          </div>
-        </>
+        <div className="flex flex-col gap-5">
+          {CONFIG_MENU_GROUPS.map((group) => (
+            <ConfigNavGroup key={group.id} title={group.title} description={group.description}>
+              {group.sectionIds.map((sectionId) => {
+                const item = configSectionById.get(sectionId);
+                if (!item) {
+                  return null;
+                }
+
+                return (
+                  <ConfigNavCard
+                    key={item.id}
+                    href={`/configuracion?view=${item.id}`}
+                    title={item.title}
+                    text={item.text}
+                    icon={item.icon}
+                  />
+                );
+              })}
+            </ConfigNavGroup>
+          ))}
+        </div>
       ) : null}
 
       {section === "plan" ? (

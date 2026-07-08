@@ -1,3 +1,5 @@
+import { routeStopsWithinVehicleCapacity } from "@/lib/logistics-route-capacity";
+
 export type LogisticsTaskType = "deliver_empty_box" | "pickup_full_box";
 
 export type LogisticsRouteStatus = "draft" | "planned" | "cancelled" | "completed";
@@ -50,6 +52,7 @@ export type LogisticsRouteRow = {
   name: string;
   status: LogisticsRouteStatus;
   assignedTo: string | null;
+  vehicleId: string | null;
   warehouseId: string | null;
   zoneKey: string;
   notes: string;
@@ -73,6 +76,7 @@ export type LogisticsRouteSuggestion = {
 export type SuggestLogisticsRoutesOptions = {
   fallbackDate: string;
   minimumStops?: number;
+  vehicleCargoCapacity?: string | null;
 };
 
 const MISSING_GEO_ZONE = "falta-geo";
@@ -176,6 +180,7 @@ function stableTaskCompare(a: LogisticsRouteTaskInput, b: LogisticsRouteTaskInpu
 }
 
 export function orderStopsByProximity(tasks: LogisticsRouteTaskInput[]) {
+  // Nearest-neighbor heuristic. For production-grade optimization use Directions API or VRP solver.
   const remaining = tasks.filter((task) => hasRouteGeo(task.address)).sort(stableTaskCompare);
   if (!remaining.length) {
     return [];
@@ -254,6 +259,11 @@ export function suggestLogisticsRoutes(
       } satisfies LogisticsRouteSuggestion;
     })
     .filter((suggestion) => suggestion.stopCount >= minimumStops)
+    .filter((suggestion) =>
+      options.vehicleCargoCapacity
+        ? routeStopsWithinVehicleCapacity(suggestion.stopCount, options.vehicleCargoCapacity)
+        : true,
+    )
     .sort(
       (a, b) =>
         a.routeDate.localeCompare(b.routeDate) ||

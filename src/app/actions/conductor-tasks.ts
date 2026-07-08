@@ -2,29 +2,46 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { createStorageSignedUrl, extractStorageObjectPath } from "@/lib/supabase/storage-url";
+import type { ActivityHistoryRow } from "@/app/actions/history";
 import {
   listLogisticsRoutesAction,
   listLogisticsTaskAddressesAction,
+  tryAutoCompleteLogisticsRoute,
 } from "@/app/actions/logistics-routes";
+import { listLogisticsVehiclesAction } from "@/app/actions/logistics-fleet";
 import {
   listShipmentsForRouteBoardAction,
   type ShipmentRow,
 } from "@/app/actions/shipments";
-import { canPreviewConductorTasks } from "@/lib/conductor-tareas-view";
+import {
+  canPreviewConductorTasks,
+  conductorAdminAuditMetadata,
+  formatConductorAdminActionNote,
+  formatConductorAdminActorDescription,
+} from "@/lib/conductor-tareas-view";
 import {
   buildConductorDriverTasks,
+  buildRouteByTaskId,
+  conductorScopeDate,
   conductorTaskTypeLabel,
+  isTaskAssignedToDriver,
   type ConductorDriverTask,
 } from "@/lib/conductor-tasks";
 import {
   buildConductorTruckInventory,
+  buildConductorTruckInventoryScope,
+  hasDeliverEventForTaskLine,
+  hasPickupReturnEventForTaskLine,
   LOGISTICS_TASK_EVIDENCE_BUCKET,
+  validateConductorTruckDeliver,
   validateConductorTruckLoad,
   validateConductorTruckReturn,
   validateConductorTaskResultInput,
   type ConductorTaskFailureReason,
   type ConductorTruckInventoryEvent,
   type ConductorTruckInventoryLine,
+  type ConductorTruckInventoryScope,
   type ConductorTruckInventorySummary,
   type ConductorTruckStockItem,
 } from "@/lib/conductor-truck-inventory";
@@ -34,6 +51,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { recordActivityHistory } from "@/lib/activity-history";
+import { recordInventoryMovementAtomic } from "@/lib/security/inventory-movement";
+import { readPositiveIntegerQty } from "@/lib/security/qty";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
 import { readBillingFromPlan } from "@/lib/invoice-billing";
 import {
@@ -90,14 +109,35 @@ type StockDbRow = {
 
 export type ConductorTruckInventoryView = {
   driverId: string;
+  scope: ConductorTruckInventoryScope;
   summary: ConductorTruckInventorySummary;
+};
+
+type DriverTaskDbRow = {
+  id: string;
+  shipment_id: string;
+  task_type: ConductorDriverTask["taskType"];
+  status: ConductorDriverTask["status"];
+  assigned_to: string | null;
+  scheduled_at: string | null;
+  warehouse_id: string | null;
+  created_at: string;
 };
 
 const EVIDENCE_MAX_BYTES = 8 * 1024 * 1024;
 const EVIDENCE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-function canWriteDriverTask(session: AppSession) {
-  return sessionHasPermission(session, "routes.update_status");
+function conductorActionAudit(session: AppSession, driverId: string) {
+  return {
+    roleSlug: session.roleSlug,
+    actorUserId: session.userId,
+    actorName: session.fullName || session.email,
+    effectiveDriverId: driverId,
+  };
+}
+
+function conductorActionAuditMetadata(session: AppSession, driverId: string) {
+  return conductorAdminAuditMetadata(conductorActionAudit(session, driverId));
 }
 
 function cleanText(value: unknown, max = 500) {
@@ -153,6 +193,10 @@ function mapStock(row: StockDbRow): ConductorTruckStockItem | null {
   };
 }
 
+function canWriteDriverTask(session: AppSession) {
+  return sessionHasPermission(session, "routes.update_status");
+}
+
 function resolveDriverId(session: AppSession, requestedDriverId?: string | null) {
   const requested = cleanText(requestedDriverId, 80);
 
@@ -163,11 +207,27 @@ function resolveDriverId(session: AppSession, requestedDriverId?: string | null)
   return session.userId;
 }
 
-async function loadConductorData(driverId: string) {
-  const [shipmentsResult, routesResult, addressesResult] = await Promise.all([
+function resolveConductorActionDriverId(session: AppSession, requestedDriverId?: string | null) {
+  const effectiveDriverId = resolveDriverId(session, requestedDriverId);
+
+  if (!effectiveDriverId) {
+    throw new Error("Falta conductor");
+  }
+
+  if (!canPreviewConductorTasks(session.roleSlug) && session.userId !== effectiveDriverId) {
+    throw new Error("FORBIDDEN");
+  }
+
+  return effectiveDriverId;
+}
+
+async function loadConductorData(driverId: string, scopeDate?: string) {
+  const effectiveScopeDate = scopeDate ?? conductorScopeDate();
+  const [shipmentsResult, routesResult, addressesResult, vehiclesResult] = await Promise.all([
     listShipmentsForRouteBoardAction(),
     listLogisticsRoutesAction(),
     listLogisticsTaskAddressesAction(),
+    listLogisticsVehiclesAction(),
   ]);
 
   if (!shipmentsResult.ok) {
@@ -182,15 +242,38 @@ async function loadConductorData(driverId: string) {
     throw new Error(addressesResult.error);
   }
 
+  if (!vehiclesResult.ok) {
+    throw new Error(vehiclesResult.error);
+  }
+
   return {
     shipments: shipmentsResult.data,
+    routes: routesResult.data,
     tasks: buildConductorDriverTasks({
       shipments: shipmentsResult.data,
       routes: routesResult.data,
       taskAddresses: addressesResult.data,
+      vehicles: vehiclesResult.data,
       driverId,
+      scopeDate: effectiveScopeDate,
     }),
+    scopeDate: effectiveScopeDate,
   };
+}
+
+async function loadDriverTaskFromDb(admin: Admin, session: AppSession, taskId: string) {
+  const { data, error } = await admin
+    .from("shipment_logistics_tasks")
+    .select("id, shipment_id, task_type, status, assigned_to, scheduled_at, warehouse_id, created_at")
+    .eq("id", taskId)
+    .eq("organization_id", session.organizationId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data as DriverTaskDbRow | null) ?? null;
 }
 
 async function loadTruckEvents(supabase: Supabase, session: AppSession, driverId: string) {
@@ -239,15 +322,18 @@ async function loadTruckInventoryView(
     throw new Error("Supabase service role no configurado");
   }
 
+  const scopeDate = conductorScopeDate();
   const [{ tasks }, events, stock] = await Promise.all([
-    loadConductorData(driverId),
+    loadConductorData(driverId, scopeDate),
     loadTruckEvents(supabase, session, driverId),
     loadTruckStock(admin, session),
   ]);
+  const scope = buildConductorTruckInventoryScope(tasks, scopeDate);
 
   return {
     driverId,
-    summary: buildConductorTruckInventory({ tasks, events, stock }),
+    scope,
+    summary: buildConductorTruckInventory({ tasks, events, stock, scope }),
   };
 }
 
@@ -261,88 +347,35 @@ function requireLineStock(line: ConductorTruckInventoryLine) {
   }
 }
 
-async function decrementWarehouseStock(admin: Admin, session: AppSession, line: ConductorTruckInventoryLine, qty: number) {
-  requireLineStock(line);
-
-  const { data: current, error: loadError } = await admin
-    .from("inventory_stock")
-    .select("id, stock")
-    .eq("organization_id", session.organizationId)
-    .eq("warehouse_id", line.warehouseId)
-    .eq("item_id", line.itemId)
-    .maybeSingle();
-
-  if (loadError || !current) {
-    throw new Error(loadError?.message || `Stock no encontrado para ${line.label}`);
-  }
-
-  const currentStock = Number(current.stock) || 0;
-
-  if (currentStock < qty) {
-    throw new Error(`Stock insuficiente para ${line.label}`);
-  }
-
-  const { error } = await admin
-    .from("inventory_stock")
-    .update({ stock: currentStock - qty })
-    .eq("id", current.id)
-    .eq("organization_id", session.organizationId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
-async function incrementWarehouseStock(admin: Admin, session: AppSession, line: ConductorTruckInventoryLine, qty: number) {
-  requireLineStock(line);
-
-  const { data: current, error: loadError } = await admin
-    .from("inventory_stock")
-    .select("id, stock")
-    .eq("organization_id", session.organizationId)
-    .eq("warehouse_id", line.warehouseId)
-    .eq("item_id", line.itemId)
-    .maybeSingle();
-
-  if (loadError || !current) {
-    throw new Error(loadError?.message || `Stock no encontrado para ${line.label}`);
-  }
-
-  const { error } = await admin
-    .from("inventory_stock")
-    .update({ stock: (Number(current.stock) || 0) + qty })
-    .eq("id", current.id)
-    .eq("organization_id", session.organizationId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
-async function insertInventoryMovement(admin: Admin, session: AppSession, input: {
-  line: ConductorTruckInventoryLine;
-  type: "salida" | "devolucion";
-  qty: number;
-  note: string;
-  driverId: string;
-}) {
+async function recordConductorWarehouseMovement(
+  admin: Admin,
+  session: AppSession,
+  input: {
+    line: ConductorTruckInventoryLine;
+    type: "salida" | "devolucion" | "entrada";
+    qty: number;
+    note: string;
+    driverId: string;
+  },
+) {
   requireLineStock(input.line);
+  const qty = readPositiveIntegerQty(input.qty);
 
-  const { error } = await admin.from("inventory_movements").insert({
-    organization_id: session.organizationId,
-    warehouse_id: input.line.warehouseId,
-    item_id: input.line.itemId,
-    item_name: input.line.itemName || input.line.label,
-    type: input.type,
-    qty: input.qty,
-    note: input.note,
-    created_by: session.userId,
-    assignee_id: input.driverId,
-  });
-
-  if (error) {
-    throw new Error(error.message);
+  if (!input.line.warehouseId || !input.line.itemId) {
+    throw new Error(`Stock no encontrado para ${input.line.label}`);
   }
+
+  await recordInventoryMovementAtomic(admin, {
+    organizationId: session.organizationId,
+    warehouseId: input.line.warehouseId,
+    itemId: input.line.itemId,
+    itemName: input.line.itemName || input.line.label,
+    type: input.type,
+    qty,
+    note: input.note,
+    createdBy: session.userId,
+    assigneeId: input.driverId,
+  });
 }
 
 async function insertTruckEvent(admin: Admin, session: AppSession, input: {
@@ -373,6 +406,10 @@ async function insertTruckEvent(admin: Admin, session: AppSession, input: {
   });
 
   if (error) {
+    if (error.code === "23505" && input.eventType === "deliver") {
+      return;
+    }
+
     throw new Error(error.message);
   }
 }
@@ -401,8 +438,8 @@ async function uploadEvidence(admin: Admin, session: AppSession, taskId: string,
     throw new Error(error.message);
   }
 
-  const { data } = admin.storage.from(LOGISTICS_TASK_EVIDENCE_BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+  const { data } = await admin.storage.from(LOGISTICS_TASK_EVIDENCE_BUCKET).createSignedUrl(path, 60 * 60);
+  return data?.signedUrl || path;
 }
 
 async function collectDriverPayment(admin: Admin, session: AppSession, shipment: ShipmentRow, input: {
@@ -496,6 +533,12 @@ async function recordTaskAttempt(admin: Admin, session: AppSession, input: {
   paymentAmount: number;
   paymentMethod: PaymentMethod | "";
 }) {
+  const audit = conductorActionAudit(session, input.driverId);
+  const note = formatConductorAdminActionNote(input.note, audit);
+  const failureReason = input.result === "failed"
+    ? formatConductorAdminActionNote(input.failureReason, audit)
+    : "";
+
   const { error } = await admin.from("shipment_logistics_task_attempts").insert({
     organization_id: session.organizationId,
     shipment_id: input.task.shipmentId,
@@ -503,8 +546,8 @@ async function recordTaskAttempt(admin: Admin, session: AppSession, input: {
     route_id: input.task.routeId,
     driver_id: input.driverId,
     result: input.result,
-    failure_reason: input.failureReason,
-    note: input.note,
+    failure_reason: failureReason,
+    note,
     evidence_url: input.evidenceUrl,
     payment_amount: input.paymentAmount > 0 ? input.paymentAmount : null,
     payment_method: input.paymentMethod || null,
@@ -584,7 +627,7 @@ async function completeTask(admin: Admin, session: AppSession, input: {
     entityType: "shipment",
     entityId: input.shipment.id,
     title: `Tarea logistica: completed`,
-    description: `${input.shipment.code} - ${conductorTaskTypeLabel[input.task.taskType]} - conductor completo`,
+    description: `${input.shipment.code} - ${conductorTaskTypeLabel[input.task.taskType]} - ${formatConductorAdminActorDescription(conductorActionAudit(session, input.driverId), "conductor")} completo`,
     metadata: {
       shipmentCode: input.shipment.code,
       taskId: input.task.id,
@@ -597,6 +640,7 @@ async function completeTask(admin: Admin, session: AppSession, input: {
       completedAt: now,
       paymentAmount: input.paymentAmount,
       paymentMethod: input.paymentAmount > 0 ? input.paymentMethod : null,
+      ...conductorActionAuditMetadata(session, input.driverId),
     },
   });
 }
@@ -610,13 +654,15 @@ async function failTask(admin: Admin, session: AppSession, input: {
   evidenceUrl: string;
 }) {
   const now = new Date().toISOString();
+  const audit = conductorActionAudit(session, input.driverId);
   const fullNote = [input.failureReason, input.note].filter(Boolean).join(" - ");
+  const auditedFullNote = formatConductorAdminActionNote(fullNote, audit);
 
   const { error: taskError } = await admin
     .from("shipment_logistics_tasks")
     .update({
       status: "cancelled",
-      notes: fullNote,
+      notes: auditedFullNote,
       completed_at: null,
       updated_at: now,
     })
@@ -634,7 +680,7 @@ async function failTask(admin: Admin, session: AppSession, input: {
     channel: "other",
     channel_other: "Conductor",
     outcome,
-    note: fullNote,
+    note: auditedFullNote,
     next_step: "Reprogramar con logistica",
     follow_up_at: null,
     created_by: session.userId,
@@ -649,7 +695,7 @@ async function failTask(admin: Admin, session: AppSession, input: {
     entityType: "shipment",
     entityId: input.shipment.id,
     title: `Seguimiento - ${input.shipment.code}`,
-    description: `Conductor: ${fullNote}`,
+    description: `${formatConductorAdminActorDescription(audit, "Conductor")}: ${auditedFullNote}`,
     metadata: {
       shipmentCode: input.shipment.code,
       source: "conductor.tareas",
@@ -657,6 +703,7 @@ async function failTask(admin: Admin, session: AppSession, input: {
       taskType: input.task.taskType,
       failureReason: input.failureReason,
       evidenceUrl: input.evidenceUrl,
+      ...conductorActionAuditMetadata(session, input.driverId),
     },
   });
 
@@ -665,7 +712,7 @@ async function failTask(admin: Admin, session: AppSession, input: {
     entityType: "shipment",
     entityId: input.shipment.id,
     title: `Tarea cancelada: ${input.shipment.code}`,
-    description: `${conductorTaskTypeLabel[input.task.taskType]} - ${fullNote}`,
+    description: `${conductorTaskTypeLabel[input.task.taskType]} - ${auditedFullNote}`,
     metadata: {
       shipmentCode: input.shipment.code,
       source: "conductor.tareas",
@@ -677,6 +724,7 @@ async function failTask(admin: Admin, session: AppSession, input: {
       note: input.note,
       evidenceUrl: input.evidenceUrl,
       cancelledAt: now,
+      ...conductorActionAuditMetadata(session, input.driverId),
     },
   });
 }
@@ -703,6 +751,87 @@ export async function listConductorDriverTasksAction(
   }
 }
 
+type ConductorTaskActivityHistoryDbRow = {
+  id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  title: string;
+  description: string;
+  actor_name: string;
+  created_at: string;
+  metadata?: Record<string, unknown> | null;
+};
+
+const CONDUCTOR_TASK_HISTORY_ACTIONS = [
+  "shipment.logistics_task_failed",
+  "shipment.logistics_task_updated",
+] as const;
+
+function mapConductorTaskActivityHistoryRow(row: ConductorTaskActivityHistoryDbRow): ActivityHistoryRow {
+  return {
+    id: row.id,
+    action: row.action,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    title: row.title,
+    description: row.description,
+    actorName: row.actor_name,
+    createdAt: row.created_at,
+    metadata: row.metadata || {},
+  };
+}
+
+export async function listConductorTaskActivityHistoryAction(
+  driverId: string,
+  limit = 80,
+): Promise<ActionResult<ActivityHistoryRow[]>> {
+  try {
+    const session = await requireAppSession();
+    const cleanDriverId = driverId.trim();
+
+    if (!cleanDriverId) {
+      return ok([]);
+    }
+
+    if (!sessionHasPermission(session, "routes.view")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    if (!canPreviewConductorTasks(session.roleSlug) && session.userId !== cleanDriverId) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data, error } = await supabase
+      .from("activity_history")
+      .select(
+        "id, action, entity_type, entity_id, title, description, actor_name, created_at, metadata",
+      )
+      .eq("organization_id", session.organizationId)
+      .contains("metadata", { source: "conductor.tareas", driverId: cleanDriverId })
+      .in("action", [...CONDUCTOR_TASK_HISTORY_ACTIONS])
+      .order("created_at", { ascending: false })
+      .limit(Math.min(Math.max(limit, 1), 200));
+
+    if (error) {
+      if (error.code === "42P01") {
+        return ok([]);
+      }
+      return fail(error.message);
+    }
+
+    return ok(((data || []) as ConductorTaskActivityHistoryDbRow[]).map(mapConductorTaskActivityHistoryRow));
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
 export async function getConductorTruckInventoryAction(
   driverId?: string | null,
 ): Promise<ActionResult<ConductorTruckInventoryView>> {
@@ -713,7 +842,7 @@ export async function getConductorTruckInventoryAction(
       throw new Error("FORBIDDEN");
     }
 
-    const effectiveDriverId = resolveDriverId(session, driverId);
+    const effectiveDriverId = resolveConductorActionDriverId(session, driverId);
     return ok(await loadTruckInventoryView(session, effectiveDriverId));
   } catch (error) {
     return fail(actionErrorMessage(error));
@@ -732,7 +861,7 @@ export async function loadConductorTruckLineAction(input: {
       throw new Error("FORBIDDEN");
     }
 
-    const driverId = resolveDriverId(session, input.driverId);
+    const driverId = resolveConductorActionDriverId(session, input.driverId);
     const admin = createSupabaseAdminClient();
 
     if (!admin) {
@@ -754,8 +883,7 @@ export async function loadConductorTruckLineAction(input: {
       return fail(validationError);
     }
 
-    await decrementWarehouseStock(admin, session, line, qty);
-    await insertInventoryMovement(admin, session, {
+    await recordConductorWarehouseMovement(admin, session, {
       line,
       type: "salida",
       qty,
@@ -767,6 +895,7 @@ export async function loadConductorTruckLineAction(input: {
       line,
       eventType: "load",
       qty,
+      routeId: null,
       note: `Carga camion - ${line.label}`,
     });
 
@@ -782,6 +911,7 @@ export async function loadConductorTruckLineAction(input: {
         lineKey: line.key,
         qty,
         label: line.label,
+        ...conductorActionAuditMetadata(session, driverId),
       },
     });
 
@@ -805,7 +935,7 @@ export async function returnConductorTruckLineAction(input: {
       throw new Error("FORBIDDEN");
     }
 
-    const driverId = resolveDriverId(session, input.driverId);
+    const driverId = resolveConductorActionDriverId(session, input.driverId);
     const admin = createSupabaseAdminClient();
 
     if (!admin) {
@@ -827,8 +957,7 @@ export async function returnConductorTruckLineAction(input: {
       return fail(validationError);
     }
 
-    await incrementWarehouseStock(admin, session, line, qty);
-    await insertInventoryMovement(admin, session, {
+    await recordConductorWarehouseMovement(admin, session, {
       line,
       type: "devolucion",
       qty,
@@ -840,6 +969,7 @@ export async function returnConductorTruckLineAction(input: {
       line,
       eventType: "return",
       qty,
+      routeId: null,
       note: `Devolucion camion - ${line.label}`,
     });
 
@@ -855,6 +985,7 @@ export async function returnConductorTruckLineAction(input: {
         lineKey: line.key,
         qty,
         label: line.label,
+        ...conductorActionAuditMetadata(session, driverId),
       },
     });
 
@@ -876,7 +1007,7 @@ export async function startConductorRouteAction(
       throw new Error("FORBIDDEN");
     }
 
-    const effectiveDriverId = resolveDriverId(session, driverId);
+    const effectiveDriverId = resolveConductorActionDriverId(session, driverId);
     const admin = createSupabaseAdminClient();
 
     if (!admin) {
@@ -924,6 +1055,7 @@ export async function startConductorRouteAction(
           currentQty: line.currentQty,
           requiredQty: line.requiredQty,
         })),
+        ...conductorActionAuditMetadata(session, effectiveDriverId),
       },
     });
 
@@ -951,7 +1083,7 @@ export async function submitConductorTaskResultAction(
       return fail("Supabase service role no configurado");
     }
 
-    const driverId = session.userId;
+    const driverId = resolveConductorActionDriverId(session, cleanText(formData.get("driverId"), 80) || null);
     const taskId = cleanText(formData.get("taskId"), 80);
     const result = cleanText(formData.get("result"), 20) === "failed" ? "failed" : "completed";
     const failureReason = cleanText(formData.get("failureReason"), 120);
@@ -965,7 +1097,34 @@ export async function submitConductorTaskResultAction(
       return fail("Falta tarea");
     }
 
-    const { tasks, shipments } = await loadConductorData(driverId);
+    const taskRow = await loadDriverTaskFromDb(admin, session, taskId);
+
+    if (!taskRow) {
+      throw new Error("FORBIDDEN");
+    }
+
+    if (taskRow.status === "completed") {
+      return ok({ taskId });
+    }
+
+    if (taskRow.status === "cancelled") {
+      return fail("Tarea cancelada");
+    }
+
+    const { tasks, shipments, routes } = await loadConductorData(driverId);
+    const routeByTaskId = buildRouteByTaskId(routes);
+    const routeInfo = routeByTaskId.get(taskRow.id);
+
+    if (
+      !isTaskAssignedToDriver(
+        { assignedTo: taskRow.assigned_to, status: taskRow.status },
+        routeInfo,
+        driverId,
+      )
+    ) {
+      throw new Error("FORBIDDEN");
+    }
+
     const task = tasks.find((entry) => entry.id === taskId);
 
     if (!task) {
@@ -993,17 +1152,33 @@ export async function submitConductorTaskResultAction(
     const evidenceUrl = await uploadEvidence(admin, session, task.id, evidenceFile);
 
     if (result === "completed" && task.taskType === "deliver_empty_box") {
+      const supabase = await createScopedSupabase(session);
+
+      if (!supabase) {
+        throw new Error("Supabase service role no configurado");
+      }
+
       const view = await loadTruckInventoryView(session, driverId);
+      const existingEvents = await loadTruckEvents(supabase, session, driverId);
 
       for (const boxLine of task.boxLines) {
-        const line = findInventoryLine(view.summary, boxLine.key);
+        if (hasDeliverEventForTaskLine(existingEvents, task.id, boxLine)) {
+          continue;
+        }
 
-        if (!line || line.currentQty < boxLine.quantity) {
-          return fail(`Faltan cajas en camion para ${boxLine.label}`);
+        const line = findInventoryLine(view.summary, boxLine.key);
+        const deliverError = validateConductorTruckDeliver(line, boxLine.quantity);
+
+        if (deliverError) {
+          return fail(deliverError);
         }
       }
 
       for (const boxLine of task.boxLines) {
+        if (hasDeliverEventForTaskLine(existingEvents, task.id, boxLine)) {
+          continue;
+        }
+
         const line = findInventoryLine(view.summary, boxLine.key);
 
         if (line) {
@@ -1015,9 +1190,67 @@ export async function submitConductorTaskResultAction(
             taskId: task.id,
             shipmentId: task.shipmentId,
             routeId: task.routeId,
-            note: `Entrega - ${shipment.code}`,
+            note: formatConductorAdminActionNote(`Entrega - ${shipment.code}`, conductorActionAudit(session, driverId)),
           });
         }
+      }
+    }
+
+    if (result === "completed" && task.taskType === "pickup_full_box") {
+      const supabase = await createScopedSupabase(session);
+
+      if (!supabase) {
+        throw new Error("Supabase service role no configurado");
+      }
+
+      const view = await loadTruckInventoryView(session, driverId);
+      const existingEvents = await loadTruckEvents(supabase, session, driverId);
+      const warehouseId = task.warehouseId || view.summary.lines[0]?.warehouseId || null;
+
+      for (const boxLine of task.boxLines) {
+        if (hasPickupReturnEventForTaskLine(existingEvents, task.id, boxLine)) {
+          continue;
+        }
+
+        const line =
+          findInventoryLine(view.summary, boxLine.key) ||
+          view.summary.lines.find((entry) => entry.warehouseId === warehouseId) ||
+          null;
+
+        if (!line?.warehouseId || !line.itemId) {
+          continue;
+        }
+
+        await recordConductorWarehouseMovement(admin, session, {
+          line: {
+            ...line,
+            warehouseId: warehouseId || line.warehouseId,
+          },
+          type: "entrada",
+          qty: boxLine.quantity,
+          note: formatConductorAdminActionNote(
+            `Recogida - ${shipment.code}`,
+            conductorActionAudit(session, driverId),
+          ),
+          driverId,
+        });
+
+        await insertTruckEvent(admin, session, {
+          driverId,
+          line: {
+            ...line,
+            warehouseId: warehouseId || line.warehouseId,
+          },
+          eventType: "return",
+          qty: boxLine.quantity,
+          taskId: task.id,
+          shipmentId: task.shipmentId,
+          routeId: task.routeId,
+          note: formatConductorAdminActionNote(
+            `Recogida - ${shipment.code}`,
+            conductorActionAudit(session, driverId),
+          ),
+        });
       }
     }
 
@@ -1053,9 +1286,18 @@ export async function submitConductorTaskResultAction(
       });
     }
 
+    if (routeInfo?.route.id) {
+      const supabase = await createScopedSupabase(session);
+
+      if (supabase) {
+        await tryAutoCompleteLogisticsRoute(supabase, session, routeInfo.route.id);
+      }
+    }
+
     revalidatePath("/conductor/tareas");
     revalidatePath("/conductor/inventario-camion");
     revalidatePath("/envios");
+    revalidatePath("/logistica");
     return ok({ taskId });
   } catch (error) {
     return fail(actionErrorMessage(error));

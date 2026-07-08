@@ -2,9 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildConductorTruckInventory,
+  buildConductorTruckInventoryScope,
+  canConductorTruckLineLoad,
   conductorTruckLineKey,
+  getConductorTruckLoadBlockReason,
+  hasDeliverEventForTaskLine,
+  isConductorTruckEventInScope,
   readConductorTruckBoxLinesFromPlan,
   validateConductorTaskResultInput,
+  validateConductorTruckDeliver,
   validateConductorTruckLoad,
   type ConductorTruckBoxLine,
   type ConductorTruckEventType,
@@ -55,8 +61,8 @@ function event(
 ): ConductorTruckInventoryEvent {
   return {
     eventType,
-    routeId: partial.routeId ?? "route-1",
-    taskId: partial.taskId ?? null,
+    routeId: partial.routeId !== undefined ? partial.routeId : "route-1",
+    taskId: partial.taskId !== undefined ? partial.taskId : null,
     shipmentId: partial.shipmentId ?? null,
     warehouseId: partial.warehouseId ?? "wh-1",
     itemId: partial.itemId ?? "item-small",
@@ -64,6 +70,7 @@ function event(
     catalogKey: partial.catalogKey || "",
     itemLabel: partial.itemLabel || "Caja chica",
     qty,
+    createdAt: partial.createdAt,
   };
 }
 
@@ -153,7 +160,7 @@ describe("buildConductorTruckInventory", () => {
   it("delivery removes boxes from truck without changing warehouse stock", () => {
     const summary = buildConductorTruckInventory({
       tasks: [task()],
-      events: [event("load", 10), event("deliver", 3)],
+      events: [event("load", 10), event("deliver", 3, { taskId: "task-1" })],
       stock: [stock({ stock: 4 })],
     });
     const line = summary.lines[0]!;
@@ -161,7 +168,62 @@ describe("buildConductorTruckInventory", () => {
     assert.equal(line.loadedQty, 10);
     assert.equal(line.deliveredQty, 3);
     assert.equal(line.currentQty, 7);
+    assert.equal(summary.deliveredTotal, 3);
     assert.equal(line.stockQty, 4);
+  });
+
+  it("ignores events outside today's scope", () => {
+    const tasks = [task({ id: "task-today", routeId: "route-today", routeDate: "2026-07-07" })];
+    const scope = buildConductorTruckInventoryScope(tasks, "2026-07-07");
+    const summary = buildConductorTruckInventory({
+      tasks,
+      events: [
+        event("load", 10, { routeId: "route-today", createdAt: "2026-07-07T08:00:00.000Z" }),
+        event("load", 5, { routeId: "route-old", createdAt: "2026-07-06T08:00:00.000Z" }),
+      ],
+      stock: [stock()],
+      scope,
+    });
+
+    assert.equal(summary.currentTotal, 10);
+    assert.equal(summary.loadedTotal, 10);
+  });
+
+  it("detects duplicate deliver events for the same task line", () => {
+    const boxLine = box("Caja chica", 3);
+    const events = [
+      event("deliver", 3, { taskId: "task-1", itemLabel: "Caja chica" }),
+    ];
+
+    assert.equal(hasDeliverEventForTaskLine(events, "task-1", boxLine), true);
+    assert.equal(hasDeliverEventForTaskLine(events, "task-2", boxLine), false);
+  });
+
+  it("scopes load and return events by created date when they have no task", () => {
+    const scope = { date: "2026-07-07", routeIds: ["route-today"], taskIds: ["task-1"] };
+
+    assert.equal(
+      isConductorTruckEventInScope(
+        event("load", 4, {
+          routeId: "route-old",
+          taskId: null,
+          createdAt: "2026-07-07T09:00:00.000Z",
+        }),
+        scope,
+      ),
+      true,
+    );
+    assert.equal(
+      isConductorTruckEventInScope(
+        event("load", 4, {
+          routeId: "route-old",
+          taskId: null,
+          createdAt: "2026-07-06T09:00:00.000Z",
+        }),
+        scope,
+      ),
+      false,
+    );
   });
 });
 
@@ -211,5 +273,59 @@ describe("conductor truck validation", () => {
       }),
       "",
     );
+  });
+
+  it("blocks delivery when truck stock is insufficient", () => {
+    const summary = buildConductorTruckInventory({
+      tasks: [task()],
+      events: [event("load", 2)],
+      stock: [stock()],
+    });
+
+    assert.match(validateConductorTruckDeliver(summary.lines[0]!, 3), /Faltan cajas en camion/);
+  });
+
+  it("explains when inventory item is not linked", () => {
+    const line = {
+      key: "label:16x16x16",
+      catalogKey: "",
+      label: "16x16x16",
+      requiredQty: 1,
+      loadedQty: 0,
+      deliveredQty: 0,
+      returnedQty: 0,
+      currentQty: 0,
+      shortageQty: 1,
+      stockQty: 9,
+      itemId: null,
+      itemName: "",
+      warehouseId: null,
+      taskIds: [],
+      routeIds: [],
+    };
+
+    assert.match(getConductorTruckLoadBlockReason(line), /No hay item de inventario vinculado/);
+    assert.equal(canConductorTruckLineLoad(line), false);
+  });
+
+  it("duplicate delivery attempt does not change truck totals", () => {
+    const boxLine = box("Caja chica", 3);
+    const existingEvents = [
+      event("load", 10),
+      event("deliver", 3, { taskId: "task-1", itemLabel: "Caja chica" }),
+    ];
+    const duplicateEvent = event("deliver", 3, { taskId: "task-1", itemLabel: "Caja chica" });
+    const eventsToApply = hasDeliverEventForTaskLine(existingEvents, "task-1", boxLine)
+      ? existingEvents
+      : [...existingEvents, duplicateEvent];
+
+    const summary = buildConductorTruckInventory({
+      tasks: [task()],
+      events: eventsToApply,
+      stock: [stock()],
+    });
+
+    assert.equal(summary.currentTotal, 7);
+    assert.equal(summary.deliveredTotal, 3);
   });
 });

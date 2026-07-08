@@ -132,16 +132,31 @@ export function routeAddressForLogisticsTask(
   taskType: LogisticsTaskType,
   customerById: Map<string, LogisticsCustomerAddressRow>,
 ) {
+  const snapshotAddress = routeAddressFromRecipientSnapshot(
+    shipment.recipientSnapshot,
+    shipment.customerName,
+  );
   const customerAddress = shipment.customerId
     ? routeAddressFromCustomer(customerById.get(shipment.customerId))
     : null;
 
   if (customerAddress) {
+    if (customerAddress.lat !== null && customerAddress.lng !== null) {
+      return customerAddress;
+    }
+
+    if (snapshotAddress.lat !== null && snapshotAddress.lng !== null) {
+      return {
+        ...customerAddress,
+        formattedAddress: snapshotAddress.formattedAddress || customerAddress.formattedAddress,
+        placeId: snapshotAddress.placeId || customerAddress.placeId,
+        lat: snapshotAddress.lat,
+        lng: snapshotAddress.lng,
+      };
+    }
+
     return customerAddress;
   }
 
-  return routeAddressFromRecipientSnapshot(
-    shipment.recipientSnapshot,
-    taskType === "pickup_full_box" ? shipment.customerName : shipment.customerName,
-  );
+  return snapshotAddress;
 }

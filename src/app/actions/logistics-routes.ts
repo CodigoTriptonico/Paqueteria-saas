@@ -29,7 +29,15 @@ import {
   type ShipmentLogisticsTaskRow,
   type ShipmentRow,
 } from "@/app/actions/shipments";
+import { listLogisticsVehiclesAction } from "@/app/actions/logistics-fleet";
 import { activeLogisticsRouteTaskIds } from "@/lib/logistics-view";
+import { pickFleetCargoCapacityLimit } from "@/lib/logistics-route-capacity";
+import { mapLogisticsEvidenceFromHistory } from "@/lib/logistics-evidence";
+import { suggestVehicleIdForDriver } from "@/lib/logistics-route-vehicle";
+import {
+  canAutoCompleteRoute,
+  routeCompletionBlockedReason,
+} from "@/lib/logistics-route-completion";
 import type { AppSession } from "@/lib/auth/types";
 
 type Supabase = NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>;
@@ -48,6 +56,7 @@ type LogisticsRouteDbRow = {
   name: string;
   status: LogisticsRouteStatus;
   assigned_to: string | null;
+  vehicle_id: string | null;
   warehouse_id: string | null;
   zone_key: string;
   notes: string | null;
@@ -79,7 +88,7 @@ type LogisticsTaskDbRow = {
 };
 
 const ROUTE_SELECT = `
-  id, route_date, name, status, assigned_to, warehouse_id, zone_key, notes, created_at, updated_at,
+  id, route_date, name, status, assigned_to, vehicle_id, warehouse_id, zone_key, notes, created_at, updated_at,
   logistics_route_stops (
     id, route_id, task_id, stop_order, address_snapshot, lat, lng, postal_code, city, created_at
   )
@@ -128,6 +137,7 @@ function mapRoute(row: LogisticsRouteDbRow): LogisticsRouteRow {
     name: row.name,
     status: row.status,
     assignedTo: row.assigned_to,
+    vehicleId: row.vehicle_id,
     warehouseId: row.warehouse_id,
     zoneKey: row.zone_key || "",
     notes: row.notes || "",
@@ -427,6 +437,7 @@ export async function listLogisticsTaskAddressesAction(): Promise<
 
 export async function suggestLogisticsRoutesAction(input: {
   routeDate: string;
+  vehicleCargoCapacity?: string | null;
 }): Promise<ActionResult<LogisticsRouteSuggestion[]>> {
   try {
     const session = await requireAppSession();
@@ -446,7 +457,23 @@ export async function suggestLogisticsRoutesAction(input: {
       onlyCurrentStep: true,
     });
 
-    return ok(suggestLogisticsRoutes(tasks, { fallbackDate, minimumStops: 1 }));
+    let vehicleCargoCapacity = input.vehicleCargoCapacity ?? null;
+
+    if (!vehicleCargoCapacity) {
+      const vehiclesResult = await listLogisticsVehiclesAction();
+
+      if (vehiclesResult.ok) {
+        vehicleCargoCapacity = pickFleetCargoCapacityLimit(vehiclesResult.data);
+      }
+    }
+
+    return ok(
+      suggestLogisticsRoutes(tasks, {
+        fallbackDate,
+        minimumStops: 1,
+        vehicleCargoCapacity,
+      }),
+    );
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -686,6 +713,7 @@ export async function reorderLogisticsRouteStopsAction(input: {
 export async function assignLogisticsRouteDriverAction(input: {
   routeId: string;
   assignedTo: string | null;
+  vehicleId?: string | null;
 }): Promise<ActionResult<LogisticsRouteRow>> {
   try {
     const session = await requireAppSession();
@@ -705,10 +733,20 @@ export async function assignLogisticsRouteDriverAction(input: {
     }
 
     const assignedTo = input.assignedTo || null;
+    let vehicleId = input.vehicleId ?? route.vehicleId;
+
+    if (assignedTo && vehicleId === null) {
+      const vehiclesResult = await listLogisticsVehiclesAction();
+      if (vehiclesResult.ok) {
+        vehicleId = suggestVehicleIdForDriver(vehiclesResult.data, assignedTo);
+      }
+    }
+
     const { error } = await supabase
       .from("logistics_routes")
       .update({
         assigned_to: assignedTo,
+        vehicle_id: vehicleId,
         status: assignedTo ? "planned" : "draft",
         updated_at: new Date().toISOString(),
       })
@@ -723,6 +761,162 @@ export async function assignLogisticsRouteDriverAction(input: {
     route = await loadRouteById(supabase, session, route.id);
 
     return ok(route);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function assignLogisticsRouteVehicleAction(input: {
+  routeId: string;
+  vehicleId: string | null;
+}): Promise<ActionResult<LogisticsRouteRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canManageRoutes(session)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const route = await loadRouteById(supabase, session, input.routeId);
+    if (route.status === "cancelled" || route.status === "completed") {
+      return fail("No puedes modificar una ruta cerrada");
+    }
+
+    const { error } = await supabase
+      .from("logistics_routes")
+      .update({
+        vehicle_id: input.vehicleId || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", route.id)
+      .eq("organization_id", session.organizationId);
+
+    if (error) {
+      return fail(error.message);
+    }
+
+    return ok(await loadRouteById(supabase, session, route.id));
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+async function loadRouteTaskStatuses(
+  supabase: Supabase,
+  session: AppSession,
+  taskIds: string[],
+) {
+  if (!taskIds.length) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("shipment_logistics_tasks")
+    .select("id, status")
+    .eq("organization_id", session.organizationId)
+    .in("id", taskIds);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || []).map((row) => ({
+    taskId: String(row.id),
+    status: row.status as LogisticsTaskStatus,
+  }));
+}
+
+export async function tryAutoCompleteLogisticsRoute(
+  supabase: Supabase,
+  session: AppSession,
+  routeId: string,
+): Promise<boolean> {
+  const route = await loadRouteById(supabase, session, routeId);
+
+  if (route.status === "completed") {
+    return false;
+  }
+
+  const taskStatuses = await loadRouteTaskStatuses(
+    supabase,
+    session,
+    route.stops.map((stop) => stop.taskId),
+  );
+
+  if (!canAutoCompleteRoute(route, taskStatuses)) {
+    return false;
+  }
+
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase
+    .from("logistics_routes")
+    .update({
+      status: "completed",
+      updated_at: nowIso,
+    })
+    .eq("id", route.id)
+    .eq("organization_id", session.organizationId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  await recordActivityHistory(supabase, session, {
+    action: "logistics.route_completed",
+    entityType: "logistics_route",
+    entityId: route.id,
+    title: `Ruta completada: ${route.name}`,
+    description: `${route.routeDate} · ${route.stops.length} paradas cerradas`,
+    metadata: {
+      routeDate: route.routeDate,
+      stopCount: route.stops.length,
+      assignedTo: route.assignedTo,
+      autoCompleted: true,
+    },
+  });
+
+  return true;
+}
+
+export async function completeLogisticsRouteAction(
+  routeId: string,
+): Promise<ActionResult<LogisticsRouteRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canManageRoutes(session)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const route = await loadRouteById(supabase, session, routeId);
+    const taskStatuses = await loadRouteTaskStatuses(
+      supabase,
+      session,
+      route.stops.map((stop) => stop.taskId),
+    );
+    const blockedReason = routeCompletionBlockedReason(route, taskStatuses);
+
+    if (blockedReason) {
+      return fail(blockedReason);
+    }
+
+    const completed = await tryAutoCompleteLogisticsRoute(supabase, session, routeId);
+
+    if (!completed) {
+      return fail("No se pudo completar la ruta");
+    }
+
+    return ok(await loadRouteById(supabase, session, routeId));
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -781,6 +975,232 @@ export async function cancelLogisticsRouteAction(routeId: string): Promise<Actio
     });
 
     return ok(null);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export type LogisticsTaskGeoPatchInput = {
+  taskId: string;
+  placeId: string;
+  formattedAddress: string;
+  lat: number;
+  lng: number;
+  street?: string;
+  houseNumber?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+};
+
+export async function patchLogisticsTaskAddressGeoAction(
+  input: LogisticsTaskGeoPatchInput,
+): Promise<ActionResult<LogisticsTaskAddressRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canManageRoutes(session)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) {
+      return fail("Coordenadas invalidas");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const shipments = await loadShipments();
+    const taskShipment = shipments
+      .flatMap((shipment) =>
+        (shipment.logisticsTasks || []).map((task) => ({ task, shipment })),
+      )
+      .find((entry) => entry.task.id === input.taskId);
+
+    if (!taskShipment) {
+      return fail("Tarea no encontrada");
+    }
+
+    const { task, shipment } = taskShipment;
+    const nowIso = new Date().toISOString();
+    const geoPatch = {
+      place_id: input.placeId.trim(),
+      formatted_address: input.formattedAddress.trim(),
+      lat: input.lat,
+      lng: input.lng,
+      geo_updated_at: nowIso,
+    };
+
+    if (shipment.customerId) {
+      const customerPatch: Record<string, unknown> = {
+        ...geoPatch,
+        updated_at: nowIso,
+      };
+
+      if (input.street) customerPatch.street = input.street;
+      if (input.houseNumber) customerPatch.house_number = input.houseNumber;
+      if (input.neighborhood) customerPatch.neighborhood = input.neighborhood;
+      if (input.city) customerPatch.city = input.city;
+      if (input.state) customerPatch.state = input.state;
+      if (input.postalCode) customerPatch.postal_code = input.postalCode;
+      if (input.country) customerPatch.country = input.country;
+
+      const { error: customerError } = await supabase
+        .from("customers")
+        .update(customerPatch)
+        .eq("id", shipment.customerId)
+        .eq("organization_id", session.organizationId);
+
+      if (customerError) {
+        return fail(customerError.message);
+      }
+    }
+
+    const recipientSnapshot = {
+      ...(shipment.recipientSnapshot && typeof shipment.recipientSnapshot === "object"
+        ? shipment.recipientSnapshot
+        : {}),
+      street: input.street || "",
+      houseNumber: input.houseNumber || "",
+      neighborhood: input.neighborhood || "",
+      city: input.city || "",
+      state: input.state || "",
+      postalCode: input.postalCode || "",
+      country: input.country || "",
+      formattedAddress: input.formattedAddress,
+      placeId: input.placeId,
+      lat: input.lat,
+      lng: input.lng,
+    };
+
+    await supabase
+      .from("shipments")
+      .update({
+        recipient_snapshot: recipientSnapshot,
+        updated_at: nowIso,
+      })
+      .eq("id", shipment.id)
+      .eq("organization_id", session.organizationId);
+
+    const { data: stopRows } = await supabase
+      .from("logistics_route_stops")
+      .select("id, route_id")
+      .eq("task_id", task.id)
+      .eq("organization_id", session.organizationId);
+
+    const addressSnapshot = {
+      source: shipment.customerId ? "customer" : "recipient_snapshot",
+      name: shipment.customer_name,
+      phone: shipment.customerPhone || "",
+      street: input.street || "",
+      houseNumber: input.houseNumber || "",
+      neighborhood: input.neighborhood || "",
+      city: input.city || "",
+      state: input.state || "",
+      postalCode: input.postalCode || "",
+      country: input.country || "",
+      formattedAddress: input.formattedAddress,
+      placeId: input.placeId,
+      lat: input.lat,
+      lng: input.lng,
+    };
+
+    for (const stopRow of stopRows || []) {
+      const route = await loadRouteById(supabase, session, String(stopRow.route_id));
+
+      if (route.status === "cancelled" || route.status === "completed") {
+        continue;
+      }
+
+      await supabase
+        .from("logistics_route_stops")
+        .update({
+          lat: input.lat,
+          lng: input.lng,
+          postal_code: input.postalCode || "",
+          city: input.city || "",
+          address_snapshot: addressSnapshot,
+          updated_at: nowIso,
+        })
+        .eq("id", stopRow.id)
+        .eq("organization_id", session.organizationId);
+    }
+
+    await recordActivityHistory(supabase, session, {
+      action: "shipment.logistics_address_geo_updated",
+      entityType: "shipment",
+      entityId: shipment.id,
+      title: `Geo corregida: ${shipment.code}`,
+      description: input.formattedAddress,
+      metadata: {
+        taskId: task.id,
+        shipmentCode: shipment.code,
+        lat: input.lat,
+        lng: input.lng,
+        placeId: input.placeId,
+      },
+    });
+
+    const addresses = await listLogisticsTaskAddressesAction();
+    if (!addresses.ok) {
+      return fail(addresses.error);
+    }
+
+    const updated = addresses.data.find((row) => row.taskId === task.id);
+    if (!updated) {
+      return fail("No se pudo recargar direccion");
+    }
+
+    return ok(updated);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function listLogisticsTaskEvidenceAction(): Promise<
+  ActionResult<ReturnType<typeof mapLogisticsEvidenceFromHistory>>
+> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canManageRoutes(session)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data, error } = await supabase
+      .from("activity_history")
+      .select("id, title, created_at, metadata")
+      .eq("organization_id", session.organizationId)
+      .in("action", [
+        "shipment.logistics_task_updated",
+        "shipment.logistics_task_failed",
+      ])
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (error) {
+      return fail(error.message);
+    }
+
+    return ok(
+      mapLogisticsEvidenceFromHistory(
+        (data || []) as Array<{
+          id: string;
+          title: string;
+          created_at: string;
+          metadata?: Record<string, unknown> | null;
+        }>,
+      ),
+    );
   } catch (error) {
     return fail(actionErrorMessage(error));
   }

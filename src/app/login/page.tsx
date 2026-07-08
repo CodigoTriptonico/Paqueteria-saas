@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { LoginForm } from "@/app/login/login-form";
 import { getAppSession } from "@/lib/auth/session";
+import { isPublicSignupEnabled } from "@/lib/auth/public-signup";
 import { resolvePostLoginRedirect } from "@/lib/organizations/kind";
 
 export default async function LoginPage({
@@ -23,7 +24,7 @@ export default async function LoginPage({
 
   return (
     <Suspense fallback={null}>
-      <LoginForm />
+      <LoginForm allowSignup={isPublicSignupEnabled()} />
     </Suspense>
   );
 }

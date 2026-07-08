@@ -38,7 +38,7 @@ npm run db:restore-owner
 npm run dev
 ```
 
-Login: `http://localhost:3000/login`
+Login: `http://localhost:3000/login` — contraseña de todos los usuarios locales: `123456789`
 
 ## Comandos utiles
 
@@ -78,6 +78,15 @@ Nada arranca solo al encender el PC:
 - **`.env.local` desincronizado** con `config.toml` produce errores de login aunque la app cargue.
 
 `npm run dev:up` cubre esos cuatro casos antes de abrir el navegador.
+
+## Google Maps (logística y direcciones)
+
+En `.env.local` define ambas claves si quieres mapa en logística y autocomplete de direcciones:
+
+- `GOOGLE_MAPS_API_KEY` — server (`/api/validate-address`, geocode)
+- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` — cliente (panel de rutas en `/logistica`)
+
+Sin la pública el mapa muestra aviso; sin la de server no validas direcciones.
 
 ## Si falla
 

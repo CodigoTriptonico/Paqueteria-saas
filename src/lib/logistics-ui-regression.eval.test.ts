@@ -30,6 +30,17 @@ function logisticsToolbarSource() {
   return componentSource.slice(toolbarStart, listStart);
 }
 
+function invoiceCardHeaderBounds(card: string) {
+  const headerStart = card.indexOf("relative border-b border-black px-3 py-2.5");
+  const bodyStart = card.indexOf('<div className="grid gap-3 p-3">');
+  assert.notEqual(headerStart, -1);
+  assert.notEqual(bodyStart, -1);
+  return {
+    header: card.slice(headerStart, bodyStart),
+    body: card.slice(bodyStart),
+  };
+}
+
 describe("logistica single-action invoice card eval", () => {
   it("does not bring back the delivery/pickup progress rail in the main card", () => {
     const bannedCardCopy = [
@@ -52,12 +63,7 @@ describe("logistica single-action invoice card eval", () => {
 
   it("keeps invoice identity centered without duplicate action badges in the header", () => {
     const card = invoiceCardSource();
-    const headerStart = card.indexOf("bg-surface-card-header");
-    const bodyStart = card.indexOf('<div className="grid gap-3 p-3">');
-    assert.notEqual(headerStart, -1);
-    assert.notEqual(bodyStart, -1);
-
-    const header = card.slice(headerStart, bodyStart);
+    const { header } = invoiceCardHeaderBounds(card);
 
     assert.equal(header.includes("text-center"), true);
     assert.equal(header.includes("invoiceActionLabel(item.step.stepType"), false);
@@ -68,9 +74,7 @@ describe("logistica single-action invoice card eval", () => {
 
   it("shows sender phone in the invoice card header", () => {
     const card = invoiceCardSource();
-    const headerStart = card.indexOf("bg-surface-card-header");
-    const bodyStart = card.indexOf('<div className="grid gap-3 p-3">');
-    const header = card.slice(headerStart, bodyStart);
+    const { header } = invoiceCardHeaderBounds(card);
 
     assert.equal(header.includes("item.shipment.customerPhone"), true);
     assert.equal(header.includes("<Phone"), true);
@@ -78,10 +82,7 @@ describe("logistica single-action invoice card eval", () => {
 
   it("moves action and driver into the bottom field grid without a date field", () => {
     const card = invoiceCardSource();
-    const headerStart = card.indexOf("bg-surface-card-header");
-    const bodyStart = card.indexOf('<div className="grid gap-3 p-3">');
-    const header = card.slice(headerStart, bodyStart);
-    const body = card.slice(bodyStart);
+    const { header, body } = invoiceCardHeaderBounds(card);
     const actionIndex = body.indexOf("invoiceActionLabel(item.step.stepType");
     const driverIndex = body.indexOf("Chofer");
     const dateIndex = body.indexOf(">Fecha<");
@@ -123,20 +124,19 @@ describe("logistica single-action invoice card eval", () => {
 
   it("uses quiet bottom fields instead of loud floating buttons", () => {
     const card = invoiceCardSource();
-    const headerStart = card.indexOf("border-b border-black px-3 py-2.5");
-    const bodyStart = card.indexOf('<div className="grid gap-3 p-3">');
-    const header = card.slice(headerStart, bodyStart);
-    const body = card.slice(bodyStart);
+    const { header, body } = invoiceCardHeaderBounds(card);
     const bottomFieldsStart = body.indexOf('<div className="grid gap-2 sm:grid-cols-2">');
     const bottomFieldsEnd = body.indexOf("</article>", bottomFieldsStart);
     const bottomFields = body.slice(bottomFieldsStart, bottomFieldsEnd);
 
     assert.equal(bottomFields.includes("rounded-md border border-black bg-[#26312c] px-2 py-2"), false);
+    assert.equal(bottomFields.includes("relative flex items-center gap-2.5 rounded-md border px-2 py-2"), true);
     assert.equal(bottomFields.includes("relative grid gap-1 rounded-md border px-2 py-2"), true);
     assert.equal(header.includes('bg-[#1f2925] p-1'), false);
     assert.equal(header.includes("bg-amber-400 text-slate-950"), false);
     assert.equal(header.includes("bg-amber-300"), false);
-    assert.equal(card.includes("bg-amber-950/45"), true);
+    assert.equal(card.includes("logisticsPriorityCardClass"), true);
+    assert.equal(card.includes("priorityHeaderClass"), true);
   });
 
   it("does not show warehouse in the invoice card footer", () => {

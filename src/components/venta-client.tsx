@@ -27,6 +27,7 @@ import { listSaleShortcutsAction, type SaleShortcuts } from "@/app/actions/sale-
 import { createShipmentAction } from "@/app/actions/shipments";
 import { useContextNav } from "@/hooks/use-context-nav";
 import { useNotify } from "@/hooks/use-notify";
+import { useViewLayout } from "@/hooks/use-view-layout";
 import { useSetShellConfig } from "@/components/app-frame";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import { Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
@@ -37,11 +38,9 @@ import {
   flowPanelContentClass,
   flowPanelFlushClass,
   flowStepBodyClass,
-  flowPersonToolbarClass,
   flowPersonListShellClass,
   flowPersonListSectionClass,
-  flowPagerClass,
-  flowToolbarCreateButtonClass,
+  flowPersonToolbarSearchShellClass,
 } from "@/components/flow-form-styles";
 import { FlowPageHeader } from "@/components/flow-page-header";
 import { InlineSearchCombobox } from "@/components/inline-search-picker";
@@ -57,7 +56,6 @@ import { PromotionSelector } from "@/components/sale/promotion-selector";
 import { SaleClientForm } from "@/components/sale/sale-client-form";
 import { SaleRecipientForm } from "@/components/sale/sale-recipient-form";
 import { SaleLogisticsStep } from "@/components/sale/sale-logistics-step";
-import { SalePersonPager } from "@/components/sale/sale-person-card";
 import type { SalePersonCardVariantId } from "@/components/sale/sale-person-card-variants";
 import { SalePersonStylePicker } from "@/components/sale/sale-person-style-picker";
 import {
@@ -65,8 +63,10 @@ import {
   SaleStepCartTrigger,
 } from "@/components/sale/sale-cart-panel";
 import { SaleRecipientList } from "@/components/sale/sale-recipient-list";
+import { SalePersonListToolbar } from "@/components/sale/sale-person-list-toolbar";
 import { SaleSenderList } from "@/components/sale/sale-sender-list";
 import { configPricesCountryHref } from "@/lib/country-options";
+import { formatSalePersonListCount } from "@/lib/sale-person-list-count";
 import { formatBoxQuantityLabel } from "@/lib/shipment-display";
 import {
   billingWithRecordedPayment,
@@ -90,6 +90,7 @@ import {
 } from "@/lib/sale-recent-storage";
 import { resolveSalePaymentInput, type SalePaymentChoice } from "@/lib/sale-payment-choice";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import type { ViewLayout } from "@/lib/view-layout";
 
 let activeSaleScrollFrame: number | null = null;
 
@@ -165,8 +166,6 @@ import {
   saleLogisticsPlanReady,
   normalizePhoneList,
   personFullName,
-  RECIPIENTS_PER_PAGE,
-  recipientCardClass,
   recipientIdentityKey,
   type Recipient,
   salePersonAddressSummary,
@@ -175,12 +174,12 @@ import {
   saleSteps,
   type SaleStep,
   selectedCardClass,
+  salePersonRowContextActiveClass,
+  salePersonRowSelectedClass,
   type Sender,
-  senderCardClass,
   senderHasPhone,
   senderPhoneKey,
   senderPhonesLabel,
-  SENDERS_PER_PAGE,
   samePersonName,
   SaleInvoicePaper,
   SaleBoxCartQtyBadge,
@@ -347,6 +346,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const localIdCounterRef = useRef(0);
   const setShellConfig = useSetShellConfig();
   const notify = useNotify();
+  const { layout: viewLayout, toggleViewLayout } = useViewLayout();
   const [mode, setMode] = useState<"sale" | "clients" | "history" | "new-client" | "new-recipient">("sale");
   const [activeStep, setActiveStep] = useState<SaleStep>("client");
   const [senderList, setSenderList] = useState<Sender[]>(initialData?.senders ?? []);
@@ -411,9 +411,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     [selectedBoxLines],
   );
   const [senderQuery, setSenderQuery] = useState("");
-  const [senderPage, setSenderPage] = useState(0);
   const [recipientQuery, setRecipientQuery] = useState("");
-  const [recipientPage, setRecipientPage] = useState(0);
   const [newClientFirstName, setNewClientFirstName] = useState("");
   const [newClientLastName, setNewClientLastName] = useState("");
   const [newClientPhones, setNewClientPhones] = useState<string[]>([""]);
@@ -940,12 +938,11 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     });
   }, [senderList]);
 
-  const senderPageCount = Math.max(1, Math.ceil(filteredSenders.length / SENDERS_PER_PAGE));
-  const safeSenderPage = Math.min(senderPage, senderPageCount - 1);
-  const visibleSenders = filteredSenders.slice(
-    safeSenderPage * SENDERS_PER_PAGE,
-    safeSenderPage * SENDERS_PER_PAGE + SENDERS_PER_PAGE,
-  );
+  useEffect(() => {
+    if (!senderQuery.trim()) {
+      senderCatalogCountRef.current = senderList.length;
+    }
+  }, [senderList, senderQuery]);
 
   const filteredRecipients = useMemo(() => {
     if (!activeSender) {
@@ -1037,16 +1034,11 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     ];
   }, [filteredRecipients, suggestedRecipientId]);
 
-  const recipientPageCount = Math.max(
-    1,
-    Math.ceil(sortedFilteredRecipients.length / RECIPIENTS_PER_PAGE),
-  );
-  const safeRecipientPage = Math.min(recipientPage, recipientPageCount - 1);
-  const visibleRecipients = sortedFilteredRecipients.slice(
-    safeRecipientPage * RECIPIENTS_PER_PAGE,
-    safeRecipientPage * RECIPIENTS_PER_PAGE + RECIPIENTS_PER_PAGE,
-  );
-  const emptyRecipientSlots = Math.max(0, RECIPIENTS_PER_PAGE - visibleRecipients.length);
+  const recipientCountLabel = formatSalePersonListCount(sortedFilteredRecipients.length, {
+    kind: "destinatario",
+    totalCount: activeSender?.recipients.length,
+    filtered: Boolean(recipientQuery.trim()),
+  });
 
   useEffect(() => {
     const elements = Array.from(
@@ -1120,7 +1112,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         element.removeEventListener("contextmenu", openElementMenu, true);
       });
     };
-  }, [boxesForCountry, filteredSenders, openContextMenuAt, visibleRecipients]);
+  }, [boxesForCountry, filteredSenders, openContextMenuAt, sortedFilteredRecipients]);
 
   const copyAddressItems = [
     {
@@ -1321,7 +1313,6 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       setSelectedRecipient(null);
       setSelectedBoxLines([]);
       resetSaleLogistics();
-      setRecipientPage(0);
       setActiveStep("client");
       return;
     }
@@ -1331,7 +1322,6 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setSelectedRecipient(null);
     setSelectedBoxLines([]);
     resetSaleLogistics();
-    setRecipientPage(0);
     setRecipientQuery("");
     setActiveStep("recipient");
   }
@@ -1475,6 +1465,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   }, []);
 
   const prevSenderQueryRef = useRef("");
+  const senderCatalogCountRef = useRef(initialData?.senders?.length ?? 0);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -1484,8 +1475,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     let cancelled = false;
 
     queueMicrotask(() => {
-      if (!cancelled) {
-        void reloadCustomers("", { showLoading: !initialData?.senders?.length });
+      if (!cancelled && !initialData?.senders?.length) {
+        void reloadCustomers("", { showLoading: true });
       }
     });
 
@@ -1903,7 +1894,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setMode("sale");
   }
 
-  async function createRecipient() {
+  async function createRecipient(options?: { skipAddressVerification?: boolean }) {
     if (
       !selectedSender ||
       !newRecipientFirstName.trim() ||
@@ -1920,7 +1911,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       return;
     }
 
-    if (recipientAddressValidation.status !== "valid") {
+    if (!options?.skipAddressVerification && recipientAddressValidation.status !== "valid") {
       setRecipientAddressValidation({
         status: "invalid",
         message: "Primero valida direccion en Google",
@@ -2250,6 +2241,30 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     }
 
     return defaultClass;
+  }
+
+  function contextPersonClass(
+    type: ContextMenuState["type"],
+    targetKey: string,
+    selected: boolean,
+    groupHasSelection = false,
+    layout: ViewLayout = viewLayout,
+  ) {
+    if (contextMenu?.type === type) {
+      const activeClass =
+        layout === "rows" ? salePersonRowContextActiveClass : contextActiveClass;
+      return contextMenu.targetKey === targetKey ? activeClass : "opacity-35";
+    }
+
+    if (selected) {
+      return layout === "rows" ? salePersonRowSelectedClass : selectedCardClass;
+    }
+
+    if (groupHasSelection) {
+      return unselectedDimClass;
+    }
+
+    return "";
   }
 
   function buildLogisticsPlan(billingSnapshot: InvoiceBillingSnapshot | null = invoiceBilling) {
@@ -2925,10 +2940,24 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     invoiceBillingForPayment,
   ]);
 
+  const boundedPersonListLayout =
+    (mode === "clients" ||
+      mode === "sale" ||
+      mode === "new-client" ||
+      mode === "new-recipient") &&
+    (activeStep === "client" ||
+      activeStep === "recipient" ||
+      mode === "new-client" ||
+      mode === "new-recipient");
+
   return (
     <>
       <div
-        className="pb-6"
+        className={
+          boundedPersonListLayout
+            ? "flex min-h-0 flex-1 flex-col lg:overflow-hidden"
+            : "pb-6"
+        }
         onContextMenuCapture={openSaleContextFromEvent}
         onMouseUpCapture={(event) => {
           if (event.button === 2) {
@@ -2946,7 +2975,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       mode === "sale" ||
       mode === "new-client" ||
       mode === "new-recipient" ? (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="shrink-0">
         <SaleStepBar
           steps={saleStepBarItems}
           onOpenStep={openStep}
@@ -2982,6 +3012,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
               : undefined
           }
         />
+        </div>
         {mode === "new-client" || !selectedSender || activeStep === "client" ? (
         <div ref={clientRef} className={flowPersonListShellClass}>
               {!isSupabaseConfigured() ? (
@@ -3045,22 +3076,23 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 />
               ) : (
                 <div
-                  className={customersLoading ? "pointer-events-none opacity-60 transition-opacity" : undefined}
+                  className={`flex min-h-0 flex-1 flex-col overflow-hidden${
+                    customersLoading ? " pointer-events-none opacity-60 transition-opacity" : ""
+                  }`}
                   aria-busy={customersLoading}
                 >
                 <SaleSenderList
                   query={senderQuery}
                   matchingSenders={filteredSenders}
-                  filteredCount={filteredSenders.length}
-                  visibleSenders={visibleSenders}
+                  senders={filteredSenders}
+                  totalCount={
+                    senderQuery.trim() ? senderCatalogCountRef.current : undefined
+                  }
+                  searchActive={Boolean(senderQuery.trim())}
                   recentSenders={recentSenders}
-                  safePage={safeSenderPage}
-                  pageCount={senderPageCount}
-                  onQueryChange={(value) => {
-                    setSenderQuery(value);
-                    setSenderPage(0);
-                  }}
-                  onPageChange={setSenderPage}
+                  viewLayout={viewLayout}
+                  onViewLayoutToggle={toggleViewLayout}
+                  onQueryChange={setSenderQuery}
                   onNewClient={() => {
                     resetNewClientForm();
                     setMode("new-client");
@@ -3082,11 +3114,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     senderList.filter((item) => item.referredByCustomerId === sender.id).length
                   }
                   getCardClass={(sender) =>
-                    contextCardClass(
+                    contextPersonClass(
                       "remitente",
                       `sender:${senderPhoneKey(sender)}`,
-                      false,
-                      senderCardClass,
                       false,
                     )
                   }
@@ -3116,62 +3146,6 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
               )}
         </div>
         ) : null}
-        </>
-      ) : null}
-
-      {mode === "history" ? (
-        <>
-          <FlowPageHeader
-            title="Historial"
-            description="Ventas, remitentes y destinatarios registrados."
-          />
-          <Panel
-            hideHeader
-            className={flowPanelFlushClass}
-            title="Historial"
-            contentClassName={flowPanelContentClass}
-          >
-            <div className={flowStepBodyClass}>
-              {!isSupabaseConfigured() ? (
-                <SupabaseRequiredBanner detail="El historial se guarda en Supabase." />
-              ) : null}
-              {historyError ? (
-                <p className="rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
-                  {historyError}
-                </p>
-              ) : null}
-              {!historyLoading && !historyRows.length ? (
-                <div className="rounded-xl border border-black bg-surface-card p-4 text-xl font-black">
-                  Sin movimientos
-                </div>
-              ) : null}
-              <div className="grid gap-3">
-                {historyRows.map((row) => (
-                  <div
-                    key={row.id}
-                    className="rounded-xl border border-black bg-surface-card p-4"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="text-lg font-black text-[#f8fafc]">{row.title}</p>
-                        {row.description ? (
-                          <p className="mt-1 text-sm font-bold text-slate-400">{row.description}</p>
-                        ) : null}
-                      </div>
-                      <span className="rounded-lg border border-black bg-surface-inset px-3 py-1 text-xs font-black text-slate-300">
-                        {historyDateLabel(row.createdAt)}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xs font-bold uppercase text-slate-500">
-                      {row.actorName} - {row.entityType}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Panel>
-        </>
-      ) : null}
 
       {selectedSender &&
       (mode === "clients" || mode === "sale" || mode === "new-recipient") &&
@@ -3187,50 +3161,47 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           {activeStep === "recipient" || mode === "new-recipient" ? (
           <div className={flowPersonListSectionClass}>
             {mode !== "new-recipient" ? (
-            <div className={flowPersonToolbarClass}>
-            <InlineSearchCombobox
-                value={recipientQuery}
-                onChange={(value) => {
-                  setRecipientQuery(value);
-                  setRecipientPage(0);
-                }}
-                options={recipientSearchOptions}
-                placeholder="Buscar destinatario, telefono o pais"
-                emptyLabel="Sin destinatarios"
-                ariaLabel="Buscar destinatarios"
-                leadingIcon={<Search className="h-4 w-4" aria-hidden />}
-                className="min-w-0 w-full"
-                minWidthClass="w-full min-w-0"
-                onSelectOption={(option) => {
-                  if (!activeSender) {
-                    return;
-                  }
+            <SalePersonListToolbar
+              viewLayout={viewLayout}
+              onViewLayoutToggle={toggleViewLayout}
+              createIcon={<Plus className="h-4 w-4" />}
+              createLabel="Nuevo destinatario"
+              createShortLabel="Nuevo"
+              countLabel={recipientCountLabel}
+              onCreate={() => {
+                resetNewRecipientForm();
+                setMode("new-recipient");
+                setActiveStep("recipient");
+              }}
+              search={
+                <InlineSearchCombobox
+                  value={recipientQuery}
+                  onChange={setRecipientQuery}
+                  options={recipientSearchOptions}
+                  placeholder="Buscar destinatario, telefono o pais"
+                  emptyLabel="Sin destinatarios"
+                  ariaLabel="Buscar destinatarios"
+                  leadingIcon={<Search className="h-4 w-4" aria-hidden />}
+                  className="w-full"
+                  minWidthClass="min-w-0 w-full"
+                  shellClassName={flowPersonToolbarSearchShellClass}
+                  onSelectOption={(option) => {
+                    if (!activeSender) {
+                      return;
+                    }
 
-                  const recipient = activeSender.recipients.find(
-                    (entry) => recipientIdentityKey(entry) === option.value,
-                  );
+                    const recipient = activeSender.recipients.find(
+                      (entry) => recipientIdentityKey(entry) === option.value,
+                    );
 
-                  if (recipient) {
-                    setRecipientQuery(personFullName(recipient));
-                    setRecipientPage(0);
-                    chooseRecipient(recipient);
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  resetNewRecipientForm();
-                  setMode("new-recipient");
-                  setActiveStep("recipient");
-                }}
-                className={`${flowToolbarCreateButtonClass} justify-self-end`}
-              >
-                  <Plus className="h-4 w-4" />
-                  <span className="hidden sm:inline">Nuevo destinatario</span>
-                  <span className="sm:hidden">Nuevo</span>
-              </button>
-            </div>
+                    if (recipient) {
+                      setRecipientQuery(personFullName(recipient));
+                      chooseRecipient(recipient);
+                    }
+                  }}
+                />
+              }
+            />
             ) : null}
 
             {mode === "new-recipient" ? (
@@ -3280,15 +3251,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 }}
               />
             ) : (
-              <>
-                <SaleRecipientList
-                  filteredCount={sortedFilteredRecipients.length}
-                  visibleRecipients={visibleRecipients}
-                  suggestedRecipientId={suggestedRecipientId}
-                  emptySlots={emptyRecipientSlots}
-                  safePage={safeRecipientPage}
-                  searchActive={Boolean(recipientQuery.trim())}
-                  onChoose={chooseRecipient}
+              <SaleRecipientList
+                recipients={sortedFilteredRecipients}
+                viewLayout={viewLayout}
+                suggestedRecipientId={suggestedRecipientId}
+                searchActive={Boolean(recipientQuery.trim())}
+                onChoose={chooseRecipient}
                   onIconClick={(event, recipient) => {
                     const rect = event.currentTarget.getBoundingClientRect();
                     setCardStylePicker({
@@ -3305,14 +3273,13 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     setActiveStep("recipient");
                   }}
                   getCardClass={(recipient) =>
-                    contextCardClass(
+                    contextPersonClass(
                       "destinatario",
                       `recipient:${recipientIdentityKey(recipient)}`,
                       Boolean(
                         selectedRecipient &&
                           recipientIdentityKey(selectedRecipient) === recipientIdentityKey(recipient),
                       ),
-                      recipientCardClass,
                       selectedRecipient !== null,
                     )
                   }
@@ -3339,21 +3306,6 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     )
                   }
                 />
-                <div className={flowPagerClass}>
-                  <SalePersonPager
-                    page={safeRecipientPage}
-                    pageCount={recipientPageCount}
-                    onPrev={() => setRecipientPage((current) => Math.max(0, current - 1))}
-                    onNext={() =>
-                      setRecipientPage((current) =>
-                        Math.min(recipientPageCount - 1, current + 1),
-                      )
-                    }
-                    prevLabel="Destinatarios anteriores"
-                    nextLabel="Destinatarios siguientes"
-                  />
-                </div>
-              </>
             )}
             </div>
           ) : null}
@@ -3680,6 +3632,62 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           </div>
           ) : null}
         </div>
+      ) : null}
+        </div>
+      ) : null}
+
+      {mode === "history" ? (
+        <>
+          <FlowPageHeader
+            title="Historial"
+            description="Ventas, remitentes y destinatarios registrados."
+          />
+          <Panel
+            hideHeader
+            className={flowPanelFlushClass}
+            title="Historial"
+            contentClassName={flowPanelContentClass}
+          >
+            <div className={flowStepBodyClass}>
+              {!isSupabaseConfigured() ? (
+                <SupabaseRequiredBanner detail="El historial se guarda en Supabase." />
+              ) : null}
+              {historyError ? (
+                <p className="rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
+                  {historyError}
+                </p>
+              ) : null}
+              {!historyLoading && !historyRows.length ? (
+                <div className="rounded-xl border border-black bg-surface-card p-4 text-xl font-black">
+                  Sin movimientos
+                </div>
+              ) : null}
+              <div className="grid gap-3">
+                {historyRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="rounded-xl border border-black bg-surface-card p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-lg font-black text-[#f8fafc]">{row.title}</p>
+                        {row.description ? (
+                          <p className="mt-1 text-sm font-bold text-slate-400">{row.description}</p>
+                        ) : null}
+                      </div>
+                      <span className="rounded-lg border border-black bg-surface-inset px-3 py-1 text-xs font-black text-slate-300">
+                        {historyDateLabel(row.createdAt)}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-xs font-bold uppercase text-slate-500">
+                      {row.actorName} - {row.entityType}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Panel>
+        </>
       ) : null}
       </div>
       </div>

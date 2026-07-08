@@ -33,8 +33,12 @@ function activeFromPath(pathname: string, session: AppSession | null) {
     return "Inventario";
   }
 
+  if (pathname.startsWith("/envios/historial")) {
+    return "Historial envíos";
+  }
+
   if (pathname.startsWith("/envios")) {
-    return "Envios";
+    return "Seguimiento";
   }
 
   if (pathname.startsWith("/conductor/inventario-camion")) {

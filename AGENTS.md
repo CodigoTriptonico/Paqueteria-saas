@@ -141,7 +141,7 @@ STOP. Name the ambiguity in one sentence. Present 2-3 options with real trade-of
 ## Safety
 
 - Never commit secrets. If `.env` is touched, verify `.gitignore` before any commit.
-- Never reset user passwords or auth credentials unless Pablo explicitly asks in that message (`db:reset-passwords`, `db-reset-passwords.mjs`, Supabase `updateUserById` with password, etc.). Do not reset passwords to "test" values while debugging login.
+- Local dev canonical password for all users with profile: `123456789`. Never reset or change user passwords unless Pablo explicitly asks in that message (`db:reset-passwords`, `db-reset-passwords.mjs`, Supabase `updateUserById` with password, etc.). Use `123456789` for login debugging; do not invent other passwords.
 - Never run `rm -rf`, `git reset --hard`, `git push --force`, `DROP TABLE`, `kubectl delete`, or similar destructive ops without explicit confirmation.
 - Never skip pre-commit hooks with `--no-verify`. If a hook fails, fix the underlying issue.
 - Never commit binaries, compiled outputs, or model weights to the repo. Use Git LFS or cloud storage with a pointer.

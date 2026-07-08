@@ -36,8 +36,8 @@ const actions = [
     href: "/logistica",
   },
   {
-    title: "Envios",
-    text: "Historial y estados.",
+    title: "Seguimiento",
+    text: "Envíos activos en curso.",
     icon: ClipboardList,
     color: "bg-emerald-400",
     href: "/envios",

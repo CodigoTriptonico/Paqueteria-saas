@@ -309,8 +309,8 @@ export function recipientIdentityKey(recipient: Recipient) {
   return `${recipient.firstName}|${recipient.lastName}|${recipient.country}`.toLowerCase();
 }
 
-export const RECIPIENTS_PER_PAGE = 3;
-export const SENDERS_PER_PAGE = 3;
+export const RECIPIENTS_PER_PAGE = 8;
+export const SENDERS_PER_PAGE = 8;
 export const RECENT_SENDERS_PER_PAGE = 3;
 
 export function historyDateLabel(value: string) {
@@ -710,6 +710,8 @@ export function AddressTags({ items }: { items: [string, string][] }) {
 
 export const contextActiveClass = selectedBorderClass;
 export const selectedCardClass = selectedBorderClass;
+export const salePersonRowSelectedClass = "bg-emerald-400/10 hover:bg-emerald-400/15";
+export const salePersonRowContextActiveClass = "bg-emerald-400/20 hover:bg-emerald-400/25";
 export const senderCardClass = "w-full";
 export const recipientCardClass = senderCardClass;
 export const boxCardClass =

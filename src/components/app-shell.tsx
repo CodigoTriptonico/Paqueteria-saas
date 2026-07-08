@@ -7,6 +7,7 @@ import {
   Boxes,
   ClipboardList,
   CreditCard,
+  History,
   House,
   ListTodo,
   LucideIcon,
@@ -23,23 +24,38 @@ import { canAccessPath, platformAdminNeedsClientContext } from "@/lib/auth/permi
 import { conductorTasksNavLabel } from "@/lib/conductor-tareas-view";
 import type { AppSession } from "@/lib/auth/types";
 
+type NavSectionId = "main" | "shipments" | "stock" | "operations" | "reports" | "admin";
+
+const navSections: { id: NavSectionId; label: string }[] = [
+  { id: "main", label: "Trabajo" },
+  { id: "shipments", label: "Envíos" },
+  { id: "stock", label: "Stock" },
+  { id: "operations", label: "Operación" },
+  { id: "reports", label: "Reportes" },
+  { id: "admin", label: "Admin" },
+];
+
 const navItems: {
   label: string;
   href: string;
   icon: LucideIcon;
+  section: NavSectionId;
   hasSubmenu?: boolean;
   platformOnly?: boolean;
 }[] = [
-  { label: "Inicio", href: "/", icon: House },
-  { label: "Nueva venta", href: "/venta", icon: CreditCard, hasSubmenu: true },
-  { label: "Inventario", href: "/inventario", icon: Boxes, hasSubmenu: true },
-  { label: "Envios", href: "/envios", icon: ClipboardList },
-  { label: "Tareas conductor", href: "/conductor/tareas", icon: ListTodo },
-  { label: "Inventario camion", href: "/conductor/inventario-camion", icon: Boxes },
-  { label: "Logistica", href: "/logistica", icon: Truck },
-  { label: "Estadisticas", href: "/estadisticas", icon: BarChart3 },
-  { label: "Plataforma", href: "/platform", icon: Shield, platformOnly: true },
+  { label: "Inicio", href: "/", icon: House, section: "main" },
+  { label: "Nueva venta", href: "/venta", icon: CreditCard, section: "main", hasSubmenu: true },
+  { label: "Seguimiento", href: "/envios", icon: ClipboardList, section: "shipments" },
+  { label: "Historial envíos", href: "/envios/historial", icon: History, section: "shipments" },
+  { label: "Inventario", href: "/inventario", icon: Boxes, section: "stock", hasSubmenu: true },
+  { label: "Logistica", href: "/logistica", icon: Truck, section: "operations" },
+  { label: "Tareas conductor", href: "/conductor/tareas", icon: ListTodo, section: "operations" },
+  { label: "Inventario camion", href: "/conductor/inventario-camion", icon: Boxes, section: "operations" },
+  { label: "Estadisticas", href: "/estadisticas", icon: BarChart3, section: "reports" },
+  { label: "Plataforma", href: "/platform", icon: Shield, section: "admin", platformOnly: true },
 ];
+
+const DESKTOP_SIDEBAR_COLLAPSED_KEY = "boxario:desktop-sidebar-collapsed";
 
 type AppShellProps = {
   active: string;
@@ -148,6 +164,27 @@ function navItemsForSession(session: AppSession | null) {
   });
 }
 
+function navSectionIdForItem(item: NavItemDef): NavSectionId {
+  if (item.section) {
+    return item.section;
+  }
+
+  if (item.href.startsWith("/envios")) {
+    return "shipments";
+  }
+
+  return "main";
+}
+
+function navGroupsForItems(items: NavItemDef[]) {
+  return navSections
+    .map((section) => ({
+      ...section,
+      items: items.filter((item) => navSectionIdForItem(item) === section.id),
+    }))
+    .filter((section) => section.items.length > 0);
+}
+
 function isNavItemLocked(session: AppSession | null, item: NavItemDef) {
   if (!session || item.platformOnly) {
     return false;
@@ -162,7 +199,7 @@ type ShellNavItemProps = {
   label: string;
   session: AppSession | null;
   isActive: boolean;
-  variant: "sidebar" | "mobile";
+  variant: "sidebar" | "mobile" | "rail";
   onNavigate?: (isActive: boolean, hasSubmenu?: boolean) => void;
 };
 
@@ -173,18 +210,41 @@ function ShellNavItem({ item, label, session, isActive, variant, onNavigate }: S
   if (locked) {
     const lockedClass =
       variant === "sidebar"
-        ? "flex h-14 min-w-0 cursor-not-allowed items-center gap-3 rounded-lg border border-transparent px-4 text-left text-lg font-black text-slate-600 opacity-50"
-        : "flex h-12 min-w-0 cursor-not-allowed items-center gap-3 rounded-lg border border-black bg-surface-card px-3 text-sm font-black text-slate-600 opacity-50";
+        ? "flex h-11 min-w-0 cursor-not-allowed items-center gap-3 rounded-lg border border-transparent px-3 text-left text-base font-black text-slate-600 opacity-50"
+        : variant === "rail"
+          ? "flex h-11 w-full cursor-not-allowed items-center justify-center rounded-lg border border-transparent text-slate-600 opacity-50"
+          : "flex h-12 min-w-0 cursor-not-allowed items-center gap-3 rounded-lg border border-black bg-surface-card px-3 text-sm font-black text-slate-600 opacity-50";
 
     return (
       <span key={item.href} className={lockedClass} title={LOCKED_NAV_HINT} aria-disabled="true">
-        <Icon className={variant === "sidebar" ? "h-6 w-6 shrink-0" : "h-5 w-5 shrink-0"} />
+        <Icon className="h-5 w-5 shrink-0" />
         {variant === "sidebar" ? (
           <span className="min-w-0 flex-1 truncate">{label}</span>
-        ) : (
+        ) : variant === "mobile" ? (
           <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-        )}
+        ) : null}
       </span>
+    );
+  }
+
+  if (variant === "rail") {
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        prefetch
+        title={label}
+        aria-label={label}
+        onClick={() => onNavigate?.(isActive, item.hasSubmenu)}
+        className={`relative flex h-11 w-full items-center justify-center rounded-lg border transition-colors duration-200 ${
+          isActive
+            ? "border-black bg-[#33413c] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+            : "border-transparent text-slate-300 hover:border-black hover:bg-surface-card hover:text-white"
+        }`}
+      >
+        {isActive ? <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-emerald-300" /> : null}
+        <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-emerald-200" : "text-slate-400"}`} />
+      </Link>
     );
   }
 
@@ -195,13 +255,14 @@ function ShellNavItem({ item, label, session, isActive, variant, onNavigate }: S
         href={item.href}
         prefetch
         onClick={() => onNavigate?.(isActive, item.hasSubmenu)}
-        className={`flex h-14 min-w-0 items-center gap-3 rounded-lg border px-4 text-left text-lg font-black transition-all duration-200 hover:translate-x-1 ${
+        className={`relative flex h-11 min-w-0 items-center gap-3 rounded-lg border px-3 text-left text-base font-black transition-colors duration-200 ${
           isActive
-            ? "border-black bg-surface-card text-white"
+            ? "border-black bg-[#33413c] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
             : "border-transparent text-slate-300 hover:border-black hover:bg-surface-card hover:text-white"
         }`}
       >
-        <Icon className="h-6 w-6 shrink-0" />
+        {isActive ? <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-emerald-300" /> : null}
+        <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-emerald-200" : "text-slate-400"}`} />
         <span className="min-w-0 flex-1 truncate">{label}</span>
       </Link>
     );
@@ -239,17 +300,36 @@ export function AppShell({
   contentEdgeToEdge = false,
 }: AppShellProps & { session: AppSession | null }) {
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const needsClientSelection = platformAdminNeedsClientContext(session);
   const sidebarNavItems = useMemo(() => navItemsForSession(session), [session]);
+  const sidebarNavGroups = useMemo(() => navGroupsForItems(sidebarNavItems), [sidebarNavItems]);
   const activeItem =
     sidebarNavItems.find((item) => navItemLabel(item, session) === active) ??
     sidebarNavItems[0] ??
     navItems[0];
   const mobileNavItems = useMemo(() => sidebarNavItems, [sidebarNavItems]);
+  const mobileNavGroups = useMemo(() => navGroupsForItems(mobileNavItems), [mobileNavItems]);
   const showCompactSidebar = hasCompactSidebarContent(compactContent);
   const showContextNav = Boolean(contextNavLabel && onContextNavBack);
   const showMobileMainNav = !(navCollapsed && showCompactSidebar) && mobileNavItems.length > 0;
+  const showDesktopRail = desktopSidebarCollapsed && !(navCollapsed && showCompactSidebar);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(DESKTOP_SIDEBAR_COLLAPSED_KEY);
+    if (stored === "true") {
+      queueMicrotask(() => setDesktopSidebarCollapsed(true));
+    }
+  }, []);
+
+  function toggleDesktopSidebar() {
+    setDesktopSidebarCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem(DESKTOP_SIDEBAR_COLLAPSED_KEY, String(next));
+      return next;
+    });
+  }
 
   function collapseToCompactNav() {
     setNavCollapsed(true);
@@ -322,17 +402,11 @@ export function AppShell({
             : "gap-4 p-3 sm:gap-5 sm:p-5"
         }`}
       >
-        <aside className="hidden w-72 shrink-0 overflow-visible rounded-xl border border-black bg-surface-panel p-4 shadow-md lg:sticky lg:top-5 lg:z-[100] lg:flex lg:max-h-[calc(100vh-2.5rem)] lg:min-h-[calc(100vh-2.5rem)] lg:flex-col">
-          {!navCollapsed ? (
-            <BoxarioBrandHeader
-              session={session}
-              compact
-              className="mb-4"
-              onBack={showContextNav ? onContextNavBack : undefined}
-              title={showContextNav ? brandTitle : undefined}
-            />
-          ) : null}
-
+        <aside
+          className={`hidden shrink-0 overflow-visible rounded-xl border border-black bg-surface-panel shadow-md transition-[width,transform,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] lg:sticky lg:top-5 lg:z-[100] lg:flex lg:max-h-[calc(100vh-2.5rem)] lg:min-h-[calc(100vh-2.5rem)] lg:flex-col ${
+            showDesktopRail ? "w-16 p-2" : "w-72 p-4"
+          }`}
+        >
           {navCollapsed && showCompactSidebar ? (
             <div className="flex min-h-0 flex-1 flex-col gap-3">
               {hideCompactNavHeader ? null : (
@@ -346,29 +420,65 @@ export function AppShell({
               {compactContent}
             </div>
           ) : (
-            <nav className="grid gap-2">
-              {needsClientSelection ? (
-                <p className="mb-1 rounded-lg border border-amber-800/50 bg-amber-950/25 px-3 py-2 text-xs font-bold leading-snug text-amber-100">
-                  Elige una paquetería en <span className="text-amber-300">Plataforma</span> y pulsa{" "}
-                  <span className="text-amber-300">Operar</span>.
-                </p>
-              ) : null}
-              {sidebarNavItems.map((item) => (
-                <ShellNavItem
-                  key={item.href}
-                  item={item}
-                  label={navItemLabel(item, session)}
+            <>
+              <div className="mb-4">
+                <BoxarioBrandHeader
                   session={session}
-                  isActive={navItemLabel(item, session) === active}
-                  variant="sidebar"
-                  onNavigate={handleNavClick}
+                  compact
+                  className="w-full min-w-0"
+                  onBack={showContextNav && !showDesktopRail ? onContextNavBack : undefined}
+                  title={showContextNav && !showDesktopRail ? brandTitle : undefined}
+                  railOnly={showDesktopRail}
+                  sidebarToggle={{
+                    collapsed: showDesktopRail,
+                    onToggle: toggleDesktopSidebar,
+                  }}
                 />
-              ))}
-            </nav>
+              </div>
+
+              <nav className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+                {!showDesktopRail && needsClientSelection ? (
+                  <p className="mb-1 rounded-lg border border-amber-800/50 bg-amber-950/25 px-3 py-2 text-xs font-bold leading-snug text-amber-100">
+                    Elige una paquetería en <span className="text-amber-300">Plataforma</span> y pulsa{" "}
+                    <span className="text-amber-300">Operar</span>
+                    .
+                  </p>
+                ) : null}
+                {sidebarNavGroups.map((section) => (
+                  <div key={section.id} className="space-y-1.5">
+                    {!showDesktopRail ? (
+                      <p className="px-3 text-[10px] font-black uppercase leading-none text-slate-500">
+                        {section.label}
+                      </p>
+                    ) : null}
+                    <div className="grid gap-1">
+                      {section.items.map((item) => {
+                        const label = navItemLabel(item, session);
+
+                        return (
+                          <ShellNavItem
+                            key={item.href}
+                            item={item}
+                            label={label}
+                            session={session}
+                            isActive={label === active}
+                            variant={showDesktopRail ? "rail" : "sidebar"}
+                            onNavigate={handleNavClick}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </nav>
+            </>
           )}
 
           <div className="mt-auto hidden pt-4 lg:block">
-            <UserAccountMenu session={session} variant="sidebar" />
+            <UserAccountMenu
+              session={session}
+              variant={showDesktopRail ? "rail" : "sidebar"}
+            />
           </div>
         </aside>
 
@@ -440,17 +550,30 @@ export function AppShell({
                     className="absolute inset-0 bg-black/45"
                     onClick={() => setMobileMenuOpen(false)}
                   />
-                  <nav className="absolute inset-x-3 bottom-24 grid max-h-[62dvh] gap-2 overflow-y-auto rounded-xl border border-black bg-surface-panel p-3 shadow-[0_18px_44px_rgba(0,0,0,0.55)]">
-                    {mobileNavItems.map((item) => (
-                      <ShellNavItem
-                        key={item.href}
-                        item={item}
-                        label={navItemLabel(item, session)}
-                        session={session}
-                        isActive={navItemLabel(item, session) === active}
-                        variant="mobile"
-                        onNavigate={handleNavClick}
-                      />
+                  <nav className="absolute inset-x-3 bottom-24 max-h-[62dvh] space-y-3 overflow-y-auto rounded-xl border border-black bg-surface-panel p-3 shadow-[0_18px_44px_rgba(0,0,0,0.55)]">
+                    {mobileNavGroups.map((section) => (
+                      <div key={section.id} className="space-y-1.5">
+                        <p className="px-2 text-[10px] font-black uppercase leading-none text-slate-500">
+                          {section.label}
+                        </p>
+                        <div className="grid gap-1">
+                          {section.items.map((item) => {
+                            const label = navItemLabel(item, session);
+
+                            return (
+                              <ShellNavItem
+                                key={item.href}
+                                item={item}
+                                label={label}
+                                session={session}
+                                isActive={label === active}
+                                variant="mobile"
+                                onNavigate={handleNavClick}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
                     ))}
                   </nav>
                 </div>

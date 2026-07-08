@@ -1,12 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ActionConfirmDialog } from "@/components/action-confirm-dialog";
 import { PhoneCountryInput } from "@/components/phone-country-input";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
 import { countryFlagIcon } from "@/components/country-flag";
 import { flowFormStackClass, flowIntroClass } from "@/components/flow-form-styles";
 import { MapPin, Plus, UserPlus } from "lucide-react";
+import {
+  recipientHasRequiredAddress,
+  recipientSaveEnabled,
+} from "@/lib/sale-recipient-save";
 import {
   type AddressSuggestion,
   type AddressValidation,
@@ -60,7 +65,7 @@ type SaleRecipientFormProps = {
   };
   actions: {
     onCancel: () => void;
-    onSubmit: () => void;
+    onSubmit: (options?: { skipAddressVerification?: boolean }) => void;
   };
   meta: {
     countries: string[];
@@ -79,7 +84,15 @@ function clearRecipientAddress(form: SaleRecipientFormProps["form"]) {
 
 export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipientFormProps) {
   const router = useRouter();
+  const [addressUnverifiedAccepted, setAddressUnverifiedAccepted] = useState(false);
+  const [showUnverifiedConfirm, setShowUnverifiedConfirm] = useState(false);
   const hasCountry = Boolean(form.country.trim());
+  const hasRequiredAddress = recipientHasRequiredAddress({
+    street: form.street,
+    city: form.city,
+    state: form.state,
+    postalCode: form.postalCode,
+  });
   const phoneDefaultDialCode = useMemo(
     () => getPhoneDialCodeForCountryName(form.country),
     [form.country],
@@ -105,6 +118,11 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
     }));
   }, [meta.countries]);
 
+  function touchAddressField(update: () => void) {
+    setAddressUnverifiedAccepted(false);
+    address.touchField(update);
+  }
+
   function handleCountryChange(country: string) {
     const previousDial = getPhoneDialCodeForCountryName(form.country);
     const nextDial = getPhoneDialCodeForCountryName(country);
@@ -113,6 +131,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
     address.setSuggestions([]);
     address.setValidation({ status: "idle", message: "" });
     address.setSearch("");
+    setAddressUnverifiedAccepted(false);
     clearRecipientAddress(form);
 
     const { nationalDigits } = splitPhoneNumber(form.phone, previousDial || nextDial || "1");
@@ -124,12 +143,28 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
     }
   }
 
-  const saveDisabled =
-    !form.firstName.trim() ||
-    !form.lastName.trim() ||
-    !form.phone.trim() ||
-    !form.country ||
-    (!meta.duplicateRecipient && address.validation.status !== "valid");
+  useEffect(() => {
+    if (address.validation.status === "valid") {
+      setAddressUnverifiedAccepted(false);
+    }
+  }, [address.validation.status]);
+
+  const saveDisabled = !recipientSaveEnabled({
+    firstName: form.firstName,
+    lastName: form.lastName,
+    phone: form.phone,
+    country: form.country,
+    duplicateRecipient: Boolean(meta.duplicateRecipient),
+    validationStatus: address.validation.status,
+    skipVerification: addressUnverifiedAccepted,
+    hasRequiredAddress,
+  });
+
+  const showUnverifiedButton =
+    hasCountry &&
+    !meta.duplicateRecipient &&
+    address.validation.status !== "valid" &&
+    !addressUnverifiedAccepted;
 
   const fullAddress = [
     [form.street, form.house].filter(Boolean).join(" "),
@@ -152,20 +187,24 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
             className={`rounded-lg border px-3 py-1 text-xs font-black uppercase ${
               !hasCountry
                 ? "border-black bg-surface-card text-slate-300"
-                : address.validation.status === "valid"
-                  ? "border-black bg-surface-inset text-slate-200"
-                  : address.validation.status === "invalid"
-                    ? "border-amber-600 bg-amber-400 text-slate-950"
-                    : "border-black bg-surface-card text-slate-300"
+                : addressUnverifiedAccepted
+                  ? "border-amber-600 bg-amber-400 text-slate-950"
+                  : address.validation.status === "valid"
+                    ? "border-black bg-surface-inset text-slate-200"
+                    : address.validation.status === "invalid"
+                      ? "border-amber-600 bg-amber-400 text-slate-950"
+                      : "border-black bg-surface-card text-slate-300"
             }`}
           >
             {!hasCountry
               ? "Elige pais"
-              : address.validation.status === "valid"
-                ? "Google OK"
-                : address.validation.status === "invalid" && address.validation.message
-                  ? "Error direccion"
-                  : "Sin validar"}
+              : addressUnverifiedAccepted
+                ? "Sin verificar"
+                : address.validation.status === "valid"
+                  ? "Google OK"
+                  : address.validation.status === "invalid" && address.validation.message
+                    ? "Error direccion"
+                    : "Sin validar"}
           </span>
         </div>
         <div className="flex gap-2">
@@ -178,7 +217,11 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
           </button>
           <button
             type="button"
-            onClick={actions.onSubmit}
+            onClick={() =>
+              actions.onSubmit(
+                addressUnverifiedAccepted ? { skipAddressVerification: true } : undefined,
+              )
+            }
             disabled={saveDisabled}
             className="h-10 rounded-md bg-emerald-400 px-5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -319,7 +362,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   disabled={!hasCountry}
                   tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
-                    address.touchField(() => form.setStreet(event.target.value));
+                    touchAddressField(() => form.setStreet(event.target.value));
                   }}
                 />
               </label>
@@ -334,7 +377,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   disabled={!hasCountry}
                   tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
-                    address.touchField(() => form.setHouse(event.target.value));
+                    touchAddressField(() => form.setHouse(event.target.value));
                   }}
                 />
               </label>
@@ -349,7 +392,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   disabled={!hasCountry}
                   tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
-                    address.touchField(() => form.setPostalCode(event.target.value));
+                    touchAddressField(() => form.setPostalCode(event.target.value));
                   }}
                 />
               </label>
@@ -367,7 +410,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   disabled={!hasCountry}
                   tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
-                    address.touchField(() => form.setNeighborhood(event.target.value));
+                    touchAddressField(() => form.setNeighborhood(event.target.value));
                   }}
                 />
               </label>
@@ -382,7 +425,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   disabled={!hasCountry}
                   tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
-                    address.touchField(() => form.setCity(event.target.value));
+                    touchAddressField(() => form.setCity(event.target.value));
                   }}
                 />
               </label>
@@ -397,7 +440,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   disabled={!hasCountry}
                   tabIndex={hasCountry ? 0 : -1}
                   onChange={(event) => {
-                    address.touchField(() => form.setState(event.target.value));
+                    touchAddressField(() => form.setState(event.target.value));
                   }}
                 />
               </label>
@@ -427,6 +470,16 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
               </div>
             ) : null}
 
+            {addressUnverifiedAccepted ? (
+              <div className="rounded-lg border border-amber-600 bg-amber-400 px-3.5 py-2.5 text-slate-950">
+                <p className="text-xs font-black uppercase text-amber-200">Direccion sin verificar</p>
+                <p className="text-sm font-bold leading-snug">
+                  Guardaras la direccion tal como la escribiste, sin validacion de Google. Revisa
+                  calle, ciudad, estado y CP antes de guardar.
+                </p>
+              </div>
+            ) : null}
+
             <p
               className={`rounded-lg border px-3.5 py-2.5 text-sm font-bold leading-snug break-words ${
                 !hasCountry
@@ -445,9 +498,35 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                   address.validation.message ||
                   "Selecciona una direccion para validar"}
             </p>
+
+            {showUnverifiedButton ? (
+              <button
+                type="button"
+                onClick={() => setShowUnverifiedConfirm(true)}
+                disabled={!hasRequiredAddress}
+                className="h-10 w-full rounded-md border border-amber-700/60 bg-amber-950/50 px-4 text-sm font-black text-amber-100 hover:bg-amber-900/50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Direccion sin verificar
+              </button>
+            ) : null}
           </div>
         </div>
       </form>
+
+      <ActionConfirmDialog
+        open={showUnverifiedConfirm}
+        dialogId="recipient-unverified-address-confirm"
+        title="Direccion sin verificar"
+        message="La direccion no fue validada en Google. Puede haber errores de entrega o retrasos en la ruta. ¿Guardar igual?"
+        confirmLabel="Aceptar sin verificar"
+        cancelLabel="Volver"
+        tone="warning"
+        onCancel={() => setShowUnverifiedConfirm(false)}
+        onConfirm={() => {
+          setAddressUnverifiedAccepted(true);
+          setShowUnverifiedConfirm(false);
+        }}
+      />
     </>
   );
 }

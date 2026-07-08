@@ -4,6 +4,7 @@ import {
   canDeactivateOrganization,
   isClientOrganization,
   resolvePostLoginRedirect,
+  sanitizeInternalPath,
 } from "./kind";
 
 describe("organization kind", () => {
@@ -42,6 +43,16 @@ describe("organization kind", () => {
     assert.equal(
       resolvePostLoginRedirect({ isPlatformAdmin: false, nextPath: "/venta" }),
       "/venta",
+    );
+  });
+
+  it("rechaza redirects externos o protocol-relative", () => {
+    assert.equal(sanitizeInternalPath("https://evil.com"), null);
+    assert.equal(sanitizeInternalPath("//evil.com/path"), null);
+    assert.equal(sanitizeInternalPath("/venta"), "/venta");
+    assert.equal(
+      resolvePostLoginRedirect({ isPlatformAdmin: false, nextPath: "https://evil.com" }),
+      "/",
     );
   });
 });

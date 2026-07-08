@@ -199,6 +199,26 @@ describe("logistics routing", () => {
     );
   });
 
+  it("filters suggestions that exceed vehicle cargo capacity", () => {
+    const fixture = Array.from({ length: 10 }, (_, index) =>
+      task({
+        id: `cap-${index}`,
+        city: "Los Angeles",
+        zip: "90001",
+        lat: 34.05 + index * 0.001,
+        lng: -118.24 - index * 0.001,
+      }),
+    );
+
+    const suggestions = suggestLogisticsRoutes(fixture, {
+      fallbackDate: "2026-07-01",
+      minimumStops: 1,
+      vehicleCargoCapacity: "5 cajas",
+    });
+
+    assert.ok(suggestions.every((suggestion) => suggestion.stopCount <= 5));
+  });
+
   it("reverts route assignment only for assigned tasks", () => {
     assert.equal(statusAfterRouteUnassign("assigned", "2026-07-01T10:00:00.000Z"), "scheduled");
     assert.equal(statusAfterRouteUnassign("assigned", null), "pending");

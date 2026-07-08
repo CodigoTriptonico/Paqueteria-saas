@@ -51,7 +51,6 @@ async function main() {
 
   const { client, label } = await connectPg();
   console.log("Connected to", label);
-  console.log("Connected to", ref);
 
   const { rows: keeperRows } = await client.query(
     `select id, email from auth.users where lower(email) = $1 limit 1`,

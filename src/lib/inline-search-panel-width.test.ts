@@ -11,13 +11,13 @@ describe("resolveInlineSearchPanelWidth", () => {
     );
 
     assert.ok(width >= 200);
-    assert.ok(width >= "Ya en destino final".length * 6);
+    assert.ok(width >= "En tránsito".length * 6);
   });
 
   it("never exceeds the viewport budget", () => {
     const width = resolveInlineSearchPanelWidth(
       128,
-      ["Ya en destino final"],
+      ["En tránsito"],
       320,
     );
 

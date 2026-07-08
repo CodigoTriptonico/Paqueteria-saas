@@ -42,4 +42,19 @@ describe("shipment compact progress UI eval", () => {
     assert.equal(cssSource.includes("contain: paint"), true);
     assert.equal(cssSource.includes("0 0 16px"), false);
   });
+
+  it("does not show the last completed gap summary row", () => {
+    assert.equal(source.includes("Último tramo:"), false);
+    assert.equal(source.includes("lastCompletedGap"), false);
+  });
+
+  it("supports a single-line compact row for envios", () => {
+    assert.equal(source.includes("singleLine?: boolean"), true);
+    assert.match(source, /if \(singleLine\) \{[\s\S]*?gridTemplateColumns: `repeat\(\$\{steps\.length\}, minmax\(0, 1fr\)\)`/);
+    assert.equal(source.includes("w-full max-w-full"), true);
+    assert.equal(source.includes("w-fit max-w-full"), false);
+    assert.equal(source.includes("text-[11px] font-black leading-none"), true);
+    assert.equal(source.includes("h-9 w-full min-w-0 items-center gap-1"), true);
+    assert.equal(source.includes("Paso {focusIndex || steps.length} de {steps.length}"), true);
+  });
 });

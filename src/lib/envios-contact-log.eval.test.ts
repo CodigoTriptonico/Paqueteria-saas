@@ -13,11 +13,11 @@ const dialogSource = readFileSync(
 const contactLogSource = readFileSync(join(root, "src/lib/shipment-contact-log.ts"), "utf8");
 const actionsSource = readFileSync(join(root, "src/app/actions/shipments.ts"), "utf8");
 const migrationSource = readFileSync(
-  join(root, "supabase/migrations/041_shipment_contact_logs.sql"),
+  join(root, "supabase/migrations/042_shipment_contact_logs.sql"),
   "utf8",
 );
 const channelOtherMigrationSource = readFileSync(
-  join(root, "supabase/migrations/043_shipment_contact_channel_other.sql"),
+  join(root, "supabase/migrations/044_shipment_contact_channel_other.sql"),
   "utf8",
 );
 
@@ -25,7 +25,7 @@ describe("envios contact log eval", () => {
   it("adds a compact seller follow-up action to shipment cards", () => {
     assert.equal(enviosSource.includes("ShipmentContactLogDialog"), true);
     assert.equal(enviosSource.includes("ShipmentContactLogLine"), true);
-    assert.equal(enviosSource.includes("setContactLogShipmentId(row.id)"), true);
+    assert.equal(enviosSource.includes("onContactLogOpen(row.id)"), true);
     assert.equal(enviosSource.includes("Registrar seguimiento"), true);
     assert.equal(enviosSource.includes("<PhoneCall"), true);
     assert.equal(enviosSource.includes("contactReminderFilter"), true);

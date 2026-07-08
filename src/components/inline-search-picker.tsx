@@ -424,6 +424,7 @@ export type InlineSearchComboboxProps = {
   disabled?: boolean;
   /** Mantiene el input visible al perder foco (filtros en toolbar). */
   persistent?: boolean;
+  shellClassName?: string;
   onSelectOption?: (option: InlineSearchPickerOption) => void;
 };
 
@@ -440,6 +441,7 @@ export function InlineSearchCombobox({
   minWidthClass = "min-w-[11rem] sm:min-w-[14rem]",
   disabled = false,
   persistent = false,
+  shellClassName,
   onSelectOption,
 }: InlineSearchComboboxProps) {
   const listboxId = useId();
@@ -568,9 +570,11 @@ export function InlineSearchCombobox({
     };
   }, [close, open]);
 
-  const shellClass = compact
-    ? `${shellBaseClass} ${minWidthClass}`
-    : `${shellBaseClass} h-11 w-full min-w-[12rem] max-w-xs px-3`;
+  const shellClass = shellClassName
+    ? shellClassName
+    : compact
+      ? `${shellBaseClass} ${minWidthClass}`
+      : `${shellBaseClass} h-11 w-full min-w-[12rem] max-w-xs px-3`;
 
   const isActive = persistent || open || value.trim().length > 0;
   const showInput = persistent || open || value.trim().length > 0;
@@ -634,10 +638,16 @@ export function InlineSearchCombobox({
     ) : null;
 
   return (
-    <div className={`relative shrink-0 ${className}`}>
+    <div className={`relative min-w-0 ${className}`}>
       <div
         ref={rootRef}
-        className={`${shellClass} ${shellStateClass(isActive, disabled)}`}
+        className={`${shellClass} ${
+          shellClassName
+            ? isActive && !disabled
+              ? "ring-1 ring-inset ring-emerald-500/25"
+              : ""
+            : shellStateClass(isActive, disabled)
+        }`}
         style={lockedWidth ? { width: lockedWidth } : undefined}
       >
         {activeOption?.icon ? (

@@ -69,6 +69,7 @@ type ShipmentProgressStepsProps = {
   canEditStatus?: boolean;
   saving?: boolean;
   compact?: boolean;
+  singleLine?: boolean;
   onLogisticsPatch?: (patch: Partial<ShipmentLogisticsEditorState>, audit: ShipmentAuditContext) => void;
   onStatusChange?: (status: ShipmentStatus, audit: ShipmentAuditContext) => void;
   onLockedLeg?: (message: string) => void;
@@ -250,6 +251,7 @@ export function ShipmentProgressSteps({
   canEditStatus,
   saving = false,
   compact = false,
+  singleLine = false,
   onLogisticsPatch,
   onStatusChange,
   onLockedLeg,
@@ -487,12 +489,142 @@ export function ShipmentProgressSteps({
   if (compact) {
     const waiting = activeStep?.state === "active";
     const focusStep = waiting ? activeStep : steps.filter((step) => step.state === "done").at(-1) ?? activeStep;
-    const focusIndex = focusStep ? steps.findIndex((step) => step.id === focusStep.id) + 1 : 0;
     const panelTint = waiting
       ? timings?.isLongWait
         ? "border-amber-500/60 bg-amber-950/20"
         : "border-black bg-surface-inset"
       : "border-emerald-600/40 bg-emerald-950/15";
+    const stepButtonClass = singleLine
+      ? "relative flex h-9 w-full min-w-0 items-center gap-1 rounded border px-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+      : "relative flex h-10 min-w-0 items-center gap-1.5 rounded border px-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+    const stepLabelClass = singleLine
+      ? "min-w-0 truncate text-[11px] font-black leading-none"
+      : "min-w-0 truncate text-[11px] font-black leading-tight";
+    const stepIconWrapClass = singleLine ? "h-4 w-4" : "h-5 w-5";
+    const stepIconClass = singleLine ? "h-3 w-3" : "h-3.5 w-3.5";
+
+    const stepButtons = steps.map((step) => {
+      const isDetailOpen = detailStepId === step.id;
+      const Icon = stepIcon(step.kind, step.channel);
+
+      return (
+        <button
+          type="button"
+          key={step.id}
+          disabled={!stepIsInteractive(step)}
+          ref={(element) => {
+            stepButtonRefs.current[step.id] = element;
+          }}
+          title={timings ? stepTimingTooltip(step, timings) : step.title}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!stepIsReachable(step)) {
+              return;
+            }
+
+            if (shouldOpenLegMenuOnClick(step) && stepIsInteractive(step)) {
+              openStepMenuFromButton(step, step.id, event);
+              setDetailStepId(null);
+              return;
+            }
+
+            const nextStepId = detailStepId === step.id ? null : step.id;
+            setDetailStepId(nextStepId);
+            if (nextStepId) {
+              queueMicrotask(() => syncDetailAnchors(nextStepId));
+            } else {
+              setDetailStepAnchor(null);
+            }
+          }}
+          onContextMenu={(event) => openContextMenu(event, step)}
+          className={`${stepButtonClass} ${stepIsInteractive(step) ? "hover:opacity-90" : ""} ${compactStepClass(step, isDetailOpen)}`}
+          aria-label={step.title}
+          aria-expanded={isDetailOpen}
+          aria-current={step.state === "active" ? "step" : undefined}
+        >
+          <span
+            className={`flex shrink-0 items-center justify-center rounded border border-black/30 bg-black/10 ${stepIconWrapClass}`}
+          >
+            <Icon className={stepIconClass} strokeWidth={2.25} aria-hidden />
+          </span>
+          <span className={stepLabelClass}>{compactStepName(step.kind)}</span>
+          {isDetailOpen ? (
+            <span
+              className="pointer-events-none absolute -bottom-2 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[6px] border-x-transparent border-t-emerald-400"
+              aria-hidden
+            />
+          ) : null}
+        </button>
+      );
+    });
+
+    if (singleLine) {
+      return (
+        <>
+          <div
+            ref={progressCardRef}
+            onContextMenu={(event) => {
+              if (focusStep) {
+                openContextMenu(event, focusStep);
+              }
+            }}
+            title={focusStep && stepIsInteractive(focusStep) ? "Clic derecho: más opciones" : undefined}
+            className={`relative w-full max-w-full min-w-0 rounded-lg border px-1.5 py-1 [contain:paint] ${panelTint}`}
+          >
+            <div
+              className="grid w-full max-w-full gap-1"
+              style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+            >
+              {stepButtons}
+            </div>
+          </div>
+
+          {row && detailStep ? (
+            <ShipmentStepDetailPanel
+              row={row}
+              step={detailStep}
+              stepNumber={detailStepNumber}
+              totalSteps={steps.length}
+              timings={timings}
+              anchorRect={detailAnchor}
+              stepAnchorRect={detailStepAnchor}
+              onClose={() => setDetailStepId(null)}
+            />
+          ) : null}
+
+          {row && menu ? (
+            <ShipmentStepContextMenu
+              menu={menu}
+              lockReason={menuLockReason(menu.kind)}
+              scheduleMode={menuScheduleMode}
+              scheduleAt={menuScheduleAt}
+              {...menuLegContext(menu.kind)}
+              currentStatus={row.status}
+              onClose={() => setMenu(null)}
+              onApply={(patch) => {
+                onLogisticsPatch?.(patch, {
+                  interaction: "context_menu",
+                  source: "envios.progress",
+                  stepTitle: menu.title,
+                  stepKind: menu.kind,
+                });
+                setMenu(null);
+              }}
+              onStatusChange={(status) => {
+                onStatusChange?.(status, {
+                  interaction: "context_menu",
+                  source: "envios.progress",
+                  stepTitle: menu.title,
+                  stepKind: menu.kind,
+                });
+              }}
+            />
+          ) : null}
+        </>
+      );
+    }
+
+    const focusIndex = focusStep ? steps.findIndex((step) => step.id === focusStep.id) + 1 : 0;
 
     return (
       <>
@@ -526,67 +658,8 @@ export function ShipmentProgressSteps({
               className="mt-2 grid gap-1"
               style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
             >
-              {steps.map((step) => {
-                const isDetailOpen = detailStepId === step.id;
-                const Icon = stepIcon(step.kind, step.channel);
-
-                return (
-                  <button
-                    type="button"
-                    key={step.id}
-                    disabled={!stepIsInteractive(step)}
-                    ref={(element) => {
-                      stepButtonRefs.current[step.id] = element;
-                    }}
-                    title={timings ? stepTimingTooltip(step, timings) : step.title}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (!stepIsReachable(step)) {
-                        return;
-                      }
-
-                      if (shouldOpenLegMenuOnClick(step) && stepIsInteractive(step)) {
-                        openStepMenuFromButton(step, step.id, event);
-                        setDetailStepId(null);
-                        return;
-                      }
-
-                      const nextStepId = detailStepId === step.id ? null : step.id;
-                      setDetailStepId(nextStepId);
-                      if (nextStepId) {
-                        queueMicrotask(() => syncDetailAnchors(nextStepId));
-                      } else {
-                        setDetailStepAnchor(null);
-                      }
-                    }}
-                    onContextMenu={(event) => openContextMenu(event, step)}
-                    className={`relative flex h-10 min-w-0 items-center gap-1.5 rounded border px-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${stepIsInteractive(step) ? "hover:opacity-90" : ""} ${compactStepClass(step, isDetailOpen)}`}
-                    aria-label={step.title}
-                    aria-expanded={isDetailOpen}
-                    aria-current={step.state === "active" ? "step" : undefined}
-                  >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-black/30 bg-black/10">
-                      <Icon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
-                    </span>
-                    <span className="min-w-0 truncate text-[11px] font-black leading-tight">
-                      {compactStepName(step.kind)}
-                    </span>
-                    {isDetailOpen ? (
-                      <span
-                        className="pointer-events-none absolute -bottom-2 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[6px] border-x-transparent border-t-emerald-400"
-                        aria-hidden
-                      />
-                    ) : null}
-                  </button>
-                );
-              })}
+              {stepButtons}
             </div>
-
-            {timings?.lastCompletedGap ? (
-              <p className="mt-2 border-t border-black/30 pt-1.5 text-[10px] font-bold leading-snug text-slate-500">
-                <span className="text-slate-600">Último tramo:</span> {timings.lastCompletedGap}
-              </p>
-            ) : null}
           </div>
         </div>
 

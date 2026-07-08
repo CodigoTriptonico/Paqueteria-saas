@@ -1,4 +1,11 @@
 import { resolveGoogleCountryCode } from "@/lib/country-options";
+import { getAppSession } from "@/lib/auth/session";
+import {
+  enforceValidateAddressRateLimit,
+  isRateLimitError,
+  VALIDATE_ADDRESS_MAX_BODY_BYTES,
+  VALIDATE_ADDRESS_MAX_QUERY_LENGTH,
+} from "@/lib/security/api-guards";
 
 type AddressInput = {
   mode?: "validate" | "suggest" | "details";
@@ -41,6 +48,8 @@ type GooglePlacePrediction = {
     secondary_text?: string;
   };
 };
+
+const GENERIC_ADDRESS_ERROR = "No se pudo validar la direccion";
 
 function firstComponent(components: GoogleAddressComponent[], types: string[]) {
   return components.find((component) =>
@@ -106,16 +115,40 @@ async function getPlacePostalCode(placeId: string, apiKey: string) {
 
 export async function POST(request: Request) {
   try {
+    const session = await getAppSession();
+    if (!session) {
+      return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
+    }
+
+    const rawBody = await request.text();
+    if (rawBody.length > VALIDATE_ADDRESS_MAX_BODY_BYTES) {
+      return Response.json(
+        { ok: false, error: "Solicitud demasiado grande" },
+        { status: 413 },
+      );
+    }
+
+    try {
+      await enforceValidateAddressRateLimit(request.headers, session.userId);
+    } catch (error) {
+      if (isRateLimitError(error)) {
+        return Response.json({ ok: false, error: error.message }, { status: 429 });
+      }
+      console.error("[validate-address] rate limit error", error);
+      return Response.json({ ok: false, error: GENERIC_ADDRESS_ERROR }, { status: 400 });
+    }
+
     const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
     if (!apiKey) {
+      console.error("[validate-address] missing GOOGLE_MAPS_API_KEY");
       return Response.json(
-        { ok: false, error: "Falta GOOGLE_MAPS_API_KEY en .env.local" },
+        { ok: false, error: "Servicio no disponible" },
         { status: 500 },
       );
     }
 
-    const body = (await request.json()) as AddressInput;
+    const body = JSON.parse(rawBody || "{}") as AddressInput;
     const countryCode = resolveGoogleCountryCode(body.country);
 
     if (body.mode === "suggest") {
@@ -123,6 +156,13 @@ export async function POST(request: Request) {
 
       if (!query || query.length < 3) {
         return Response.json({ ok: true, suggestions: [] });
+      }
+
+      if (query.length > VALIDATE_ADDRESS_MAX_QUERY_LENGTH) {
+        return Response.json(
+          { ok: false, error: "Consulta demasiado larga" },
+          { status: 400 },
+        );
       }
 
       const params = new URLSearchParams({
@@ -146,10 +186,15 @@ export async function POST(request: Request) {
       };
 
       if (!response.ok || (data.status !== "OK" && data.status !== "ZERO_RESULTS")) {
+        if (data.error_message || data.status) {
+          console.error("[validate-address] google suggest failed", {
+            status: data.status,
+            message: data.error_message,
+          });
+        }
         return Response.json({
           ok: false,
-          error: data.error_message || "Google no pudo sugerir direcciones",
-          googleStatus: data.status,
+          error: GENERIC_ADDRESS_ERROR,
         });
       }
 
@@ -193,10 +238,15 @@ export async function POST(request: Request) {
       };
 
       if (!response.ok || data.status !== "OK" || !data.result) {
+        if (data.error_message || data.status) {
+          console.error("[validate-address] google details failed", {
+            status: data.status,
+            message: data.error_message,
+          });
+        }
         return Response.json({
           ok: false,
-          error: data.error_message || "Google no encontro detalle",
-          googleStatus: data.status,
+          error: GENERIC_ADDRESS_ERROR,
         });
       }
 
@@ -249,10 +299,15 @@ export async function POST(request: Request) {
     const result = data.results?.[0];
 
     if (!response.ok || data.status !== "OK" || !result) {
+      if (data.error_message || data.status) {
+        console.error("[validate-address] google geocode failed", {
+          status: data.status,
+          message: data.error_message,
+        });
+      }
       return Response.json({
         ok: false,
-        error: data.error_message || "Google no encontro direccion valida",
-        googleStatus: data.status,
+        error: GENERIC_ADDRESS_ERROR,
       });
     }
 
@@ -265,7 +320,8 @@ export async function POST(request: Request) {
       address: normalized,
       error: hasMinimumParts ? "" : "Faltan partes de direccion",
     });
-  } catch {
+  } catch (error) {
+    console.error("[validate-address] request failed", error);
     return Response.json(
       { ok: false, error: "Solicitud invalida o error del servidor" },
       { status: 400 },

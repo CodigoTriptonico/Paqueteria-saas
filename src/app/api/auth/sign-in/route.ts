@@ -2,12 +2,15 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured } from "@/lib/supabase/env";
+import { resolveRequestUrl } from "@/lib/http/request-origin";
 import { resolvePostLoginRedirect } from "@/lib/organizations/kind";
 import {
-  APP_SESSION_COOKIE,
-  APP_SESSION_COOKIE_MAX_AGE,
-  createAppSessionCookieValue,
-} from "@/lib/auth/app-session-cookie";
+  enforceLoginRateLimit,
+  isRateLimitError,
+  LOGIN_RATE_LIMIT,
+} from "@/lib/security/api-guards";
+
+const GENERIC_LOGIN_ERROR = "Credenciales invalidas";
 
 async function loadIsPlatformAdmin(userId: string) {
   const admin = createSupabaseAdminClient();
@@ -26,7 +29,7 @@ async function loadIsPlatformAdmin(userId: string) {
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ ok: false, error: "Configura Supabase en .env.local" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "Servicio no disponible" }, { status: 500 });
   }
 
   const contentType = request.headers.get("content-type") || "";
@@ -55,7 +58,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: message }, { status });
     }
 
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = resolveRequestUrl(request, "/login");
     loginUrl.searchParams.set("error", message);
     if (nextPath) {
       loginUrl.searchParams.set("next", nextPath);
@@ -65,6 +68,16 @@ export async function POST(request: NextRequest) {
 
   if (!email || !password) {
     return failLogin("Correo y contrasena requeridos");
+  }
+
+  try {
+    await enforceLoginRateLimit(request.headers, email);
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      return failLogin(error.message, 429);
+    }
+    console.error("[auth/sign-in] rate limit error", error);
+    return failLogin("Servicio temporalmente no disponible", 503);
   }
 
   const cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[] = [];
@@ -82,30 +95,24 @@ export async function POST(request: NextRequest) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error || !data.user) {
-    return failLogin(error?.message || "Credenciales invalidas", 401);
+    if (error) {
+      console.error("[auth/sign-in] supabase login failed", {
+        code: error.code,
+        message: error.message,
+        bucket: LOGIN_RATE_LIMIT.bucket,
+      });
+    }
+    return failLogin(GENERIC_LOGIN_ERROR, 401);
   }
 
   const isPlatformAdmin = await loadIsPlatformAdmin(data.user.id);
   const redirectTo = resolvePostLoginRedirect({ isPlatformAdmin, nextPath });
-  const appCookie = {
-    name: APP_SESSION_COOKIE,
-    value: createAppSessionCookieValue(data.user.id),
-    options: {
-      path: "/",
-      sameSite: "lax" as const,
-      maxAge: APP_SESSION_COOKIE_MAX_AGE,
-    },
-  };
   const response = wantsJson
     ? NextResponse.json({ ok: true, redirectTo })
-    : NextResponse.redirect(new URL(redirectTo, request.url), 303);
+    : NextResponse.redirect(resolveRequestUrl(request, redirectTo), 303);
 
   cookiesToSet.forEach(({ name, value, options }) => {
     response.cookies.set(name, value, options);
-  });
-  response.cookies.set(appCookie.name, appCookie.value, {
-    httpOnly: true,
-    ...appCookie.options,
   });
 
   return response;

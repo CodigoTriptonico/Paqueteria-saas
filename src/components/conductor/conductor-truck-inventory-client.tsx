@@ -21,6 +21,10 @@ import {
 } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
 import {
+  canConductorTruckLineLoad,
+  getConductorTruckLoadBlockReason,
+} from "@/lib/conductor-truck-inventory";
+import {
   buildConductorPreviewPickerOptions,
   type ConductorDriverOption,
 } from "@/lib/conductor-tareas-view";
@@ -154,6 +158,7 @@ export function ConductorTruckInventoryClient({
   }
 
   const summary = view?.summary;
+  const scope = view?.scope;
   const lines = summary?.lines ?? [];
   const ready = Boolean(summary?.ready);
   const hasRequiredBoxes = Boolean(summary && summary.requiredTotal > 0);
@@ -168,7 +173,7 @@ export function ConductorTruckInventoryClient({
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-sky-700/50 bg-sky-950/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-xs font-black uppercase text-sky-300">Vista previa admin</p>
-              <p className="text-sm font-bold text-sky-100">Carga como la ve el conductor.</p>
+              <p className="text-sm font-bold text-sky-100">Carga como la ve el conductor. Tus acciones quedan en historial como admin.</p>
             </div>
             <InlineSearchPicker
               value={previewDriverId || ""}
@@ -191,6 +196,11 @@ export function ConductorTruckInventoryClient({
           <div className="min-w-0 flex-1">
             <p className="text-xs font-black uppercase text-slate-500">Conductor</p>
             <p className="truncate text-lg font-black text-[#f8fafc]">{effectiveDriverLabel}</p>
+            {scope ? (
+              <p className="mt-0.5 text-xs font-bold text-slate-400">
+                Ruta {scope.date} · {scope.routeIds.length} rutas · {scope.taskIds.length} tareas
+              </p>
+            ) : null}
           </div>
           <Link
             href="/conductor/tareas"
@@ -207,11 +217,12 @@ export function ConductorTruckInventoryClient({
         ) : null}
 
         {summary ? (
-          <div className="mb-4 grid gap-2 sm:grid-cols-4">
-            <Metric label="Requeridas" value={summary.requiredTotal} tone="text-[#f8fafc]" />
-            <Metric label="En camion" value={summary.currentTotal} tone="text-emerald-300" />
+          <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <Metric label="Necesarias" value={summary.requiredTotal} tone="text-[#f8fafc]" />
             <Metric label="Cargadas" value={summary.loadedTotal} tone="text-sky-300" />
-            <Metric label="Faltan" value={summary.shortageTotal} tone={summary.shortageTotal ? "text-rose-300" : "text-emerald-300"} />
+            <Metric label="Entregadas" value={summary.deliveredTotal} tone="text-amber-300" />
+            <Metric label="Restantes" value={summary.currentTotal} tone="text-emerald-300" />
+            <Metric label="Faltantes" value={summary.shortageTotal} tone={summary.shortageTotal ? "text-rose-300" : "text-emerald-300"} />
           </div>
         ) : null}
 
@@ -234,8 +245,9 @@ export function ConductorTruckInventoryClient({
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {lines.map((line) => {
                 const missing = line.shortageQty > 0;
-                const canLoad = missing && line.stockQty >= line.shortageQty && !canPreview;
-                const canReturn = line.currentQty > 0 && !canPreview;
+                const loadBlockReason = getConductorTruckLoadBlockReason(line);
+                const canLoad = canConductorTruckLineLoad(line);
+                const canReturn = line.currentQty > 0;
 
                 return (
                   <article
@@ -254,9 +266,11 @@ export function ConductorTruckInventoryClient({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 divide-x divide-black border-b border-black">
+                    <div className="grid grid-cols-5 divide-x divide-black border-b border-black">
                       <SmallMetric label="Debe" value={line.requiredQty} />
-                      <SmallMetric label="Camion" value={line.currentQty} />
+                      <SmallMetric label="Cargadas" value={line.loadedQty} tone="text-sky-300" />
+                      <SmallMetric label="Entregadas" value={line.deliveredQty} tone="text-amber-300" />
+                      <SmallMetric label="Restantes" value={line.currentQty} tone="text-emerald-300" />
                       <SmallMetric label="Falta" value={line.shortageQty} tone={missing ? "text-rose-300" : "text-emerald-300"} />
                     </div>
 
@@ -280,6 +294,9 @@ export function ConductorTruckInventoryClient({
                         Devolver
                       </button>
                     </div>
+                    {loadBlockReason ? (
+                      <p className="px-3 pb-3 text-xs font-bold text-rose-300">{loadBlockReason}</p>
+                    ) : null}
                   </article>
                 );
               })}
@@ -304,7 +321,7 @@ export function ConductorTruckInventoryClient({
           <button
             type="button"
             className={`${primaryButtonClass} h-12 px-5 text-sm disabled:cursor-not-allowed disabled:opacity-40`}
-            disabled={!ready || !hasRequiredBoxes || Boolean(busyKey) || canPreview}
+            disabled={!ready || !hasRequiredBoxes || Boolean(busyKey)}
             onClick={() => void startRoute()}
           >
             {busyKey === "start" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}

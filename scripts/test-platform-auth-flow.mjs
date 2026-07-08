@@ -1,8 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
 import { loadEnvLocal } from "./lib/db-connection.mjs";
 
 const BASE = process.env.APP_BASE_URL || "http://localhost:3000";
-const DEV_TEST_PASSWORD = "BoxarioDevTest1!";
+const LOCAL_CANONICAL_PASSWORD = "123456789";
 
 function parseSetCookie(header) {
   const cookies = new Map();
@@ -66,32 +65,8 @@ async function fetchWithJar(path, jar, init = {}) {
   return response;
 }
 
-async function ensureOwnerPassword(admin, email) {
-  const configured = process.env.PLATFORM_OWNER_PASSWORD?.trim();
-  if (configured) {
-    return configured;
-  }
-
-  const { data: profile, error } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("email", email)
-    .maybeSingle();
-
-  if (error || !profile?.id) {
-    throw new Error(`No se encontró perfil para ${email}`);
-  }
-
-  const { error: updateError } = await admin.auth.admin.updateUserById(profile.id, {
-    password: DEV_TEST_PASSWORD,
-  });
-
-  if (updateError) {
-    throw new Error(`No se pudo fijar contraseña de prueba: ${updateError.message}`);
-  }
-
-  console.log(`Contraseña de prueba aplicada para ${email} (sin PLATFORM_OWNER_PASSWORD en .env.local).`);
-  return DEV_TEST_PASSWORD;
+async function ownerPassword() {
+  return process.env.PLATFORM_OWNER_PASSWORD?.trim() || LOCAL_CANONICAL_PASSWORD;
 }
 
 async function main() {
@@ -107,11 +82,7 @@ async function main() {
     process.exit(1);
   }
 
-  const admin = createClient(url, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  const password = await ensureOwnerPassword(admin, ownerEmail);
+  const password = await ownerPassword();
   const jar = {};
 
   console.log("1. Login vía API…");
@@ -136,7 +107,7 @@ async function main() {
   const cookieNames = Object.keys(jar);
   console.log(`   OK → ${signInJson.redirectTo} | cookies: ${cookieNames.join(", ") || "(ninguna)"}`);
 
-  if (!cookieNames.some((name) => name.includes("auth") || name === "boxario_app_session")) {
+  if (!cookieNames.some((name) => name.startsWith("sb-"))) {
     console.error("No se recibieron cookies de sesión en sign-in");
     process.exit(1);
   }

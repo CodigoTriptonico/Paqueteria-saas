@@ -6,6 +6,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { parsePlanLimit } from "@/lib/organizations/settings";
+import { assertSameOrgWarehouseIds } from "@/lib/security/org-scope";
+import { deleteAuthUserSafely } from "@/lib/security/auth-cleanup";
 import type { RoleSlug } from "@/lib/auth/types";
 
 export type OrgUserRow = {
@@ -188,6 +190,10 @@ export async function inviteOrgUserAction(input: {
       return fail("Rol no encontrado");
     }
 
+    await assertSameOrgWarehouseIds(admin, session.organizationId, input.warehouseIds);
+
+    let createdUserId: string | null = null;
+
     const { data: created, error: createError } = await admin.auth.admin.createUser({
       email: input.email.trim(),
       password: input.password,
@@ -197,6 +203,8 @@ export async function inviteOrgUserAction(input: {
     if (createError || !created.user) {
       return fail(createError?.message || "No se pudo crear el usuario");
     }
+
+    createdUserId = created.user.id;
 
     const { error: profileError } = await admin.from("profiles").insert({
       id: created.user.id,
@@ -208,6 +216,7 @@ export async function inviteOrgUserAction(input: {
     });
 
     if (profileError) {
+      await deleteAuthUserSafely(admin, createdUserId);
       return fail(profileError.message);
     }
 
@@ -220,6 +229,7 @@ export async function inviteOrgUserAction(input: {
       );
 
       if (whError) {
+        await deleteAuthUserSafely(admin, createdUserId);
         return fail(whError.message);
       }
     }
@@ -241,6 +251,7 @@ export async function inviteOrgUserAction(input: {
         .eq("id", created.user.id);
 
       if (defaultError) {
+        await deleteAuthUserSafely(admin, createdUserId);
         return fail(defaultError.message);
       }
     }
@@ -326,6 +337,8 @@ export async function updateOrgUserAction(input: {
     }
 
     if (input.warehouseIds) {
+      await assertSameOrgWarehouseIds(admin, session.organizationId, input.warehouseIds);
+
       await admin.from("profile_warehouses").delete().eq("profile_id", input.userId);
 
       if (input.warehouseIds.length) {

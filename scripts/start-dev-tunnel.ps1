@@ -90,6 +90,36 @@ if (-not $publicUrl) {
 }
 
 Set-Content -LiteralPath $urlFile -Value $publicUrl -Encoding utf8
+$env:DEV_TUNNEL_URL = $publicUrl
+
+Write-Host "Restarting next dev with tunnel origin..."
+Stop-ListenerOnPort $port
+Start-Sleep -Seconds 1
+
+Remove-Item -LiteralPath $nextOut,$nextErr -Force -ErrorAction SilentlyContinue
+Start-Process -FilePath "npm.cmd" `
+  -ArgumentList "run","dev" `
+  -WorkingDirectory $root `
+  -RedirectStandardOutput $nextOut `
+  -RedirectStandardError $nextErr `
+  -WindowStyle Hidden
+
+$isUp = $false
+for ($i = 0; $i -lt 30; $i++) {
+  try {
+    $response = Invoke-WebRequest -UseBasicParsing $localUrl -TimeoutSec 3
+    if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+      $isUp = $true
+      break
+    }
+  } catch {
+    Start-Sleep -Seconds 1
+  }
+}
+
+if (-not $isUp) {
+  throw "next dev did not restart. Check .next-dev.err.log"
+}
 
 Write-Host ""
 Write-Host "DEV + TUNNEL (cambios en vivo al guardar):"

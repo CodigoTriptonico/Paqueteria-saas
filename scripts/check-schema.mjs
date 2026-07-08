@@ -36,6 +36,11 @@ const requiredTables = [
   "organization_invoice_counters",
   "activity_history",
   "app_schema_migrations",
+  "logistics_vehicles",
+  "logistics_routes",
+  "logistics_route_stops",
+  "shipment_contact_logs",
+  "logistics_truck_inventory_events",
 ];
 
 let failed = false;
@@ -76,6 +81,21 @@ if (!existsSync(join(root, ".env.local.template"))) {
   failed = true;
 } else {
   console.log("OK .env.local.template");
+}
+
+const requiredColumns = [
+  { table: "logistics_routes", column: "vehicle_id" },
+];
+
+for (const { table, column } of requiredColumns) {
+  const pattern = new RegExp(`alter\\s+table\\s+public\\.${table}[\\s\\S]*${column}`, "i");
+
+  if (!pattern.test(combined)) {
+    console.error(`Columna no encontrada en migraciones: ${table}.${column}`);
+    failed = true;
+  } else {
+    console.log(`OK columna ${table}.${column}`);
+  }
 }
 
 if (failed) {

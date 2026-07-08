@@ -118,4 +118,32 @@ describe("buildAuditHistorySegments", () => {
       true,
     );
   });
+
+  it("shows failure reason, note and actor for logistics_task_failed", () => {
+    const segments = buildAuditHistorySegments(
+      historyEntry({
+        action: "shipment.logistics_task_failed",
+        title: "Tarea cancelada: INV-000001",
+        description: "Recoger caja llena - Cliente no contesto - Llame 2 veces",
+        metadata: {
+          failureReason: "Cliente no contesto",
+          note: "Llame 2 veces",
+          shipmentCode: "INV-000001",
+        },
+      }),
+    );
+
+    assert.equal(
+      segments.some((segment) => segment.type === "text" && segment.value.includes("Cliente no contesto")),
+      true,
+    );
+    assert.equal(
+      segments.some((segment) => segment.type === "text" && segment.value.includes("Llame 2 veces")),
+      true,
+    );
+    assert.equal(
+      segments.some((segment) => segment.type === "actor" && segment.value === "Pablo"),
+      true,
+    );
+  });
 });

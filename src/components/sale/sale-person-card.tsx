@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight, MapPin, Package, Phone, Plus, User } from "lucide-react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import { CountryName } from "@/components/country-flag";
 import {
   DEFAULT_SALE_PERSON_CARD_VARIANT_ID,
   resolveSalePersonCardVariant,
@@ -11,7 +12,14 @@ import {
   Flag,
   type SalePersonAddress,
   salePersonAddressLines,
+  salePersonAddressSummary,
 } from "@/components/sale/venta-parts";
+
+import {
+  flowPersonListCountClass,
+  flowPersonListFooterClass,
+} from "@/components/flow-form-styles";
+import { formatSalePersonListCount, type SalePersonListCountKind } from "@/lib/sale-person-list-count";
 
 const defaultVariant = resolveSalePersonCardVariant(DEFAULT_SALE_PERSON_CARD_VARIANT_ID);
 
@@ -23,6 +31,9 @@ export const salePersonCardAddClass =
 
 export const salePersonCardEmptyClass =
   "col-span-full flex min-h-[5.25rem] items-center justify-center rounded-xl border border-amber-800/40 bg-[#2f281f] px-4 text-center text-sm font-black text-amber-100/85";
+
+export const salePersonRowEmptyClass =
+  "px-4 py-8 text-center text-sm font-black text-slate-400";
 
 type SalePersonCardProps = {
   name: string;
@@ -178,6 +189,158 @@ export function SalePersonCard({
   );
 }
 
+type SalePersonRowProps = {
+  name: string;
+  phone: string;
+  address: SalePersonAddress;
+  country: string;
+  cardStyle?: SalePersonCardVariantId | string | null;
+  hint?: string;
+  hintHighlighted?: boolean;
+  onQuickSale?: () => void;
+  quickSaleLabel?: string;
+  onIconClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+  className?: string;
+  onClick: () => void;
+  onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
+  onContextMenu?: (event: MouseEvent<HTMLElement>) => void;
+  contextProps?: Record<string, string | undefined>;
+};
+
+export function SalePersonRow({
+  name,
+  phone,
+  address,
+  country,
+  cardStyle,
+  hint,
+  hintHighlighted = false,
+  onQuickSale,
+  quickSaleLabel = "Venta rápida",
+  onIconClick,
+  className,
+  onClick,
+  onKeyDown,
+  onContextMenu,
+  contextProps,
+}: SalePersonRowProps) {
+  const variant = resolveSalePersonCardVariant(cardStyle);
+  const addressSummary = salePersonAddressSummary(address);
+  const iconTitle = onIconClick ? "Cambiar estilo de tarjeta" : undefined;
+
+  return (
+    <article
+      role="button"
+      tabIndex={0}
+      {...contextProps}
+      onClick={onClick}
+      onKeyDown={onKeyDown}
+      onContextMenu={onContextMenu}
+      className={`px-3 py-1.5 transition-colors sm:px-4 ${variant.focusRing} hover:bg-surface-card-hover${className ? ` ${className}` : ""}`}
+      data-sale-person-row
+    >
+      <div className="grid w-full min-w-0 cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-2 overflow-hidden sm:grid-cols-[2rem_minmax(0,1fr)_minmax(0,1.4fr)_auto] sm:gap-x-3">
+        {onIconClick ? (
+          <button
+            type="button"
+            title={iconTitle}
+            aria-label={iconTitle}
+            onClick={(event) => {
+              event.stopPropagation();
+              onIconClick(event);
+            }}
+            className={`flex h-7 w-7 shrink-0 items-center justify-center text-slate-950 transition hover:scale-105 active:scale-95 ${variant.iconWell}`}
+          >
+            <User className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <span
+            className={`flex h-7 w-7 shrink-0 items-center justify-center text-slate-950 ${variant.iconWell}`}
+          >
+            <User className="h-3.5 w-3.5" />
+          </span>
+        )}
+
+        <div className="min-w-0 py-0.5">
+          <p className="truncate text-sm font-black leading-tight text-[#f8fafc]">{name}</p>
+          <div className="mt-0.5 flex min-w-0 items-center gap-2 overflow-hidden text-[10px] font-bold leading-none text-slate-500">
+            <Phone className="h-3 w-3 shrink-0" aria-hidden />
+            <span className="min-w-0 truncate">{phone}</span>
+            <CountryName
+              name={country}
+              size="xs"
+              className="hidden shrink-0 sm:inline-flex"
+              labelClassName="max-w-[5rem] truncate"
+            />
+          </div>
+        </div>
+
+        <div className="hidden min-w-0 sm:block">
+          <p
+            className={`truncate text-[11px] font-bold leading-snug ${addressSummary ? "text-slate-400" : "text-slate-600"}`}
+            title={addressSummary || "Sin dirección registrada"}
+          >
+            {addressSummary ? (
+              <>
+                <MapPin className="mr-1 inline h-3 w-3 shrink-0 align-[-2px] text-slate-500" aria-hidden />
+                {addressSummary}
+              </>
+            ) : (
+              "Sin dirección"
+            )}
+          </p>
+        </div>
+
+        <div
+          className="flex shrink-0 items-center justify-end gap-1.5"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          {hint ? (
+            <SalePersonStatBadge highlighted={hintHighlighted}>{hint}</SalePersonStatBadge>
+          ) : null}
+          {onQuickSale ? (
+            <button
+              type="button"
+              title={quickSaleLabel}
+              aria-label={quickSaleLabel}
+              onClick={(event) => {
+                event.stopPropagation();
+                onQuickSale();
+              }}
+              className={`inline-flex h-7 items-center justify-center gap-1 rounded-md border px-2 text-[10px] font-black text-slate-950 transition active:scale-[0.98] ${variant.quickSale}`}
+            >
+              <Package className="h-3 w-3 shrink-0" strokeWidth={2.25} />
+              <span className="hidden lg:inline">Rápida</span>
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export function SalePersonAddRow({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-surface-card-hover sm:px-4"
+    >
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-emerald-300">
+        <Plus className="h-4 w-4" aria-hidden />
+      </span>
+      <span className="text-sm font-black text-emerald-300">{label}</span>
+    </button>
+  );
+}
+
 export function SalePersonStatBadge({
   children,
   highlighted = false,
@@ -296,6 +459,32 @@ export function SalePersonPager({
       >
         <ChevronRight className="h-4 w-4" />
       </button>
+    </div>
+  );
+}
+
+type SalePersonListFooterProps = {
+  visibleCount: number;
+  totalCount?: number;
+  kind: SalePersonListCountKind;
+  filtered?: boolean;
+};
+
+export function SalePersonListFooter({
+  visibleCount,
+  totalCount,
+  kind,
+  filtered = false,
+}: SalePersonListFooterProps) {
+  const countLabel = formatSalePersonListCount(visibleCount, {
+    kind,
+    totalCount,
+    filtered,
+  });
+
+  return (
+    <div className={flowPersonListFooterClass}>
+      <span className={flowPersonListCountClass}>{countLabel}</span>
     </div>
   );
 }

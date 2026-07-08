@@ -1,12 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
-import { APP_SESSION_COOKIE, APP_SESSION_COOKIE_MAX_AGE, createAppSessionCookieValue } from "@/lib/auth/app-session-cookie";
-import { isPlatformOwnerEmail, platformOwnerOrganizationName } from "@/lib/auth/platform-owner";
+import { isPublicSignupEnabled } from "@/lib/auth/public-signup";
 import { resolvePostLoginRedirect } from "@/lib/organizations/kind";
 import { PHONE_RECOVERY_ENABLED } from "@/lib/phone/features";
 import { isValidNationalPhone } from "@/lib/phone/countries";
@@ -17,6 +15,12 @@ import {
   restoreAuthPrimaryPhone,
 } from "@/lib/phone/profile-phones";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { deleteAuthUserSafely } from "@/lib/security/auth-cleanup";
+import {
+  enforceLoginRateLimit,
+  isRateLimitError,
+} from "@/lib/security/api-guards";
+import { headers } from "next/headers";
 
 const PHONE_RECOVERY_DISABLED_MESSAGE =
   "Recuperación por celular estará disponible pronto. Por ahora contacta al administrador de tu paquetería.";
@@ -45,6 +49,15 @@ export async function signInAction(
     return fail("Configura Supabase en .env.local");
   }
 
+  try {
+    await enforceLoginRateLimit(await headers(), email);
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      return fail(error.message);
+    }
+    return fail("Credenciales invalidas");
+  }
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return fail("No se pudo iniciar Supabase");
@@ -53,7 +66,13 @@ export async function signInAction(
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error || !data.user) {
-    return fail(error?.message || "Credenciales invalidas");
+    if (error) {
+      console.error("[signInAction] supabase login failed", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+    return fail("Credenciales invalidas");
   }
 
   const isPlatformAdmin = await loadIsPlatformAdmin(data.user.id);
@@ -67,6 +86,10 @@ export async function signUpAction(
   fullName?: string,
   nextPath?: string | null,
 ): Promise<ActionResult<{ redirectTo: string }>> {
+  if (!isPublicSignupEnabled()) {
+    return fail("El registro publico no esta disponible. Contacta al administrador.");
+  }
+
   if (!isSupabaseConfigured()) {
     return fail("Configura Supabase en .env.local");
   }
@@ -88,43 +111,28 @@ export async function signUpAction(
     return fail(signUpError?.message || "No se pudo crear el usuario");
   }
 
-  const ownerSignup = isPlatformOwnerEmail(email);
-  const orgName = ownerSignup
-    ? platformOwnerOrganizationName()
-    : organizationName.trim() || "Mi empresa";
-  const orgKind = ownerSignup ? "platform" : "client";
+  const orgName = organizationName.trim() || "Mi empresa";
 
   const { error: bootstrapError } = await admin.rpc("bootstrap_organization", {
     org_name: orgName,
     owner_id: signUpData.user.id,
     owner_email: email,
     owner_name: fullName?.trim() || null,
-    org_kind: orgKind,
+    org_kind: "client",
   });
 
   if (bootstrapError) {
+    await deleteAuthUserSafely(admin, signUpData.user.id);
     return fail(bootstrapError.message);
   }
 
-  let isPlatformAdmin = false;
-  if (ownerSignup) {
-    await admin.rpc("grant_platform_admin", { target_user_id: signUpData.user.id });
-    isPlatformAdmin = true;
-  }
+  const isPlatformAdmin = false;
 
   const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
   if (signInError) {
     return fail(signInError.message);
   }
-
-  const cookieStore = await cookies();
-  cookieStore.set(APP_SESSION_COOKIE, createAppSessionCookieValue(signUpData.user.id), {
-    httpOnly: true,
-    path: "/",
-    sameSite: "lax",
-    maxAge: APP_SESSION_COOKIE_MAX_AGE,
-  });
 
   return ok({ redirectTo: resolvePostLoginRedirect({ isPlatformAdmin, nextPath }) });
 }
@@ -134,8 +142,6 @@ export async function signOutAction() {
   if (supabase) {
     await supabase.auth.signOut();
   }
-  const cookieStore = await cookies();
-  cookieStore.delete(APP_SESSION_COOKIE);
   redirect("/login");
 }
 

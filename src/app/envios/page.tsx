@@ -31,6 +31,7 @@ export default async function EnviosPage() {
 
   return (
     <EnviosClient
+      mode="tracking"
       initialShipments={shipmentsResult.ok ? shipmentsResult.data : []}
       initialRouteMembers={membersResult.ok ? membersResult.data : []}
       initialSalesOwners={ownersResult.ok ? ownersResult.data : []}

@@ -28,9 +28,11 @@
     "db:seed:mx-recipients": "node scripts/seed-scgs-mexico-recipients.mjs",
     "db:seed:mx-products": "node scripts/seed-scgs-mexico-products.mjs",
     "db:seed:demo-catalog": "node scripts/seed-scgs-demo-catalog.mjs",
+    "db:seed:more-senders": "node scripts/seed-scgs-more-senders.mjs",
     "db:seed:scgs-demo": "node scripts/seed-scgs-senders.mjs && node scripts/add-inventory-box-sizes.mjs && node scripts/seed-scgs-demo-catalog.mjs",
     "db:seed:logistics-workday": "node scripts/seed-logistics-workday.mjs",
     "db:seed:invoice-scenarios": "node scripts/seed-invoice-scenarios.mjs",
+    "db:seed:envios-pending": "node scripts/seed-envios-pending.mjs",
     "db:reset:catalog": "node scripts/reset-scgs-catalog.mjs",
     "db:reset:scgs": "node scripts/reset-scgs-demo-data.mjs",
     "db:clear:sales": "node scripts/clear-sales-history.mjs",
@@ -40,7 +42,7 @@
     "supabase:status": "npx supabase status",
     "env:local": "powershell -ExecutionPolicy Bypass -File scripts/use-local-env.ps1",
     "codegen:dial-codes": "node scripts/generate-dial-codes.mjs",
-    "test": "tsx --test src/lib/**/*.test.ts",
+    "test": "tsx --test src/lib/**/*.test.ts src/components/**/*.test.ts src/app/actions/**/*.test.ts && node --test scripts/lib/*.test.mjs tests/integration/*.test.mjs",
     "test:platform-auth": "node scripts/test-platform-auth-flow.mjs",
     "test:sms": "node scripts/test-sms-flow.mjs"
   },
@@ -48,7 +50,7 @@
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.106.2",
     "lucide-react": "^1.16.0",
-    "next": "16.2.6",
+    "next": "16.2.10",
     "qrcode.react": "^4.2.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
@@ -59,10 +61,13 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.10",
     "pg": "^8.21.0",
     "tailwindcss": "^4",
     "tsx": "^4.20.3",
     "typescript": "^5"
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
   }
 }

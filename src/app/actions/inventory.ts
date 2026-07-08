@@ -25,6 +25,8 @@ import {
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
 import type { CategoryConfig } from "@/lib/inventory-tree";
+import { InvalidQuantityError, readPositiveQty } from "@/lib/security/qty";
+import { recordInventoryMovementAtomic } from "@/lib/security/inventory-movement";
 import {
   collectCategoryTreeLeaves,
   mergeTreeIntoInventoryItems,
@@ -478,10 +480,14 @@ export async function deductStockForBoxSaleAction(input: {
 }): Promise<ActionResult<InventoryMovement | null>> {
   try {
     const session = await requireAppSession();
+    if (!sessionHasPermission(session, "inventory.adjust")) {
+      return fail("No tienes permiso para ajustar inventario");
+    }
+
     const supabase = await createScopedSupabase(session);
 
     if (!supabase) {
-      return ok(null);
+      return fail("Supabase no configurado");
     }
 
     let warehouseId = input.warehouseId;
@@ -501,6 +507,10 @@ export async function deductStockForBoxSaleAction(input: {
 
     if (!warehouseId) {
       return fail("No hay bodega activa");
+    }
+
+    if (!canAccessWarehouse(session, warehouseId)) {
+      return fail("No tienes acceso a esta bodega");
     }
 
     const normalizedBox = input.boxLabel
@@ -611,49 +621,23 @@ export async function recordInventoryMovementAction(input: {
       return fail("Supabase no configurado");
     }
 
-    const { data: stockRow, error: stockError } = await supabase
-      .from("inventory_stock")
-      .select("id, stock, reserved")
-      .eq("warehouse_id", input.warehouseId)
-      .eq("item_id", input.itemId)
-      .maybeSingle();
+    const qty = readPositiveQty(input.qty);
 
-    if (stockError || !stockRow) {
-      return fail("Stock no encontrado para este item");
-    }
-
-    let nextStock = Number(stockRow.stock);
-
-    if (input.type === "entrada") {
-      nextStock += input.qty;
-    } else if (input.type === "salida") {
-      nextStock = Math.max(0, nextStock - input.qty);
-    } else {
-      nextStock = input.qty;
-    }
-
-    const { error: updateError } = await supabase
-      .from("inventory_stock")
-      .update({ stock: nextStock })
-      .eq("id", stockRow.id);
-
-    if (updateError) {
-      return fail(updateError.message);
-    }
+    const result = await recordInventoryMovementAtomic(supabase, {
+      organizationId: session.organizationId,
+      warehouseId: input.warehouseId,
+      itemId: input.itemId,
+      itemName: input.itemName,
+      type: input.type,
+      qty,
+      note: input.note,
+      createdBy: session.userId,
+    });
 
     const { data: movement, error: movError } = await supabase
       .from("inventory_movements")
-      .insert({
-        organization_id: session.organizationId,
-        warehouse_id: input.warehouseId,
-        item_id: input.itemId,
-        item_name: input.itemName,
-        type: input.type,
-        qty: input.qty,
-        note: input.note || "",
-        created_by: session.userId,
-      })
       .select(MOVEMENT_SELECT)
+      .eq("id", result.movementId)
       .single();
 
     if (movError || !movement) {
@@ -662,6 +646,9 @@ export async function recordInventoryMovementAction(input: {
 
     return ok(movementsFromDb([movement])[0]);
   } catch (error) {
+    if (error instanceof InvalidQuantityError) {
+      return fail(error.message);
+    }
     return fail(actionErrorMessage(error));
   }
 }
@@ -983,38 +970,23 @@ export async function recordInventoryMovementForLeafAction(input: {
       stockRow = insertedStock;
     }
 
-    let nextStock = Number(stockRow.stock || 0);
+    const qty = readPositiveQty(input.qty);
 
-    if (input.type === "entrada") {
-      nextStock += input.qty;
-    } else if (input.type === "salida") {
-      nextStock = Math.max(0, nextStock - input.qty);
-    } else {
-      nextStock = input.qty;
-    }
-
-    const { error: updateError } = await supabase
-      .from("inventory_stock")
-      .update({ stock: nextStock })
-      .eq("id", stockRow.id);
-
-    if (updateError) {
-      return fail(updateError.message);
-    }
+    const result = await recordInventoryMovementAtomic(supabase, {
+      organizationId: session.organizationId,
+      warehouseId: input.warehouseId,
+      itemId: itemRow.id,
+      itemName: itemRow.name || itemName,
+      type: input.type,
+      qty,
+      note: input.note,
+      createdBy: session.userId,
+    });
 
     const { data: movement, error: movError } = await supabase
       .from("inventory_movements")
-      .insert({
-        organization_id: session.organizationId,
-        warehouse_id: input.warehouseId,
-        item_id: itemRow.id,
-        item_name: itemRow.name || itemName,
-        type: input.type,
-        qty: input.qty,
-        note: input.note || "",
-        created_by: session.userId,
-      })
       .select(MOVEMENT_SELECT)
+      .eq("id", result.movementId)
       .single();
 
     if (movError || !movement) {
@@ -1029,7 +1001,7 @@ export async function recordInventoryMovementForLeafAction(input: {
         kind: itemRow.kind || kind,
         subcategory: itemRow.subcategory || undefined,
         size: itemRow.size || undefined,
-        stock: nextStock,
+        stock: result.stock,
         reserved: Number(stockRow.reserved || 0),
         assigned: Number(stockRow.assigned ?? 0),
         unavailable: Number(stockRow.unavailable ?? 0),
@@ -1040,6 +1012,9 @@ export async function recordInventoryMovementForLeafAction(input: {
       movement: movementsFromDb([movement])[0],
     });
   } catch (error) {
+    if (error instanceof InvalidQuantityError) {
+      return fail(error.message);
+    }
     return fail(actionErrorMessage(error));
   }
 }

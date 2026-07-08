@@ -3,8 +3,12 @@ import { describe, it } from "node:test";
 import {
   buildConductorPreviewPickerOptions,
   canPreviewConductorTasks,
+  conductorAdminAuditMetadata,
   conductorPreviewSearchParam,
   conductorTasksNavLabel,
+  formatConductorAdminActionNote,
+  formatConductorAdminActorDescription,
+  isConductorAdminActing,
   isConductorRole,
   resolveConductorTasksView,
 } from "@/lib/conductor-tareas-view";
@@ -89,5 +93,48 @@ describe("conductor tareas view", () => {
   it("serializes preview driver into search params", () => {
     assert.equal(conductorPreviewSearchParam("driver-2"), "conductor=driver-2");
     assert.equal(conductorPreviewSearchParam(null), "");
+  });
+
+  it("flags when admin acts for a conductor", () => {
+    assert.equal(
+      isConductorAdminActing({
+        roleSlug: "administrador",
+        actorUserId: "admin-1",
+        effectiveDriverId: "driver-1",
+      }),
+      true,
+    );
+    assert.equal(
+      isConductorAdminActing({
+        roleSlug: "conductor",
+        actorUserId: "driver-1",
+        effectiveDriverId: "driver-1",
+      }),
+      false,
+    );
+  });
+
+  it("tags admin notes and audit metadata", () => {
+    const audit = {
+      roleSlug: "administrador",
+      actorUserId: "admin-1",
+      actorName: "Pablo Admin",
+      effectiveDriverId: "driver-1",
+    };
+
+    assert.equal(
+      formatConductorAdminActionNote("Dejadas en puerta", audit),
+      "[Admin: Pablo Admin] Dejadas en puerta",
+    );
+    assert.deepEqual(conductorAdminAuditMetadata(audit), {
+      actedByAdmin: true,
+      actorUserId: "admin-1",
+      actorName: "Pablo Admin",
+      assignedDriverId: "driver-1",
+    });
+    assert.equal(
+      formatConductorAdminActorDescription(audit, "conductor"),
+      "admin Pablo Admin por conductor",
+    );
   });
 });

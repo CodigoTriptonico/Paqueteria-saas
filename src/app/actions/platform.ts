@@ -13,6 +13,7 @@ import { assertPhoneAvailable } from "@/lib/phone/profile-phone";
 import { syncProfileRecoveryPhones } from "@/lib/phone/profile-phones";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { parsePlanLimit, type OrganizationSettings } from "@/lib/organizations/settings";
+import { deleteAuthUserSafely } from "@/lib/security/auth-cleanup";
 
 export async function listAllOrganizationsAction(): Promise<ActionResult<PlatformOrganizationRow[]>> {
   try {
@@ -162,6 +163,7 @@ export async function createOrganizationAction(input: {
     });
 
     if (bootstrapError || !orgId) {
+      await deleteAuthUserSafely(admin, created.user.id);
       return fail(bootstrapError?.message || "No se pudo crear la organización");
     }
 
@@ -480,6 +482,7 @@ export async function createOrgUserAsPlatformAdminAction(input: {
     });
 
     if (profileError) {
+      await deleteAuthUserSafely(admin, created.user.id);
       return fail(profileError.message);
     }
 
