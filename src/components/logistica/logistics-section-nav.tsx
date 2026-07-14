@@ -26,7 +26,7 @@ export function LogisticsSectionNav({
   extraActions,
 }: LogisticsSectionNavProps) {
   return (
-    <div className={`flex shrink-0 flex-wrap items-center gap-1.5 ${className}`.trim()}>
+    <div className={`flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:w-auto ${className}`.trim()}>
       <Link href="/logistica" className={sectionButtonClass(active, "tasks")}>
         <ClipboardList className="h-3.5 w-3.5 shrink-0" aria-hidden />
         Tareas

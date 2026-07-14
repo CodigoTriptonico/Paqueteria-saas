@@ -52,7 +52,7 @@ export function TimePickerCalendar({ view, onChange, onComplete }: TimePickerCal
   return (
     <div
       data-time-picker-panel
-      className="w-[12.75rem] overflow-hidden rounded-lg border border-black bg-surface-card shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+      className="w-full max-w-[12.75rem] overflow-hidden rounded-lg border border-black bg-surface-card shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
       onPointerDown={(event) => event.stopPropagation()}
     >
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 border-b border-black bg-[#1a221f] p-2">

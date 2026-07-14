@@ -47,7 +47,7 @@ export function DatePickerCalendar({
   return (
     <div
       data-date-picker-panel
-      className="w-[17.5rem] overflow-hidden rounded-lg border border-black bg-surface-card shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+      className="w-full max-w-[17.5rem] overflow-hidden rounded-lg border border-black bg-surface-card shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
       onPointerDown={(event) => event.stopPropagation()}
     >
       <div className="flex items-center justify-between gap-2 border-b border-black bg-[#1a221f] px-2 py-2">

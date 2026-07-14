@@ -298,7 +298,7 @@ export function EstadisticasVentasPanel({
         <div className="rounded-xl border border-black bg-surface-card-header p-2">
           <div className="flex flex-wrap items-center gap-2">
             <div
-              className="flex h-9 shrink-0 divide-x divide-black overflow-hidden rounded-lg border border-black bg-surface-inset"
+              className="grid h-10 w-full grid-cols-4 divide-x divide-black overflow-hidden rounded-lg border border-black bg-surface-inset sm:w-auto"
               role="group"
               aria-label="Tipo de periodo"
             >
@@ -309,7 +309,7 @@ export function EstadisticasVentasPanel({
                   disabled={isPending}
                   onClick={() => changeGranularity(option.value)}
                   aria-pressed={granularity === option.value}
-                  className={`min-w-[4.5rem] px-3 text-xs font-black transition disabled:opacity-50 ${
+                  className={`min-w-0 whitespace-nowrap px-1 text-[11px] font-black transition disabled:opacity-50 sm:px-3 sm:text-xs ${
                     granularity === option.value
                       ? "bg-emerald-400 text-slate-950"
                       : "text-slate-300 hover:bg-surface-card-hover hover:text-[#f8fafc]"

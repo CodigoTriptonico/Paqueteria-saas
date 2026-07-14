@@ -35,4 +35,15 @@ describe("responsive layout eval", () => {
     assert.match(report, /<small className="text-\[9px\][^"]*sm:hidden">Extra<\/small>/);
     assert.match(report, /<small className="text-\[9px\][^"]*sm:hidden">Total<\/small>/);
   });
+
+  it("does not treat clipped navigation and date picker width as a mobile layout strategy", () => {
+    const nav = source("src/components/logistica/logistics-section-nav.tsx");
+    const metrics = source("src/components/estadisticas/ventas-panel.tsx");
+    const datePicker = source("src/components/date-picker-calendar.tsx");
+
+    assert.match(nav, /w-full min-w-0 flex-wrap/);
+    assert.match(metrics, /grid-cols-4/);
+    assert.doesNotMatch(metrics, /min-w-\[4\.5rem\] px-3/);
+    assert.match(datePicker, /max-w-\[17\.5rem\]/);
+  });
 });
