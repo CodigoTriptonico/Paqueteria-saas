@@ -50,7 +50,7 @@ describe("conductor tareas shell eval", () => {
   });
 
   it("wires admin preview picker into the conductor tasks client", () => {
-    assert.match(conductorClientSource, /Vista admin/);
+    assert.match(conductorClientSource, />Admin</);
     assert.match(conductorClientSource, /InlineSearchPicker/);
     assert.match(conductorClientSource, /params\.set\("conductor"/);
     assert.doesNotMatch(conductorClientSource, /conductorTaskTypeLabel/);
@@ -83,18 +83,32 @@ describe("conductor tareas shell eval", () => {
   });
 
   it("keeps the driver task controls in compact operational bars", () => {
-    assert.match(conductorClientSource, /min-h-10 flex-wrap items-center/);
-    assert.match(conductorClientSource, /flex flex-wrap items-center gap-1\.5/);
-    assert.match(conductorClientSource, /className="flex h-9 min-w-0 overflow-hidden rounded-md border border-black" role="group"/);
-    assert.match(conductorClientSource, /className="flex h-9 min-w-0 overflow-hidden rounded-md border border-black bg-surface-inset" role="tablist"/);
+    assert.match(conductorClientSource, /<section className="mb-3 flex flex-wrap items-center gap-2/);
+    assert.match(conductorClientSource, /className="flex h-10 min-w-0 overflow-hidden rounded-md border border-black" role="group"/);
+    assert.match(conductorClientSource, /className="flex h-10 min-w-0 overflow-hidden rounded-md border border-black bg-surface-inset" role="tablist"/);
+    assert.doesNotMatch(conductorClientSource, /mb-2 flex min-h-10 flex-wrap items-center/);
     assert.doesNotMatch(conductorClientSource, /min-h-14/);
   });
 
   it("keeps the admin explanation behind a compact disclosure", () => {
-    assert.match(conductorClientSource, /<details className="group relative shrink-0">/);
-    assert.match(conductorClientSource, /aria-label="Ver detalle de vista administrativa"/);
+    assert.match(conductorClientSource, /function CompactInfoDisclosure/);
+    assert.match(conductorClientSource, /ariaLabel="Ver detalle de vista administrativa"/);
     assert.match(conductorClientSource, /Vista del conductor\. Puedes completar tareas en su nombre/);
     assert.doesNotMatch(conductorClientSource, /Actúas como conductor y queda registrado como admin/);
+  });
+
+  it("keeps secondary explanations hidden without hiding operational warnings", () => {
+    assert.match(conductorClientSource, /ariaLabel="Ver más información"/);
+    assert.match(conductorClientSource, /min-h-\[8rem\]/);
+    assert.match(conductorClientSource, />\s*Cargar cajas\s*</);
+    assert.doesNotMatch(conductorClientSource, /min-h-\[14rem\]/);
+  });
+
+  it("uses readable labels for low-tech driver actions", () => {
+    assert.match(conductorClientSource, />\s*Llamar\s*</);
+    assert.match(conductorClientSource, />\s*Reintentar\s*</);
+    assert.match(conductorClientSource, /<XCircle className="h-4 w-4" \/>\s+No se pudo/);
+    assert.doesNotMatch(conductorClientSource, /className="grid gap-1 text-\[10px\] font-black uppercase/);
   });
 
   it("keeps the chosen box filter when switching task lists", () => {

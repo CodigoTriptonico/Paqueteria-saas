@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Camera,
@@ -33,7 +33,6 @@ import {
   Panel,
   primaryButtonClass,
   secondaryButtonClass,
-  textMutedClass,
 } from "@/components/ui-blocks";
 import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provider";
 import { useNotify } from "@/hooks/use-notify";
@@ -87,6 +86,40 @@ type ConductorTaskItemProps = {
   onReactivate: (task: ConductorDriverTask) => void;
 };
 
+function CompactInfoDisclosure({
+  ariaLabel,
+  children,
+  align = "left",
+  tone = "slate",
+}: {
+  ariaLabel: string;
+  children: ReactNode;
+  align?: "left" | "right";
+  tone?: "sky" | "slate";
+}) {
+  return (
+    <details className="group relative shrink-0">
+      <summary
+        aria-label={ariaLabel}
+        className={`flex h-6 w-6 cursor-pointer list-none items-center justify-center rounded-full border text-xs font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden ${
+          tone === "sky"
+            ? "border-sky-500/60 text-sky-200 hover:border-sky-300 hover:bg-sky-900/60 hover:text-white focus-visible:outline-sky-300"
+            : "border-slate-600 text-slate-300 hover:border-slate-400 hover:bg-surface-inset hover:text-white focus-visible:outline-slate-300"
+        }`}
+      >
+        !
+      </summary>
+      <div
+        className={`absolute top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-black bg-surface-panel px-3 py-2.5 text-sm font-bold leading-snug text-slate-200 shadow-xl ${
+          align === "right" ? "right-0" : "left-0"
+        }`}
+      >
+        {children}
+      </div>
+    </details>
+  );
+}
+
 function ConductorTaskRecipientPeek({
   task,
   className = "",
@@ -105,11 +138,9 @@ function ConductorTaskRecipientPeek({
   }
 
   return (
-    <details className={`group ${className}`}>
-      <summary className="cursor-pointer list-none rounded-md border border-slate-700/80 bg-slate-900/60 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-400 transition hover:border-slate-600 hover:text-slate-200 [&::-webkit-details-marker]:hidden">
-        Destinatario
-      </summary>
-      <div className="absolute right-0 z-10 mt-1 min-w-[10rem] max-w-[14rem] rounded-md border border-black bg-surface-panel px-2.5 py-1.5 text-left text-[11px] font-bold leading-snug text-slate-300 shadow-lg">
+    <div className={className}>
+      <CompactInfoDisclosure ariaLabel="Ver destinatario" align="right">
+        <p className="mb-1 text-xs font-black uppercase tracking-wide text-slate-500">Destinatario</p>
         {task.recipientName ? <p className="font-black text-slate-100">{task.recipientName}</p> : null}
         {task.recipientCity || task.recipientCountry ? (
           <p className="text-slate-400">
@@ -121,8 +152,8 @@ function ConductorTaskRecipientPeek({
             {task.recipientPhone}
           </a>
         ) : null}
-      </div>
-    </details>
+      </CompactInfoDisclosure>
+    </div>
   );
 }
 
@@ -136,7 +167,7 @@ function ConductorTaskSenderSummary({
   if (layout === "card") {
     return (
       <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Remitente</p>
+        <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">Remitente</p>
         <p className="truncate text-sm font-black text-slate-100">{task.senderName}</p>
         {task.senderPhone ? (
           <p className="mt-0.5 inline-flex max-w-full items-center justify-center gap-1 truncate text-[11px] font-black text-slate-400">
@@ -150,7 +181,7 @@ function ConductorTaskSenderSummary({
 
   return (
     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-      <span className="text-[10px] font-black uppercase text-slate-500">Remitente</span>
+      <span className="text-[11px] font-black uppercase text-slate-500">Remitente</span>
       <span className="truncate text-sm font-bold text-slate-100">{task.senderName}</span>
       {task.senderPhone ? (
         <span className="inline-flex max-w-full items-center gap-1 truncate text-[11px] font-bold text-slate-400">
@@ -207,7 +238,7 @@ function ConductorTaskCard({
       <div className="flex flex-1 flex-col gap-3 p-3">
         {task.addressLine ? (
           <div className="grid gap-2">
-            <p className="line-clamp-2 rounded-md border border-black bg-surface-inset px-2 py-1 text-xs font-bold leading-snug text-slate-300">
+            <p className="line-clamp-2 rounded-md border border-black bg-surface-inset px-2.5 py-1.5 text-sm font-bold leading-snug text-slate-300">
               <MapPin className="mr-1 inline h-3.5 w-3.5 shrink-0 text-slate-500" />
               {task.addressLine}
               {task.zoneLabel ? <span className="text-slate-500"> · {task.zoneLabel}</span> : null}
@@ -228,7 +259,7 @@ function ConductorTaskCard({
                   }
                   target="_blank"
                   rel="noreferrer"
-                  className={`${secondaryButtonClass} h-8 px-2.5 text-[11px]`}
+                  className={`${secondaryButtonClass} h-9 px-3 text-xs`}
                 >
                   Google Maps
                 </a>
@@ -240,7 +271,7 @@ function ConductorTaskCard({
                       label: task.addressLine,
                     })!.apple
                   }
-                  className={`${secondaryButtonClass} h-8 px-2.5 text-[11px]`}
+                  className={`${secondaryButtonClass} h-9 px-3 text-xs`}
                 >
                   Apple Maps
                 </a>
@@ -295,7 +326,7 @@ function ConductorTaskCard({
             {task.status === "cancelled" ? (
               <button
                 type="button"
-                className={`${secondaryButtonClass} h-11 text-xs`}
+                className={`${secondaryButtonClass} h-11 text-sm`}
                 onClick={() => onReactivate(task)}
               >
                 <RotateCcw className="h-4 w-4" />
@@ -307,7 +338,7 @@ function ConductorTaskCard({
           <div className="grid gap-2 sm:grid-cols-2">
             <button
               type="button"
-              className={`${primaryButtonClass} h-11 text-xs disabled:cursor-not-allowed disabled:opacity-40`}
+              className={`${primaryButtonClass} h-11 text-sm disabled:cursor-not-allowed disabled:opacity-40`}
               disabled={successDisabled}
               onClick={() => onOpenDialog(task, "completed")}
             >
@@ -316,7 +347,7 @@ function ConductorTaskCard({
             </button>
             <button
               type="button"
-              className={`${secondaryButtonClass} h-11 text-xs disabled:cursor-not-allowed disabled:opacity-40`}
+              className={`${secondaryButtonClass} h-11 text-sm disabled:cursor-not-allowed disabled:opacity-40`}
               onClick={() => onOpenDialog(task, "failed")}
             >
               <XCircle className="h-4 w-4" />
@@ -365,7 +396,7 @@ function ConductorTaskRow({
           <ConductorTaskRecipientPeek task={task} className="relative shrink-0" />
         </div>
         {task.addressLine ? (
-          <p className="mt-0.5 line-clamp-1 text-xs font-bold text-slate-400">
+          <p className="mt-1 line-clamp-1 text-sm font-bold text-slate-300">
             <MapPin className="mr-1 inline h-3 w-3 shrink-0 text-slate-500" />
             {task.addressLine}
             {task.zoneLabel ? <span className="text-slate-500"> · {task.zoneLabel}</span> : null}
@@ -388,14 +419,15 @@ function ConductorTaskRow({
             href={mapsUrl.google}
             target="_blank"
             rel="noreferrer"
-            className={`${secondaryButtonClass} h-8 px-2 text-[10px]`}
+            className={`${secondaryButtonClass} h-9 px-3 text-xs`}
           >
             Maps
           </a>
         ) : null}
         {task.senderPhone ? (
-          <a className={`${secondaryButtonClass} h-8 px-2 text-[10px]`} href={`tel:${task.senderPhone}`}>
-            <Phone className="h-3.5 w-3.5" />
+          <a className={`${secondaryButtonClass} h-9 px-3 text-xs`} href={`tel:${task.senderPhone}`}>
+            <Phone className="h-4 w-4" />
+            Llamar
           </a>
         ) : null}
         {isCompletedView ? (
@@ -407,17 +439,18 @@ function ConductorTaskRow({
             </span>
             <Link
               href={buildLogisticaShipmentDeepLink(task.shipmentCode)}
-              className={`${secondaryButtonClass} h-8 px-2 text-[10px]`}
+              className={`${secondaryButtonClass} h-9 px-3 text-xs`}
             >
-              Logistica
+              Logística
             </Link>
             {task.status === "cancelled" ? (
               <button
                 type="button"
-                className={`${secondaryButtonClass} h-8 px-2 text-[10px]`}
+                className={`${secondaryButtonClass} h-9 px-3 text-xs`}
                 onClick={() => onReactivate(task)}
               >
-                <RotateCcw className="h-3.5 w-3.5" />
+                <RotateCcw className="h-4 w-4" />
+                Reintentar
               </button>
             ) : null}
           </>
@@ -425,19 +458,20 @@ function ConductorTaskRow({
           <>
             <button
               type="button"
-              className={`${primaryButtonClass} h-8 px-2.5 text-[10px] disabled:cursor-not-allowed disabled:opacity-40`}
+              className={`${primaryButtonClass} h-9 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-40`}
               disabled={successDisabled}
               onClick={() => onOpenDialog(task, "completed")}
             >
-              <PackageCheck className="h-3.5 w-3.5" />
+              <PackageCheck className="h-4 w-4" />
               Listo
             </button>
             <button
               type="button"
-              className={`${secondaryButtonClass} h-8 px-2.5 text-[10px] disabled:cursor-not-allowed disabled:opacity-40`}
+              className={`${secondaryButtonClass} h-9 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-40`}
               onClick={() => onOpenDialog(task, "failed")}
             >
-              <XCircle className="h-3.5 w-3.5" />
+              <XCircle className="h-4 w-4" />
+              No se pudo
             </button>
           </>
         )}
@@ -715,14 +749,14 @@ export function ConductorTareasClient({
 
   const emptyDetail =
     listMode === "completed"
-      ? "Aqui veras las cajas que ya marcaste como listas o no se pudieron."
+      ? "Aquí verás las cajas que marcaste como listas o que no se pudieron entregar."
       : canPreview
         ? effectiveDriverId
           ? `Vista de ${effectiveDriverLabel}. Puedes completar tareas en su nombre; queda registrado como admin.`
-          : "Crea o activa conductores en Logistica para previsualizar su vista."
+          : "Crea o activa conductores en Logística para previsualizar su vista."
         : taskFilter === "deliver_empty_box"
-          ? "Aqui veras entregas de cajas vacias y paradas de tu ruta del dia."
-          : "Aqui veras recogidas de cajas llenas y paradas de tu ruta del dia.";
+          ? "Aquí verás entregas de cajas vacías y paradas de tu ruta del día."
+          : "Aquí verás recogidas de cajas llenas y paradas de tu ruta del día.";
 
   const shortageTotal = initialTruckSummary?.shortageTotal ?? 0;
   const routeBlocked = !canPreview && listMode === "pending" && shortageTotal > 0;
@@ -735,56 +769,48 @@ export function ConductorTareasClient({
       className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden"
       contentClassName="flex flex-col p-4 sm:p-5 lg:min-h-0 lg:flex-1"
     >
-        {canPreview ? (
-          <div className="mb-2 flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-sky-700/50 bg-sky-950/30 px-3 py-1.5">
-            <p className="shrink-0 text-[10px] font-black uppercase tracking-[0.12em] text-sky-300">Vista admin</p>
-            <details className="group relative shrink-0">
-              <summary
-                aria-label="Ver detalle de vista administrativa"
-                className="flex h-5 w-5 cursor-pointer list-none items-center justify-center rounded-full border border-sky-500/60 text-[11px] font-black text-sky-200 transition hover:border-sky-300 hover:bg-sky-900/60 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300 [&::-webkit-details-marker]:hidden"
-              >
-                !
-              </summary>
-              <p className="absolute left-0 top-full z-20 mt-2 w-72 rounded-md border border-black bg-surface-panel px-3 py-2 text-xs font-bold leading-snug text-slate-200 shadow-lg">
+        <section className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-black bg-surface-card-header p-2 shadow-[0_6px_18px_rgba(0,0,0,0.12)]">
+          {canPreview ? (
+            <div className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-sky-800/70 bg-sky-950/25 pl-2">
+              <p className="shrink-0 text-xs font-black uppercase tracking-wide text-sky-300">Admin</p>
+              <CompactInfoDisclosure ariaLabel="Ver detalle de vista administrativa" tone="sky">
                 Vista del conductor. Puedes completar tareas en su nombre; queda registrado como admin.
-              </p>
-            </details>
-            <InlineSearchPicker
-              value={previewDriverId || ""}
-              onChange={handlePreviewDriverChange}
-              options={previewOptions}
-              placeholder="Elegir conductor"
-              searchPlaceholder="Buscar conductor"
-              emptyLabel="Sin conductores"
-              ariaLabel="Conductor a previsualizar"
-              minWidthClass="min-w-[11rem] sm:min-w-[14rem]"
-              disabled={!previewOptions.length}
-            />
-          </div>
-        ) : null}
+              </CompactInfoDisclosure>
+              <InlineSearchPicker
+                value={previewDriverId || ""}
+                onChange={handlePreviewDriverChange}
+                options={previewOptions}
+                placeholder="Conductor"
+                searchPlaceholder="Buscar conductor"
+                emptyLabel="Sin conductores"
+                ariaLabel="Conductor a previsualizar"
+                minWidthClass="min-w-[11rem] sm:min-w-[14rem]"
+                disabled={!previewOptions.length}
+              />
+            </div>
+          ) : (
+            <div className="flex h-10 min-w-0 items-center gap-2 px-1.5">
+              <p className="shrink-0 text-xs font-black uppercase tracking-wide text-slate-500">Ruta</p>
+              <h1 className="max-w-48 truncate text-sm font-black tracking-tight text-[#f8fafc]">{effectiveDriverLabel}</h1>
+            </div>
+          )}
 
-        <section className="mb-3 flex flex-wrap items-center gap-1.5 rounded-lg border border-black bg-surface-card-header p-1.5 shadow-[0_6px_18px_rgba(0,0,0,0.12)]">
-          <div className="flex h-9 min-w-0 items-baseline gap-1.5 px-1.5">
-            <p className="shrink-0 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Ruta</p>
-            <h1 className="max-w-48 truncate text-sm font-black tracking-tight text-[#f8fafc]">{effectiveDriverLabel}</h1>
-          </div>
-
-          <div className="flex h-9 min-w-0 overflow-hidden rounded-md border border-black">
+          <div className="flex h-10 min-w-0 overflow-hidden rounded-md border border-black">
             <div className="flex min-w-0 items-center gap-1.5 bg-surface-card px-2">
-              <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Faltan</p>
+              <p className="text-xs font-black text-slate-400">Faltan</p>
               <p className="text-base font-black tabular-nums text-[#f8fafc]">{selectedPendingBoxes}</p>
             </div>
             <div className="flex min-w-0 items-center gap-1.5 border-l border-black bg-emerald-950/25 px-2">
-              <p className="text-[10px] font-black uppercase tracking-wide text-emerald-300/80">Listas</p>
+              <p className="text-xs font-black text-emerald-300">Listas</p>
               <p className="text-base font-black tabular-nums text-emerald-200">{completedOutcomeSummary.successBoxes}</p>
             </div>
             <div className="flex min-w-0 items-center gap-1.5 border-l border-black bg-rose-950/25 px-2">
-              <p className="text-[10px] font-black uppercase tracking-wide text-rose-300/80">No se pudo</p>
+              <p className="text-xs font-black text-rose-300">No se pudo</p>
               <p className="text-base font-black tabular-nums text-rose-200">{completedOutcomeSummary.failedBoxes}</p>
             </div>
           </div>
 
-          <div className="flex h-9 min-w-0 overflow-hidden rounded-md border border-black" role="group" aria-label="Filtrar tareas por tipo">
+          <div className="flex h-10 min-w-0 overflow-hidden rounded-md border border-black" role="group" aria-label="Filtrar tareas por tipo">
             <button
               type="button"
               aria-pressed={taskFilter === "deliver_empty_box"}
@@ -795,7 +821,7 @@ export function ConductorTareasClient({
               }`}
               onClick={() => handleTaskFilterChange("deliver_empty_box")}
             >
-              <span className="truncate text-[10px] font-black uppercase tracking-wide text-emerald-300/80">Por dejar</span>
+              <span className="truncate text-xs font-black text-emerald-200">Por dejar</span>
               <span className="shrink-0 tabular-nums text-emerald-200">{pendingSummary.deliverCount}</span>
               <span className="sr-only">cajas por hacer</span>
             </button>
@@ -809,18 +835,18 @@ export function ConductorTareasClient({
               }`}
               onClick={() => handleTaskFilterChange("pickup_full_box")}
             >
-              <span className="truncate text-[10px] font-black uppercase tracking-wide text-amber-300/80">Por recoger</span>
+              <span className="truncate text-xs font-black text-amber-200">Por recoger</span>
               <span className="shrink-0 tabular-nums text-amber-200">{pendingSummary.pickupCount}</span>
               <span className="sr-only">cajas por hacer</span>
             </button>
           </div>
 
-          <div className="flex h-9 min-w-0 overflow-hidden rounded-md border border-black bg-surface-inset" role="tablist" aria-label="Vista de tareas">
+          <div className="flex h-10 min-w-0 overflow-hidden rounded-md border border-black bg-surface-inset" role="tablist" aria-label="Vista de tareas">
               <button
                 type="button"
                 role="tab"
                 aria-selected={listMode === "pending"}
-                className={`flex min-w-0 items-center justify-center gap-1.5 px-2.5 text-xs font-black transition ${
+                className={`flex min-w-0 items-center justify-center gap-1.5 px-3 text-sm font-black transition ${
                   listMode === "pending"
                     ? "bg-emerald-950/50 text-emerald-100"
                     : "bg-surface-card text-slate-300 hover:bg-surface-inset"
@@ -829,13 +855,13 @@ export function ConductorTareasClient({
               >
                 <ListTodo className="h-4 w-4 shrink-0" />
                 En ruta
-                <span className="rounded-full border border-black bg-surface-inset px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-300">{pendingCount}</span>
+                <span className="rounded-full border border-black bg-surface-inset px-1.5 py-0.5 text-xs font-black tabular-nums text-slate-300">{pendingCount}</span>
               </button>
               <button
                 type="button"
                 role="tab"
                 aria-selected={listMode === "completed"}
-                className={`flex min-w-0 items-center justify-center gap-1.5 border-l border-black px-2.5 text-xs font-black transition ${
+                className={`flex min-w-0 items-center justify-center gap-1.5 border-l border-black px-3 text-sm font-black transition ${
                   listMode === "completed"
                     ? "bg-sky-950/50 text-sky-100"
                     : "bg-surface-card text-slate-300 hover:bg-surface-inset"
@@ -844,24 +870,23 @@ export function ConductorTareasClient({
               >
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 Resueltas
-                <span className="rounded-full border border-black bg-surface-inset px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-300">{completedCount}</span>
+                <span className="rounded-full border border-black bg-surface-inset px-1.5 py-0.5 text-xs font-black tabular-nums text-slate-300">{completedCount}</span>
               </button>
           </div>
         </section>
 
         {routeBlocked ? (
-          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-rose-800/70 bg-rose-950/35 px-4 py-3 sm:flex-row sm:items-center">
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-rose-800/70 bg-rose-950/35 px-3 py-2">
             <AlertTriangle className="h-5 w-5 shrink-0 text-rose-300" />
             <p className="min-w-0 flex-1 text-sm font-black text-rose-100">
-              Tienes {shortageTotal} {shortageTotal === 1 ? "caja vacía" : "cajas vacías"} por subir al camión. Primero, {" "}
-              <Link
-                href="/conductor/inventario-camion"
-                className="text-rose-100 underline decoration-rose-300/80 underline-offset-4 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-200"
-              >
-                ver inventario
-              </Link>{" "}
-              y súbelas al camión.
+              Faltan {shortageTotal} {shortageTotal === 1 ? "caja vacía" : "cajas vacías"} en el camión.
             </p>
+            <Link
+              href="/conductor/inventario-camion"
+              className={`${secondaryButtonClass} h-9 border-rose-800/70 px-3 text-xs text-rose-100 hover:bg-rose-900/40`}
+            >
+              Cargar cajas
+            </Link>
           </div>
         ) : null}
 
@@ -918,12 +943,16 @@ export function ConductorTareasClient({
             )}
           </div>
         ) : (
-          <div className="flex min-h-[14rem] flex-col items-center justify-center rounded-xl border border-dashed border-black/70 bg-surface-card/40 px-6 py-10 text-center">
-            <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl border border-black bg-surface-inset text-slate-300">
-              <ListTodo className="h-7 w-7" />
-            </span>
-            <p className="text-xl font-black text-[#f8fafc]">{emptyMessage}</p>
-            <p className={`mt-2 max-w-md ${textMutedClass}`}>{emptyDetail}</p>
+          <div className="flex min-h-[8rem] items-center justify-center rounded-lg border border-dashed border-black/70 bg-surface-card/40 px-4 py-6 text-center">
+            <div className="flex flex-wrap items-center justify-center gap-2.5">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300">
+                <ListTodo className="h-5 w-5" />
+              </span>
+              <p className="text-lg font-black text-[#f8fafc]">{emptyMessage}</p>
+              <CompactInfoDisclosure ariaLabel="Ver más información">
+                {emptyDetail}
+              </CompactInfoDisclosure>
+            </div>
           </div>
         )}
       </Panel>
@@ -962,8 +991,8 @@ export function ConductorTareasClient({
 
             <div className="grid gap-3 overflow-y-auto p-4">
               {dialog.result === "failed" ? (
-                <label className="grid gap-1 text-[10px] font-black uppercase text-slate-500">
-                  Razon
+                <label className="grid gap-1.5 text-xs font-black text-slate-400">
+                  Razón
                   <select
                     className={`${inputClass} text-sm`}
                     value={failureReason}
@@ -979,7 +1008,7 @@ export function ConductorTareasClient({
                 </label>
               ) : null}
 
-              <label className="grid gap-1 text-[10px] font-black uppercase text-slate-500">
+              <label className="grid gap-1.5 text-xs font-black text-slate-400">
                 Foto {dialog.result === "completed" ? "obligatoria" : "opcional"}
                 <span className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-black bg-surface-inset px-3 py-4 text-center text-sm font-black text-slate-300">
                   <Camera className="mb-2 h-6 w-6 text-slate-500" />
@@ -1005,7 +1034,7 @@ export function ConductorTareasClient({
                     <button
                       type="button"
                       disabled={saving}
-                      className={`${paymentChoice === "expected" ? primaryButtonClass : secondaryButtonClass} min-h-12 text-xs`}
+                      className={`${paymentChoice === "expected" ? primaryButtonClass : secondaryButtonClass} min-h-12 text-sm`}
                       onClick={() => setPaymentChoice("expected")}
                     >
                       Recibí {formatMoneyValue(paymentExpectedAmount)}
@@ -1013,7 +1042,7 @@ export function ConductorTareasClient({
                     <button
                       type="button"
                       disabled={saving}
-                      className={`${paymentChoice === "custom" ? primaryButtonClass : secondaryButtonClass} min-h-12 text-xs`}
+                      className={`${paymentChoice === "custom" ? primaryButtonClass : secondaryButtonClass} min-h-12 text-sm`}
                       onClick={() => setPaymentChoice("custom")}
                     >
                       Recibí otro monto
@@ -1021,14 +1050,14 @@ export function ConductorTareasClient({
                     <button
                       type="button"
                       disabled={saving}
-                      className={`${paymentChoice === "none" ? primaryButtonClass : secondaryButtonClass} min-h-12 text-xs`}
+                      className={`${paymentChoice === "none" ? primaryButtonClass : secondaryButtonClass} min-h-12 text-sm`}
                       onClick={() => setPaymentChoice("none")}
                     >
                       No recibí dinero
                     </button>
                   </div>
                   {paymentChoice === "custom" ? (
-                    <label className="grid gap-1 text-[10px] font-black uppercase text-slate-500">
+                    <label className="grid gap-1.5 text-xs font-black text-slate-400">
                       Monto recibido
                       <input
                         className={inputClass}
@@ -1041,7 +1070,7 @@ export function ConductorTareasClient({
                     </label>
                   ) : null}
                   {paymentChoice && paymentChoice !== "none" ? (
-                    <label className="grid gap-1 text-[10px] font-black uppercase text-slate-500">
+                    <label className="grid gap-1.5 text-xs font-black text-slate-400">
                       Método
                       <select
                         className={inputClass}
@@ -1060,7 +1089,7 @@ export function ConductorTareasClient({
                 </div>
               ) : null}
 
-              <label className="grid gap-1 text-[10px] font-black uppercase text-slate-500">
+              <label className="grid gap-1.5 text-xs font-black text-slate-400">
                 Nota
                 <textarea
                   className="min-h-24 rounded-lg border border-black bg-surface-inset px-3 py-2 text-sm font-bold leading-snug text-[#f8fafc] outline-none placeholder:text-slate-500 disabled:opacity-50"
@@ -1075,7 +1104,7 @@ export function ConductorTareasClient({
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
-                  className={`${secondaryButtonClass} h-11 text-xs`}
+                  className={`${secondaryButtonClass} h-11 text-sm`}
                   disabled={saving}
                   onClick={closeDialog}
                 >
@@ -1083,7 +1112,7 @@ export function ConductorTareasClient({
                 </button>
                 <button
                   type="button"
-                  className={`${primaryButtonClass} h-11 text-xs disabled:cursor-not-allowed disabled:opacity-40`}
+                  className={`${primaryButtonClass} h-11 text-sm disabled:cursor-not-allowed disabled:opacity-40`}
                   disabled={saving || (dialog.result === "completed" && !evidence) || (needsPaymentChoice && !paymentChoice)}
                   onClick={() => void submitDialog()}
                 >
