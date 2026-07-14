@@ -104,7 +104,7 @@ At the end of every task, report one of:
 Once a task is done:
 
 1. **Report what to restart.** Tell Pablo exactly which service / system / program needs to be restarted for the change to take effect, with the full list of commands to run. If nothing needs restarting, say so explicitly.
-2. **Commit and push only when Pablo asks.** Do not stage, commit, or push on your own (see Project overrides below).
+2. **Create a GitHub backup after a fully completed task.** When the task is `DONE`, validations are green, and the user-visible outcome is complete, stage only the files belonging to that task, create a descriptive commit, and push the current branch to its configured GitHub remote. Inspect the diff first; never include secrets, `.env` files, generated binaries, or unrelated pending work. If the commit or push fails, report it plainly and leave the work intact.
 
 For restart commands that need `sudo`: never run them yourself. List them for Pablo to run, clearly marked as his to execute.
 
@@ -160,7 +160,7 @@ When Pablo asks for something, the answer is the finished product — not a plan
 
 ## Project — paqueteria-saas
 
-- No commitear ni pushear salvo que Pablo lo pida explícitamente.
+- Al completar una tarea al 100% con sus validaciones, crear automáticamente un commit descriptivo y subirlo a GitHub como respaldo. Incluir solo los cambios de esa tarea; nunca secretos, archivos `.env`, binarios generados ni trabajo pendiente ajeno. No commitear ni subir tareas incompletas, bloqueadas o con pruebas fallando.
 - Ser directo y corto.
 - Siempre guardar en UTF-8.
 - Este proyecto usa Next.js nuevo. Antes de tocar codigo Next.js, revisar `node_modules/next/dist/docs/`.
