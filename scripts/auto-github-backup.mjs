@@ -28,16 +28,16 @@ function log(message) {
   appendFileSync(logFile, `${line}\n`, "utf8");
 }
 
-function git(args, { allowFailure = false } = {}) {
+function git(args, { allowFailure = false, printOutput = true } = {}) {
   const result = spawnSync("git", args, {
     cwd: root,
     encoding: "utf8",
   });
 
-  if (result.stdout) {
+  if (printOutput && result.stdout) {
     process.stdout.write(result.stdout);
   }
-  if (result.stderr) {
+  if (printOutput && result.stderr) {
     process.stderr.write(result.stderr);
   }
   if (result.error) {
@@ -51,7 +51,7 @@ function git(args, { allowFailure = false } = {}) {
 }
 
 function stagedPaths() {
-  return git(["diff", "--cached", "--name-only", "-z"])
+  return git(["diff", "--cached", "--name-only", "-z"], { printOutput: false })
     .stdout.split("\0")
     .filter(Boolean);
 }
