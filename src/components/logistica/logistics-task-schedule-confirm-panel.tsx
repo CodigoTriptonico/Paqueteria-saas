@@ -89,15 +89,15 @@ export function LogisticsTaskScheduleConfirmPanel({
   const canConfirm = Boolean(scheduledTimestamp && driverId && routeTemplateId && dayTemplates.length);
 
   return (
-    <div className="fixed inset-0 z-[145] flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-lg rounded-xl border border-black bg-surface-panel p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="confirm-task-schedule-title">
+    <div className="app-modal-overlay fixed inset-0 z-[145] flex justify-center bg-black/70 p-3 sm:p-4">
+      <div className="app-modal-content w-full max-w-lg rounded-xl border border-black bg-surface-panel p-4 shadow-2xl sm:p-5" role="dialog" aria-modal="true" aria-labelledby="confirm-task-schedule-title">
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-emerald-700 bg-emerald-400 text-slate-950">
             <CalendarCheck2 className="h-5 w-5" />
           </span>
-          <div>
+          <div className="min-w-0">
             <p id="confirm-task-schedule-title" className="text-xl font-black text-[#f8fafc]">Confirmar y programar</p>
-            <p className="mt-1 text-sm font-bold text-slate-400">{shipmentCode} - {customerName}</p>
+            <p className="mt-1 break-words text-sm font-bold text-slate-400">{shipmentCode} - {customerName}</p>
             <p className="mt-1 text-xs font-black uppercase text-emerald-300">{taskTypeLabel}</p>
           </div>
         </div>

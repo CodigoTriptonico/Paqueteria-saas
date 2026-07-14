@@ -14,7 +14,10 @@ export type PermissionKey =
   | "routes.view"
   | "routes.update_status"
   | "time_clock.view"
-  | "time_clock.manage";
+  | "time_clock.manage"
+  | "distribution.manage"
+  | "distribution.sell"
+  | "distribution.acquire";
 
 export type RoleSlug = "administrador" | "vendedor" | "conductor" | (string & {});
 

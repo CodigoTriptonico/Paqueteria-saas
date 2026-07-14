@@ -72,10 +72,10 @@ export function SaleQuickCheckoutModal({
   }
 
   return (
-    <div className="no-print fixed inset-0 z-[130] flex items-center justify-center bg-[#163A2A] p-4">
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-auto rounded-xl border border-black bg-surface-panel p-5 shadow-2xl">
+    <div className="app-modal-overlay no-print fixed inset-0 z-[130] flex justify-center bg-[#163A2A] p-3 sm:p-4">
+      <div className="app-modal-content w-full max-w-4xl rounded-xl border border-black bg-surface-panel p-4 shadow-2xl sm:p-5">
         <div className="mb-5 flex items-start justify-between gap-4 border-b border-black pb-4">
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-black uppercase text-slate-400">
               {completed ? "Invoice creado" : saleFinishActionLabel(billingForPayment)}
             </p>
@@ -95,8 +95,8 @@ export function SaleQuickCheckoutModal({
           <div className="grid gap-4">
             <div className="no-print rounded-xl border border-black bg-surface-card p-4">
               <p className="text-xs font-black uppercase text-slate-500">Remitente</p>
-              <p className="text-xl font-black">{personFullName(draft.sender)}</p>
-              <p className="font-bold text-slate-400">{senderPhonesLabel(draft.sender)}</p>
+              <p className="break-words text-xl font-black">{personFullName(draft.sender)}</p>
+              <p className="break-words font-bold text-slate-400">{senderPhonesLabel(draft.sender)}</p>
             </div>
 
             <div className="flex flex-col items-center gap-4">

@@ -73,10 +73,10 @@ export function ProductCountriesModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-lg rounded-xl border border-black bg-surface-panel shadow-2xl">
+    <div className="app-modal-overlay fixed inset-0 z-[180] flex justify-center bg-black/70 p-3 sm:p-4">
+      <div className="app-modal-content w-full max-w-lg rounded-xl border border-black bg-surface-panel shadow-2xl">
         <div className="flex items-start justify-between gap-3 border-b border-black px-5 py-4">
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
               Países y precio
             </p>

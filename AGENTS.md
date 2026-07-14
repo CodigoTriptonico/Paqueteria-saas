@@ -160,7 +160,8 @@ When Pablo asks for something, the answer is the finished product — not a plan
 
 ## Project — paqueteria-saas
 
-- Al completar una tarea al 100% con sus validaciones, crear automáticamente un commit descriptivo y subirlo a GitHub como respaldo. Incluir solo los cambios de esa tarea; nunca secretos, archivos `.env`, binarios generados ni trabajo pendiente ajeno. No commitear ni subir tareas incompletas, bloqueadas o con pruebas fallando.
+- Al completar una tarea al 100% con sus validaciones, crear automáticamente un commit descriptivo y subirlo a GitHub como respaldo. Incluir solo los cambios de esa tarea; nunca secretos, archivos `.env` ni binarios generados.
+- Mantener activa la tarea de Windows `PaqueteriaSaasHourlyGitHubBackup`: cada hora debe crear y subir a GitHub un respaldo de todos los cambios del proyecto, incluso trabajo incompleto. Solo excluir secretos y archivos generados definidos en `.gitignore` y `scripts/lib/git-backup.mjs`.
 - Ser directo y corto.
 - Siempre guardar en UTF-8.
 - Este proyecto usa Next.js nuevo. Antes de tocar codigo Next.js, revisar `node_modules/next/dist/docs/`.

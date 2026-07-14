@@ -307,6 +307,7 @@ export async function loadSellerMetricsForSession(
         "sales_owner_id, paid, profit, sale_kind, created_at, invoice_status, sales_owner_profile:profiles!shipments_sales_owner_id_fkey(full_name, email)",
       )
       .eq("organization_id", orgId)
+      .is("distribution_partner_id", null)
       .neq("invoice_status", "void")
       .gte("created_at", start.toISOString())
       .lt("created_at", end.toISOString()),

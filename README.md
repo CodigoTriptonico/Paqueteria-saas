@@ -69,6 +69,18 @@ http://localhost:3000/login
 - Seguimiento por invoice en `shipment_contact_logs`: llamada/medio, resultado, nota, proximo paso y recordatorio.
 - RLS: vendedor solo ve/escribe seguimiento de sus invoices; administrador ve todos.
 
+## Distribuidores
+
+- La matriz crea distribuidores en `/distribuidores`, define crédito y tarifa interna por producto y país.
+- El distribuidor entra por `/distribuidor`, fija su precio público y registra ventas para la logística de la matriz.
+- La cuenta corriente de la matriz solo suma la tarifa interna. El precio público y la cobranza al cliente final se guardan solo para monitoreo.
+- La consola de matriz permite filtrar distribuidores, ver deuda, pagos, ventas internas, crédito y envíos; cada cuenta tiene pestañas de resumen, productos, cuenta corriente, operación y acceso.
+- Desde Acceso se puede editar responsable y correo, cambiar límite, restablecer contraseña o pausar la cuenta. Pausar bloquea acceso y ventas, sin borrar su historial.
+- El rol `Captador de distribuidores` usa `/mis-distribuidores`: crea su propia cartera en estado pendiente. La matriz configura productos, crédito y activación.
+- `/estadisticas` separa `Vendedores` y `Distribuidores`. Cada venta de distribuidor conserva el captador vigente al registrarse, incluso si la matriz lo reasigna después.
+- La regla monetaria de comisión queda pendiente: se guarda la atribución, pero todavía no se calcula ni paga comisión.
+- Aplica la migración `065_distribution_partners.sql` antes de usar el módulo: `npm run db:apply`.
+
 ## Docs
 
 - Setup y pruebas: [SETUP.md](./SETUP.md)

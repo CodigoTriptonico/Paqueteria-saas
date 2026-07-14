@@ -3269,7 +3269,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     <>
       <div
         className={
-          boundedPersonListLayout
+          boundedPersonListLayout || activeStep === "box"
             ? "flex min-h-0 flex-1 flex-col lg:overflow-hidden"
             : "pb-6"
         }
@@ -3290,7 +3290,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       mode === "sale" ||
       mode === "new-client" ||
       mode === "new-recipient" ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-visible lg:overflow-hidden">
         <div className="shrink-0">
         <SaleStepBar
           steps={saleStepBarItems}
@@ -3474,7 +3474,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
               ? mode === "new-recipient"
                 ? `${flowPersonListShellClass} overflow-y-auto py-2 sm:py-2`
                 : flowPersonListShellClass
-              : `${flowPersonListShellClass} border-t border-black/80`
+              : `${flowPersonListShellClass} !overflow-visible lg:!overflow-hidden border-t border-black/80`
           }
         >
           {activeStep === "recipient" || mode === "new-recipient" ? (
@@ -3640,15 +3640,16 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           {selectedRecipient && activeStep === "box" ? (
             <div
               ref={boxesRef}
-              className={stepShellClass("box")}
+              className={`flex min-h-0 flex-1 flex-col ${stepShellClass("box")}`}
             >
             <Panel
-              className={flowPanelFlushClass}
-              contentClassName={flowPanelContentClass}
+              className={`${flowPanelFlushClass} flex min-h-0 flex-1 flex-col`}
+              contentClassName={`${flowPanelContentClass} flex min-h-0 flex-1 flex-col`}
+              clipContent={false}
               hideHeader
               title="Cajas"
             >
-              <div className={flowStepBodyClass}>
+              <div className={`${flowStepBodyClass} flex min-h-0 flex-1 flex-col`}>
               {!selectedRecipient ? (
                 <p className="text-center text-xl font-black text-slate-400">
                   Selecciona un destinatario.
@@ -3695,7 +3696,28 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   </div>
                 </section>
               ) : (
-                <div className={flowCardGridClass}>
+                <>
+                <div className="sticky top-0 z-20 -mx-2 shrink-0 border-b border-black/80 bg-[#1a221f]/95 px-2 pb-3 pt-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pt-0 sm:backdrop-blur-none">
+                  <div className="flex w-full max-w-md flex-col items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={selectedBoxCount < 1}
+                      onClick={continueFromCart}
+                      className={`${primaryButtonClass} flex h-12 w-full items-center justify-center gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-35`}
+                    >
+                      Siguiente
+                      <ChevronRight className="h-4 w-4" aria-hidden />
+                    </button>
+                    {selectedBoxCount < 1 ? (
+                      <p className="text-center text-xs font-bold text-slate-500">
+                        Clic izquierdo en una caja para agregar &middot; clic derecho para quitar.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <div
+                  className={`${flowCardGridClass} min-h-0 flex-1 overflow-y-auto pt-3 pr-1`}
+                >
                   {boxesForCountry.map((box, boxIndex) => {
                     const cartLine = selectedBoxLines.find(
                       (line) => line.id === saleCartLineId(box),
@@ -3769,27 +3791,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     );
                   })}
                 </div>
+                </>
               )}
-              {selectedRecipient && boxesForCountry.length > 0 ? (
-                <div className="flex justify-center border-t border-black/80 pt-4">
-                  <div className="flex w-full max-w-md flex-col items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={selectedBoxCount < 1}
-                      onClick={continueFromCart}
-                      className={`${primaryButtonClass} flex h-12 w-full items-center justify-center gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-35`}
-                    >
-                      Siguiente
-                      <ChevronRight className="h-4 w-4" aria-hidden />
-                    </button>
-                    {selectedBoxCount < 1 ? (
-                      <p className="text-center text-xs font-bold text-slate-500">
-                        Clic izquierdo en una caja para agregar · clic derecho para quitar.
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
               </div>
             </Panel>
             </div>

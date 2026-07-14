@@ -1,9 +1,11 @@
 import type { AppSession, PermissionKey, RoleSlug } from "@/lib/auth/types";
 
 const ROLE_ROUTE_ACCESS: Partial<Record<RoleSlug, string[]>> = {
-  administrador: ["/", "/venta", "/inventario", "/seguimiento", "/ingreso-bodega", "/bodega", "/paletas", "/logistica", "/estadisticas", "/auditoria", "/vendedores", "/configuracion", "/time-clock", "/conductor"],
+  administrador: ["/", "/venta", "/inventario", "/seguimiento", "/ingreso-bodega", "/bodega", "/paletas", "/logistica", "/estadisticas", "/auditoria", "/vendedores", "/configuracion", "/time-clock", "/distribuidores", "/conductor"],
   vendedor: ["/", "/venta", "/inventario", "/seguimiento"],
   conductor: ["/", "/conductor"],
+  distribuidor: ["/", "/distribuidor"],
+  captador_distribuidores: ["/", "/mis-distribuidores"],
 };
 
 const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {

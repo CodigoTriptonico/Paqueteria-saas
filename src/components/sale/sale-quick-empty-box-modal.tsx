@@ -113,10 +113,10 @@ export function SaleQuickEmptyBoxModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[92vh] w-full max-w-lg overflow-auto rounded-xl border border-black bg-surface-panel p-5 shadow-2xl">
+    <div className="app-modal-overlay fixed inset-0 z-[120] flex justify-center bg-black/60 p-3 sm:p-4">
+      <div className="app-modal-content w-full max-w-lg rounded-xl border border-black bg-surface-panel p-4 shadow-2xl sm:p-5">
         <div className="mb-4 flex items-start justify-between gap-3 border-b border-black pb-4">
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-black uppercase text-slate-500">Venta rápida</p>
             <h3 className="text-2xl font-black text-[#f8fafc]">Caja vacía + depósito</h3>
           </div>
@@ -132,7 +132,7 @@ export function SaleQuickEmptyBoxModal({
         <div className="space-y-4">
           <div className="rounded-xl border border-black bg-surface-card p-4">
             <p className="text-xs font-black uppercase text-slate-500">Remitente</p>
-            <p className="text-lg font-black text-[#f8fafc]">{personFullName(sender)}</p>
+            <p className="break-words text-lg font-black text-[#f8fafc]">{personFullName(sender)}</p>
           </div>
 
           <label className="grid gap-2">

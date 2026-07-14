@@ -211,7 +211,7 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
       ) : null}
 
       {signOutConfirmOpen ? (
-        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 p-4">
+        <div className="app-modal-overlay fixed inset-0 z-[210] flex justify-center bg-black/70 p-3 sm:p-4">
           <button
             type="button"
             aria-label="Cancelar cierre de sesion"
@@ -220,7 +220,7 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
             onClick={() => setSignOutConfirmOpen(false)}
           />
           <div
-            className="relative w-full max-w-sm rounded-xl border border-black bg-surface-panel p-5 shadow-2xl"
+            className="app-modal-content relative w-full max-w-sm rounded-xl border border-black bg-surface-panel p-4 shadow-2xl sm:p-5"
             role="dialog"
             aria-modal="true"
             aria-labelledby="sign-out-confirm-title"
@@ -228,7 +228,7 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
             <p id="sign-out-confirm-title" className="text-xl font-black text-[#f8fafc]">
               ¿Cerrar sesion?
             </p>
-            <p className="mt-2 text-sm font-bold text-slate-400">
+            <p className="mt-2 break-words text-sm font-bold text-slate-400">
               Saldras de la cuenta de {displayName}. Tendras que volver a iniciar sesion para entrar.
             </p>
 

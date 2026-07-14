@@ -18,6 +18,7 @@ import {
   Settings,
   Shield,
   Truck,
+  Users,
   Layers3,
   X,
 } from "lucide-react";
@@ -54,6 +55,9 @@ const navItems: {
   platformOnly?: boolean;
 }[] = [
   { label: "Nueva venta", href: "/venta", icon: CreditCard, section: "shipments", hasSubmenu: true },
+  { label: "Mi distribuidora", href: "/distribuidor", icon: CreditCard, section: "main" },
+  { label: "Mis distribuidores", href: "/mis-distribuidores", icon: Users, section: "main" },
+  { label: "Distribuidores", href: "/distribuidores", icon: Boxes, section: "admin" },
   { label: "Seguimiento", href: "/seguimiento", icon: ClipboardList, section: "shipments" },
   { label: "Historial envíos", href: "/seguimiento/historial", icon: History, section: "shipments" },
   { label: "Inventario", href: "/inventario", icon: Boxes, section: "stock", hasSubmenu: true },

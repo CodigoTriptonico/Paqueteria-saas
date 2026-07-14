@@ -850,7 +850,7 @@ function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boole
           className={`min-w-0 truncate leading-snug ${
             step.id === "box"
               ? "text-[11px] font-black sm:text-xs"
-              : "text-[10px] font-bold sm:text-[11px] lg:text-xs"
+              : "text-[11px] font-black sm:text-[11px] lg:text-xs"
           }`}
         >
           {step.value}
@@ -866,22 +866,26 @@ function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boole
         }`}
         aria-hidden={!step.country && !step.subtitle}
       >
-        {step.country ? <Flag country={step.country} /> : null}
-        <span className="min-w-0 truncate text-[10px] font-bold leading-snug sm:text-[11px] lg:text-xs">
+        {step.country ? (
+          <span className="hidden sm:contents">
+            <Flag country={step.country} />
+          </span>
+        ) : null}
+        <span className="min-w-0 truncate text-[11px] font-black leading-snug sm:text-[11px] lg:text-xs">
           {step.country || step.subtitle || "\u00a0"}
         </span>
       </span>
       {options?.hideDetail ? null : (
         <span
-          className={`flex min-h-[1.125rem] w-full items-center justify-center truncate text-center sm:min-h-[1.25rem] ${
+          className={`flex min-h-[1.75rem] w-full items-center justify-center break-words px-1 text-center leading-tight sm:min-h-[1.25rem] ${
             step.detail && (step.isActive || step.isDone)
               ? step.id === "box"
                 ? step.isActive
                   ? "text-sm font-black text-emerald-300 sm:text-base"
                   : "text-sm font-black text-emerald-400/80"
                 : step.isActive
-                  ? "text-[10px] font-semibold text-emerald-200/70"
-                  : "text-[10px] font-semibold text-slate-500"
+                  ? "text-[11px] font-black tracking-tight text-emerald-100"
+                  : "text-[11px] font-black tracking-tight text-slate-200"
               : "invisible"
           }`}
           aria-hidden={!step.detail || !(step.isActive || step.isDone)}
@@ -933,7 +937,14 @@ export function SaleStepBar({
         }`}
       >
         <div className="flex items-start gap-2">
-          <ol className="flex min-w-0 flex-1 items-start gap-0">
+          <div
+            className={`min-w-0 flex-1 ${
+              hasOpenStepPopover
+                ? "overflow-visible"
+                : "snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            }`}
+          >
+          <ol className="flex min-w-max items-start gap-0 sm:min-w-0 sm:w-full">
           {steps.map((step, index) => {
             const connectorDone =
               index > 0 && (steps[index - 1]?.isDone || steps[index - 1]?.isActive);
@@ -952,7 +963,7 @@ export function SaleStepBar({
                     />
                   </div>
                 ) : null}
-                <li className="relative flex min-w-0 flex-1 flex-col">
+                <li className="relative flex w-[6.5rem] shrink-0 snap-start flex-col sm:min-w-0 sm:w-auto sm:flex-1">
                   {step.isActive && stepPopovers?.[step.id] ? (
                     <div
                       className={`min-w-0 w-full overflow-hidden rounded-md border text-center transition sm:rounded-lg ${saleStepBarButtonClass(
@@ -1008,6 +1019,7 @@ export function SaleStepBar({
             );
           })}
           </ol>
+          </div>
           {trailingSlot ? (
             <div className="mt-1.5 shrink-0 self-start sm:mt-2 lg:mt-[0.625rem]">
               {trailingSlot}

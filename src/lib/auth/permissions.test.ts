@@ -72,6 +72,26 @@ function driverSession(): AppSession {
   };
 }
 
+function distributorSession(): AppSession {
+  return {
+    ...sellerSession(),
+    userId: "distributor-1",
+    roleSlug: "distribuidor",
+    roleName: "Distribuidor",
+    permissions: ["distribution.sell"],
+  };
+}
+
+function captorSession(): AppSession {
+  return {
+    ...sellerSession(),
+    userId: "captor-1",
+    roleSlug: "captador_distribuidores",
+    roleName: "Captador de distribuidores",
+    permissions: ["distribution.acquire"],
+  };
+}
+
 describe("canAccessPath seller shipments", () => {
   it("lets sellers open envios", () => {
     assert.equal(canAccessPath(sellerSession(), "/seguimiento"), true);
@@ -116,5 +136,23 @@ describe("canAccessPath conductor tasks", () => {
 
   it("lets admins preview tareas conductor", () => {
     assert.equal(canAccessPath(adminSession(), "/conductor/tareas"), true);
+  });
+});
+
+describe("canAccessPath distributor workspace", () => {
+  it("isolates distributors in their own workspace", () => {
+    assert.equal(canAccessPath(distributorSession(), "/distribuidor"), true);
+    assert.equal(canAccessPath(distributorSession(), "/venta"), false);
+    assert.equal(canAccessPath(distributorSession(), "/distribuidores"), false);
+    assert.equal(canAccessPath(adminSession(), "/distribuidores"), true);
+  });
+});
+
+describe("canAccessPath captor workspace", () => {
+  it("isolates captors to their own distributor portfolio", () => {
+    assert.equal(canAccessPath(captorSession(), "/mis-distribuidores"), true);
+    assert.equal(canAccessPath(captorSession(), "/distribuidores"), false);
+    assert.equal(canAccessPath(captorSession(), "/estadisticas"), false);
+    assert.equal(canAccessPath(captorSession(), "/venta"), false);
   });
 });

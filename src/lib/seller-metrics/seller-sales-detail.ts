@@ -213,6 +213,7 @@ export async function loadSellerSalesDetailForSession(
     )
     .eq("organization_id", orgId)
     .eq("sales_owner_id", input.salesOwnerId)
+    .is("distribution_partner_id", null)
     .neq("invoice_status", "void")
     .gte("created_at", start.toISOString())
     .lt("created_at", end.toISOString())

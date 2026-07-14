@@ -85,9 +85,9 @@ export function LogisticsTaskEditPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/70 p-4">
+    <div className="app-modal-overlay fixed inset-0 z-[140] flex justify-center bg-black/70 p-3 sm:p-4">
       <div
-        className="w-full max-w-lg rounded-xl border border-black bg-surface-panel p-5 shadow-2xl"
+        className="app-modal-content w-full max-w-lg rounded-xl border border-black bg-surface-panel p-4 shadow-2xl sm:p-5"
         role="dialog"
         aria-modal="true"
         aria-labelledby="logistics-task-edit-title"
@@ -95,7 +95,7 @@ export function LogisticsTaskEditPanel({
         <p id="logistics-task-edit-title" className="text-xl font-black text-[#f8fafc]">
           Editar tarea
         </p>
-        <p className="mt-1 text-sm font-bold text-slate-400">
+        <p className="mt-1 break-words text-sm font-bold text-slate-400">
           {shipmentCode} · {customerName}
         </p>
         <p className="mt-1 text-xs font-black uppercase text-emerald-300">{taskTypeLabel}</p>

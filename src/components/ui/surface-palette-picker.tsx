@@ -439,7 +439,7 @@ function SurfacePaletteResetDialog({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/70 p-4">
+    <div className="app-modal-overlay fixed inset-0 z-[260] flex justify-center bg-black/70 p-3 sm:p-4">
       <button
         type="button"
         aria-label="Cerrar"
@@ -450,7 +450,7 @@ function SurfacePaletteResetDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="surface-palette-reset-title"
-        className="relative w-full max-w-sm rounded-xl border border-black bg-surface-panel p-5 shadow-2xl"
+        className="app-modal-content relative w-full max-w-sm rounded-xl border border-black bg-surface-panel p-4 shadow-2xl sm:p-5"
         onPointerDown={(event) => event.stopPropagation()}
       >
         <p id="surface-palette-reset-title" className="text-lg font-black text-[#f8fafc]">

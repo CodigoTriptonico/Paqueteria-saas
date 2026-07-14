@@ -58,6 +58,14 @@ export default async function Home() {
     redirect("/platform");
   }
 
+  if (session?.roleSlug === "distribuidor") {
+    redirect("/distribuidor");
+  }
+
+  if (session?.roleSlug === "captador_distribuidores") {
+    redirect("/mis-distribuidores");
+  }
+
   const isConductor = Boolean(session && isConductorRole(session.roleSlug));
   const supabaseReady = isSupabaseConfigured() && Boolean(session);
   let initialSummary = null;

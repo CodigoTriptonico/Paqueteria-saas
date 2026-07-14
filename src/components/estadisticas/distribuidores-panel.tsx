@@ -1,0 +1,25 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { LoaderCircle } from "lucide-react";
+import { getDistributionMetricsAction, type DistributionMetricsReport } from "@/app/actions/distribution-metrics";
+import { Panel, StatCard, listRowBaseClass } from "@/components/ui-blocks";
+import type { PeriodGranularity } from "@/lib/seller-metrics/period-buckets";
+
+const periods: { value: PeriodGranularity; label: string }[] = [{ value: "day", label: "Día" }, { value: "week", label: "Semana" }, { value: "month", label: "Mes" }];
+function money(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value || 0); }
+
+export function DistribuidoresPanel({ initialReport, initialError }: { initialReport?: DistributionMetricsReport; initialError?: string }) {
+  const [report, setReport] = useState(initialReport);
+  const [error, setError] = useState(initialError || "");
+  const [granularity, setGranularity] = useState<PeriodGranularity>(initialReport?.granularity || "day");
+  const [isPending, startTransition] = useTransition();
+  function selectPeriod(next: PeriodGranularity) {
+    startTransition(async () => {
+      const result = await getDistributionMetricsAction({ granularity: next });
+      if (!result.ok) return setError(result.error);
+      setGranularity(next); setReport(result.data); setError("");
+    });
+  }
+  return <Panel title="Distribuidores" hideHeader contentClassName="p-0"><div className="space-y-4 p-4 sm:p-5"><div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-black bg-surface-card-header p-2"><div className="flex h-9 divide-x divide-black overflow-hidden rounded-lg border border-black bg-surface-inset">{periods.map((period) => <button key={period.value} disabled={isPending} onClick={() => selectPeriod(period.value)} className={`min-w-20 px-3 text-xs font-black ${granularity === period.value ? "bg-emerald-400 text-slate-950" : "text-slate-300 hover:bg-surface-card-hover"}`}>{period.label}</button>)}</div><div className="flex items-center gap-2"><span className="text-sm font-black text-slate-300">{report?.periodLabel || ""}</span>{isPending ? <LoaderCircle className="h-4 w-4 animate-spin text-emerald-300" /> : null}</div></div>{error ? <p className="rounded-lg border border-rose-600 bg-rose-400/10 px-3 py-2 text-sm font-bold text-rose-200">{error}</p> : null}{report ? <><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"><StatCard label="Distribuidores activos" value={String(report.totals.activePartners)} tone="text-emerald-300" /><StatCard label="Ventas distribuidoras" value={String(report.totals.saleCount)} tone="text-slate-100" /><StatCard label="Venta interna" value={money(report.totals.internalSales)} tone="text-emerald-300" /><StatCard label="Cobrado a matriz" value={money(report.totals.payments)} tone="text-sky-300" /><StatCard label="Saldo por cobrar" value={money(report.totals.totalDebt)} tone="text-amber-300" /><StatCard label="Captadores activos" value={String(report.totals.activeCaptors)} tone="text-slate-100" /></section><div className="grid gap-3 xl:grid-cols-2"><section className="overflow-hidden rounded-xl border border-black bg-surface-card"><div className="border-b border-black bg-surface-card-header px-4 py-3"><h2 className="text-sm font-black text-slate-100">Ranking por captador</h2><p className="text-xs font-bold text-slate-400">Las ventas conservan al captador que tenía el distribuidor cuando se registraron.</p></div><div className="grid gap-2 p-3">{report.captors.map((captor, index) => <div key={captor.id} className={`${listRowBaseClass} grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 p-3`}><b className="text-emerald-300">#{index + 1}</b><span><b className="block truncate text-slate-100">{captor.name}</b><small className="text-slate-400">{captor.partnerCount} distribuidores · {captor.saleCount} ventas</small></span><b className="text-slate-100">{money(captor.internalSales)}</b></div>)}{!report.captors.length ? <p className="p-4 text-sm font-bold text-slate-400">No hay distribuidores asignados a captadores.</p> : null}</div></section><section className="overflow-hidden rounded-xl border border-black bg-surface-card"><div className="border-b border-black bg-surface-card-header px-4 py-3"><h2 className="text-sm font-black text-slate-100">Distribuidores</h2></div><div className="grid gap-2 p-3">{report.partners.map((partner) => <div key={partner.id} className={`${listRowBaseClass} grid gap-2 p-3 sm:grid-cols-[minmax(0,1fr)_6rem_8rem]`}><span><b className="block truncate text-slate-100">{partner.name}</b><small className="text-slate-400">{partner.captorName} · {partner.isActive ? "Activo" : "Pendiente"}</small></span><span className="text-sm font-black text-slate-100">{partner.saleCount} ventas</span><span className="text-right text-sm font-black text-amber-300">Debe {money(partner.balance)}</span></div>)}</div></section></div></> : <p className="text-sm font-bold text-slate-400">Cargando estadísticas.</p>}</div></Panel>;
+}

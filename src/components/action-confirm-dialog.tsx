@@ -44,7 +44,7 @@ export function ActionConfirmDialog({
   }
 
   return (
-    <div className={`fixed inset-0 flex items-center justify-center bg-black/70 p-4 ${overlayClassName}`}>
+    <div className={`app-modal-overlay fixed inset-0 flex justify-center bg-black/70 p-3 sm:p-4 ${overlayClassName}`}>
       <button
         type="button"
         aria-label="Cerrar confirmación"
@@ -54,7 +54,7 @@ export function ActionConfirmDialog({
       />
       <div
         id={dialogId}
-        className="relative w-full max-w-sm rounded-xl border border-black bg-surface-panel p-5 shadow-2xl"
+        className="app-modal-content relative w-full max-w-sm rounded-xl border border-black bg-surface-panel p-5 shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${dialogId}-title`}
@@ -62,7 +62,7 @@ export function ActionConfirmDialog({
         <p id={`${dialogId}-title`} className="text-xl font-black text-[#f8fafc]">
           {title}
         </p>
-        <p className="mt-2 text-sm font-bold leading-snug text-slate-400">{message}</p>
+        <p className="mt-2 break-words text-sm font-bold leading-snug text-slate-400">{message}</p>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <button

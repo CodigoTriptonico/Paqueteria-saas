@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# generated browser screenshots
+/output/
+
 # production
 /build
 
