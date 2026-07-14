@@ -104,7 +104,7 @@ describe("conductor route eval", () => {
 
   it("keeps tareas blocked by missing truck boxes", () => {
     assert.match(tareasClientSource, /routeBlocked/);
-    assert.match(tareasClientSource, /ver inventario/);
+    assert.match(tareasClientSource, /Cargar cajas/);
     assert.match(tareasClientSource, /href="\/conductor\/inventario-camion"/);
     assert.match(tareasClientSource, /Foto requerida/);
   });
