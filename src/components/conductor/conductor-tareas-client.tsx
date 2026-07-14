@@ -736,13 +736,11 @@ export function ConductorTareasClient({
       contentClassName="flex flex-col p-4 sm:p-5 lg:min-h-0 lg:flex-1"
     >
         {canPreview ? (
-          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-sky-700/50 bg-sky-950/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase text-sky-300">Vista previa admin</p>
-              <p className="text-sm font-bold text-sky-100">
-                Vista del conductor. Puedes actuar en su nombre; queda registrado como admin.
-              </p>
-            </div>
+          <div className="mb-2 flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-sky-700/50 bg-sky-950/30 px-3 py-1.5">
+            <p className="shrink-0 text-[10px] font-black uppercase tracking-[0.12em] text-sky-300">Vista admin</p>
+            <p className="min-w-0 flex-1 truncate text-xs font-bold text-sky-100">
+              Actúas como conductor y queda registrado como admin.
+            </p>
             <InlineSearchPicker
               value={previewDriverId || ""}
               onChange={handlePreviewDriverChange}
@@ -751,75 +749,70 @@ export function ConductorTareasClient({
               searchPlaceholder="Buscar conductor"
               emptyLabel="Sin conductores"
               ariaLabel="Conductor a previsualizar"
-              minWidthClass="min-w-[12rem] sm:min-w-[16rem]"
+              minWidthClass="min-w-[11rem] sm:min-w-[14rem]"
               disabled={!previewOptions.length}
             />
           </div>
         ) : null}
 
-        <section className="mb-3 flex flex-col gap-2 rounded-xl border border-black bg-surface-card-header px-3 py-2.5 shadow-[0_8px_22px_rgba(0,0,0,0.12)] xl:flex-row xl:items-center">
-          <div className="flex min-w-0 items-baseline gap-2 xl:w-48 xl:shrink-0 xl:flex-col xl:gap-0">
-            <p className="shrink-0 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Ruta de hoy</p>
-            <h1 className="truncate text-lg font-black tracking-tight text-[#f8fafc]">{effectiveDriverLabel}</h1>
+        <section className="mb-3 flex flex-wrap items-center gap-1.5 rounded-lg border border-black bg-surface-card-header p-1.5 shadow-[0_6px_18px_rgba(0,0,0,0.12)]">
+          <div className="flex h-9 min-w-0 items-baseline gap-1.5 px-1.5">
+            <p className="shrink-0 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Ruta</p>
+            <h1 className="max-w-48 truncate text-sm font-black tracking-tight text-[#f8fafc]">{effectiveDriverLabel}</h1>
           </div>
 
-          <div className="grid flex-1 grid-cols-3 overflow-hidden rounded-md border border-black">
-            <div className="flex min-w-0 items-center justify-between gap-2 bg-surface-card px-2.5 py-2">
+          <div className="flex h-9 min-w-0 overflow-hidden rounded-md border border-black">
+            <div className="flex min-w-0 items-center gap-1.5 bg-surface-card px-2">
               <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Faltan</p>
-              <p className="text-xl font-black tabular-nums text-[#f8fafc]">{selectedPendingBoxes}</p>
+              <p className="text-base font-black tabular-nums text-[#f8fafc]">{selectedPendingBoxes}</p>
             </div>
-            <div className="flex min-w-0 items-center justify-between gap-2 border-l border-black bg-emerald-950/25 px-2.5 py-2">
+            <div className="flex min-w-0 items-center gap-1.5 border-l border-black bg-emerald-950/25 px-2">
               <p className="text-[10px] font-black uppercase tracking-wide text-emerald-300/80">Listas</p>
-              <p className="text-xl font-black tabular-nums text-emerald-200">{completedOutcomeSummary.successBoxes}</p>
+              <p className="text-base font-black tabular-nums text-emerald-200">{completedOutcomeSummary.successBoxes}</p>
             </div>
-            <div className="flex min-w-0 items-center justify-between gap-2 border-l border-black bg-rose-950/25 px-2.5 py-2">
+            <div className="flex min-w-0 items-center gap-1.5 border-l border-black bg-rose-950/25 px-2">
               <p className="text-[10px] font-black uppercase tracking-wide text-rose-300/80">No se pudo</p>
-              <p className="text-xl font-black tabular-nums text-rose-200">{completedOutcomeSummary.failedBoxes}</p>
+              <p className="text-base font-black tabular-nums text-rose-200">{completedOutcomeSummary.failedBoxes}</p>
             </div>
           </div>
-        </section>
 
-        <div className="mb-4 grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-          <div className="grid grid-cols-2 gap-2" role="group" aria-label="Filtrar tareas por tipo">
-              <button
-                type="button"
-                aria-pressed={taskFilter === "deliver_empty_box"}
-                className={`flex min-h-14 items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 ${
-                  taskFilter === "deliver_empty_box"
-                    ? "border-emerald-400 bg-emerald-950/35 text-emerald-100"
-                    : "border-black bg-surface-card text-slate-300 hover:bg-surface-inset"
-                }`}
-                onClick={() => handleTaskFilterChange("deliver_empty_box")}
-              >
-                <span className="text-[10px] font-black uppercase tracking-wide text-emerald-300/80">Cajas por dejar</span>
-                <span className="text-right text-sm font-bold tabular-nums text-slate-300">
-                  <strong className="text-2xl text-emerald-200">{pendingSummary.deliverCount}</strong> por hacer
-                </span>
-              </button>
-              <button
-                type="button"
-                aria-pressed={taskFilter === "pickup_full_box"}
-                className={`flex min-h-14 items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 ${
-                  taskFilter === "pickup_full_box"
-                    ? "border-amber-400 bg-amber-950/30 text-amber-100"
-                    : "border-black bg-surface-card text-slate-300 hover:bg-surface-inset"
-                }`}
-                onClick={() => handleTaskFilterChange("pickup_full_box")}
-              >
-                <span className="text-[10px] font-black uppercase tracking-wide text-amber-300/80">Cajas por recoger</span>
-                <span className="text-right text-sm font-bold tabular-nums text-slate-300">
-                  <strong className="text-2xl text-amber-200">{pendingSummary.pickupCount}</strong> por hacer
-                </span>
-              </button>
+          <div className="flex h-9 min-w-0 overflow-hidden rounded-md border border-black" role="group" aria-label="Filtrar tareas por tipo">
+            <button
+              type="button"
+              aria-pressed={taskFilter === "deliver_empty_box"}
+              className={`flex min-w-0 items-center gap-1.5 px-2.5 text-left text-xs font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 ${
+                taskFilter === "deliver_empty_box"
+                  ? "bg-emerald-950/35 text-emerald-100"
+                  : "bg-surface-card text-slate-300 hover:bg-surface-inset"
+              }`}
+              onClick={() => handleTaskFilterChange("deliver_empty_box")}
+            >
+              <span className="truncate text-[10px] font-black uppercase tracking-wide text-emerald-300/80">Por dejar</span>
+              <span className="shrink-0 tabular-nums text-emerald-200">{pendingSummary.deliverCount}</span>
+              <span className="sr-only">cajas por hacer</span>
+            </button>
+            <button
+              type="button"
+              aria-pressed={taskFilter === "pickup_full_box"}
+              className={`flex min-w-0 items-center gap-1.5 border-l border-black px-2.5 text-left text-xs font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 ${
+                taskFilter === "pickup_full_box"
+                  ? "bg-amber-950/30 text-amber-100"
+                  : "bg-surface-card text-slate-300 hover:bg-surface-inset"
+              }`}
+              onClick={() => handleTaskFilterChange("pickup_full_box")}
+            >
+              <span className="truncate text-[10px] font-black uppercase tracking-wide text-amber-300/80">Por recoger</span>
+              <span className="shrink-0 tabular-nums text-amber-200">{pendingSummary.pickupCount}</span>
+              <span className="sr-only">cajas por hacer</span>
+            </button>
           </div>
 
-          <div className="flex min-h-14 items-center gap-2">
-            <div className="flex min-h-14 flex-1 overflow-hidden rounded-lg border border-black bg-surface-inset" role="tablist" aria-label="Vista de tareas">
+          <div className="flex h-9 min-w-0 overflow-hidden rounded-md border border-black bg-surface-inset" role="tablist" aria-label="Vista de tareas">
               <button
                 type="button"
                 role="tab"
                 aria-selected={listMode === "pending"}
-                className={`flex flex-1 items-center justify-center gap-2 px-3 text-xs font-black transition xl:min-w-32 ${
+                className={`flex min-w-0 items-center justify-center gap-1.5 px-2.5 text-xs font-black transition ${
                   listMode === "pending"
                     ? "bg-emerald-950/50 text-emerald-100"
                     : "bg-surface-card text-slate-300 hover:bg-surface-inset"
@@ -834,7 +827,7 @@ export function ConductorTareasClient({
                 type="button"
                 role="tab"
                 aria-selected={listMode === "completed"}
-                className={`flex flex-1 items-center justify-center gap-2 border-l border-black px-3 text-xs font-black transition xl:min-w-32 ${
+                className={`flex min-w-0 items-center justify-center gap-1.5 border-l border-black px-2.5 text-xs font-black transition ${
                   listMode === "completed"
                     ? "bg-sky-950/50 text-sky-100"
                     : "bg-surface-card text-slate-300 hover:bg-surface-inset"
@@ -845,9 +838,8 @@ export function ConductorTareasClient({
                 Resueltas
                 <span className="rounded-full border border-black bg-surface-inset px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-300">{completedCount}</span>
               </button>
-            </div>
           </div>
-        </div>
+        </section>
 
         {routeBlocked ? (
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-rose-800/70 bg-rose-950/35 px-4 py-3 sm:flex-row sm:items-center">

@@ -50,7 +50,7 @@ describe("conductor tareas shell eval", () => {
   });
 
   it("wires admin preview picker into the conductor tasks client", () => {
-    assert.match(conductorClientSource, /Vista previa admin/);
+    assert.match(conductorClientSource, /Vista admin/);
     assert.match(conductorClientSource, /InlineSearchPicker/);
     assert.match(conductorClientSource, /params\.set\("conductor"/);
     assert.doesNotMatch(conductorClientSource, /conductorTaskTypeLabel/);
@@ -80,6 +80,14 @@ describe("conductor tareas shell eval", () => {
     assert.match(conductorClientSource, /listMode === "completed"/);
     assert.match(conductorClientSource, /conductorTaskOutcomeLabel/);
     assert.doesNotMatch(conductorClientSource, /Historial/);
+  });
+
+  it("keeps the driver task controls in compact operational bars", () => {
+    assert.match(conductorClientSource, /min-h-10 flex-wrap items-center/);
+    assert.match(conductorClientSource, /flex flex-wrap items-center gap-1\.5/);
+    assert.match(conductorClientSource, /className="flex h-9 min-w-0 overflow-hidden rounded-md border border-black" role="group"/);
+    assert.match(conductorClientSource, /className="flex h-9 min-w-0 overflow-hidden rounded-md border border-black bg-surface-inset" role="tablist"/);
+    assert.doesNotMatch(conductorClientSource, /min-h-14/);
   });
 
   it("keeps the chosen box filter when switching task lists", () => {
