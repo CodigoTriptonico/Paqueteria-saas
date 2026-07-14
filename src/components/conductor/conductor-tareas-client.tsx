@@ -738,9 +738,17 @@ export function ConductorTareasClient({
         {canPreview ? (
           <div className="mb-2 flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-sky-700/50 bg-sky-950/30 px-3 py-1.5">
             <p className="shrink-0 text-[10px] font-black uppercase tracking-[0.12em] text-sky-300">Vista admin</p>
-            <p className="min-w-0 flex-1 truncate text-xs font-bold text-sky-100">
-              Actúas como conductor y queda registrado como admin.
-            </p>
+            <details className="group relative shrink-0">
+              <summary
+                aria-label="Ver detalle de vista administrativa"
+                className="flex h-5 w-5 cursor-pointer list-none items-center justify-center rounded-full border border-sky-500/60 text-[11px] font-black text-sky-200 transition hover:border-sky-300 hover:bg-sky-900/60 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300 [&::-webkit-details-marker]:hidden"
+              >
+                !
+              </summary>
+              <p className="absolute left-0 top-full z-20 mt-2 w-72 rounded-md border border-black bg-surface-panel px-3 py-2 text-xs font-bold leading-snug text-slate-200 shadow-lg">
+                Vista del conductor. Puedes completar tareas en su nombre; queda registrado como admin.
+              </p>
+            </details>
             <InlineSearchPicker
               value={previewDriverId || ""}
               onChange={handlePreviewDriverChange}

@@ -90,6 +90,13 @@ describe("conductor tareas shell eval", () => {
     assert.doesNotMatch(conductorClientSource, /min-h-14/);
   });
 
+  it("keeps the admin explanation behind a compact disclosure", () => {
+    assert.match(conductorClientSource, /<details className="group relative shrink-0">/);
+    assert.match(conductorClientSource, /aria-label="Ver detalle de vista administrativa"/);
+    assert.match(conductorClientSource, /Vista del conductor\. Puedes completar tareas en su nombre/);
+    assert.doesNotMatch(conductorClientSource, /Actúas como conductor y queda registrado como admin/);
+  });
+
   it("keeps the chosen box filter when switching task lists", () => {
     assert.match(conductorClientSource, /function handleListModeChange\(next: TaskListMode\)/);
     assert.match(conductorClientSource, /setListMode\(next\)/);
