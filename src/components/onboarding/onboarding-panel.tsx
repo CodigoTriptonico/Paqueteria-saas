@@ -28,9 +28,9 @@ import {
 import { onboardingGroupHelp, onboardingStepHelp } from "@/components/onboarding/onboarding-help";
 import { OnboardingMicroStepChecklist } from "@/components/onboarding/onboarding-micro-step-checklist";
 import { useOnboardingHelpSeen } from "@/hooks/use-onboarding-help-seen";
-import { useOnboardingProgress } from "@/hooks/use-onboarding-progress";
 import { resolveOnboardingGuideForStep } from "@/lib/onboarding/micro-steps";
 import { isOnboardingTutorialEnabled } from "@/lib/onboarding/feature";
+import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 
 const stepIcons: Record<OnboardingStepId, typeof Globe2> = {
   countries: Globe2,
@@ -162,9 +162,11 @@ function OnboardingStepRow({
                 {step.title}
               </span>
               {!step.completed && isNext ? (
-                <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-emerald-300">
+                <span
+                  className={`${!isOpen ? "onboarding-step-expand-hint" : ""} mt-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-emerald-300`}
+                >
                   <Circle className="h-1.5 w-1.5 fill-current" />
-                  Siguiente
+                  Empieza aquí
                 </span>
               ) : null}
             </span>
@@ -182,8 +184,11 @@ function OnboardingStepRow({
           <OnboardingInfoButton
             compact
             active={showHelp}
-            highlight={isNext && !step.completed && !helpSeen}
+            highlight={isNext && !step.completed && isOpen && !helpSeen}
             onClick={() => {
+              if (!isOpen) {
+                setIsOpen(true);
+              }
               if (!helpSeen) {
                 markHelpSeen();
               }
@@ -213,9 +218,12 @@ function OnboardingStepRow({
               <Link
                 href={guide.actionHref}
                 onClick={onNavigate}
+                data-onboarding-target={
+                  isNext ? ONBOARDING_TARGETS.NOTIFICATIONS_ACTION : undefined
+                }
                 className={`mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-black transition active:scale-[0.99] ${
                   isNext
-                    ? "bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+                    ? "onboarding-coach-target-glow bg-emerald-400 text-slate-950 hover:bg-emerald-300"
                     : "border border-black bg-[#1a2320] text-slate-200 hover:bg-[#2a332f]"
                 }`}
               >
@@ -239,19 +247,24 @@ function OnboardingGroupSkeleton() {
 export type OnboardingSummaryFocus = "all" | "pending" | "completed";
 
 type OnboardingPanelProps = {
+  progress: OnboardingProgress | null;
+  loading?: boolean;
+  error?: string;
   onNavigate?: () => void;
   onProgressChange?: (progress: OnboardingProgress | null) => void;
   summaryFocus?: OnboardingSummaryFocus | null;
 };
 
 export function OnboardingPanel({
+  progress,
+  loading = false,
+  error = "",
   onNavigate,
   onProgressChange,
   summaryFocus = "all",
 }: OnboardingPanelProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { progress, loading, error } = useOnboardingProgress();
   const [tasksOpen, setTasksOpen] = useState(true);
   const [openStepId, setOpenStepId] = useState<OnboardingStepId | null>(null);
 
@@ -263,10 +276,6 @@ export function OnboardingPanel({
     () => progress?.steps.find((step) => !step.completed)?.id ?? null,
     [progress],
   );
-
-  useEffect(() => {
-    queueMicrotask(() => setOpenStepId(nextStepId));
-  }, [summaryFocus, nextStepId]);
 
   const stepNumberById = useMemo(() => {
     if (!progress) {
@@ -280,7 +289,7 @@ export function OnboardingPanel({
     return null;
   }
 
-  if (loading) {
+  if (loading && !progress?.started) {
     return <OnboardingGroupSkeleton />;
   }
 
@@ -292,7 +301,7 @@ export function OnboardingPanel({
     );
   }
 
-  if (!progress?.eligible || progress.allComplete) {
+  if (!progress?.eligible || progress.allComplete || !progress.started) {
     return null;
   }
 

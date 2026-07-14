@@ -14,8 +14,7 @@ const conductorSource = readFileSync(
 );
 
 describe("logistics route completion eval", () => {
-  it("exports route completion actions and auto-complete helper", () => {
-    assert.match(routesSource, /export async function completeLogisticsRouteAction/);
+  it("exports the route auto-complete helper", () => {
     assert.match(routesSource, /export async function tryAutoCompleteLogisticsRoute/);
     assert.match(routesSource, /logistics\.route_completed/);
   });

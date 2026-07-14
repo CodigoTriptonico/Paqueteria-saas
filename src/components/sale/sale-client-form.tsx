@@ -1,18 +1,24 @@
 "use client";
 
-import { Mail, MapPin, Plus, Trash2, UserPlus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Mail, MapPin, Phone, Plus, Trash2, UserPlus } from "lucide-react";
+import { ActionConfirmDialog } from "@/components/action-confirm-dialog";
 import { EmailDomainSuggestionsInput } from "@/components/email-domain-suggestions-input";
 import { PhoneCountryInput } from "@/components/phone-country-input";
-import { flowFormStackClass, flowIntroClass } from "@/components/flow-form-styles";
+import { flowFormStackClass } from "@/components/flow-form-styles";
+import { SaleAddressGooglePanel } from "@/components/sale/sale-address-google-panel";
 import {
   type AddressSuggestion,
   type AddressValidation,
   clientFormInputClass,
+  clientFormAddressFieldClass,
+  clientFormAddressLabelClass,
   clientFormLabelClass,
   noBrowserAutocomplete,
   personFullName,
   type Sender,
 } from "@/components/sale/venta-parts";
+import { resolveAddressValidationUi, addressCardSubtitle } from "@/lib/sale-address-validation-ui";
 
 type SaleClientFormProps = {
   form: {
@@ -20,7 +26,7 @@ type SaleClientFormProps = {
     lastName: string;
     phones: string[];
     phoneList: string[];
-    email: string;
+    emails: string[];
     street: string;
     house: string;
     neighborhood: string;
@@ -29,7 +35,6 @@ type SaleClientFormProps = {
     postalCode: string;
     setFirstName: (value: string) => void;
     setLastName: (value: string) => void;
-    setEmail: (value: string) => void;
     setStreet: (value: string) => void;
     setHouse: (value: string) => void;
     setNeighborhood: (value: string) => void;
@@ -40,6 +45,7 @@ type SaleClientFormProps = {
   address: {
     search: string;
     suggestions: AddressSuggestion[];
+    searching?: boolean;
     validation: AddressValidation;
     setSearch: (value: string) => void;
     setSuggestions: (suggestions: AddressSuggestion[]) => void;
@@ -49,7 +55,10 @@ type SaleClientFormProps = {
   };
   actions: {
     onCancel: () => void;
-    onSubmit: () => void;
+    onSubmit: (options?: { skipAddressVerification?: boolean }) => void;
+    onAddEmail: () => void;
+    onUpdateEmail: (index: number, value: string) => void;
+    onRemoveEmail: (index: number) => void;
     onAddPhone: () => void;
     onUpdatePhone: (index: number, value: string) => void;
     onRemovePhone: (index: number) => void;
@@ -61,15 +70,20 @@ type SaleClientFormProps = {
 };
 
 export function SaleClientForm({ form, address, actions, meta }: SaleClientFormProps) {
+  const contactMenuRef = useRef<HTMLDivElement>(null);
+  const [contactMenuOpen, setContactMenuOpen] = useState(false);
+  const [addressUnverifiedAccepted, setAddressUnverifiedAccepted] = useState(false);
+  const [showUnverifiedConfirm, setShowUnverifiedConfirm] = useState(false);
   const hasRequiredAddress =
     form.street.trim() && form.city.trim() && form.state.trim() && form.postalCode.trim();
+  const addressReady = address.validation.status === "valid" || addressUnverifiedAccepted;
   const saveDisabled =
     !form.phoneList.length ||
     (!meta.duplicateClient &&
       (!form.firstName.trim() ||
         !form.lastName.trim() ||
         !hasRequiredAddress ||
-        address.validation.status !== "valid"));
+        !addressReady));
   const fullAddress = [
     [form.street, form.house].filter(Boolean).join(" "),
     [form.city, form.state, form.postalCode].filter(Boolean).join(" "),
@@ -78,30 +92,75 @@ export function SaleClientForm({ form, address, actions, meta }: SaleClientFormP
     .filter(Boolean)
     .join(", ");
 
+  useEffect(() => {
+    if (!contactMenuOpen) {
+      return;
+    }
+
+    function closeFromOutside(event: PointerEvent) {
+      if (!contactMenuRef.current?.contains(event.target as Node)) {
+        setContactMenuOpen(false);
+      }
+    }
+
+    function closeFromEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setContactMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", closeFromOutside);
+    document.addEventListener("keydown", closeFromEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeFromOutside);
+      document.removeEventListener("keydown", closeFromEscape);
+    };
+  }, [contactMenuOpen]);
+
+  function addEmailContact() {
+    actions.onAddEmail();
+    setContactMenuOpen(false);
+  }
+
+  function addPhoneContact() {
+    actions.onAddPhone();
+    setContactMenuOpen(false);
+  }
+
+  function touchAddressField(update: () => void) {
+    setAddressUnverifiedAccepted(false);
+    address.touchField(update);
+  }
+
+  function selectSuggestedAddress(suggestion: AddressSuggestion) {
+    setAddressUnverifiedAccepted(false);
+    void address.onSelectSuggestion(suggestion);
+  }
+
+  function useAddressWithoutGoogle() {
+    setAddressUnverifiedAccepted(true);
+    setShowUnverifiedConfirm(false);
+    address.setSuggestions([]);
+    address.setValidation({
+      status: "idle",
+      message: "Direccion sin verificar",
+    });
+  }
+
+  const addressUi = resolveAddressValidationUi({
+    enabled: true,
+    searching: address.searching,
+    validation: address.validation,
+    suggestionsCount: address.suggestions.length,
+    unverifiedAccepted: addressUnverifiedAccepted,
+    hasRequiredAddress: Boolean(hasRequiredAddress),
+    fullAddress,
+  });
+
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <p className={`${flowIntroClass} !text-left !text-slate-300`}>
-            {meta.editingCustomerId ? "Actualiza la ficha del remitente." : "Registra un nuevo remitente."}
-          </p>
-          <span
-            className={`rounded-lg border px-3 py-1 text-xs font-black uppercase ${
-              address.validation.status === "valid"
-                ? "border-black bg-surface-inset text-slate-200"
-                : address.validation.status === "invalid"
-                  ? "border-amber-600 bg-amber-400 text-slate-950"
-                  : "border-black bg-surface-card text-slate-300"
-            }`}
-          >
-            {address.validation.status === "valid"
-              ? "Google OK"
-              : address.validation.status === "invalid" && address.validation.message
-                ? "Error direccion"
-                : "Sin validar"}
-          </span>
-        </div>
-        <div className="flex gap-2">
+      <div className="mb-5 border-b border-white/10 pb-4">
+        <div className="flex flex-wrap items-center justify-start gap-2">
           <button
             type="button"
             onClick={actions.onCancel}
@@ -111,7 +170,11 @@ export function SaleClientForm({ form, address, actions, meta }: SaleClientFormP
           </button>
           <button
             type="button"
-            onClick={actions.onSubmit}
+            onClick={() =>
+              actions.onSubmit(
+                addressUnverifiedAccepted ? { skipAddressVerification: true } : undefined,
+              )
+            }
             disabled={saveDisabled}
             className="h-10 rounded-md bg-emerald-400 px-5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -169,31 +232,70 @@ export function SaleClientForm({ form, address, actions, meta }: SaleClientFormP
                 </label>
               </div>
 
-              <label className="grid gap-1.5">
-                <span className={clientFormLabelClass}>Correo</span>
-                <EmailDomainSuggestionsInput
-                  {...noBrowserAutocomplete}
-                  name="boxario-client-email"
-                  inputClassName={`${clientFormInputClass} pl-10`}
-                  placeholder="cliente@correo.com"
-                  value={form.email}
-                  onChange={form.setEmail}
-                  icon={<Mail className="h-4 w-4" />}
-                />
-              </label>
+              <div ref={contactMenuRef} className="relative flex w-fit items-center justify-start gap-2">
+                <button
+                  type="button"
+                  title="Agregar contacto"
+                  aria-label="Agregar contacto"
+                  aria-expanded={contactMenuOpen}
+                  onClick={() => setContactMenuOpen((open) => !open)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-emerald-400 text-slate-950"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+                <span className={clientFormLabelClass}>Contacto</span>
+                {contactMenuOpen ? (
+                  <div className="absolute left-0 top-[calc(100%+0.4rem)] z-30 w-40 overflow-hidden rounded-lg border border-black bg-[#101820] shadow-2xl">
+                    <button
+                      type="button"
+                      onClick={addEmailContact}
+                      className="flex h-10 w-full items-center gap-2 border-b border-black px-3 text-left text-sm font-black text-[#f8fafc] hover:bg-surface-card-header"
+                    >
+                      <Mail className="h-4 w-4 text-emerald-300" />
+                      Correo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addPhoneContact}
+                      className="flex h-10 w-full items-center gap-2 px-3 text-left text-sm font-black text-[#f8fafc] hover:bg-surface-card-header"
+                    >
+                      <Phone className="h-4 w-4 text-emerald-300" />
+                      Telefono
+                    </button>
+                  </div>
+                ) : null}
+              </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={clientFormLabelClass}>Telefonos</span>
-                  <button
-                    type="button"
-                    onClick={actions.onAddPhone}
-                    className="inline-flex h-8 items-center gap-1 rounded-md bg-emerald-400 px-2.5 text-xs font-black text-slate-950"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Agregar
-                  </button>
-                </div>
+                <span className={clientFormLabelClass}>Correos</span>
+                {form.emails.map((email, index) => (
+                  <div key={`client-email-${index}`} className="flex items-start gap-2">
+                    <EmailDomainSuggestionsInput
+                      {...noBrowserAutocomplete}
+                      className="min-w-0 flex-1"
+                      name={`boxario-client-email-${index}`}
+                      inputClassName={`${clientFormInputClass} pl-10`}
+                      placeholder="cliente@correo.com"
+                      value={email}
+                      onChange={(value) => actions.onUpdateEmail(index, value)}
+                      icon={<Mail className="h-4 w-4" />}
+                    />
+                    <button
+                      type="button"
+                      title="Quitar correo"
+                      aria-label="Quitar correo"
+                      disabled={form.emails.length === 1}
+                      onClick={() => actions.onRemoveEmail(index)}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-black bg-[#3A1818] text-rose-100 disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <span className={clientFormLabelClass}>Telefonos</span>
                 {form.phones.map((phone, index) => (
                   <div key={`client-phone-${index}`} className="flex flex-wrap items-start gap-2">
                     <PhoneCountryInput
@@ -235,47 +337,51 @@ export function SaleClientForm({ form, address, actions, meta }: SaleClientFormP
             </span>
             <div className="min-w-0">
               <p className="text-sm font-black uppercase text-[#f8fafc]">Direccion USA</p>
-              <p className="text-xs font-bold text-slate-400">Buscar y validar en Google</p>
+              <p className="text-xs font-bold text-slate-400">
+                {addressCardSubtitle(addressUi.tone)}
+              </p>
             </div>
           </div>
           <div className="space-y-3 p-4">
             <div className="grid gap-3 md:grid-cols-[minmax(0,1.5fr)_6.5rem_5.5rem]">
               <label className="grid min-w-0 gap-1.5">
-                <span className={clientFormLabelClass}>Calle</span>
+                <span className={clientFormAddressLabelClass(form.street)}>Calle</span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-client-line-1"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.street)}
                   placeholder="Calle y numero"
                   value={form.street}
                   onChange={(event) => {
-                    address.touchField(() => form.setStreet(event.target.value));
+                    touchAddressField(() => form.setStreet(event.target.value));
                   }}
                 />
               </label>
               <label className="grid gap-1.5">
-                <span className={clientFormLabelClass}>Unidad</span>
+                <span className={clientFormAddressLabelClass(form.house, { required: false })}>
+                  Unidad
+                </span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-client-line-2"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.house, { required: false })}
                   placeholder="Apto / suite"
                   value={form.house}
                   onChange={(event) => {
-                    address.touchField(() => form.setHouse(event.target.value));
+                    touchAddressField(() => form.setHouse(event.target.value));
                   }}
                 />
               </label>
               <label className="grid gap-1.5">
-                <span className={clientFormLabelClass}>CP</span>
+                <span className={clientFormAddressLabelClass(form.postalCode)}>CP</span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-client-zip"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.postalCode)}
                   placeholder="Codigo postal"
                   value={form.postalCode}
                   onChange={(event) => {
-                    address.touchField(() => form.setPostalCode(event.target.value));
+                    touchAddressField(() => form.setPostalCode(event.target.value));
                   }}
                 />
               </label>
@@ -283,87 +389,74 @@ export function SaleClientForm({ form, address, actions, meta }: SaleClientFormP
 
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4.5rem]">
               <label className="grid min-w-0 gap-1.5">
-                <span className={clientFormLabelClass}>Colonia</span>
+                <span className={clientFormAddressLabelClass(form.neighborhood, { required: false })}>
+                  Colonia
+                </span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-client-zone"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.neighborhood, { required: false })}
                   placeholder="Barrio / colonia"
                   value={form.neighborhood}
                   onChange={(event) => {
-                    address.touchField(() => form.setNeighborhood(event.target.value));
+                    touchAddressField(() => form.setNeighborhood(event.target.value));
                   }}
                 />
               </label>
               <label className="grid min-w-0 gap-1.5">
-                <span className={clientFormLabelClass}>Ciudad</span>
+                <span className={clientFormAddressLabelClass(form.city)}>Ciudad</span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-client-city"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.city)}
                   placeholder="Ciudad"
                   value={form.city}
                   onChange={(event) => {
-                    address.touchField(() => form.setCity(event.target.value));
+                    touchAddressField(() => form.setCity(event.target.value));
                   }}
                 />
               </label>
               <label className="grid gap-1.5">
-                <span className={clientFormLabelClass}>Estado</span>
+                <span className={clientFormAddressLabelClass(form.state)}>Estado</span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-client-region"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.state)}
                   placeholder="Estado"
                   value={form.state}
                   onChange={(event) => {
-                    address.touchField(() => form.setState(event.target.value));
+                    touchAddressField(() => form.setState(event.target.value));
                   }}
                 />
               </label>
             </div>
 
-            {address.suggestions.length ? (
-              <div
-                id="client-address-suggestions-listbox"
-                role="listbox"
-                className="overflow-hidden rounded-lg border border-black bg-[#101820]"
-              >
-                {address.suggestions.map((suggestion) => (
-                  <button
-                    key={suggestion.placeId}
-                    type="button"
-                    onClick={() => void address.onSelectSuggestion(suggestion)}
-                    className="grid w-full gap-0.5 border-b border-black px-4 py-3 text-left last:border-b-0 hover:bg-surface-card-header"
-                  >
-                    <span className="truncate text-sm font-black text-[#f8fafc]">
-                      {suggestion.mainText}
-                    </span>
-                    <span className="truncate text-xs font-bold text-slate-300">
-                      {[suggestion.secondaryText, suggestion.postalCode].filter(Boolean).join(" | CP ")}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
-            <p
-              className={`rounded-lg border px-3.5 py-2.5 text-sm font-bold leading-snug break-words ${
-                address.validation.status === "valid"
-                  ? "border-black bg-surface-inset text-slate-300"
-                  : address.validation.status === "invalid"
-                    ? "border-amber-600 bg-amber-400 text-slate-950"
-                    : "border-black bg-surface-inset text-slate-500"
-              }`}
-            >
-              {fullAddress ||
-                address.validation.formattedAddress ||
-                address.validation.message ||
-                "Selecciona una direccion para validar"}
-            </p>
+            <SaleAddressGooglePanel
+              validation={address.validation}
+              searching={address.searching}
+              suggestions={address.suggestions}
+              unverifiedAccepted={addressUnverifiedAccepted}
+              hasRequiredAddress={Boolean(hasRequiredAddress)}
+              fullAddress={fullAddress}
+              listboxId="client-address-suggestions-listbox"
+              onSelectSuggestion={selectSuggestedAddress}
+              onUseUnverified={() => setShowUnverifiedConfirm(true)}
+            />
           </div>
         </div>
       </form>
+
+      <ActionConfirmDialog
+        open={showUnverifiedConfirm}
+        dialogId="client-unverified-address-confirm"
+        title="Direccion sin verificar"
+        message="Estas seguro de que quieres agregar esta direccion sin verificarla en Google? Puede tener errores y afectar la entrega."
+        confirmLabel="Agregar sin verificar"
+        cancelLabel="Volver"
+        tone="warning"
+        onCancel={() => setShowUnverifiedConfirm(false)}
+        onConfirm={useAddressWithoutGoogle}
+      />
     </>
   );
 }

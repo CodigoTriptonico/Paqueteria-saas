@@ -101,7 +101,12 @@ export type InventoryCategorySidebarProps = {
     childKindNames: string[],
   ) => ReturnType<typeof resolveCategoryStockItems>;
   renderSubcategoryForm: (compact?: boolean) => React.ReactNode;
+  showStructureDelete?: boolean;
+  selectedSubcategory: { id: string; name: string } | null;
 };
+
+const deleteButtonClass =
+  "inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-red-900/70 bg-red-950/30 px-2.5 text-xs font-black text-red-300 hover:bg-red-950/50 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function InventoryCategorySidebar({
   categoryQuery,
@@ -149,9 +154,47 @@ export function InventoryCategorySidebar({
   openStructureOptions,
   subcategoryStockItems,
   renderSubcategoryForm,
+  showStructureDelete = false,
+  selectedSubcategory,
 }: InventoryCategorySidebarProps) {
   function categoryStockItems(category: CategoryConfig) {
     return resolveCategoryStockItems(inventoryItems, category);
+  }
+
+  function confirmDeleteCategory() {
+    if (!selectedCategoryData) {
+      return;
+    }
+
+    const name = selectedCategoryData.name;
+
+    if (
+      !window.confirm(
+        `¿Eliminar la categoría "${name}"? También se quitarán sus subcategorías e ítems del catálogo.`,
+      )
+    ) {
+      return;
+    }
+
+    deleteCategory(name);
+  }
+
+  function confirmDeleteSubcategory() {
+    if (!selectedCategoryData || !selectedSubcategory) {
+      return;
+    }
+
+    const name = selectedSubcategory.name;
+
+    if (
+      !window.confirm(
+        `¿Eliminar la subcategoría "${name}" de ${selectedCategoryData.name}?`,
+      )
+    ) {
+      return;
+    }
+
+    deleteSubcategory(selectedCategoryData.name, selectedSubcategory.id);
   }
 
   return (
@@ -313,7 +356,7 @@ export function InventoryCategorySidebar({
                 </div>
 
                 {structureEditingEnabled && isAddingSubcategory ? (
-                  <div className="mx-2 mb-2 flex items-center gap-1.5 rounded-lg border border-black bg-surface-inset px-2.5 py-2">
+                  <div className="inset-shell mx-2 mb-2 flex items-center gap-1.5 rounded-lg border border-black bg-surface-inset px-2.5 py-2">
                     <input
                       className={`${inputClass} h-8 min-w-0 flex-1 border-0 bg-transparent text-sm`}
                       placeholder="Subcategoria"
@@ -489,6 +532,41 @@ export function InventoryCategorySidebar({
         </div>
       </div>
 
+      {showStructureDelete && categoryConfigs.length > 0 ? (
+        <div className="mt-2 shrink-0 rounded-lg border border-red-900/50 bg-red-950/20 p-2.5">
+          <p className="text-[10px] font-black uppercase tracking-wide text-red-300/90">
+            Eliminar estructura
+          </p>
+          <p className="mt-1 text-[11px] font-bold leading-snug text-slate-500">
+            {selectedCategoryData
+              ? selectedSubcategory
+                ? `Seleccionado: ${selectedCategoryData.name} › ${selectedSubcategory.name}`
+                : `Seleccionado: ${selectedCategoryData.name}`
+              : "Elige una categoría de la lista"}
+          </p>
+          <div className="mt-2 space-y-1.5">
+            <button
+              type="button"
+              disabled={!selectedSubcategory}
+              onClick={confirmDeleteSubcategory}
+              className={deleteButtonClass}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Eliminar subcategoría
+            </button>
+            <button
+              type="button"
+              disabled={!selectedCategoryData}
+              onClick={confirmDeleteCategory}
+              className={deleteButtonClass}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Eliminar categoría
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {showStructureOptions ? (
         <div className="mt-2 shrink-0 border-t border-black/70 pt-2">
           <div className="overflow-hidden rounded-lg border border-black/60 bg-[#151d1a]">
@@ -525,7 +603,7 @@ export function InventoryCategorySidebar({
                     Nueva categoría
                   </button>
                 ) : (
-                  <div className="flex items-center gap-1 rounded-md border border-black bg-surface-card p-1">
+                  <div className="inset-shell flex items-center gap-1 rounded-md border border-black bg-surface-card p-1">
                     <input
                       className="h-8 min-w-0 flex-1 rounded-md border-0 bg-transparent px-2 text-xs font-black text-[#f8fafc] outline-none placeholder:text-slate-500"
                       placeholder="Nueva categoría"

@@ -4,7 +4,9 @@ import Link from "next/link";
 import {
   ArrowLeft,
   BarChart3,
+  Box,
   Boxes,
+  ChevronDown,
   ClipboardList,
   CreditCard,
   History,
@@ -12,24 +14,31 @@ import {
   ListTodo,
   LucideIcon,
   Menu,
+  PackageCheck,
   Settings,
   Shield,
   Truck,
+  Layers3,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { UserAccountMenu } from "@/components/user-account-menu";
-import { BoxarioBrandHeader } from "@/components/notifications/notifications-center";
+import { SidebarFooterControls, SidebarPageSurfaceControls } from "@/components/ui/sidebar-page-surface-controls";
+import { OnboardingCoachSidebarCountdown } from "@/components/onboarding/onboarding-coach-countdown";
+import { BoxarioBrandHeader, NotificationsCenter } from "@/components/notifications/notifications-center";
 import { canAccessPath, platformAdminNeedsClientContext } from "@/lib/auth/permissions";
 import { conductorTasksNavLabel } from "@/lib/conductor-tareas-view";
+import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
+import type { UiSurfaceContextId } from "@/lib/ui-surface-context";
 import type { AppSession } from "@/lib/auth/types";
 
-type NavSectionId = "main" | "shipments" | "stock" | "operations" | "reports" | "admin";
+type NavSectionId = "main" | "shipments" | "stock" | "warehouse" | "operations" | "reports" | "admin";
 
 const navSections: { id: NavSectionId; label: string }[] = [
   { id: "main", label: "Trabajo" },
   { id: "shipments", label: "Envíos" },
   { id: "stock", label: "Stock" },
+  { id: "warehouse", label: "Flujo de bodega" },
   { id: "operations", label: "Operación" },
   { id: "reports", label: "Reportes" },
   { id: "admin", label: "Admin" },
@@ -40,22 +49,28 @@ const navItems: {
   href: string;
   icon: LucideIcon;
   section: NavSectionId;
+  flowStep?: string;
   hasSubmenu?: boolean;
   platformOnly?: boolean;
 }[] = [
-  { label: "Inicio", href: "/", icon: House, section: "main" },
-  { label: "Nueva venta", href: "/venta", icon: CreditCard, section: "main", hasSubmenu: true },
-  { label: "Seguimiento", href: "/envios", icon: ClipboardList, section: "shipments" },
-  { label: "Historial envíos", href: "/envios/historial", icon: History, section: "shipments" },
+  { label: "Nueva venta", href: "/venta", icon: CreditCard, section: "shipments", hasSubmenu: true },
+  { label: "Seguimiento", href: "/seguimiento", icon: ClipboardList, section: "shipments" },
+  { label: "Historial envíos", href: "/seguimiento/historial", icon: History, section: "shipments" },
   { label: "Inventario", href: "/inventario", icon: Boxes, section: "stock", hasSubmenu: true },
+  { label: "Ingreso a bodega", href: "/ingreso-bodega", icon: Box, section: "warehouse", flowStep: "01" },
+  { label: "Bodega", href: "/bodega", icon: PackageCheck, section: "warehouse", flowStep: "02" },
+  { label: "Paletas", href: "/paletas", icon: Layers3, section: "warehouse", flowStep: "03" },
   { label: "Logistica", href: "/logistica", icon: Truck, section: "operations" },
   { label: "Tareas conductor", href: "/conductor/tareas", icon: ListTodo, section: "operations" },
   { label: "Inventario camion", href: "/conductor/inventario-camion", icon: Boxes, section: "operations" },
   { label: "Estadisticas", href: "/estadisticas", icon: BarChart3, section: "reports" },
+  { label: "Auditoria", href: "/auditoria", icon: History, section: "reports" },
+  { label: "Configuracion", href: "/configuracion", icon: Settings, section: "admin" },
   { label: "Plataforma", href: "/platform", icon: Shield, section: "admin", platformOnly: true },
 ];
 
 const DESKTOP_SIDEBAR_COLLAPSED_KEY = "boxario:desktop-sidebar-collapsed";
+const SIDEBAR_GROUPS_EXPANDED_KEY_PREFIX = "boxario:sidebar-expanded-groups";
 
 type AppShellProps = {
   active: string;
@@ -75,6 +90,7 @@ type AppShellProps = {
   contextNavLabel?: string;
   onContextNavBack?: () => void;
   contentEdgeToEdge?: boolean;
+  surfaceContextId?: UiSurfaceContextId | null;
   children: React.ReactNode;
 };
 
@@ -169,7 +185,7 @@ function navSectionIdForItem(item: NavItemDef): NavSectionId {
     return item.section;
   }
 
-  if (item.href.startsWith("/envios")) {
+  if (item.href.startsWith("/seguimiento")) {
     return "shipments";
   }
 
@@ -185,6 +201,33 @@ function navGroupsForItems(items: NavItemDef[]) {
     .filter((section) => section.items.length > 0);
 }
 
+function isNavSectionId(value: unknown): value is NavSectionId {
+  return typeof value === "string" && navSections.some((section) => section.id === value);
+}
+
+function navSectionIcon(sectionId: NavSectionId): LucideIcon {
+  switch (sectionId) {
+    case "main":
+      return House;
+    case "shipments":
+      return ClipboardList;
+    case "stock":
+      return Boxes;
+    case "warehouse":
+      return PackageCheck;
+    case "operations":
+      return Truck;
+    case "reports":
+      return BarChart3;
+    case "admin":
+      return Settings;
+  }
+}
+
+function sidebarGroupsExpandedStorageKey(session: AppSession | null) {
+  return `${SIDEBAR_GROUPS_EXPANDED_KEY_PREFIX}:${session?.userId ?? "anonymous"}`;
+}
+
 function isNavItemLocked(session: AppSession | null, item: NavItemDef) {
   if (!session || item.platformOnly) {
     return false;
@@ -193,6 +236,22 @@ function isNavItemLocked(session: AppSession | null, item: NavItemDef) {
 }
 
 const LOCKED_NAV_HINT = "Selecciona una paquetería en Plataforma y pulsa Operar";
+
+function navOnboardingTarget(href: string) {
+  if (href === "/configuracion") {
+    return ONBOARDING_TARGETS.NAV_CONFIGURACION;
+  }
+
+  if (href === "/inventario") {
+    return ONBOARDING_TARGETS.NAV_INVENTARIO;
+  }
+
+  if (href === "/venta") {
+    return ONBOARDING_TARGETS.NAV_VENTA;
+  }
+
+  return undefined;
+}
 
 type ShellNavItemProps = {
   item: NavItemDef;
@@ -206,6 +265,7 @@ type ShellNavItemProps = {
 function ShellNavItem({ item, label, session, isActive, variant, onNavigate }: ShellNavItemProps) {
   const Icon = item.icon;
   const locked = isNavItemLocked(session, item);
+  const onboardingTarget = navOnboardingTarget(item.href);
 
   if (locked) {
     const lockedClass =
@@ -235,6 +295,7 @@ function ShellNavItem({ item, label, session, isActive, variant, onNavigate }: S
         prefetch
         title={label}
         aria-label={label}
+        data-onboarding-target={onboardingTarget}
         onClick={() => onNavigate?.(isActive, item.hasSubmenu)}
         className={`relative flex h-11 w-full items-center justify-center rounded-lg border transition-colors duration-200 ${
           isActive
@@ -242,28 +303,33 @@ function ShellNavItem({ item, label, session, isActive, variant, onNavigate }: S
             : "border-transparent text-slate-300 hover:border-black hover:bg-surface-card hover:text-white"
         }`}
       >
-        {isActive ? <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-emerald-300" /> : null}
         <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-emerald-200" : "text-slate-400"}`} />
       </Link>
     );
   }
 
   if (variant === "sidebar") {
+    const isWorkflowItem = Boolean(item.flowStep);
     return (
       <Link
         key={item.href}
         href={item.href}
         prefetch
+        data-onboarding-target={onboardingTarget}
         onClick={() => onNavigate?.(isActive, item.hasSubmenu)}
-        className={`relative flex h-11 min-w-0 items-center gap-3 rounded-lg border px-3 text-left text-base font-black transition-colors duration-200 ${
+        className={`relative flex min-w-0 items-center gap-3 rounded-lg border px-3 text-left text-base font-black transition-colors duration-200 ${
           isActive
-            ? "border-black bg-[#33413c] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-            : "border-transparent text-slate-300 hover:border-black hover:bg-surface-card hover:text-white"
+            ? isWorkflowItem
+              ? "min-h-12 border-black bg-[#33413c] py-2 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+              : "h-11 border-black bg-[#33413c] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+            : isWorkflowItem
+              ? "min-h-11 border-transparent py-2 text-slate-300 hover:border-black hover:bg-surface-card hover:text-white"
+              : "h-11 border-transparent text-slate-300 hover:border-black hover:bg-surface-card hover:text-white"
         }`}
       >
-        {isActive ? <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-emerald-300" /> : null}
-        <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-emerald-200" : "text-slate-400"}`} />
-        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {isWorkflowItem ? <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-black ${isActive ? "bg-white/10 text-slate-100" : "bg-slate-700/40 text-slate-400"}`}>{item.flowStep}</span> : null}
+        <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? "text-slate-100" : "text-slate-400"}`} />
+        <span className={isWorkflowItem ? "min-w-0 flex-1 whitespace-normal leading-tight" : "min-w-0 flex-1 truncate"}>{label}</span>
       </Link>
     );
   }
@@ -273,6 +339,7 @@ function ShellNavItem({ item, label, session, isActive, variant, onNavigate }: S
       key={item.href}
       href={item.href}
       prefetch
+      data-onboarding-target={onboardingTarget}
       onClick={() => onNavigate?.(isActive, item.hasSubmenu)}
       className={`flex h-12 min-w-0 items-center gap-3 rounded-lg border px-3 text-sm font-black transition-all duration-200 active:scale-[0.98] ${
         isActive ? "border-black bg-emerald-400 text-slate-950" : "border-black bg-surface-card text-slate-300"
@@ -298,13 +365,25 @@ export function AppShell({
   onContextNavBack,
   onActiveClick,
   contentEdgeToEdge = false,
+  surfaceContextId = null,
 }: AppShellProps & { session: AppSession | null }) {
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
+  const [expandedSidebarGroups, setExpandedSidebarGroups] = useState<NavSectionId[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const needsClientSelection = platformAdminNeedsClientContext(session);
   const sidebarNavItems = useMemo(() => navItemsForSession(session), [session]);
   const sidebarNavGroups = useMemo(() => navGroupsForItems(sidebarNavItems), [sidebarNavItems]);
+  const collapsibleSidebarGroupIds = useMemo(
+    () => sidebarNavGroups.filter((section) => section.items.length > 0).map((section) => section.id),
+    [sidebarNavGroups],
+  );
+  const allSidebarGroupsExpanded = useMemo(
+    () =>
+      collapsibleSidebarGroupIds.length > 0 &&
+      collapsibleSidebarGroupIds.every((sectionId) => expandedSidebarGroups.includes(sectionId)),
+    [collapsibleSidebarGroupIds, expandedSidebarGroups],
+  );
   const activeItem =
     sidebarNavItems.find((item) => navItemLabel(item, session) === active) ??
     sidebarNavItems[0] ??
@@ -315,6 +394,7 @@ export function AppShell({
   const showContextNav = Boolean(contextNavLabel && onContextNavBack);
   const showMobileMainNav = !(navCollapsed && showCompactSidebar) && mobileNavItems.length > 0;
   const showDesktopRail = desktopSidebarCollapsed && !(navCollapsed && showCompactSidebar);
+  const sidebarGroupsStorageKey = sidebarGroupsExpandedStorageKey(session);
 
   useEffect(() => {
     const stored = localStorage.getItem(DESKTOP_SIDEBAR_COLLAPSED_KEY);
@@ -323,12 +403,48 @@ export function AppShell({
     }
   }, []);
 
+  useEffect(() => {
+    const stored = localStorage.getItem(sidebarGroupsStorageKey);
+    if (!stored) {
+      return;
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(stored);
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+
+      const savedGroups = parsed.filter(isNavSectionId);
+      queueMicrotask(() => setExpandedSidebarGroups(savedGroups));
+    } catch {
+      // An older or malformed browser value should never block navigation.
+    }
+  }, [sidebarGroupsStorageKey]);
+
   function toggleDesktopSidebar() {
     setDesktopSidebarCollapsed((current) => {
       const next = !current;
       localStorage.setItem(DESKTOP_SIDEBAR_COLLAPSED_KEY, String(next));
       return next;
     });
+  }
+
+  function toggleSidebarGroup(sectionId: NavSectionId) {
+    setExpandedSidebarGroups((current) => {
+      const next = current.includes(sectionId)
+        ? current.filter((id) => id !== sectionId)
+        : [...current, sectionId];
+
+      localStorage.setItem(sidebarGroupsStorageKey, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function toggleAllSidebarGroups() {
+    const next = allSidebarGroupsExpanded ? [] : collapsibleSidebarGroupIds;
+    setExpandedSidebarGroups(next);
+    localStorage.setItem(sidebarGroupsStorageKey, JSON.stringify(next));
   }
 
   function collapseToCompactNav() {
@@ -404,7 +520,7 @@ export function AppShell({
       >
         <aside
           className={`hidden shrink-0 overflow-visible rounded-xl border border-black bg-surface-panel shadow-md transition-[width,transform,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] lg:sticky lg:top-5 lg:z-[100] lg:flex lg:max-h-[calc(100vh-2.5rem)] lg:min-h-[calc(100vh-2.5rem)] lg:flex-col ${
-            showDesktopRail ? "w-16 p-2" : "w-72 p-4"
+            showDesktopRail ? "w-16 p-2" : "w-64 p-3"
           }`}
         >
           {navCollapsed && showCompactSidebar ? (
@@ -422,21 +538,26 @@ export function AppShell({
           ) : (
             <>
               <div className="mb-4">
-                <BoxarioBrandHeader
-                  session={session}
-                  compact
-                  className="w-full min-w-0"
-                  onBack={showContextNav && !showDesktopRail ? onContextNavBack : undefined}
-                  title={showContextNav && !showDesktopRail ? brandTitle : undefined}
-                  railOnly={showDesktopRail}
-                  sidebarToggle={{
-                    collapsed: showDesktopRail,
-                    onToggle: toggleDesktopSidebar,
-                  }}
-                />
+                {showDesktopRail ? (
+                  <div className="flex justify-center">
+                    <NotificationsCenter session={session} variant="brand" />
+                  </div>
+                ) : (
+                  <BoxarioBrandHeader
+                    session={session}
+                    compact
+                    className="w-full min-w-0"
+                    onBack={showContextNav ? onContextNavBack : undefined}
+                    title={showContextNav ? brandTitle : undefined}
+                    sidebarGroupsToggle={{
+                      allExpanded: allSidebarGroupsExpanded,
+                      onToggle: toggleAllSidebarGroups,
+                    }}
+                  />
+                )}
               </div>
 
-              <nav className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+              <nav className="min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1">
                 {!showDesktopRail && needsClientSelection ? (
                   <p className="mb-1 rounded-lg border border-amber-800/50 bg-amber-950/25 px-3 py-2 text-xs font-bold leading-snug text-amber-100">
                     Elige una paquetería en <span className="text-amber-300">Plataforma</span> y pulsa{" "}
@@ -444,37 +565,125 @@ export function AppShell({
                     .
                   </p>
                 ) : null}
-                {sidebarNavGroups.map((section) => (
-                  <div key={section.id} className="space-y-1.5">
-                    {!showDesktopRail ? (
-                      <p className="px-3 text-[10px] font-black uppercase leading-none text-slate-500">
-                        {section.label}
-                      </p>
-                    ) : null}
-                    <div className="grid gap-1">
-                      {section.items.map((item) => {
-                        const label = navItemLabel(item, session);
+                {sidebarNavGroups.map((section) => {
+                  const canCollapse = section.items.length > 0;
+                  const sectionCollapsed =
+                    !showDesktopRail && canCollapse && !expandedSidebarGroups.includes(section.id);
+                  const sectionExpanded = !sectionCollapsed;
+                  const isWarehouseSection = section.id === "warehouse";
+                  const groupPanelId = `sidebar-group-${section.id}`;
+                  const SectionIcon = navSectionIcon(section.id);
+                  const collapsedGroupHeaderClass =
+                    "border-black/75 bg-surface-inset/55 hover:border-emerald-900/80 hover:bg-[#27342f]";
 
-                        return (
-                          <ShellNavItem
-                            key={item.href}
-                            item={item}
-                            label={label}
-                            session={session}
-                            isActive={label === active}
-                            variant={showDesktopRail ? "rail" : "sidebar"}
-                            onNavigate={handleNavClick}
-                          />
-                        );
-                      })}
+                  return (
+                    <div key={section.id} className="space-y-1.5">
+                      {!showDesktopRail ? (
+                        <button
+                          type="button"
+                          onClick={canCollapse ? () => toggleSidebarGroup(section.id) : undefined}
+                          aria-controls={canCollapse ? groupPanelId : undefined}
+                          aria-expanded={canCollapse ? sectionExpanded : undefined}
+                          className={`group flex min-h-11 w-full items-center justify-between rounded-lg border px-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-[background-color,border-color,box-shadow,transform] duration-200 active:scale-[0.99] ${
+                            canCollapse
+                              ? `cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70 ${
+                                  sectionExpanded ? "sidebar-group-expanded" : collapsedGroupHeaderClass
+                                }`
+                              : "cursor-default"
+                          }`}
+                        >
+                          <span className="flex min-w-0 items-center gap-2.5">
+                            <span
+                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${
+                                sectionExpanded
+                                  ? "sidebar-group-expanded-icon"
+                                  : "border-black/70 bg-surface-card text-emerald-200 group-hover:bg-[#34443d] group-hover:text-emerald-100"
+                              }`}
+                            >
+                              <SectionIcon className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+                            </span>
+                            {isWarehouseSection ? (
+                              <span
+                                className={`flex min-w-0 flex-col text-[9px] font-black uppercase leading-[0.86rem] tracking-[0.08em] ${
+                                  sectionExpanded ? "text-emerald-100" : "text-slate-200"
+                                }`}
+                              >
+                                <span>Flujo</span>
+                                <span>de bodega</span>
+                              </span>
+                            ) : (
+                              <span
+                                className={`truncate text-[11px] font-black uppercase leading-none tracking-[0.08em] ${
+                                  sectionExpanded ? "text-emerald-100" : "text-slate-200"
+                                }`}
+                              >
+                                {section.label}
+                              </span>
+                            )}
+                          </span>
+                          {canCollapse ? (
+                            <span
+                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors duration-200 ${
+                                sectionExpanded
+                                  ? "sidebar-group-expanded-chevron"
+                                  : "border-black/70 bg-black/20 text-emerald-200 group-hover:bg-black/30"
+                              }`}
+                            >
+                              <ChevronDown
+                                className={`h-4 w-4 transition-transform duration-200 ${
+                                  sectionCollapsed ? "-rotate-90" : "rotate-0"
+                                }`}
+                                aria-hidden
+                              />
+                            </span>
+                          ) : null}
+                        </button>
+                      ) : null}
+                      <div
+                        id={!showDesktopRail && canCollapse ? groupPanelId : undefined}
+                        aria-hidden={sectionCollapsed}
+                        inert={sectionCollapsed}
+                        className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ease-out ${
+                          sectionCollapsed ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+                        }`}
+                      >
+                        <div className="min-h-0">
+                          <div className="grid gap-1">
+                            {section.items.map((item) => {
+                              const label = navItemLabel(item, session);
+
+                              return (
+                                <ShellNavItem
+                                  key={item.href}
+                                  item={item}
+                                  label={label}
+                                  session={session}
+                                  isActive={label === active}
+                                  variant={showDesktopRail ? "rail" : "sidebar"}
+                                  onNavigate={handleNavClick}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </nav>
             </>
           )}
 
           <div className="mt-auto hidden pt-4 lg:block">
+            <OnboardingCoachSidebarCountdown
+              variant={showDesktopRail ? "rail" : "sidebar"}
+            />
+            <SidebarFooterControls
+              contextId={surfaceContextId}
+              sidebarCollapsed={showDesktopRail}
+              onToggleSidebar={toggleDesktopSidebar}
+              variant={showDesktopRail ? "rail" : "sidebar"}
+            />
             <UserAccountMenu
               session={session}
               variant={showDesktopRail ? "rail" : "sidebar"}
@@ -492,6 +701,9 @@ export function AppShell({
               title={showContextNav ? brandTitle : undefined}
             />
             <UserAccountMenu session={session} variant="bar" />
+            {surfaceContextId ? (
+              <SidebarPageSurfaceControls contextId={surfaceContextId} variant="bar" />
+            ) : null}
           </div>
 
           {needsClientSelection ? (

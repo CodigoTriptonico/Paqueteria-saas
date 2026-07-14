@@ -12,7 +12,7 @@ import {
   type PromotionQuote,
 } from "@/lib/pricing-promotions";
 
-export type LogisticsFeeMode = "per_trip" | "per_box";
+type LogisticsFeeMode = "per_trip" | "per_box";
 
 export type InvoiceBillingConfig = LogisticsFeeConfig & {
   minimumDeposit: string;
@@ -51,42 +51,15 @@ export type InvoiceBillingSnapshot = {
   minimumDeposit: string;
   payNow: string;
   balanceDue: string;
-};
-
-export type InvoiceAccountingState = {
-  invoiceStatus: "open" | "paid";
-  accountingStatus: "not_exportable" | "exportable";
-};
-
-function parseRecordedPayment(value: string | number) {
-  return typeof value === "number" ? value : parseMoneyValue(value);
-}
-
-export function billingWithRecordedPayment(
-  billing: InvoiceBillingSnapshot,
-  recordedPayment: string | number,
-): InvoiceBillingSnapshot {
-  const quotedTotal = parseMoneyValue(billing.quotedTotal);
-  const paid = Math.max(0, Math.min(parseRecordedPayment(recordedPayment), quotedTotal));
-
-  return {
-    ...billing,
-    payNow: formatMoneyValue(paid),
-    balanceDue: formatMoneyValue(Math.max(quotedTotal - paid, 0)),
+  lastDriverCollection?: {
+    expectedAmount: number;
+    receivedAmount: number;
+    outcome: "collected" | "not_collected";
+    collectedAt: string;
+    totalBefore: number;
+    totalAfter: number;
   };
-}
-
-export function invoiceAccountingStateForPayment(
-  billing: InvoiceBillingSnapshot,
-  recordedPayment: string | number,
-): InvoiceAccountingState {
-  const adjusted = billingWithRecordedPayment(billing, recordedPayment);
-  const paidInFull = parseMoneyValue(adjusted.balanceDue) <= 0;
-
-  return paidInFull
-    ? { invoiceStatus: "paid", accountingStatus: "exportable" }
-    : { invoiceStatus: "open", accountingStatus: "not_exportable" };
-}
+};
 
 export function computeInvoiceBilling(input: {
   boxCount?: number;
@@ -136,13 +109,8 @@ export function computeInvoiceBilling(input: {
   const promotionDiscount = promotion ? parseMoneyValue(promotion.discountTotal) : 0;
   const boxSubtotal = Math.max(boxSubtotalBeforeDiscount - promotionDiscount, 0);
   const mode = input.fees.logisticsFeeMode;
-  const feeMultiplier = mode === "per_box" ? boxCount : 1;
-  const emptyBoxDelivery = input.emptyBoxDriver
-    ? Math.max(parseMoneyValue(input.fees.emptyBoxDeliveryFee), 0) * feeMultiplier
-    : 0;
-  const fullBoxPickup = input.fullBoxDriver
-    ? Math.max(parseMoneyValue(input.fees.fullBoxPickupFee), 0) * feeMultiplier
-    : 0;
+  const emptyBoxDelivery = 0;
+  const fullBoxPickup = 0;
   const logisticsSubtotal = emptyBoxDelivery + fullBoxPickup;
   const quotedTotal = boxSubtotal + logisticsSubtotal;
 
@@ -186,6 +154,31 @@ export function resolvePayNowFromDraft(draft: string, touched: boolean): number 
   return parseMoneyValue(draft);
 }
 
+export function billingWithRecordedPayment(
+  billing: InvoiceBillingSnapshot,
+  paidValue: string,
+): InvoiceBillingSnapshot {
+  const quotedTotal = parseMoneyValue(billing.quotedTotal);
+  const paid = Math.min(Math.max(parseMoneyValue(paidValue), 0), quotedTotal);
+
+  return {
+    ...billing,
+    payNow: formatMoneyValue(paid),
+    balanceDue: formatMoneyValue(Math.max(quotedTotal - paid, 0)),
+  };
+}
+
+export function invoiceAccountingStateForPayment(
+  billing: Pick<InvoiceBillingSnapshot, "quotedTotal">,
+  paidValue: string,
+) {
+  const paidInFull = parseMoneyValue(paidValue) >= parseMoneyValue(billing.quotedTotal);
+  return {
+    invoiceStatus: paidInFull ? "paid" as const : "open" as const,
+    accountingStatus: paidInFull ? "exportable" as const : "not_exportable" as const,
+  };
+}
+
 export function readBillingFromPlan(value: unknown): InvoiceBillingSnapshot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -200,6 +193,24 @@ export function readBillingFromPlan(value: unknown): InvoiceBillingSnapshot | nu
   const quotedTotal = String(row.quotedTotal || "");
   const payNow = String(row.payNow || "");
   const balanceDue = String(row.balanceDue || "");
+  const driverCollection =
+    row.lastDriverCollection &&
+    typeof row.lastDriverCollection === "object" &&
+    !Array.isArray(row.lastDriverCollection)
+      ? (row.lastDriverCollection as Record<string, unknown>)
+      : null;
+  const lastDriverCollection =
+    driverCollection &&
+    (driverCollection.outcome === "collected" || driverCollection.outcome === "not_collected")
+      ? {
+          expectedAmount: Number(driverCollection.expectedAmount) || 0,
+          receivedAmount: Number(driverCollection.receivedAmount) || 0,
+          outcome: driverCollection.outcome as "collected" | "not_collected",
+          collectedAt: String(driverCollection.collectedAt || ""),
+          totalBefore: Number(driverCollection.totalBefore) || 0,
+          totalAfter: Number(driverCollection.totalAfter) || 0,
+        }
+      : undefined;
 
   if (!quotedTotal || !payNow) {
     return null;
@@ -234,6 +245,7 @@ export function readBillingFromPlan(value: unknown): InvoiceBillingSnapshot | nu
     minimumDeposit: String(row.minimumDeposit || "$0"),
     payNow,
     balanceDue: balanceDue || formatMoneyValue(parseMoneyValue(quotedTotal) - parseMoneyValue(payNow)),
+    lastDriverCollection,
   };
 }
 

@@ -1,14 +1,16 @@
 "use client";
 
-import { ArrowLeft, Bell, CheckCircle2, PanelLeftClose, PanelLeftOpen, Sparkles, X } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Bell, CheckCircle2, ChevronsDownUp, PanelLeftClose, PanelLeftOpen, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { OnboardingProgress } from "@/app/actions/onboarding";
-import { OnboardingPanel, type OnboardingSummaryFocus } from "@/components/onboarding/onboarding-panel";
+import { OnboardingPanel } from "@/components/onboarding/onboarding-panel";
+import { OnboardingStartPanel } from "@/components/onboarding/onboarding-start-panel";
 import { iconWellEmerald, labelMutedClass } from "@/components/ui-blocks";
 import { useOnboardingProgress } from "@/hooks/use-onboarding-progress";
-import { isOnboardingTutorialEnabled } from "@/lib/onboarding/feature";
 import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
+import { setOnboardingNotificationsPanelOpen } from "@/lib/onboarding/notifications-panel";
 import type { AppSession } from "@/lib/auth/types";
 
 const PANEL_MIN_WIDTH = 320;
@@ -22,6 +24,13 @@ type PanelPosition = {
   maxHeight: number;
 };
 
+type OnboardingCompletionNotice = {
+  completedTitle: string;
+  nextTitle: string;
+};
+
+const ONBOARDING_COMPLETION_NOTICE_MS = 1_200;
+
 type NotificationsCenterProps = {
   session: AppSession | null;
   variant?: "bar" | "sidebar" | "brand";
@@ -34,12 +43,41 @@ type BoxarioBrandHeaderProps = {
   onBack?: () => void;
   title?: string;
   backTitle?: string;
-  railOnly?: boolean;
-  sidebarToggle?: {
-    collapsed: boolean;
+  sidebarGroupsToggle?: {
+    allExpanded: boolean;
     onToggle: () => void;
   };
 };
+
+const backButtonClass =
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-700/40 bg-emerald-400/10 text-emerald-300 transition hover:bg-emerald-400/15 hover:text-emerald-200 active:scale-[0.98]";
+const homeButtonClass =
+  "inline-flex min-w-0 items-center rounded-lg px-1.5 py-2 text-left transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70";
+
+type SidebarCollapseButtonProps = {
+  collapsed: boolean;
+  onToggle: () => void;
+};
+
+export function SidebarCollapseButton({
+  collapsed,
+  onToggle,
+}: SidebarCollapseButtonProps) {
+  const Icon = collapsed ? PanelLeftOpen : PanelLeftClose;
+  const title = collapsed ? "Mostrar menú lateral" : "Ocultar menú lateral";
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={title}
+      aria-label={title}
+      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card text-slate-400 transition hover:bg-[#2f3834] hover:text-slate-200 active:scale-[0.98]"
+    >
+      <Icon className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+    </button>
+  );
+}
 
 export function BoxarioBrandHeader({
   session,
@@ -48,48 +86,24 @@ export function BoxarioBrandHeader({
   onBack,
   title = "Boxario",
   backTitle = "Volver",
-  railOnly = false,
-  sidebarToggle,
+  sidebarGroupsToggle,
 }: BoxarioBrandHeaderProps) {
-  const shellClass = `flex flex-col rounded-xl border border-black bg-surface-card text-[#f8fafc] shadow-sm ${
-    compact ? "h-12 justify-center px-3" : "h-16 justify-center px-4"
+  const shellClass = `relative flex items-center overflow-hidden rounded-xl border border-black bg-surface-card-header text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
+    compact ? "h-12 px-2.5" : "h-14 px-3"
   } ${className}`;
-  const titleClass = `min-w-0 truncate font-black ${compact ? "text-xl" : "text-2xl"}`;
-  const backButtonClass =
-    "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#1a2320] text-emerald-300/90 transition hover:bg-[#243029] hover:text-emerald-200 active:scale-[0.98]";
-  const sidebarToggleButtonClass =
-    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-black/70 bg-[#1a2320] text-slate-400 transition hover:bg-[#243029] hover:text-slate-200 active:scale-[0.98]";
+  const titleClass = `min-w-0 truncate font-black tracking-tight leading-none ${
+    compact ? "text-lg" : "text-xl"
+  }`;
   const showNotifications = Boolean(session && !platformAdminNeedsClientContext(session));
-
-  const sidebarToggleButton = sidebarToggle ? (
-    <button
-      type="button"
-      onClick={sidebarToggle.onToggle}
-      className={sidebarToggleButtonClass}
-      aria-label={sidebarToggle.collapsed ? "Expandir menu lateral" : "Colapsar menu lateral"}
-      title={sidebarToggle.collapsed ? "Expandir menu" : "Colapsar menu"}
-    >
-      {sidebarToggle.collapsed ? (
-        <PanelLeftOpen className="h-3.5 w-3.5" />
-      ) : (
-        <PanelLeftClose className="h-3.5 w-3.5" />
-      )}
-    </button>
-  ) : null;
-
-  if (railOnly && sidebarToggleButton) {
-    return (
-      <div className={`flex justify-center rounded-xl border border-black bg-surface-card p-1.5 ${className}`}>
-        {sidebarToggleButton}
-      </div>
-    );
-  }
+  const expandAllGroupsLabel = sidebarGroupsToggle?.allExpanded
+    ? "Contraer todos los grupos del menú"
+    : "Expandir todos los grupos del menú";
 
   return (
     <div className={shellClass}>
-      <div className="flex min-h-8 items-center justify-between gap-2">
-        {onBack ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+      <div className="flex w-full min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+          {onBack ? (
             <button
               type="button"
               onClick={onBack}
@@ -99,104 +113,37 @@ export function BoxarioBrandHeader({
             >
               <ArrowLeft className="h-4 w-4" strokeWidth={2.5} />
             </button>
+          ) : null}
+          {onBack && title !== "Boxario" ? (
             <span className={titleClass}>{title}</span>
-          </div>
-        ) : (
-          <h1 className={titleClass}>Boxario</h1>
-        )}
-        <div className="flex shrink-0 items-center gap-1.5">
-          {sidebarToggleButton}
+          ) : (
+            <Link href="/" prefetch aria-label="Ir al inicio" title="Ir al inicio" className={homeButtonClass}>
+              <h1 className={titleClass}>Boxario</h1>
+            </Link>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {sidebarGroupsToggle ? (
+            <button
+              type="button"
+              onClick={sidebarGroupsToggle.onToggle}
+              title={expandAllGroupsLabel}
+              aria-label={expandAllGroupsLabel}
+              aria-expanded={sidebarGroupsToggle.allExpanded}
+              className={backButtonClass}
+            >
+              <ChevronsDownUp
+                className={`h-4 w-4 transition-transform duration-200 ${
+                  sidebarGroupsToggle.allExpanded ? "rotate-180" : ""
+                }`}
+                strokeWidth={2.5}
+                aria-hidden
+              />
+            </button>
+          ) : null}
           {showNotifications ? <NotificationsCenter session={session} variant="brand" /> : null}
         </div>
       </div>
-    </div>
-  );
-}
-
-function SummaryStatButton({
-  label,
-  value,
-  valueClassName,
-  active,
-  onClick,
-}: {
-  label: string;
-  value: string | number;
-  valueClassName: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-lg border px-2.5 py-2 text-center transition active:scale-[0.98] ${
-        active
-          ? "border-emerald-600/50 bg-emerald-400/10 ring-1 ring-emerald-500/20"
-          : "border-black bg-[#243029] hover:border-emerald-700/30 hover:bg-[#2a332f]"
-      }`}
-    >
-      <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`mt-0.5 text-lg font-black tabular-nums ${valueClassName}`}>{value}</p>
-    </button>
-  );
-}
-
-function NotificationsSummary({
-  pendingCount,
-  progress,
-  activeFocus,
-  onAllClick,
-  onPendingClick,
-  onCompletedClick,
-}: {
-  pendingCount: number;
-  progress: OnboardingProgress | null;
-  activeFocus: OnboardingSummaryFocus;
-  onAllClick: () => void;
-  onPendingClick: () => void;
-  onCompletedClick: () => void;
-}) {
-  const completedCount = progress?.completedCount ?? 0;
-  const totalCount = progress?.totalCount ?? 5;
-
-  return (
-    <div className="grid grid-cols-3 gap-2 border-b border-black bg-[#1a2320]/80 px-3 py-2.5">
-      <SummaryStatButton
-        label="Todos"
-        value={totalCount}
-        valueClassName="text-[#f8fafc]"
-        active={activeFocus === "all"}
-        onClick={onAllClick}
-      />
-      <SummaryStatButton
-        label="Pendientes"
-        value={pendingCount}
-        valueClassName="text-emerald-300"
-        active={activeFocus === "pending"}
-        onClick={onPendingClick}
-      />
-      <SummaryStatButton
-        label="Listos"
-        value={completedCount}
-        valueClassName="text-[#f8fafc]"
-        active={activeFocus === "completed"}
-        onClick={onCompletedClick}
-      />
-    </div>
-  );
-}
-
-function TutorialPausedState() {
-  return (
-    <div className="flex flex-col items-center rounded-xl border border-black bg-gradient-to-b from-[#243029] to-[#1f2724] px-5 py-8 text-center shadow-[0_10px_28px_rgba(0,0,0,0.22)]">
-      <span className={`h-10 w-10 ${iconWellEmerald}`}>
-        <Sparkles className="h-5 w-5" />
-      </span>
-      <p className="mt-3 text-base font-black text-[#f8fafc]">Tutorial en pausa</p>
-      <p className="mt-1.5 max-w-[14rem] text-xs font-bold leading-relaxed text-slate-400">
-        La guía de configuración inicial está desactivada por ahora. Te avisaremos aquí cuando haya novedades.
-      </p>
     </div>
   );
 }
@@ -221,12 +168,17 @@ export function NotificationsCenter({
 }: NotificationsCenterProps) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [summaryFocus, setSummaryFocus] = useState<OnboardingSummaryFocus>("all");
   const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null);
+  const [completionNotice, setCompletionNotice] = useState<OnboardingCompletionNotice | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const { progress, pendingCount, loading } = useOnboardingProgress();
+  const previousProgressRef = useRef<OnboardingProgress | null>(null);
+  const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { progress, pendingCount, loading, error } = useOnboardingProgress(session?.organizationId);
   const hasOnboarding = Boolean(progress?.eligible && !progress?.allComplete);
+  const tutorialStarted = Boolean(progress?.started);
+  const hasActiveTutorial = hasOnboarding && tutorialStarted;
+  const hasPausedTutorial = hasOnboarding && !tutorialStarted;
   const ready = !loading || progress !== null;
 
   const close = useCallback(() => {
@@ -263,9 +215,63 @@ export function NotificationsCenter({
   }, []);
 
   useEffect(() => {
+    const previous = previousProgressRef.current;
+    previousProgressRef.current = progress;
+
+    if (
+      !previous ||
+      !progress?.started ||
+      !previous.started ||
+      progress.completedCount <= previous.completedCount
+    ) {
+      return;
+    }
+
+    const completedStep = progress.steps.find(
+      (step) => step.completed && !previous.steps.find((previousStep) => previousStep.id === step.id)?.completed,
+    );
+    const nextStep = progress.steps.find((step) => !step.completed);
+
+    if (!completedStep || !nextStep) {
+      return;
+    }
+
+    if (completionTimerRef.current) {
+      clearTimeout(completionTimerRef.current);
+    }
+
+    setCompletionNotice({
+      completedTitle: completedStep.title,
+      nextTitle: nextStep.title,
+    });
+
+    completionTimerRef.current = setTimeout(() => {
+      setCompletionNotice(null);
+      setOpen(true);
+      completionTimerRef.current = null;
+    }, ONBOARDING_COMPLETION_NOTICE_MS);
+  }, [progress]);
+
+  useEffect(
+    () => () => {
+      if (completionTimerRef.current) {
+        clearTimeout(completionTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    setOnboardingNotificationsPanelOpen(open);
+
+    return () => {
+      setOnboardingNotificationsPanelOpen(false);
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open) {
       queueMicrotask(() => {
-        setSummaryFocus("all");
         setPanelPosition(null);
       });
       return;
@@ -318,7 +324,7 @@ export function NotificationsCenter({
   }
 
   const triggerClass = isBrand
-    ? "group relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#1a2320] text-slate-400 transition hover:bg-[#243029] hover:text-slate-200"
+    ? "group relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:bg-surface-card hover:text-[#f8fafc]"
     : isSidebar
       ? "group relative flex w-full items-center gap-3 overflow-hidden rounded-lg border border-black bg-surface-card px-3 py-2.5 text-left transition-colors hover:bg-[#2f3834]"
       : "group relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card text-slate-300 transition hover:bg-[#2f3834] hover:text-[#f8fafc]";
@@ -329,6 +335,7 @@ export function NotificationsCenter({
         ref={panelRef}
         role="dialog"
         aria-label="Notificaciones"
+        data-onboarding-notifications-panel=""
         className="fixed z-[150] flex flex-col overflow-hidden rounded-xl border border-black bg-[#1a221f] shadow-[0_18px_48px_rgba(0,0,0,0.45)] ring-1 ring-white/[0.04]"
         style={{
           top: panelPosition.top,
@@ -348,11 +355,20 @@ export function NotificationsCenter({
                 <Bell className="h-4 w-4" />
               </span>
               <div className="min-w-0">
-                <p className={labelMutedClass}>Centro de avisos</p>
-                <h2 className="text-base font-black text-[#f8fafc]">Notificaciones</h2>
-                <p className="mt-0.5 text-xs font-bold leading-snug text-slate-400">
-                  Guías y pendientes para tu operación diaria.
-                </p>
+                {hasActiveTutorial ? (
+                  <>
+                    <p className={labelMutedClass}>Tutorial paso a paso</p>
+                    <h2 className="text-base font-black text-[#f8fafc]">Tareas iniciales</h2>
+                  </>
+                ) : (
+                  <>
+                    <p className={labelMutedClass}>Centro de avisos</p>
+                    <h2 className="text-base font-black text-[#f8fafc]">Notificaciones</h2>
+                    <p className="mt-0.5 text-xs font-bold leading-snug text-slate-400">
+                      Guías y pendientes para tu operación diaria.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
             <button
@@ -365,7 +381,12 @@ export function NotificationsCenter({
             </button>
           </div>
 
-          {hasOnboarding ? (
+          {hasPausedTutorial ? (
+            <div className="relative mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-sky-700/30 bg-sky-400/10 px-2 py-1 text-[10px] font-black text-sky-200">
+              <Sparkles className="h-3 w-3 shrink-0" aria-hidden />
+              Tutorial disponible
+            </div>
+          ) : hasActiveTutorial ? (
             <div className="relative mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/30 bg-emerald-400/10 px-2 py-1 text-[10px] font-black text-emerald-200">
               <Sparkles className="h-3 w-3 shrink-0" aria-hidden />
               Configuración inicial en curso
@@ -373,26 +394,21 @@ export function NotificationsCenter({
           ) : null}
         </div>
 
-        {hasOnboarding ? (
-          <NotificationsSummary
-            pendingCount={pendingCount}
-            progress={progress}
-            activeFocus={summaryFocus}
-            onAllClick={() => setSummaryFocus("all")}
-            onPendingClick={() => setSummaryFocus("pending")}
-            onCompletedClick={() => setSummaryFocus("completed")}
-          />
-        ) : null}
-
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          <OnboardingPanel
-            onNavigate={close}
-            summaryFocus={summaryFocus}
-          />
-
-          {ready && !hasOnboarding ? (
-            isOnboardingTutorialEnabled() ? <NotificationsEmptyState /> : <TutorialPausedState />
+          {hasPausedTutorial && session?.organizationId ? (
+            <OnboardingStartPanel organizationId={session.organizationId} />
           ) : null}
+
+          {hasActiveTutorial ? (
+            <OnboardingPanel
+              progress={progress}
+              loading={loading}
+              error={error}
+              onNavigate={close}
+            />
+          ) : null}
+
+          {ready && !hasOnboarding ? <NotificationsEmptyState /> : null}
         </div>
       </div>
     ) : null;
@@ -444,6 +460,33 @@ export function NotificationsCenter({
         ) : null}
       </button>
       {mounted && popover ? createPortal(popover, document.body) : null}
+      {mounted && completionNotice
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed left-1/2 top-5 z-[490] w-[min(calc(100vw-2rem),22rem)] -translate-x-1/2 rounded-xl border border-emerald-500/45 bg-[#102018]/95 px-4 py-3 shadow-[0_18px_48px_rgba(0,0,0,0.5)] backdrop-blur-sm"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400 text-slate-950">
+                  <CheckCircle2 className="h-5 w-5" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-wide text-emerald-300">
+                    Paso completado
+                  </p>
+                  <p className="text-sm font-black text-[#f8fafc]">
+                    {completionNotice.completedTitle} listo
+                  </p>
+                  <p className="mt-0.5 text-xs font-bold text-slate-300">
+                    Siguiente: {completionNotice.nextTitle}
+                  </p>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

@@ -1,21 +1,45 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getOnboardingProgressAction,
   type OnboardingProgress,
 } from "@/app/actions/onboarding";
-import { ONBOARDING_PROGRESS_CHANGED } from "@/lib/onboarding/refresh";
+import {
+  ONBOARDING_PROGRESS_CHANGED,
+} from "@/lib/onboarding/refresh";
 import {
   isOnboardingTutorialEnabled,
   onboardingTutorialDisabledProgress,
 } from "@/lib/onboarding/feature";
+import {
+  markOnboardingStartedLocally,
+  mergeOnboardingStarted,
+} from "@/lib/onboarding/started";
 
 const CACHE_TTL_MS = 60_000;
+
+const pendingOptimisticStart = new Set<string>();
 
 let cachedProgress: OnboardingProgress | null = null;
 let cacheTimestamp = 0;
 let inflightRequest: Promise<OnboardingProgress | null> | null = null;
+
+function withMergedStarted(
+  progress: OnboardingProgress | null,
+  organizationId?: string | null,
+) {
+  if (!progress || !organizationId) {
+    return progress;
+  }
+
+  return {
+    ...progress,
+    started: mergeOnboardingStarted(organizationId, progress.started, {
+      allowLocalStart: pendingOptimisticStart.has(organizationId),
+    }),
+  };
+}
 
 async function fetchOnboardingProgress(force = false): Promise<OnboardingProgress | null> {
   if (!isOnboardingTutorialEnabled()) {
@@ -48,25 +72,43 @@ async function fetchOnboardingProgress(force = false): Promise<OnboardingProgres
   return inflightRequest;
 }
 
-export function invalidateOnboardingProgressCache() {
-  cachedProgress = null;
-  cacheTimestamp = 0;
+export function optimisticallyStartOnboarding(organizationId: string) {
+  pendingOptimisticStart.add(organizationId);
+  markOnboardingStartedLocally(organizationId);
 }
 
-export function useOnboardingProgress() {
+export function useOnboardingProgress(organizationId?: string | null) {
   const [progress, setProgress] = useState<OnboardingProgress | null>(cachedProgress);
   const [loading, setLoading] = useState(!cachedProgress);
   const [error, setError] = useState("");
+  const [localStartedTick, setLocalStartedTick] = useState(0);
+
+  const effectiveProgress = useMemo(() => {
+    void localStartedTick;
+    return withMergedStarted(progress, organizationId);
+  }, [localStartedTick, organizationId, progress]);
+
+  const applyProgress = useCallback(
+    (next: OnboardingProgress | null, options?: { fromServer?: boolean }) => {
+      if (organizationId && options?.fromServer && next?.started) {
+        pendingOptimisticStart.delete(organizationId);
+      }
+
+      const merged = withMergedStarted(next, organizationId);
+      if (merged) {
+        cachedProgress = merged;
+        cacheTimestamp = Date.now();
+      }
+      setProgress(merged);
+      return merged;
+    },
+    [organizationId],
+  );
 
   const refresh = useCallback(async () => {
     if (!isOnboardingTutorialEnabled()) {
       const disabled = onboardingTutorialDisabledProgress();
-      cachedProgress = disabled;
-      cacheTimestamp = Date.now();
-      setProgress(disabled);
-      setLoading(false);
-      setError("");
-      return disabled;
+      return applyProgress(disabled);
     }
 
     setLoading((current) => current || !cachedProgress);
@@ -81,50 +123,46 @@ export function useOnboardingProgress() {
       return null;
     }
 
-    cachedProgress = result.data;
-    cacheTimestamp = Date.now();
-    setProgress(result.data);
     setLoading(false);
-    return result.data;
-  }, []);
+    return applyProgress(result.data, { fromServer: true });
+  }, [applyProgress]);
 
   const load = useCallback(
-    async (force = false) => {
+    async (force = false, options?: { silent?: boolean }) => {
       if (!isOnboardingTutorialEnabled()) {
-        const disabled = onboardingTutorialDisabledProgress();
-        cachedProgress = disabled;
-        cacheTimestamp = Date.now();
-        setProgress(disabled);
-        setLoading(false);
-        setError("");
-        return disabled;
+        return applyProgress(onboardingTutorialDisabledProgress());
       }
 
       const cacheFresh = cachedProgress && Date.now() - cacheTimestamp < CACHE_TTL_MS;
 
       if (!force && cacheFresh) {
-        setProgress(cachedProgress);
+        const merged = applyProgress(cachedProgress);
         setLoading(false);
         setError("");
-        return cachedProgress;
+        return merged;
       }
 
-      setLoading((current) => current || !cachedProgress);
+      if (!options?.silent) {
+        setLoading((current) => current || !cachedProgress);
+      }
       setError("");
 
       try {
         const next = await fetchOnboardingProgress(force);
-        setProgress(next);
-        return next;
+        return applyProgress(next, { fromServer: true });
       } catch {
-        setError("No se pudo cargar el progreso");
-        setProgress(null);
+        if (!options?.silent) {
+          setError("No se pudo cargar el progreso");
+          setProgress(null);
+        }
         return null;
       } finally {
-        setLoading(false);
+        if (!options?.silent) {
+          setLoading(false);
+        }
       }
     },
-    [],
+    [applyProgress],
   );
 
   useEffect(() => {
@@ -137,8 +175,8 @@ export function useOnboardingProgress() {
     }
 
     function onProgressChanged() {
-      invalidateOnboardingProgressCache();
-      void load(true);
+      setLocalStartedTick((current) => current + 1);
+      void load(true, { silent: true });
     }
 
     window.addEventListener("focus", onFocus);
@@ -147,10 +185,19 @@ export function useOnboardingProgress() {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener(ONBOARDING_PROGRESS_CHANGED, onProgressChanged);
     };
-  }, [load]);
+  }, [applyProgress, load]);
 
-  const pendingCount =
-    progress?.eligible && !progress.allComplete ? progress.pendingCount : 0;
+  const pendingCount = useMemo(() => {
+    if (!effectiveProgress?.eligible || effectiveProgress.allComplete) {
+      return 0;
+    }
 
-  return { progress, pendingCount, loading, error, refresh, load };
+    if (!effectiveProgress.started) {
+      return 1;
+    }
+
+    return effectiveProgress.pendingCount;
+  }, [effectiveProgress]);
+
+  return { progress: effectiveProgress, pendingCount, loading, error, refresh, load };
 }

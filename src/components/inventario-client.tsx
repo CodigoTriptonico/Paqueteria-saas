@@ -2,7 +2,7 @@
 
 import { Plus, Warehouse } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createWarehouseAction } from "@/app/actions/warehouses";
 import {
@@ -14,12 +14,14 @@ import {
   AssignInventoryModal,
   type CloseAssignmentSubmit,
 } from "@/components/inventory-assignment-modals";
-import { InventoryAssignmentsDrawer } from "@/components/inventory-assignments-panel";
-import { InventoryMovementsDrawer } from "@/components/inventory-movements-panel";
+import { InventoryControlMenu } from "@/components/inventory/inventory-control-menu";
+import { InventoryTruckPanel } from "@/components/inventory/inventory-truck-panel";
 import { InventoryStructureEditor } from "@/components/inventory-structure-editor";
 import { InventoryWarehouseBar } from "@/components/inventory-warehouse-bar";
+import { WarehousesSettingsPanel } from "@/components/config/warehouses-settings-panel";
 import { PageLoading } from "@/components/page-loading";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
+import { primaryButtonClass } from "@/components/ui-blocks";
 import { useContextNav } from "@/hooks/use-context-nav";
 import { useNotify } from "@/hooks/use-notify";
 import {
@@ -33,11 +35,15 @@ import {
   type InventoryCatalogProduct,
 } from "@/lib/pricing-catalog";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
+import type { ConductorTruckBalance } from "@/lib/conductor-truck-inventory";
 import { mergeTreeIntoInventoryItems } from "@/lib/inventory-stock";
 import type { PricingConfigPayload } from "@/lib/pricing/types";
-
-const WAREHOUSES_CONFIG_HREF =
-  "/configuracion?view=inventory&inventory=warehouses";
+import {
+  inventarioReturnActionLabel,
+  readInventarioReturnTo,
+} from "@/lib/inventario-return";
+import { INVENTORY_WAREHOUSES_HREF } from "@/lib/inventory-structure-utils";
+import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 
 type AssignDraft = {
   itemName: string;
@@ -48,11 +54,14 @@ type AssignDraft = {
 export function InventarioClient({
   initialData,
   initialPricing,
+  initialTruckBalances = [],
 }: {
   initialData?: InventoryBackendInitialData;
   initialPricing?: PricingConfigPayload;
+  initialTruckBalances?: ConductorTruckBalance[];
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const notify = useNotify();
   const {
     enabled,
@@ -89,13 +98,35 @@ export function InventarioClient({
   const [closingAssignmentId, setClosingAssignmentId] = useState("");
   const [productCountriesDraft, setProductCountriesDraft] =
     useState<InventoryCatalogProduct | null>(null);
+  const [truckTabOpen, setTruckTabOpen] = useState(false);
+  const [truckBalances, setTruckBalances] = useState(initialTruckBalances);
 
   const activeWarehouseName =
     warehouses.find((warehouse) => warehouse.id === warehouseId)?.name || "";
+  const truckQty = truckBalances.reduce((total, balance) => total + balance.totalQty, 0);
+  const returnTo = useMemo(
+    () => readInventarioReturnTo(searchParams),
+    [searchParams],
+  );
+  const returnActionLabel = useMemo(
+    () => (returnTo ? inventarioReturnActionLabel(returnTo) : null),
+    [returnTo],
+  );
+  const showWarehouseSettings = searchParams.get("bodegas") === "1";
 
   const handleInventarioNavBack = useCallback(() => {
+    if (showWarehouseSettings) {
+      router.push("/inventario");
+      return;
+    }
+
+    if (returnTo) {
+      router.push(returnTo);
+      return;
+    }
+
     router.push("/");
-  }, [router]);
+  }, [returnTo, router, showWarehouseSettings]);
 
   const inventarioNavTitle = useMemo(() => {
     if (!loaded || !enabled) {
@@ -114,7 +145,7 @@ export function InventarioClient({
   }, [activeWarehouseName, enabled, loaded, warehouseId, warehouses.length]);
 
   useContextNav({
-    title: inventarioNavTitle,
+    title: showWarehouseSettings ? "Bodegas" : inventarioNavTitle,
     onBack: handleInventarioNavBack,
     enabled: loaded && enabled,
   });
@@ -212,6 +243,14 @@ export function InventarioClient({
     );
   }
 
+  if (showWarehouseSettings) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <WarehousesSettingsPanel />
+      </div>
+    );
+  }
+
   async function createWarehouse() {
     const name = newWarehouseName.trim();
 
@@ -269,10 +308,10 @@ export function InventarioClient({
         <p className="text-sm font-bold text-slate-400">
           Pide a un administrador que cree bodegas en{" "}
           <Link
-            href={WAREHOUSES_CONFIG_HREF}
+            href={INVENTORY_WAREHOUSES_HREF}
             className="text-emerald-300 underline-offset-2 hover:underline"
           >
-            Configuración → Inventario → Bodegas
+            Inventario → Bodegas
           </Link>
           .
         </p>
@@ -285,10 +324,10 @@ export function InventarioClient({
           Activa{" "}
           <span className="text-slate-200">modo múltiples bodegas</span> en{" "}
           <Link
-            href={WAREHOUSES_CONFIG_HREF}
+            href={INVENTORY_WAREHOUSES_HREF}
             className="text-emerald-300 underline-offset-2 hover:underline"
           >
-            Configuración → Bodegas
+            Inventario → Bodegas
           </Link>{" "}
           para agregar otra.
         </p>
@@ -297,7 +336,7 @@ export function InventarioClient({
 
     return (
       <div
-        className={`flex w-full items-center gap-2 rounded-xl bg-[#111827] p-2 ${compact ? "max-w-md" : "max-w-sm sm:w-80"}`}
+        className={`inset-shell flex w-full items-center gap-2 rounded-xl bg-[#111827] p-2 ${compact ? "max-w-md" : "max-w-sm sm:w-80"}`}
       >
         <input
           className={`min-w-0 flex-1 bg-transparent px-2 text-sm font-black text-[#f8fafc] outline-none placeholder:text-slate-500 ${compact ? "h-10" : "h-9"}`}
@@ -351,6 +390,8 @@ export function InventarioClient({
     <div className="flex h-full min-h-0 flex-1 flex-col">
       <InventoryStructureEditor
         embedded
+        pricingReturnHref={returnTo}
+        pricingReturnLabel={returnActionLabel}
         categoryConfigs={categoryConfigs}
         onCategoryConfigsChange={setCategoryConfigs}
         inventoryItems={inventoryItems}
@@ -406,34 +447,48 @@ export function InventarioClient({
         }}
         onViewItemAssignments={(itemId) => setAssignmentDrawerItemId(itemId)}
         showCategoryCreate
-        headerSlot={
-          <InventoryWarehouseBar
-            compact
-            warehouses={warehouses}
-            warehouseId={warehouseId}
-            onChange={setWarehouseId}
+        showStructureDelete
+        truckQty={truckQty}
+        truckTabOpen={truckTabOpen}
+        onTruckTabChange={setTruckTabOpen}
+        truckPanel={
+          <InventoryTruckPanel
+            initialBalances={truckBalances}
+            onBalancesChange={setTruckBalances}
           />
         }
-        toolbarEndSlot={
+        headerSlot={
           <>
-            <InventoryAssignmentsDrawer
-              iconOnly
+            {returnTo ? (
+              <Link
+                href={returnTo}
+                className={`${primaryButtonClass} h-9 shrink-0 px-3 text-xs font-black sm:px-4 sm:text-sm`}
+                data-onboarding-target={ONBOARDING_TARGETS.INVENTORY_RETURN_PRICING}
+              >
+                {returnActionLabel}
+              </Link>
+            ) : null}
+            <InventoryWarehouseBar
+              compact
+              warehouses={warehouses}
               warehouseId={warehouseId}
-              assignments={assignments}
-              initialItemId={assignmentDrawerItemId}
-              onAssignmentsChange={setAssignments}
-              onCloseAssignment={handleCloseAssignment}
-              closingAssignmentId={closingAssignmentId}
-            />
-            <InventoryMovementsDrawer
-              iconOnly
-              warehouseId={warehouseId}
-              movements={movements}
-              assignments={assignments}
-              warehouseName={activeWarehouseName}
-              onMovementsChange={setMovements}
+              onChange={setWarehouseId}
             />
           </>
+        }
+        toolbarEndSlot={
+          <InventoryControlMenu
+            bare
+            warehouseId={warehouseId}
+            warehouseName={activeWarehouseName}
+            assignments={assignments}
+            movements={movements}
+            initialItemId={assignmentDrawerItemId}
+            onAssignmentsChange={setAssignments}
+            onMovementsChange={setMovements}
+            onCloseAssignment={handleCloseAssignment}
+            closingAssignmentId={closingAssignmentId}
+          />
         }
       />
 

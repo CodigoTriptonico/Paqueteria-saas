@@ -4,7 +4,6 @@ import {
   Box,
   Check,
   ChevronLeft,
-  Package2,
   Plus,
   Search,
   X,
@@ -15,18 +14,12 @@ import {
   type InventoryEmptyContextMenuState,
 } from "@/components/inventory/inventory-empty-context-menu";
 import { InlineSearchCombobox } from "@/components/inline-search-picker";
-import {
-  iconWellEmerald,
-  inputClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-} from "@/components/ui-blocks";
+import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import type { ViewLayout } from "@/lib/view-layout";
 import {
   inventoryItemsForLeaf,
   leafStockMetrics,
-  stockBadgeToneClass,
   stockCardClass,
-  stockStatusLabel,
   stockValueToneClass,
   type InventoryStockItem,
 } from "@/lib/inventory-stock";
@@ -38,9 +31,9 @@ import {
   INTERACTIVE_SELECTOR,
   itemsGridClass,
   stockItemForTreeItem,
-  type CategoryLeafEntry,
 } from "@/lib/inventory-structure-utils";
 import { type CategoryConfig, type InventoryTreeItem } from "@/lib/inventory-tree";
+import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 
 type InventoryItemCardProps = {
   item: InventoryTreeItem;
@@ -51,14 +44,13 @@ type InventoryItemCardProps = {
   editingItemName: string;
   setEditingItemName: (value: string) => void;
   setEditingItemId: (value: string) => void;
-  itemQueryActive: boolean;
-  leafEntryByItemId: Map<string, CategoryLeafEntry>;
   onContextMenu: (
     event: MouseEvent<HTMLElement>,
     item: InventoryTreeItem,
     stockItem: InventoryStockItem,
   ) => void;
   onSaveItem: (categoryName: string, itemId: string) => void;
+  coachTarget?: boolean;
 };
 
 function InventoryItemCard({
@@ -70,10 +62,9 @@ function InventoryItemCard({
   editingItemName,
   setEditingItemName,
   setEditingItemId,
-  itemQueryActive,
-  leafEntryByItemId,
   onContextMenu,
   onSaveItem,
+  coachTarget = false,
 }: InventoryItemCardProps) {
   const editing = editingItemId === item.id;
   const leafItems = inventoryItemsForLeaf(
@@ -94,90 +85,147 @@ function InventoryItemCard({
       : [stockItem],
   );
   const stockLevel = metrics.level;
+  const stockQty = metrics.warehouse;
 
   return (
     <article
       key={item.id}
       data-inventory-item-id={item.id}
+      data-onboarding-target={
+        coachTarget ? ONBOARDING_TARGETS.INVENTORY_STOCK_ITEM : undefined
+      }
       onContextMenu={(event) => onContextMenu(event, item, stockItem)}
-      className={`cursor-context-menu rounded-xl border p-4 transition ${stockCardClass[stockLevel]}`}
+      className={`group relative flex min-h-[7.75rem] cursor-context-menu overflow-hidden rounded-2xl border p-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_20px_rgba(0,0,0,0.18)] sm:p-3.5 ${stockCardClass[stockLevel]}`}
     >
-      <div className="flex items-start gap-3">
-        <span className={`h-10 w-10 shrink-0 ${iconWellEmerald}`}>
-          <Package2 className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
+      <div className="mx-auto flex h-full w-full max-w-[10.5rem] flex-1 flex-col">
+        <div className="flex items-center gap-2">
+          <span className="h-px min-w-0 flex-1 bg-black/35" aria-hidden />
+          <div className="min-w-[5.75rem] rounded-xl border border-black/25 bg-black/15 px-2.5 py-1.5 text-center shadow-inner">
+            <p
+              className={`text-xl font-black leading-none tabular-nums ${stockValueToneClass[stockLevel]}`}
+              aria-label={`${stockQty} en stock`}
+            >
+              {stockQty}
+            </p>
+            <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.13em] text-slate-400">
+              en stock
+            </p>
+          </div>
+          <span className="h-px min-w-0 flex-1 bg-black/35" aria-hidden />
+        </div>
+
+        <div
+          className={`mt-auto flex min-w-0 items-end gap-2 pt-3 ${
+            editing ? "justify-between" : "justify-center text-center"
+          }`}
+        >
+          <div className="min-w-0 flex-1">
+            {editing ? (
+              <input
+                className={`${inputClass} h-9 w-full text-sm`}
+                value={editingItemName}
+                onChange={(event) => setEditingItemName(event.target.value)}
+                autoFocus
+              />
+            ) : (
+              <p className="truncate text-sm font-black leading-tight text-[#f8fafc]">
+                {item.name}
+              </p>
+            )}
+          </div>
+
           {editing ? (
-            <input
-              className={`${inputClass} h-9 w-full text-sm`}
-              value={editingItemName}
-              onChange={(event) => setEditingItemName(event.target.value)}
-              autoFocus
-            />
-          ) : (
-            <p className="truncate text-base font-black leading-tight text-[#f8fafc]">
-              {item.name}
-            </p>
-          )}
-          {selectedSubcategory ? (
-            <p className="mt-0.5 truncate text-xs font-bold capitalize text-slate-500">
-              {selectedSubcategory.name}
-            </p>
-          ) : itemQueryActive && leafEntryByItemId.get(item.id)?.subcategoryName ? (
-            <p className="mt-0.5 truncate text-xs font-bold capitalize text-slate-500">
-              {leafEntryByItemId.get(item.id)?.subcategoryName}
-            </p>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onSaveItem(selectedCategoryData.name, item.id)}
+                className={addBtnClass}
+                title="Guardar"
+              >
+                <Check className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingItemId("");
+                  setEditingItemName("");
+                }}
+                className={iconBtnClass}
+                title="Cancelar"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           ) : null}
         </div>
-        {!editing ? (
-          <span
-            className={`shrink-0 rounded-lg border px-2 py-1 text-[10px] font-black uppercase tracking-wide ${stockBadgeToneClass[stockLevel]}`}
-          >
-            {stockStatusLabel[stockLevel]}
-          </span>
-        ) : null}
       </div>
+    </article>
+  );
+}
 
-      <div className="mt-4 grid w-full grid-cols-3 overflow-hidden rounded-lg border border-black bg-surface-card-header">
-        <div className="flex min-w-0 flex-col items-center justify-center border-r border-black px-2 py-3 sm:px-3">
-          <p
-            className={`text-2xl font-black tabular-nums leading-none ${stockValueToneClass[stockLevel]}`}
-          >
-            {metrics.warehouse}
-          </p>
-          <p
-            className="mt-2 whitespace-nowrap text-[10px] font-bold uppercase tracking-wide text-emerald-400/90"
-            title="En bodega"
-          >
-            Bodega
-          </p>
-        </div>
-        <div className="flex min-w-0 flex-col items-center justify-center border-r border-black px-2 py-3 sm:px-3">
-          <p className="text-2xl font-black tabular-nums leading-none text-sky-300">
-            {metrics.assigned}
-          </p>
-          <p
-            className="mt-2 whitespace-nowrap text-[10px] font-bold uppercase tracking-wide text-sky-400/90"
-            title="Con empleados"
-          >
-            Asignado
-          </p>
-        </div>
-        <div className="flex min-w-0 flex-col items-center justify-center px-2 py-3 sm:px-3">
-          <p className="text-2xl font-black tabular-nums leading-none text-rose-300">
-            {metrics.unavailable}
-          </p>
-          <p
-            className="mt-2 whitespace-nowrap text-[10px] font-bold uppercase tracking-wide text-rose-400/90"
-            title="No disponible"
-          >
-            No disp.
-          </p>
-        </div>
+function InventoryItemRow({
+  item,
+  selectedCategoryData,
+  selectedSubcategory,
+  inventoryItems,
+  editingItemId,
+  editingItemName,
+  setEditingItemName,
+  setEditingItemId,
+  onContextMenu,
+  onSaveItem,
+}: Omit<InventoryItemCardProps, "coachTarget">) {
+  const editing = editingItemId === item.id;
+  const leafItems = inventoryItemsForLeaf(
+    inventoryItems,
+    selectedCategoryData.name,
+    item.name,
+    selectedSubcategory?.name,
+  );
+  const stockItem = stockItemForTreeItem(
+    inventoryItems,
+    selectedCategoryData.name,
+    item,
+    selectedSubcategory?.name,
+  );
+  const metrics = leafStockMetrics(leafItems.length > 0 ? leafItems : [stockItem]);
+  const stockLevel = metrics.level;
+  const stockQty = metrics.warehouse;
+
+  return (
+    <article
+      data-inventory-item-id={item.id}
+      onContextMenu={(event) => onContextMenu(event, item, stockItem)}
+      className={`group grid w-full min-w-0 cursor-context-menu items-center gap-2.5 overflow-hidden rounded-xl border px-2.5 py-2 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_20px_rgba(0,0,0,0.18)] sm:px-3 sm:py-2.5 ${
+        editing
+          ? "grid-cols-[auto_minmax(0,1fr)_auto]"
+          : "grid-cols-[auto_minmax(0,1fr)]"
+      } ${stockCardClass[stockLevel]}`}
+    >
+      <div className="flex min-w-[3.25rem] shrink-0 flex-col items-center rounded-lg border border-black/25 bg-black/15 px-1.5 py-1 text-center">
+        <p
+          className={`text-base font-black leading-none tabular-nums sm:text-lg ${stockValueToneClass[stockLevel]}`}
+        >
+          {stockQty}
+        </p>
+        <p className="mt-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-slate-400">
+          stock
+        </p>
       </div>
 
       {editing ? (
-        <div className="mt-3 flex items-center justify-end gap-1">
+        <input
+          className={`${inputClass} h-9 min-w-0 w-full text-sm`}
+          value={editingItemName}
+          onChange={(event) => setEditingItemName(event.target.value)}
+          autoFocus
+        />
+      ) : (
+        <p className="min-w-0 truncate text-sm font-black text-[#f8fafc]">{item.name}</p>
+      )}
+
+      {editing ? (
+        <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
             onClick={() => onSaveItem(selectedCategoryData.name, item.id)}
@@ -221,7 +269,6 @@ export type InventoryItemGridProps = {
   itemQueryTrimmed: string;
   itemQueryActive: boolean;
   itemCountLabel: string;
-  leafEntryByItemId: Map<string, CategoryLeafEntry>;
   inventoryItems: InventoryStockItem[];
   editingItemId: string;
   editingItemName: string;
@@ -240,6 +287,7 @@ export type InventoryItemGridProps = {
     stockItem: InventoryStockItem,
   ) => void;
   onSaveItem: (categoryName: string, itemId: string) => void;
+  viewLayout?: ViewLayout;
 };
 
 export function InventoryItemGrid({
@@ -255,7 +303,6 @@ export function InventoryItemGrid({
   itemQueryTrimmed,
   itemQueryActive,
   itemCountLabel,
-  leafEntryByItemId,
   inventoryItems,
   editingItemId,
   editingItemName,
@@ -270,6 +317,7 @@ export function InventoryItemGrid({
   beginAddCategory,
   onItemContextMenu,
   onSaveItem,
+  viewLayout = "cards",
 }: InventoryItemGridProps) {
   const [emptyContextMenu, setEmptyContextMenu] =
     useState<InventoryEmptyContextMenuState | null>(null);
@@ -506,25 +554,46 @@ export function InventoryItemGrid({
 
             {filteredItems.length ? (
               <div className="grid gap-2">
-                <div className={itemsGridClass}>
-                  {filteredItems.map((item) => (
-                    <InventoryItemCard
-                      key={item.id}
-                      item={item}
-                      selectedCategoryData={selectedCategoryData}
-                      selectedSubcategory={selectedSubcategory}
-                      inventoryItems={inventoryItems}
-                      editingItemId={editingItemId}
-                      editingItemName={editingItemName}
-                      setEditingItemName={setEditingItemName}
-                      setEditingItemId={setEditingItemId}
-                      itemQueryActive={itemQueryActive}
-                      leafEntryByItemId={leafEntryByItemId}
-                      onContextMenu={onItemContextMenu}
-                      onSaveItem={onSaveItem}
-                    />
-                  ))}
-                </div>
+                {viewLayout === "rows" ? (
+                  <div className={itemsGridClass}>
+                    {filteredItems.map((item) =>
+                      selectedCategoryData ? (
+                        <InventoryItemRow
+                          key={item.id}
+                          item={item}
+                          selectedCategoryData={selectedCategoryData}
+                          selectedSubcategory={selectedSubcategory}
+                          inventoryItems={inventoryItems}
+                          editingItemId={editingItemId}
+                          editingItemName={editingItemName}
+                          setEditingItemName={setEditingItemName}
+                          setEditingItemId={setEditingItemId}
+                          onContextMenu={onItemContextMenu}
+                          onSaveItem={onSaveItem}
+                        />
+                      ) : null,
+                    )}
+                  </div>
+                ) : (
+                  <div className={itemsGridClass}>
+                    {filteredItems.map((item, itemIndex) => (
+                      <InventoryItemCard
+                        key={item.id}
+                        item={item}
+                        selectedCategoryData={selectedCategoryData}
+                        selectedSubcategory={selectedSubcategory}
+                        inventoryItems={inventoryItems}
+                        editingItemId={editingItemId}
+                        editingItemName={editingItemName}
+                        setEditingItemName={setEditingItemName}
+                        setEditingItemId={setEditingItemId}
+                        onContextMenu={onItemContextMenu}
+                        onSaveItem={onSaveItem}
+                        coachTarget={itemIndex === 0}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ) : itemQueryActive ? (
               <div className="grid gap-3 py-12 text-center">
@@ -547,9 +616,11 @@ export function InventoryItemGrid({
                 <p className="text-sm font-bold text-slate-300">
                   {selectedSubcategory
                     ? "Agrega variantes como rojo, azul o aislante."
-                    : "Agrega items sueltos en esta categoría (ej. 14x14x14, cinta, playera M). Clic derecho aquí para agregar."}
+                    : embedded
+                      ? "Usa Agregar para crear el primer artículo o grupo de esta categoría."
+                      : "Agrega artículos sueltos en esta categoría, como cajas, cinta o uniformes."}
                 </p>
-                {showStructureOptions && !showNewItemForm ? (
+                {!embedded && showStructureOptions && !showNewItemForm ? (
                   <button
                     type="button"
                     onClick={beginAddItem}
@@ -559,7 +630,8 @@ export function InventoryItemGrid({
                     Agregar item
                   </button>
                 ) : null}
-                {!selectedSubcategory &&
+                {!embedded &&
+                !selectedSubcategory &&
                 showStructureOptions &&
                 !addingSubcategoryForSelectedCategory ? (
                   <div className="mx-auto mt-1 flex max-w-md flex-col items-center gap-2">

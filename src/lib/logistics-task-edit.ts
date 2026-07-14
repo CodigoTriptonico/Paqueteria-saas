@@ -6,7 +6,7 @@ import { isClosedLogisticsStatus } from "@/lib/logistics-view";
 
 export type LogisticsTaskEditableField = "schedule" | "warehouse" | "notes";
 
-export type LogisticsTaskEditScheduleMode = "pending" | "scheduled";
+type LogisticsTaskEditScheduleMode = "pending" | "scheduled";
 
 export type LogisticsTaskEditDraft = {
   scheduleMode: LogisticsTaskEditScheduleMode;
@@ -70,7 +70,6 @@ export function logisticsTaskEditDraftFromTask(task: {
 
 export function buildLogisticsTaskEditPatch(
   draft: LogisticsTaskEditDraft,
-  previousScheduledAt: string | null,
 ): {
   scheduledAt: string | null;
   warehouseId: string | null;

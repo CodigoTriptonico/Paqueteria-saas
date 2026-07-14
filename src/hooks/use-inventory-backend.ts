@@ -4,13 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   loadWarehouseInventoryCoreAction,
   loadWarehouseInventoryHistoryAction,
-  saveInventoryCategoriesAction,
-  saveWarehouseStockAction,
+  saveWarehouseInventoryAction,
 } from "@/app/actions/inventory";
 import { listWarehousesAction } from "@/app/actions/warehouses";
 import { getCurrentSessionAction } from "@/app/actions/session";
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
+import { mergeOrphanItemsIntoCategoryConfigs } from "@/lib/inventory-stock";
 import type { CategoryConfig } from "@/lib/inventory-tree";
 import { dispatchOnboardingProgressChanged } from "@/lib/onboarding/refresh";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -29,12 +29,12 @@ export type InventoryBackendInitialData = {
 
 const SAVE_DEBOUNCE_MS = 600;
 
-function snapshotCategories(categoryConfigs: CategoryConfig[]) {
-  return JSON.stringify(categoryConfigs);
-}
-
-function snapshotStock(warehouseId: string, items: InventoryStockItem[]) {
-  return JSON.stringify({ warehouseId, items });
+function snapshotInventory(
+  warehouseId: string,
+  categoryConfigs: CategoryConfig[],
+  items: InventoryStockItem[],
+) {
+  return JSON.stringify({ warehouseId, categoryConfigs, items });
 }
 
 export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
@@ -61,17 +61,17 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
   const [error, setError] = useState("");
   const inventoryHydratedRef = useRef(Boolean(initialData?.warehouseId));
   const categorySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stockSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLoadedWarehouse = useRef(initialData?.warehouseId || "");
   const initialHistoryLoadedRef = useRef(
     Boolean(initialData?.movements.length || initialData?.assignments.length),
   );
-  const lastSavedCategoriesRef = useRef(
-    snapshotCategories(initialData?.categoryConfigs || []),
-  );
-  const lastSavedStockRef = useRef(
+  const lastSavedInventoryRef = useRef(
     initialData
-      ? snapshotStock(initialData.warehouseId, initialData.items)
+      ? snapshotInventory(
+          initialData.warehouseId,
+          initialData.categoryConfigs,
+          initialData.items,
+        )
       : "",
   );
   const categoryConfigsRef = useRef(categoryConfigs);
@@ -95,33 +95,25 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
       clearTimeout(categorySaveTimer.current);
       categorySaveTimer.current = null;
     }
-
-    if (stockSaveTimer.current) {
-      clearTimeout(stockSaveTimer.current);
-      stockSaveTimer.current = null;
-    }
   }, []);
 
-  const persistCategories = useCallback(async (configs: CategoryConfig[]) => {
-    const snapshot = snapshotCategories(configs);
-    const result = await saveInventoryCategoriesAction(configs);
+  const persistInventory = useCallback(
+    async (
+      targetWarehouseId: string,
+      configs: CategoryConfig[],
+      items: InventoryStockItem[],
+    ) => {
+      const syncedConfigs = mergeOrphanItemsIntoCategoryConfigs(configs, items);
 
-    if (!result.ok) {
-      setError(result.error);
-      return false;
-    }
+      if (syncedConfigs !== configs) {
+        categoryConfigsRef.current = syncedConfigs;
+        setCategoryConfigs(syncedConfigs);
+      }
 
-    lastSavedCategoriesRef.current = snapshot;
-    dispatchOnboardingProgressChanged();
-    return true;
-  }, []);
-
-  const persistStock = useCallback(
-    async (targetWarehouseId: string, items: InventoryStockItem[]) => {
-      const snapshot = snapshotStock(targetWarehouseId, items);
-      const result = await saveWarehouseStockAction({
+      const snapshot = snapshotInventory(targetWarehouseId, syncedConfigs, items);
+      const result = await saveWarehouseInventoryAction({
         warehouseId: targetWarehouseId,
-        categoryConfigs: categoryConfigsRef.current,
+        categoryConfigs: syncedConfigs,
         items,
       });
 
@@ -131,7 +123,7 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
       }
 
       if (warehouseIdRef.current === targetWarehouseId) {
-        lastSavedStockRef.current = snapshot;
+        lastSavedInventoryRef.current = snapshot;
       }
 
       dispatchOnboardingProgressChanged();
@@ -145,23 +137,27 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
       clearSaveTimers();
 
       const run = async () => {
-        const categoriesSnapshot = snapshotCategories(categoryConfigsRef.current);
         const stockTarget = stockWarehouseId ?? warehouseIdRef.current;
 
-        if (
-          categoriesSnapshot !== lastSavedCategoriesRef.current &&
-          categoryConfigsRef.current.length > 0
-        ) {
-          await persistCategories(categoryConfigsRef.current);
+        if (!stockTarget) {
+          return;
         }
 
-        if (stockTarget) {
-          const stockSnapshot = snapshotStock(stockTarget, inventoryItemsRef.current);
+        const inventorySnapshot = snapshotInventory(
+          stockTarget,
+          categoryConfigsRef.current,
+          inventoryItemsRef.current,
+        );
 
-          if (stockSnapshot !== lastSavedStockRef.current) {
-            await persistStock(stockTarget, inventoryItemsRef.current);
-          }
+        if (inventorySnapshot === lastSavedInventoryRef.current) {
+          return;
         }
+
+        await persistInventory(
+          stockTarget,
+          categoryConfigsRef.current,
+          inventoryItemsRef.current,
+        );
       };
 
       const pending = inflightSaveRef.current
@@ -176,7 +172,7 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
 
       await pending;
     },
-    [clearSaveTimers, persistCategories, persistStock],
+    [clearSaveTimers, persistInventory],
   );
 
   const loadRemote = useCallback(async (targetWarehouseId: string) => {
@@ -189,8 +185,11 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
       return;
     }
 
-    lastSavedCategoriesRef.current = snapshotCategories(coreResult.data.categoryConfigs);
-    lastSavedStockRef.current = snapshotStock(targetWarehouseId, coreResult.data.items);
+    lastSavedInventoryRef.current = snapshotInventory(
+      targetWarehouseId,
+      coreResult.data.categoryConfigs,
+      coreResult.data.items,
+    );
     setCategoryConfigs(coreResult.data.categoryConfigs);
     setInventoryItems(coreResult.data.items);
     lastLoadedWarehouse.current = targetWarehouseId;
@@ -303,13 +302,21 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
       return;
     }
 
-    if (categoryConfigs.length === 0) {
+    if (inventoryItems.length === 0 && categoryConfigs.length === 0) {
       return;
     }
 
-    const categoriesSnapshot = snapshotCategories(categoryConfigs);
+    if (!warehouseId) {
+      return;
+    }
 
-    if (categoriesSnapshot === lastSavedCategoriesRef.current) {
+    const inventorySnapshot = snapshotInventory(
+      warehouseId,
+      categoryConfigs,
+      inventoryItems,
+    );
+
+    if (inventorySnapshot === lastSavedInventoryRef.current) {
       return;
     }
 
@@ -317,9 +324,20 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
       clearTimeout(categorySaveTimer.current);
     }
 
+    const targetWarehouseId = warehouseId;
+
     categorySaveTimer.current = setTimeout(() => {
       categorySaveTimer.current = null;
-      void persistCategories(categoryConfigsRef.current);
+
+      if (warehouseIdRef.current !== targetWarehouseId) {
+        return;
+      }
+
+      void persistInventory(
+        targetWarehouseId,
+        categoryConfigsRef.current,
+        inventoryItemsRef.current,
+      );
     }, SAVE_DEBOUNCE_MS);
 
     return () => {
@@ -328,46 +346,7 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
         categorySaveTimer.current = null;
       }
     };
-  }, [categoryConfigs, enabled, loaded, persistCategories]);
-
-  useEffect(() => {
-    if (!enabled || !loaded || !warehouseId || !inventoryHydratedRef.current) {
-      return;
-    }
-
-    if (inventoryItems.length === 0 && categoryConfigs.length === 0) {
-      return;
-    }
-
-    const stockSnapshot = snapshotStock(warehouseId, inventoryItems);
-
-    if (stockSnapshot === lastSavedStockRef.current) {
-      return;
-    }
-
-    if (stockSaveTimer.current) {
-      clearTimeout(stockSaveTimer.current);
-    }
-
-    const targetWarehouseId = warehouseId;
-
-    stockSaveTimer.current = setTimeout(() => {
-      stockSaveTimer.current = null;
-
-      if (warehouseIdRef.current !== targetWarehouseId) {
-        return;
-      }
-
-      void persistStock(targetWarehouseId, inventoryItemsRef.current);
-    }, SAVE_DEBOUNCE_MS);
-
-    return () => {
-      if (stockSaveTimer.current) {
-        clearTimeout(stockSaveTimer.current);
-        stockSaveTimer.current = null;
-      }
-    };
-  }, [categoryConfigs.length, enabled, inventoryItems, loaded, persistStock, warehouseId]);
+  }, [categoryConfigs, enabled, inventoryItems, loaded, persistInventory, warehouseId]);
 
   useEffect(() => {
     if (!enabled) {

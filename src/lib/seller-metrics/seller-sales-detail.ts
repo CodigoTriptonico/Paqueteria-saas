@@ -25,7 +25,7 @@ export type SellerSaleDetailRow = {
   recipientName: string | null;
 };
 
-export type SellerSalesDetailTotals = {
+type SellerSalesDetailTotals = {
   saleCount: number;
   openCount: number;
   closedCount: number;

@@ -4,8 +4,11 @@ import Link from "next/link";
 export const inputClass =
   "h-11 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc] outline-none placeholder:font-semibold placeholder:text-slate-500 focus:border-black";
 
+/** Marco para controles con campo transparente dentro (pickers, búsqueda, fecha). */
+export const insetShellClass = "inset-shell";
+
 export const pickerShellClass =
-  "box-border inline-flex h-11 max-w-full items-center gap-2 rounded-lg border border-solid border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc]";
+  `${insetShellClass} box-border inline-flex h-11 max-w-full items-center gap-2 rounded-lg border border-solid border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc]`;
 
 export const primaryButtonClass =
   "inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 text-sm font-black text-slate-950";
@@ -13,14 +16,29 @@ export const primaryButtonClass =
 export const secondaryButtonClass =
   "inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc] hover:border-black hover:bg-surface-card";
 
-export const cardHeaderClass =
+const cardHeaderClass =
   "flex items-center gap-3 border-b border-black bg-surface-card-header px-4 py-3";
 
-/** Header band for split cards (inventario categorías, items, etc.) */
-export const cardBodyHeaderClass = "border-b border-black bg-surface-card-header";
+export const cardClass = "rounded-xl border border-black";
 
-export const cardClass =
-  "rounded-xl border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)]";
+/** Toolbar superior dentro de un Panel, sin caja extra. */
+export const panelToolbarClass =
+  "relative shrink-0 overflow-visible border-b border-black/70 pb-3";
+
+/** Lista con scroll dentro del panel (sin marco adicional). */
+export const panelListScrollClass = "min-h-0 flex-1 overflow-y-auto pr-1";
+
+/** Filas separadas con superficie propia (sin divide-y en caja anidada). */
+export const panelListStackClass = "flex flex-col gap-2";
+
+/** Fondo base de cada fila en listados operativos. */
+export const listRowBaseClass =
+  "rounded-lg border border-black/70 bg-surface-list-row transition-colors";
+
+export const listRowHoverClass = "hover:bg-surface-list-row-hover";
+
+/** Misma superficie de color en tarjetas del listado (modo tarjetas). */
+export const listCardShellClass = `${listRowBaseClass} ${listRowHoverClass}`;
 
 export const cardHoverClass =
   "transition-colors hover:border-black hover:bg-surface-card-hover";
@@ -29,13 +47,11 @@ export const cardHoverClass =
 export const unselectedDimClass =
   "opacity-45 saturate-[0.85] transition-opacity hover:opacity-75 hover:saturate-100";
 
-export const selectionShellClass =
-  "border border-black shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors";
+export const selectionShellClass = "border border-black transition-colors";
 
 export const selectionActiveClass = "border-black bg-emerald-400/10 hover:bg-emerald-400/15";
 
-export const selectionIdleClass =
-  "border-black bg-surface-card hover:bg-surface-card-hover";
+const selectionIdleClass = "border-black hover:bg-surface-card-hover";
 
 export function selectionSurfaceClass(selected: boolean, dimmed = false) {
   if (selected) {
@@ -48,25 +64,8 @@ export function selectionSurfaceClass(selected: boolean, dimmed = false) {
 export const accentEmeraldSolid =
   "border border-emerald-600 bg-emerald-400 text-slate-950";
 
-export const accentAmberSolid = "border border-amber-600 bg-amber-400 text-slate-950";
-
-export const accentSkySolid = "border border-sky-600 bg-sky-400 text-slate-950";
-
-export const accentRoseSolid = "border border-rose-600 bg-rose-400 text-slate-950";
-
-export const accentMutedSolid = "border border-black bg-surface-inset text-slate-300";
-
 export const iconWellEmerald =
   "flex items-center justify-center rounded-lg border border-emerald-600 bg-emerald-400 text-slate-950";
-
-export const iconWellMuted =
-  "flex items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300";
-
-export const alertAmberSolid =
-  "rounded-lg border border-amber-600 bg-amber-400 font-black text-slate-950";
-
-export const badgeEmeraldSolid =
-  "inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-emerald-400 font-black text-slate-950";
 
 export const labelMutedClass = "text-xs font-black uppercase text-slate-500";
 
@@ -148,7 +147,7 @@ export function Panel({
 }) {
   return (
     <section
-      className={`rounded-xl border border-black bg-surface-panel shadow-md ${
+      className={`rounded-xl border border-black bg-surface-shell ${
         clipContent ? "overflow-hidden" : "overflow-visible"
       } ${className ?? ""}`}
     >

@@ -6,6 +6,21 @@ export function formatScheduleDateInput(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+/** Local calendar date (YYYY-MM-DD) for a stored schedule timestamp. */
+export function scheduledAtToLocalDateInput(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return formatScheduleDateInput(date);
+}
+
 export function minScheduleDateInput(reference = new Date()) {
   return formatScheduleDateInput(reference);
 }

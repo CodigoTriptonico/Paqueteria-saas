@@ -1,8 +1,10 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { primaryButtonClass } from "@/components/ui-blocks";
 import {
   addBtnClass,
   STRUCTURE_MENU_WIDTH,
@@ -22,6 +24,8 @@ export type InventoryNewItemPopoverProps = {
   onChange: (value: string) => void;
   onAdd: () => void;
   onClose: () => void;
+  pricingReturnHref?: string | null;
+  pricingReturnLabel?: string | null;
 };
 
 export function InventoryNewItemPopover({
@@ -37,11 +41,13 @@ export function InventoryNewItemPopover({
   onChange,
   onAdd,
   onClose,
+  pricingReturnHref,
+  pricingReturnLabel,
 }: InventoryNewItemPopoverProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!open) {
+    if (!open || !mounted || !position) {
       return;
     }
 
@@ -50,7 +56,7 @@ export function InventoryNewItemPopover({
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [open, itemPlaceholder]);
+  }, [itemPlaceholder, mounted, open, position]);
 
   useEffect(() => {
     if (!open) {
@@ -104,7 +110,15 @@ export function InventoryNewItemPopover({
       <p className="px-1 text-[11px] font-black uppercase tracking-wide text-emerald-300">
         Nuevo item
       </p>
-      <div className="flex items-center gap-2 rounded-xl border border-black bg-[#111827] p-2">
+      {pricingReturnHref && pricingReturnLabel ? (
+        <Link
+          href={pricingReturnHref}
+          className={`${primaryButtonClass} h-9 w-full justify-center px-3 text-xs`}
+        >
+          {pricingReturnLabel}
+        </Link>
+      ) : null}
+      <div className="inset-shell flex items-center gap-2 rounded-xl border border-black bg-[#111827] p-2">
         <button
           type="button"
           onClick={onAdd}

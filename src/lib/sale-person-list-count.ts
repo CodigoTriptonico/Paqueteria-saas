@@ -1,4 +1,4 @@
-export type SalePersonListCountKind = "remitente" | "destinatario";
+type SalePersonListCountKind = "remitente" | "destinatario";
 
 type FormatSalePersonListCountOptions = {
   kind: SalePersonListCountKind;

@@ -10,7 +10,7 @@ import {
   formatScheduleTimePart,
   parseScheduleTime,
   scheduleTimePresetMatches,
-} from "@/components/sale/schedule-time";
+} from "@/lib/sale/schedule-time";
 
 describe("schedule time display", () => {
   it("starts without a default exact time", () => {
@@ -62,27 +62,35 @@ describe("schedule time field eval", () => {
     assert.match(source, /onFocus=\{\(\) => setRangeTarget\("end"\)\}/);
   });
 
-  it("renders preset shortcuts above time inputs so the native picker does not cover them", () => {
+  it("renders preset shortcuts above time inputs so the picker does not cover them", () => {
     const source = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "../components/sale/schedule-time-field.tsx"),
       "utf8",
     );
 
     const presetIndex = source.indexOf("TIME_PRESETS.map");
-    const timeInputIndex = source.indexOf('type="time"');
+    const timeInputIndex = source.indexOf("Hora exacta");
 
     assert.ok(presetIndex > -1);
     assert.ok(timeInputIndex > -1);
     assert.ok(presetIndex < timeInputIndex);
   });
 
-  it("opens the native time picker through the shared helper", () => {
+  it("uses the custom grid time picker instead of native time inputs", () => {
     const source = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "../components/sale/schedule-time-field.tsx"),
       "utf8",
     );
+    const calendarSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../components/time-picker-calendar.tsx"),
+      "utf8",
+    );
 
-    assert.match(source, /openNativePicker/);
-    assert.equal(source.includes("input.showPicker"), false);
+    assert.match(source, /TimePickerInput/);
+    assert.equal(source.includes('type="time"'), false);
+    assert.equal(source.includes("openNativePicker"), false);
+    assert.match(calendarSource, /Elige la hora/);
+    assert.match(calendarSource, /Elige el minuto/);
+    assert.match(calendarSource, /setStep\("minute"\)/);
   });
 });

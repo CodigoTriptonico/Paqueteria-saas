@@ -54,7 +54,7 @@ export function PromotionSelector({
         ariaLabel="Elegir promocion"
         className="w-full"
         minWidthClass="w-full min-w-0"
-        shellClassName="box-border inline-flex h-11 w-full max-w-full items-center gap-2 rounded-lg border border-solid border-black bg-[#111827] px-3"
+        shellClassName="inset-shell box-border inline-flex h-11 w-full max-w-full items-center gap-2 rounded-lg border border-solid border-black bg-[#111827] px-3"
         formatSelectedLabel={(option, placeholder) => option?.label || placeholder}
       />
       <p className="min-h-4 text-xs font-bold text-slate-500">

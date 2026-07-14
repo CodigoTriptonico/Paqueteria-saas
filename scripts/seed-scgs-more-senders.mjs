@@ -5,7 +5,6 @@
 import { connectPg } from "./lib/db-connection.mjs";
 import {
   SCGS_ORG_ID,
-  COUNTRIES,
   isSameCountry,
   pickRandomRecipientCountries,
   recipientForSenderRandom,

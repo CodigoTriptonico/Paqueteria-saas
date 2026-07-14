@@ -1,26 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ActionConfirmDialog } from "@/components/action-confirm-dialog";
+import { EmailDomainSuggestionsInput } from "@/components/email-domain-suggestions-input";
 import { PhoneCountryInput } from "@/components/phone-country-input";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
 import { countryFlagIcon } from "@/components/country-flag";
-import { flowFormStackClass, flowIntroClass } from "@/components/flow-form-styles";
-import { MapPin, Plus, UserPlus } from "lucide-react";
+import { flowFormStackClass } from "@/components/flow-form-styles";
+import { Mail, MapPin, Plus, Trash2, UserPlus } from "lucide-react";
 import {
   recipientHasRequiredAddress,
   recipientSaveEnabled,
 } from "@/lib/sale-recipient-save";
+import { SaleAddressGooglePanel } from "@/components/sale/sale-address-google-panel";
 import {
   type AddressSuggestion,
   type AddressValidation,
   clientFormInputClass,
+  clientFormAddressFieldClass,
+  clientFormAddressLabelClass,
   clientFormLabelClass,
   clientFormPickerShellClass,
   noBrowserAutocomplete,
   type Recipient,
 } from "@/components/sale/venta-parts";
+import { resolveAddressValidationUi, addressCardSubtitle } from "@/lib/sale-address-validation-ui";
 import { configPricesCountryHref } from "@/lib/country-options";
 import {
   buildPhoneNumber,
@@ -35,6 +40,7 @@ type SaleRecipientFormProps = {
     firstName: string;
     lastName: string;
     phone: string;
+    emails: string[];
     country: string;
     street: string;
     house: string;
@@ -56,6 +62,7 @@ type SaleRecipientFormProps = {
   address: {
     search: string;
     suggestions: AddressSuggestion[];
+    searching?: boolean;
     validation: AddressValidation;
     setSearch: (value: string) => void;
     setSuggestions: (suggestions: AddressSuggestion[]) => void;
@@ -66,6 +73,9 @@ type SaleRecipientFormProps = {
   actions: {
     onCancel: () => void;
     onSubmit: (options?: { skipAddressVerification?: boolean }) => void;
+    onAddEmail: () => void;
+    onUpdateEmail: (index: number, value: string) => void;
+    onRemoveEmail: (index: number) => void;
   };
   meta: {
     countries: string[];
@@ -84,6 +94,8 @@ function clearRecipientAddress(form: SaleRecipientFormProps["form"]) {
 
 export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipientFormProps) {
   const router = useRouter();
+  const contactMenuRef = useRef<HTMLDivElement>(null);
+  const [contactMenuOpen, setContactMenuOpen] = useState(false);
   const [addressUnverifiedAccepted, setAddressUnverifiedAccepted] = useState(false);
   const [showUnverifiedConfirm, setShowUnverifiedConfirm] = useState(false);
   const hasCountry = Boolean(form.country.trim());
@@ -97,6 +109,36 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
     () => getPhoneDialCodeForCountryName(form.country),
     [form.country],
   );
+
+  useEffect(() => {
+    if (!contactMenuOpen) {
+      return;
+    }
+
+    function closeFromOutside(event: PointerEvent) {
+      if (!contactMenuRef.current?.contains(event.target as Node)) {
+        setContactMenuOpen(false);
+      }
+    }
+
+    function closeFromEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setContactMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", closeFromOutside);
+    document.addEventListener("keydown", closeFromEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeFromOutside);
+      document.removeEventListener("keydown", closeFromEscape);
+    };
+  }, [contactMenuOpen]);
+
+  function addEmailContact() {
+    actions.onAddEmail();
+    setContactMenuOpen(false);
+  }
 
   const countryOptions = useMemo(() => {
     if (!meta.countries.length) {
@@ -145,7 +187,9 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
 
   useEffect(() => {
     if (address.validation.status === "valid") {
-      setAddressUnverifiedAccepted(false);
+      queueMicrotask(() => {
+        setAddressUnverifiedAccepted(false);
+      });
     }
   }, [address.validation.status]);
 
@@ -160,11 +204,6 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
     hasRequiredAddress,
   });
 
-  const showUnverifiedButton =
-    hasCountry &&
-    !meta.duplicateRecipient &&
-    address.validation.status !== "valid" &&
-    !addressUnverifiedAccepted;
 
   const fullAddress = [
     [form.street, form.house].filter(Boolean).join(" "),
@@ -176,62 +215,59 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
 
   const lockedClass = "pointer-events-none opacity-45";
 
+  const addressUi = resolveAddressValidationUi({
+    enabled: hasCountry,
+    disabledMessage: "Disponible al elegir pais",
+    searching: address.searching,
+    validation: address.validation,
+    suggestionsCount: address.suggestions.length,
+    unverifiedAccepted: addressUnverifiedAccepted,
+    hasRequiredAddress,
+    fullAddress,
+  });
+
+  const addressBadgeClass: Record<string, string> = {
+    disabled: "border-black bg-surface-card text-slate-300",
+    idle: "border-sky-400/45 bg-[#14262b] text-sky-100",
+    searching: "border-sky-300 bg-[#14262b] text-sky-100",
+    checking: "border-sky-300 bg-[#14262b] text-sky-100",
+    suggestions: "border-sky-400/45 bg-[#14262b] text-sky-100",
+    valid: "border-emerald-500/70 bg-[#1a2e28] text-emerald-100",
+    invalid: "border-amber-600 bg-amber-400 text-slate-950",
+    unverified: "border-amber-600 bg-amber-400 text-slate-950",
+  };
+
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <p className={`${flowIntroClass} !text-left !text-slate-300`}>
-            Registra un nuevo destinatario.
-          </p>
-          <span
-            className={`rounded-lg border px-3 py-1 text-xs font-black uppercase ${
-              !hasCountry
-                ? "border-black bg-surface-card text-slate-300"
-                : addressUnverifiedAccepted
-                  ? "border-amber-600 bg-amber-400 text-slate-950"
-                  : address.validation.status === "valid"
-                    ? "border-black bg-surface-inset text-slate-200"
-                    : address.validation.status === "invalid"
-                      ? "border-amber-600 bg-amber-400 text-slate-950"
-                      : "border-black bg-surface-card text-slate-300"
-            }`}
-          >
-            {!hasCountry
-              ? "Elige pais"
-              : addressUnverifiedAccepted
-                ? "Sin verificar"
-                : address.validation.status === "valid"
-                  ? "Google OK"
-                  : address.validation.status === "invalid" && address.validation.message
-                    ? "Error direccion"
-                    : "Sin validar"}
-          </span>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={actions.onCancel}
-            className="h-10 rounded-md border border-slate-600/60 bg-surface-inset px-4 text-sm font-black text-[#f8fafc]"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              actions.onSubmit(
-                addressUnverifiedAccepted ? { skipAddressVerification: true } : undefined,
-              )
-            }
-            disabled={saveDisabled}
-            className="h-10 rounded-md bg-emerald-400 px-5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {meta.duplicateRecipient ? "Usar existente" : "Guardar destinatario"}
-          </button>
-        </div>
+      <div className="mb-3 flex flex-wrap items-center justify-start gap-2 border-b border-white/10 pb-3">
+        <button
+          type="button"
+          onClick={actions.onCancel}
+          className="h-10 rounded-md border border-slate-600/60 bg-surface-inset px-4 text-sm font-black text-[#f8fafc]"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            actions.onSubmit(
+              addressUnverifiedAccepted ? { skipAddressVerification: true } : undefined,
+            )
+          }
+          disabled={saveDisabled}
+          className="h-10 rounded-md bg-emerald-400 px-5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {meta.duplicateRecipient ? "Usar existente" : "Guardar destinatario"}
+        </button>
+        <span
+          className={`rounded-lg border px-2.5 py-1 text-[11px] font-black uppercase ${addressBadgeClass[addressUi.tone]}`}
+        >
+          {!hasCountry ? "Elige pais" : addressCardSubtitle(addressUi.tone)}
+        </span>
       </div>
 
       <form
-        className="relative grid gap-4 lg:grid-cols-2 lg:items-start"
+        className="relative grid gap-3 lg:grid-cols-2 lg:items-start"
         autoComplete="off"
         onSubmit={(event) => event.preventDefault()}
       >
@@ -250,7 +286,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
             </span>
             <div className="min-w-0">
               <p className="text-sm font-black uppercase text-[#f8fafc]">Destinatario</p>
-              <p className="text-xs font-bold text-slate-400">Pais, nombre y telefono</p>
+              <p className="text-xs font-bold text-slate-400">Pais, nombre, telefono y correo</p>
             </div>
           </div>
           <div className="space-y-3 p-4">
@@ -320,6 +356,63 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                     onChange={form.setPhone}
                   />
                 </label>
+
+                <div ref={contactMenuRef} className="relative mt-3 flex w-fit items-center justify-start gap-2">
+                  <button
+                    type="button"
+                    title="Agregar correo"
+                    aria-label="Agregar correo"
+                    aria-expanded={contactMenuOpen}
+                    disabled={!hasCountry}
+                    tabIndex={hasCountry ? 0 : -1}
+                    onClick={() => setContactMenuOpen((open) => !open)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-emerald-400 text-slate-950 disabled:cursor-not-allowed disabled:opacity-35"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                  <span className={clientFormLabelClass}>Correo</span>
+                  {contactMenuOpen ? (
+                    <div className="absolute left-0 top-[calc(100%+0.4rem)] z-30 w-40 overflow-hidden rounded-lg border border-black bg-[#101820] shadow-2xl">
+                      <button
+                        type="button"
+                        onClick={addEmailContact}
+                        className="flex h-10 w-full items-center gap-2 px-3 text-left text-sm font-black text-[#f8fafc] hover:bg-surface-card-header"
+                      >
+                        <Mail className="h-4 w-4 text-emerald-300" />
+                        Correo
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {form.emails.map((email, index) => (
+                    <div key={`recipient-email-${index}`} className="flex items-start gap-2">
+                      <EmailDomainSuggestionsInput
+                        {...noBrowserAutocomplete}
+                        className="min-w-0 flex-1"
+                        name={`boxario-recipient-email-${index}`}
+                        inputClassName={`${clientFormInputClass} pl-10`}
+                        placeholder="destinatario@correo.com"
+                        value={email}
+                        disabled={!hasCountry}
+                        onChange={(value) => actions.onUpdateEmail(index, value)}
+                        icon={<Mail className="h-4 w-4" />}
+                      />
+                      <button
+                        type="button"
+                        title="Quitar correo"
+                        aria-label="Quitar correo"
+                        disabled={!hasCountry || form.emails.length === 1}
+                        tabIndex={hasCountry ? 0 : -1}
+                        onClick={() => actions.onRemoveEmail(index)}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-black bg-[#3A1818] text-rose-100 disabled:cursor-not-allowed disabled:opacity-35"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {meta.duplicateRecipient ? (
@@ -335,7 +428,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
         </div>
 
         <div
-          className={`flex h-full min-w-0 flex-col rounded-lg border border-black bg-surface-card ${hasCountry ? "" : lockedClass}`}
+          className={`flex min-w-0 flex-col rounded-lg border border-black bg-surface-card ${hasCountry ? "" : lockedClass}`}
           aria-disabled={!hasCountry}
         >
           <div className="flex items-center gap-3 border-b border-sky-300/25 bg-[#1f2c28] px-4 py-3">
@@ -345,18 +438,20 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
             <div className="min-w-0">
               <p className="text-sm font-black uppercase text-[#f8fafc]">Direccion destino</p>
               <p className="text-xs font-bold text-slate-400">
-                {hasCountry ? "Buscar y validar en Google" : "Disponible al elegir pais"}
+                {hasCountry ? addressCardSubtitle(addressUi.tone) : "Disponible al elegir pais"}
               </p>
             </div>
           </div>
           <div className="space-y-3 p-4">
             <div className="grid gap-3 md:grid-cols-[minmax(0,1.5fr)_6.5rem_5.5rem]">
               <label className="grid min-w-0 gap-1.5">
-                <span className={clientFormLabelClass}>Calle</span>
+                <span className={clientFormAddressLabelClass(form.street, { enabled: hasCountry })}>
+                  Calle
+                </span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-recipient-line-1"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.street, { enabled: hasCountry })}
                   placeholder="Calle y numero"
                   value={form.street}
                   disabled={!hasCountry}
@@ -367,11 +462,21 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                 />
               </label>
               <label className="grid gap-1.5">
-                <span className={clientFormLabelClass}>Unidad</span>
+                <span
+                  className={clientFormAddressLabelClass(form.house, {
+                    required: false,
+                    enabled: hasCountry,
+                  })}
+                >
+                  Unidad
+                </span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-recipient-line-2"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.house, {
+                    required: false,
+                    enabled: hasCountry,
+                  })}
                   placeholder="Apto / suite"
                   value={form.house}
                   disabled={!hasCountry}
@@ -382,11 +487,13 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                 />
               </label>
               <label className="grid gap-1.5">
-                <span className={clientFormLabelClass}>CP</span>
+                <span className={clientFormAddressLabelClass(form.postalCode, { enabled: hasCountry })}>
+                  CP
+                </span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-recipient-zip"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.postalCode, { enabled: hasCountry })}
                   placeholder="Codigo postal"
                   value={form.postalCode}
                   disabled={!hasCountry}
@@ -400,11 +507,21 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
 
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4.5rem]">
               <label className="grid min-w-0 gap-1.5">
-                <span className={clientFormLabelClass}>Colonia</span>
+                <span
+                  className={clientFormAddressLabelClass(form.neighborhood, {
+                    required: false,
+                    enabled: hasCountry,
+                  })}
+                >
+                  Colonia
+                </span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-recipient-zone"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.neighborhood, {
+                    required: false,
+                    enabled: hasCountry,
+                  })}
                   placeholder="Barrio / colonia"
                   value={form.neighborhood}
                   disabled={!hasCountry}
@@ -415,11 +532,13 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                 />
               </label>
               <label className="grid min-w-0 gap-1.5">
-                <span className={clientFormLabelClass}>Ciudad</span>
+                <span className={clientFormAddressLabelClass(form.city, { enabled: hasCountry })}>
+                  Ciudad
+                </span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-recipient-city"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.city, { enabled: hasCountry })}
                   placeholder="Ciudad"
                   value={form.city}
                   disabled={!hasCountry}
@@ -430,11 +549,13 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                 />
               </label>
               <label className="grid gap-1.5">
-                <span className={clientFormLabelClass}>Estado</span>
+                <span className={clientFormAddressLabelClass(form.state, { enabled: hasCountry })}>
+                  Estado
+                </span>
                 <input
                   {...noBrowserAutocomplete}
                   name="boxario-recipient-region"
-                  className={clientFormInputClass}
+                  className={clientFormAddressFieldClass(form.state, { enabled: hasCountry })}
                   placeholder="Estado"
                   value={form.state}
                   disabled={!hasCountry}
@@ -446,69 +567,24 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
               </label>
             </div>
 
-            {hasCountry && address.suggestions.length ? (
-              <div
-                id="recipient-address-suggestions-listbox"
-                role="listbox"
-                className="overflow-hidden rounded-lg border border-black bg-[#101820]"
-              >
-                {address.suggestions.map((suggestion) => (
-                  <button
-                    key={suggestion.placeId}
-                    type="button"
-                    onClick={() => void address.onSelectSuggestion(suggestion)}
-                    className="grid w-full gap-0.5 border-b border-black px-4 py-3 text-left last:border-b-0 hover:bg-surface-card-header"
-                  >
-                    <span className="truncate text-sm font-black text-[#f8fafc]">
-                      {suggestion.mainText}
-                    </span>
-                    <span className="truncate text-xs font-bold text-slate-300">
-                      {[suggestion.secondaryText, suggestion.postalCode].filter(Boolean).join(" | CP ")}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
-            {addressUnverifiedAccepted ? (
-              <div className="rounded-lg border border-amber-600 bg-amber-400 px-3.5 py-2.5 text-slate-950">
-                <p className="text-xs font-black uppercase text-amber-200">Direccion sin verificar</p>
-                <p className="text-sm font-bold leading-snug">
-                  Guardaras la direccion tal como la escribiste, sin validacion de Google. Revisa
-                  calle, ciudad, estado y CP antes de guardar.
-                </p>
-              </div>
-            ) : null}
-
-            <p
-              className={`rounded-lg border px-3.5 py-2.5 text-sm font-bold leading-snug break-words ${
-                !hasCountry
-                  ? "border-black bg-surface-inset text-slate-500"
-                  : address.validation.status === "valid"
-                    ? "border-black bg-surface-inset text-slate-300"
-                    : address.validation.status === "invalid"
-                      ? "border-amber-600 bg-amber-400 text-slate-950"
-                      : "border-black bg-surface-inset text-slate-500"
-              }`}
-            >
-              {!hasCountry
-                ? "Elige el pais del destinatario para habilitar telefono y direccion."
-                : fullAddress ||
-                  address.validation.formattedAddress ||
-                  address.validation.message ||
-                  "Selecciona una direccion para validar"}
-            </p>
-
-            {showUnverifiedButton ? (
-              <button
-                type="button"
-                onClick={() => setShowUnverifiedConfirm(true)}
-                disabled={!hasRequiredAddress}
-                className="h-10 w-full rounded-md border border-amber-700/60 bg-amber-950/50 px-4 text-sm font-black text-amber-100 hover:bg-amber-900/50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Direccion sin verificar
-              </button>
-            ) : null}
+            <SaleAddressGooglePanel
+              enabled={hasCountry}
+              disabledMessage="Elige el pais del destinatario para habilitar telefono y direccion."
+              validation={address.validation}
+              searching={address.searching}
+              suggestions={address.suggestions}
+              unverifiedAccepted={addressUnverifiedAccepted}
+              hasRequiredAddress={hasRequiredAddress}
+              fullAddress={fullAddress}
+              listboxId="recipient-address-suggestions-listbox"
+              unverifiedButtonLabel="Direccion sin verificar"
+              showUnverifiedOption={!meta.duplicateRecipient}
+              onSelectSuggestion={(suggestion) => {
+                setAddressUnverifiedAccepted(false);
+                void address.onSelectSuggestion(suggestion);
+              }}
+              onUseUnverified={() => setShowUnverifiedConfirm(true)}
+            />
           </div>
         </div>
       </form>

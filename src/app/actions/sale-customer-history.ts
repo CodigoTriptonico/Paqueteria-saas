@@ -5,7 +5,7 @@ import { sessionHasPermission } from "@/lib/auth/permissions";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 
-export type ShipmentSaleKind = "full" | "empty_box_deposit";
+type ShipmentSaleKind = "full" | "empty_box_deposit";
 
 export type CustomerSaleHistoryRow = {
   id: string;

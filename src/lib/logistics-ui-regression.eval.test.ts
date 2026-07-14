@@ -17,14 +17,19 @@ const fleetAdminSource = readFileSync(
 function invoiceCardSource() {
   const cardStart = componentSource.indexOf("function renderInvoiceCard");
   assert.notEqual(cardStart, -1);
-  const cardEnd = componentSource.indexOf("function renderTaskCard", cardStart);
+  const cardEnd = componentSource.indexOf("function renderInvoiceRow", cardStart);
   assert.notEqual(cardEnd, -1);
   return componentSource.slice(cardStart, cardEnd);
 }
 
 function logisticsToolbarSource() {
-  const toolbarStart = componentSource.indexOf('Panel title="Logistica"');
-  const listStart = componentSource.indexOf("{advancedRoutesOpen && suggestions.length", toolbarStart);
+  const taskPanelStart = componentSource.indexOf('className="flex min-h-0 w-full flex-col lg:flex-1 lg:overflow-hidden"');
+  assert.notEqual(taskPanelStart, -1);
+  const toolbarStart = componentSource.indexOf("<div className={panelToolbarClass}>", taskPanelStart);
+  const listStart = componentSource.indexOf(
+    'className={`${panelListScrollClass} pt-3`}',
+    toolbarStart,
+  );
   assert.notEqual(toolbarStart, -1);
   assert.notEqual(listStart, -1);
   return componentSource.slice(toolbarStart, listStart);
@@ -109,7 +114,7 @@ describe("logistica single-action invoice card eval", () => {
     assert.equal(componentSource.includes("LOGISTICS_FIELD_BASE"), true);
     assert.equal(componentSource.includes("logisticsActionIconWellClass"), true);
     assert.equal(body.includes("taskTypeIcon(item.step.stepType, \"h-5 w-5\")"), true);
-    assert.equal(body.includes("invoiceActionFieldClass(item.step.stepType)"), true);
+    assert.equal(body.includes("invoiceActionFieldClass()"), true);
     assert.equal(body.includes("invoiceDriverFieldClass(task?.assignedTo, Boolean(task))"), true);
     assert.equal(dateIndex, -1);
     assert.ok(actionIndex >= 0);
@@ -142,13 +147,10 @@ describe("logistica single-action invoice card eval", () => {
   it("does not show warehouse in the invoice card footer", () => {
     const card = invoiceCardSource();
     const footerStart = card.indexOf('className="flex flex-wrap items-center justify-end gap-2 border-t border-black pt-2"');
-    const addressStart = card.indexOf("formattedAddress || displayTask?.notes");
-    const driverGridStart = card.indexOf("invoiceDriverFieldClass");
 
     assert.equal(footerStart, -1);
-    assert.equal(card.includes("item.quote?.label"), true);
-    assert.ok(card.indexOf("item.quote?.label") > addressStart);
-    assert.ok(card.indexOf("item.quote?.label") > driverGridStart);
+    assert.equal(card.includes("ShipmentBoxLinesTrigger"), true);
+    assert.equal(card.includes("readShipmentBoxLines(item.shipment)"), true);
     assert.equal(card.includes("<Warehouse"), false);
     assert.equal(card.includes("warehouseLabel"), false);
   });
@@ -159,28 +161,22 @@ describe("logistica single-action invoice card eval", () => {
     assert.equal(componentSource.includes('type InvoiceAssignmentTab = "unassigned" | "assigned"'), false);
     assert.equal(main.includes('role="tablist"'), false);
     assert.equal(main.includes('role="tabpanel"'), false);
-    assert.equal(main.includes("activeInvoiceItems.map((item) => renderInvoiceCard(item))"), false);
-    assert.equal(main.includes("unassignedInvoiceItems.map((item) => renderInvoiceCard(item))"), false);
-    assert.equal(main.includes("assignedInvoiceItems.map((item) => renderInvoiceCard(item))"), false);
-    assert.equal(main.includes("filteredInvoiceItems.map((item) => renderInvoiceCard(item))"), true);
-    assert.equal(
-      main.includes(
-        'className="grid max-h-[72vh] auto-rows-max gap-3 overflow-y-auto p-3 xl:grid-cols-2 2xl:grid-cols-3"',
-      ),
-      true,
-    );
+    assert.equal(componentSource.includes("activeInvoiceItems.map((item) => renderInvoiceCard(item))"), false);
+    assert.equal(componentSource.includes("unassignedInvoiceItems.map((item) => renderInvoiceCard(item))"), false);
+    assert.equal(componentSource.includes("assignedInvoiceItems.map((item) => renderInvoiceCard(item))"), false);
+    assert.equal(componentSource.includes("visibleInvoiceItems.map((item) => renderInvoiceCard(item))"), true);
+    assert.equal(componentSource.includes("LOGISTICS_INVOICE_CARD_GRID_CLASS"), true);
+    assert.equal(componentSource.includes("panelListScrollClass"), true);
+    assert.equal(componentSource.includes("panelListStackClass"), true);
+    assert.equal(componentSource.includes("listRowBaseClass"), true);
+    assert.equal(componentSource.includes("divide-y divide-black/70"), false);
     assert.equal(main.includes("Pendientes de asignar"), false);
     assert.equal(main.includes("Ya asignados"), false);
     assert.equal(main.includes("unassignedCount"), false);
     assert.equal(main.includes("assignedCount"), false);
   });
 
-  it("keeps the unrouted driver field stable after assignment", () => {
-    assert.equal(componentSource.includes('const showChoferPicker = mode === "unrouted";'), true);
-    assert.equal(componentSource.includes("const showChoferPicker = !task.assignedTo"), false);
-  });
-
-  it("colors unrouted cards without inline date fields", () => {
+  it("keeps invoice cards without inline date fields", () => {
     assert.equal(componentSource.includes("function invoiceDateFieldClass"), false);
     assert.equal(componentSource.includes("LogisticsScheduleText"), false);
   });
@@ -209,7 +205,7 @@ describe("logistica single-action invoice card eval", () => {
   it("keeps the main toolbar in one compact row", () => {
     const toolbar = logisticsToolbarSource();
 
-    assert.equal(toolbar.includes("overflow-visible p-2"), true);
+    assert.equal(toolbar.includes("panelToolbarClass"), true);
     assert.equal(toolbar.includes("flex flex-wrap items-center gap-2"), true);
     assert.equal(toolbar.includes("lg:grid-cols-[auto_minmax(18rem,1.4fr)"), false);
     assert.equal(toolbar.includes('className="grid gap-3"'), false);
@@ -221,12 +217,20 @@ describe("logistica single-action invoice card eval", () => {
   });
 
   it("keeps section nav aligned to the right on fleet admin pages", () => {
-    assert.equal(componentSource.includes('<LogisticsSectionNav\n                active="routes"'), true);
+    assert.equal(componentSource.includes('<LogisticsSectionNav active="routes"'), true);
     assert.equal(componentSource.includes('className="ml-auto"'), true);
     assert.equal(fleetAdminSource.includes("<LogisticsSectionNav"), true);
     assert.equal(fleetAdminSource.includes('className="ml-auto"'), true);
     assert.equal(fleetAdminSource.includes('href="/logistica/conductores"'), false);
     assert.equal(fleetAdminSource.includes("Logistica"), false);
+  });
+
+  it("supports per-context list row palettes via surface preferences", () => {
+    assert.equal(componentSource.includes("rowColorPreview"), false);
+    assert.equal(componentSource.includes("listRowColorSwatchForIndex"), false);
+    assert.equal(componentSource.includes("SurfaceContextColorTrigger"), false);
+    assert.equal(componentSource.includes("usePageListRowPalette"), false);
+    assert.equal(componentSource.includes("listRowBaseClass"), true);
   });
 
   it("opens the native date picker from the toolbar date filter", () => {
@@ -235,5 +239,17 @@ describe("logistica single-action invoice card eval", () => {
     assert.equal(toolbar.includes("<DateInput"), true);
     assert.equal(toolbar.includes("onClick={() => openDatePicker(inputRef.current)}"), false);
     assert.equal(toolbar.includes('ariaLabel="Fecha"'), true);
+  });
+
+  it("marks the filters trigger active while its panel is open", () => {
+    const toolbar = logisticsToolbarSource();
+
+    assert.equal(
+      toolbar.includes(
+        'className={`${filtersOpen || hasFilters ? primaryButtonClass : secondaryButtonClass} h-9 shrink-0 px-2.5 text-xs`}',
+      ),
+      true,
+    );
+    assert.equal(toolbar.includes('aria-expanded={filtersOpen}'), true);
   });
 });

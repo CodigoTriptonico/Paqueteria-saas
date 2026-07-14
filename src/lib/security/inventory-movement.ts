@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { readPositiveQty } from "@/lib/security/qty";
 
-export type InventoryMovementType = "entrada" | "salida" | "ajuste" | "devolucion";
+type InventoryMovementType = "entrada" | "salida" | "ajuste" | "devolucion";
 
 export type RecordInventoryMovementInput = {
   organizationId: string;

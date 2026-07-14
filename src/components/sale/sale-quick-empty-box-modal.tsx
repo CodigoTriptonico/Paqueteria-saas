@@ -4,7 +4,7 @@ import { CalendarDays, Clock, Minus, Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DateInput } from "@/components/date-input";
 import { ScheduleTimeField } from "@/components/sale/schedule-time-field";
-import { scheduleTimeComplete } from "@/components/sale/schedule-time";
+import { scheduleTimeComplete } from "@/lib/sale/schedule-time";
 import {
   quotePromotionsForBox,
   type PricingPromotionConfig,
@@ -246,7 +246,6 @@ export function SaleQuickEmptyBoxModal({
                     <span className="text-[11px] font-black uppercase text-slate-500">Fecha</span>
                     <DateInput
                       compact={false}
-                      className="w-full"
                       min={minScheduleDateInput()}
                       value={routeDate}
                       ariaLabel="Fecha de entrega"

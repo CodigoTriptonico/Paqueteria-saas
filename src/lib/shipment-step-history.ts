@@ -15,7 +15,7 @@ function metaText(row: ActivityHistoryRow, key: string) {
   return typeof value === "string" ? value : "";
 }
 
-export function sanitizeHistoryIsoText(text: string) {
+function sanitizeHistoryIsoText(text: string) {
   return text.replace(ISO_IN_TEXT, (iso) => formatShipmentAbsolute(iso) || iso);
 }
 
@@ -143,7 +143,7 @@ export function stepHistoryEntryDetail(entry: ActivityHistoryRow) {
   return description;
 }
 
-export function stepDetailPhrase(detail: string) {
+function stepDetailPhrase(detail: string) {
   const trimmed = detail.trim();
 
   if (!trimmed) {
@@ -187,7 +187,7 @@ export function buildStepSummarySentence(input: {
   return parts.join(" ");
 }
 
-export function primaryStepHistoryEntry(
+function primaryStepHistoryEntry(
   matchingHistory: ActivityHistoryRow[],
   step: ShipmentProgressStep,
 ) {
@@ -362,7 +362,7 @@ function saleAuditKindLabel(action: string) {
   return "Venta registrada";
 }
 
-export function formatAuditHistoryTitle(entry: ActivityHistoryRow) {
+function formatAuditHistoryTitle(entry: ActivityHistoryRow) {
   if (entry.action === "sale.open_invoice_created") {
     const invoice = invoiceCodeFromTitle(entry.title);
     return invoice || "Invoice abierto";
@@ -399,7 +399,7 @@ export function formatAuditHistoryHeaderLabel(entry: ActivityHistoryRow, actionL
   return actionLabel;
 }
 
-export function formatAuditHistoryDetail(entry: ActivityHistoryRow) {
+function formatAuditHistoryDetail(entry: ActivityHistoryRow) {
   if (entry.action === SHIPMENT_MILESTONE_ACTION) {
     return stepHistoryEntryDetail(entry);
   }
@@ -532,40 +532,4 @@ export function buildAuditHistorySegments(entry: ActivityHistoryRow | null | und
   }
 
   return segments;
-}
-
-function auditSegmentPlainText(segment: AuditHistoryLineSegment) {
-  return segment.value;
-}
-
-export function formatAuditHistoryLine(entry: ActivityHistoryRow) {
-  const segments = buildAuditHistorySegments(entry);
-  const parts: string[] = [];
-
-  for (let index = 0; index < segments.length; index += 1) {
-    const segment = segments[index];
-    const next = segments[index + 1];
-
-    if (segment.type === "text" && next?.type === "date") {
-      parts.push(`${segment.value} ${next.value}`);
-      index += 1;
-      continue;
-    }
-
-    if (segment.type === "text" && segment.value === "vendedor encargado" && next?.type === "actor") {
-      parts.push(`vendedor encargado ${next.value}`);
-      index += 1;
-      continue;
-    }
-
-    if (segment.type === "text" && segment.value === "por" && next?.type === "actor") {
-      parts.push(`por ${next.value}`);
-      index += 1;
-      continue;
-    }
-
-    parts.push(auditSegmentPlainText(segment));
-  }
-
-  return parts.join(" · ");
 }

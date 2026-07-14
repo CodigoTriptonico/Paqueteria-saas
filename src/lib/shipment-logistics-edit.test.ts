@@ -110,11 +110,61 @@ describe("shipment-logistics-edit", () => {
         mode: FULL_BOX_DRIVER_MODE,
         scheduleMode: "pending",
         scheduleAt: null,
+        driverTaskOrdered: true,
       },
     });
 
     assert.equal(logisticsPlan.driverTaskCount, 1);
     assert.match(deliveryNotes, /recoleccion caja llena/i);
+  });
+
+  it("persists an explicit logistics order without inferring it from the schedule", () => {
+    const row = baseShipment({
+      logistics_plan: {
+        emptyBox: { mode: EMPTY_BOX_DRIVER_MODE, scheduleMode: "scheduled" },
+        fullBox: { mode: "", deferred: true },
+      },
+    });
+
+    const { logisticsPlan } = buildUpdatedLogisticsPlan(row, {
+      emptyBox: {
+        mode: EMPTY_BOX_DRIVER_MODE,
+        scheduleMode: "scheduled",
+        scheduleAt: "2026-07-14T09:00:00",
+        driverTaskOrdered: true,
+      },
+      fullBox: { mode: "" },
+    });
+
+    assert.equal(logisticsPlan.emptyBox?.driverTaskOrdered, true);
+    assert.equal(logisticsPlan.fullBox?.driverTaskOrdered, false);
+  });
+
+  it("only syncs a driver task after the leg is explicitly ordered", () => {
+    const row = baseShipment({
+      logistics_plan: {
+        emptyBox: { mode: EMPTY_BOX_DRIVER_MODE },
+        fullBox: { mode: "", deferred: true },
+      },
+    });
+    const input = {
+      emptyBox: {
+        mode: EMPTY_BOX_DRIVER_MODE,
+        scheduleMode: "scheduled",
+        scheduleAt: "2026-07-14T09:00:00",
+        driverTaskOrdered: false,
+      },
+      fullBox: { mode: "" },
+    };
+
+    assert.equal(logisticsTaskSyncPlan(row, input)[0]?.needed, false);
+    assert.equal(
+      logisticsTaskSyncPlan(row, {
+        ...input,
+        emptyBox: { ...input.emptyBox, driverTaskOrdered: true },
+      })[0]?.needed,
+      true,
+    );
   });
 
   it("allows cancelling a marked full box pickup", () => {
@@ -222,7 +272,7 @@ describe("shipment-logistics-edit", () => {
     assert.equal(delivery?.needed, false);
   });
 
-  it("creates pickup task spec when marking deferred full box pickup ready", () => {
+  it("creates pickup task spec when scheduling deferred full box pickup", () => {
     const row = baseShipment({
       logistics_plan: {
         emptyBox: {
@@ -253,61 +303,5 @@ describe("shipment-logistics-edit", () => {
     const pickup = taskSync.find((spec) => spec.taskType === "pickup_full_box");
     assert.equal(pickup?.needed, true);
     assert.equal(pickup?.scheduleMode, "pending");
-  });
-
-  it("creates driver task when applying a scheduled date", () => {
-    const row = baseShipment({
-      status: PENDING_EMPTY_BOX_STATUS,
-      logistics_plan: {
-        emptyBox: {
-          mode: EMPTY_BOX_DRIVER_MODE,
-          scheduleMode: "pending",
-        },
-        fullBox: {
-          mode: "",
-          deferred: true,
-        },
-      },
-    });
-
-    const scheduleAndOrder = logisticsTaskSyncPlan(row, {
-      emptyBox: {
-        mode: EMPTY_BOX_DRIVER_MODE,
-        scheduleMode: "scheduled",
-        scheduleAt: "2026-07-10T10:00:00",
-        driverTaskOrdered: true,
-      },
-      fullBox: {
-        mode: "",
-        scheduleMode: "pending",
-        scheduleAt: null,
-        driverTaskOrdered: false,
-      },
-    });
-
-    const delivery = scheduleAndOrder.find((spec) => spec.taskType === "deliver_empty_box");
-    assert.equal(delivery?.needed, true);
-    assert.equal(delivery?.scheduleMode, "scheduled");
-    assert.equal(delivery?.scheduleAt, "2026-07-10T10:00:00");
-
-    const scheduleOnly = logisticsTaskSyncPlan(row, {
-      emptyBox: {
-        mode: EMPTY_BOX_DRIVER_MODE,
-        scheduleMode: "scheduled",
-        scheduleAt: "2026-07-10T10:00:00",
-        driverTaskOrdered: false,
-      },
-      fullBox: {
-        mode: "",
-        scheduleMode: "pending",
-        scheduleAt: null,
-        driverTaskOrdered: false,
-      },
-    });
-
-    assert.equal(
-      scheduleOnly.find((spec) => spec.taskType === "deliver_empty_box")?.needed,
-      false,
-    );
   });
 });

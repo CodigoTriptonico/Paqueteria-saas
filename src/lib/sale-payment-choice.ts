@@ -1,19 +1,30 @@
 import {
   isPaymentMethod,
-  PAYMENT_METHOD_OPTIONS,
   paymentMethodLabel,
   type PaymentMethod,
 } from "@/lib/payment-methods";
 
 export type SalePaymentChoice = PaymentMethod | "pending";
 
-export const SALE_PAYMENT_CHOICE_OPTIONS: Array<{ value: SalePaymentChoice; label: string }> = [
-  { value: "pending", label: "Pendiente" },
-  ...PAYMENT_METHOD_OPTIONS,
-];
+export const SALE_PAYMENT_UNSET = "unset" as const;
+
+export type SalePaymentSelection = SalePaymentChoice | typeof SALE_PAYMENT_UNSET;
+
 
 export function isSalePaymentChoice(value: unknown): value is SalePaymentChoice {
   return value === "pending" || isPaymentMethod(value);
+}
+
+export function isSalePaymentUnset(
+  value: SalePaymentSelection,
+): value is typeof SALE_PAYMENT_UNSET {
+  return value === SALE_PAYMENT_UNSET;
+}
+
+export function isResolvedSalePaymentChoice(
+  value: SalePaymentSelection,
+): value is SalePaymentChoice {
+  return isSalePaymentChoice(value);
 }
 
 export function salePaymentChoiceLabel(choice: SalePaymentChoice) {

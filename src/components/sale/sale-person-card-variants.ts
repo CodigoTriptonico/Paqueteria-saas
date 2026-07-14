@@ -424,7 +424,7 @@ const PALETTES: Palette[] = [
   },
 ];
 
-export const DEFAULT_SALE_PERSON_CARD_VARIANT_ID: SalePersonCardVariantId = "amber-warm";
+const DEFAULT_SALE_PERSON_CARD_VARIANT_ID: SalePersonCardVariantId = "amber-warm";
 
 export const SALE_PERSON_CARD_VARIANTS: SalePersonCardVariant[] =
   PALETTES.map(variantFromPalette);

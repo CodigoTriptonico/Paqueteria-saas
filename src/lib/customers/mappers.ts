@@ -9,6 +9,8 @@ export type SaleRecipient = {
   lastName: string;
   country: string;
   phone: string;
+  email: string;
+  emails: string[];
   street: string;
   houseNumber: string;
   neighborhood: string;
@@ -18,6 +20,7 @@ export type SaleRecipient = {
   cardStyle: string;
   placeId: string;
   formattedAddress: string;
+  addressVerified: boolean;
   lat: number | null;
   lng: number | null;
 };
@@ -29,6 +32,7 @@ export type SaleSender = {
   lastName: string;
   phones: string[];
   email: string;
+  emails: string[];
   street: string;
   houseNumber: string;
   neighborhood: string;
@@ -38,6 +42,7 @@ export type SaleSender = {
   cardStyle: string;
   placeId: string;
   formattedAddress: string;
+  addressVerified: boolean;
   lat: number | null;
   lng: number | null;
   recipients: SaleRecipient[];
@@ -51,6 +56,7 @@ export function customerRowToSender(row: CustomerWithRecipientsRow): SaleSender 
     lastName: row.lastName,
     phones: row.phones,
     email: row.email,
+    emails: row.emails,
     street: row.street,
     houseNumber: row.houseNumber,
     neighborhood: row.neighborhood,
@@ -60,6 +66,7 @@ export function customerRowToSender(row: CustomerWithRecipientsRow): SaleSender 
     cardStyle: row.cardStyle,
     placeId: row.placeId,
     formattedAddress: row.formattedAddress,
+    addressVerified: row.addressVerified,
     lat: row.lat,
     lng: row.lng,
     recipients: row.recipients.map(recipientRowToSaleRecipient),
@@ -73,6 +80,8 @@ export function recipientRowToSaleRecipient(row: CustomerRecipientRow): SaleReci
     lastName: row.lastName,
     country: row.country,
     phone: row.phone,
+    email: row.email,
+    emails: row.emails,
     street: row.street,
     houseNumber: row.houseNumber,
     neighborhood: row.neighborhood,
@@ -82,28 +91,8 @@ export function recipientRowToSaleRecipient(row: CustomerRecipientRow): SaleReci
     cardStyle: row.cardStyle,
     placeId: row.placeId,
     formattedAddress: row.formattedAddress,
+    addressVerified: row.addressVerified,
     lat: row.lat,
     lng: row.lng,
-  };
-}
-
-export function saleRecipientToRow(recipient: SaleRecipient): CustomerRecipientRow {
-  return {
-    id: recipient.id,
-    firstName: recipient.firstName,
-    lastName: recipient.lastName,
-    phone: recipient.phone,
-    country: recipient.country,
-    street: recipient.street,
-    houseNumber: recipient.houseNumber,
-    neighborhood: recipient.neighborhood,
-    city: recipient.city,
-    state: recipient.state || "",
-    postalCode: recipient.postalCode,
-    cardStyle: recipient.cardStyle,
-    placeId: recipient.placeId,
-    formattedAddress: recipient.formattedAddress,
-    lat: recipient.lat,
-    lng: recipient.lng,
   };
 }

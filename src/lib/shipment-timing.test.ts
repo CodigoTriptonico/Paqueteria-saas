@@ -4,6 +4,7 @@ import type { ShipmentRow } from "@/app/actions/shipments";
 import { shipmentLogisticsSteps, PENDING_FULL_BOX_STATUS } from "./shipment-display";
 import {
   buildShipmentMilestoneAges,
+  buildShipmentTimingInsightPanel,
   buildShipmentTimings,
   buildShipmentAuditTimings,
   formatActiveElapsed,
@@ -167,11 +168,11 @@ describe("shipment-timing", () => {
     assert.equal(ages[1]?.status, "done");
     assert.equal(milestoneAgeDisplayValue(ages[1]!), "2 días");
     assert.equal(ages[2]?.status, "waiting");
-    assert.equal(milestoneAgeDisplayValue(ages[2]!), "2 días");
-    assert.equal(ages[2]?.detailLabel, "Recolección · lleva 2 días desde la entrega");
+    assert.equal(milestoneAgeDisplayValue(ages[2]!), "1 día");
+    assert.equal(ages[2]?.detailLabel, "Recoger · lleva 1 día desde que se marcó");
   });
 
-  it("marks undelivered milestones as pending", () => {
+  it("marks undelivered milestones as pending until dejar is ordered", () => {
     const row = baseShipment({
       empty_box_delivered_at: null,
       full_box_collected_at: null,
@@ -184,18 +185,57 @@ describe("shipment-timing", () => {
     const steps = shipmentLogisticsSteps(row);
     const ages = buildShipmentMilestoneAges(row, steps, NOW);
 
-    assert.equal(ages[1]?.status, "waiting");
-    assert.equal(milestoneAgeDisplayValue(ages[1]!), "2 días");
+    assert.equal(ages[1]?.status, "pending");
+    assert.equal(milestoneAgeDisplayValue(ages[1]!), "—");
+    assert.equal(ages[1]?.detailLabel, "Dejar · sin marcar");
     assert.equal(ages[2]?.status, "pending");
   });
 
-  it("uses Venta, Entrega and Recolección labels", () => {
+  it("starts dejar timer only after the leg is marked ready", () => {
+    const row = baseShipment({
+      created_at: "2026-03-10T11:39:00.000Z",
+      empty_box_delivered_at: null,
+      full_box_collected_at: null,
+      logistics_plan: {
+        emptyBox: {
+          mode: "Programar entrega de caja vacia",
+          driverTaskOrdered: true,
+        },
+        fullBox: { mode: "Programar recoleccion caja llena" },
+      },
+      logisticsTasks: [
+        {
+          id: "task-1",
+          shipmentId: "shipment-1",
+          taskType: "deliver_empty_box",
+          status: "pending",
+          assignedTo: null,
+          scheduledAt: null,
+          warehouseId: null,
+          notes: "",
+          stockDeductedAt: null,
+          completedAt: null,
+          orderedAt: "2026-03-10T11:45:00.000Z",
+          assignedAt: null,
+          loadedAt: null,
+          createdAt: "2026-03-10T11:45:00.000Z",
+        },
+      ],
+    });
+    const ages = buildShipmentMilestoneAges(row, shipmentLogisticsSteps(row), NOW);
+
+    assert.equal(ages[1]?.status, "waiting");
+    assert.equal(milestoneAgeDisplayValue(ages[1]!), "15 min");
+    assert.equal(ages[1]?.detailLabel, "Dejar · lleva 15 min desde que se marcó");
+  });
+
+  it("uses Venta, Dejar and Recoger labels", () => {
     const row = baseShipment();
     const ages = buildShipmentMilestoneAges(row, shipmentLogisticsSteps(row), NOW);
 
     assert.deepEqual(
       ages.map((age) => age.label),
-      ["Venta", "Entrega", "Recolección"],
+      ["Venta", "Dejar", "Recoger"],
     );
   });
 
@@ -204,6 +244,110 @@ describe("shipment-timing", () => {
     const ages = buildShipmentMilestoneAges(row, shipmentLogisticsSteps(row), NOW);
 
     assert.match(milestoneAgeIndicatorButtonClass(ages), /amber/);
+  });
+
+  it("builds a step-to-step timing insight panel", () => {
+    const row = baseShipment();
+    const insights = buildShipmentTimingInsightPanel(row, shipmentLogisticsSteps(row), NOW);
+
+    assert.equal(insights[0]?.label, "Venta");
+    assert.equal(insights[0]?.value, "2 días");
+    assert.equal(
+      insights.some((entry) => entry.label === "Venta → dejado" && entry.status === "done"),
+      true,
+    );
+    assert.equal(
+      insights.some(
+        (entry) => entry.label === "Marcar recoger → recogido" && entry.status === "active",
+      ),
+      true,
+    );
+  });
+
+  it("does not count dejar wait time after canceling a driver leg", () => {
+    const row = baseShipment({
+      created_at: "2026-07-11T17:54:00.000Z",
+      empty_box_delivered_at: null,
+      full_box_collected_at: null,
+      status: "Pendiente entrega caja vacía",
+      delivery_notes: "",
+      logistics_plan: {
+        emptyBox: {
+          deferred: true,
+          mode: "",
+          driverTaskOrdered: false,
+        },
+        fullBox: {
+          mode: "Programar recoleccion caja llena",
+        },
+      },
+      logisticsTasks: [
+        {
+          id: "task-empty",
+          shipmentId: "shipment-1",
+          taskType: "deliver_empty_box",
+          status: "cancelled",
+          assignedTo: null,
+          scheduledAt: null,
+          warehouseId: null,
+          notes: "",
+          stockDeductedAt: null,
+          completedAt: null,
+          orderedAt: null,
+          assignedAt: null,
+          loadedAt: null,
+          createdAt: "2026-07-11T17:54:00.000Z",
+        },
+        {
+          id: "task-1",
+          shipmentId: "shipment-1",
+          taskType: "pickup_full_box",
+          status: "scheduled",
+          assignedTo: null,
+          scheduledAt: "2026-03-11T10:00:00.000Z",
+          warehouseId: null,
+          notes: "",
+          stockDeductedAt: null,
+          completedAt: null,
+          orderedAt: null,
+          assignedAt: null,
+          loadedAt: null,
+          createdAt: "2026-03-08T12:00:00.000Z",
+        },
+      ],
+    });
+    const steps = shipmentLogisticsSteps(row);
+    const now = Date.parse("2026-07-11T20:59:00.000Z");
+    const insights = buildShipmentTimingInsightPanel(row, steps, now);
+    const saleToEmpty = insights.find((entry) => entry.id === "sale-empty-done");
+    const timings = buildShipmentTimings(row, steps, now);
+
+    assert.equal(saleToEmpty?.status, "pending");
+    assert.equal(saleToEmpty?.value, "—");
+    assert.equal(timings.waitingText, null);
+    assert.equal(timings.activeElapsedDetail, null);
+  });
+
+  it("shows pending gaps before dejar is marked", () => {
+    const row = baseShipment({
+      created_at: "2026-03-10T11:39:00.000Z",
+      empty_box_delivered_at: null,
+      full_box_collected_at: null,
+      logistics_plan: {
+        emptyBox: { mode: "Programar entrega de caja vacia" },
+        fullBox: { mode: "Programar recoleccion caja llena" },
+      },
+      logisticsTasks: [],
+    });
+    const insights = buildShipmentTimingInsightPanel(row, shipmentLogisticsSteps(row), NOW);
+
+    assert.equal(insights[0]?.value, "21 min");
+    assert.deepEqual(
+      insights
+        .filter((entry) => entry.id !== "sale")
+        .map((entry) => entry.value),
+      ["—", "—", "—", "—"],
+    );
   });
 
   it("omits completed line when milestone data is missing", () => {

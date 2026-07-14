@@ -19,8 +19,11 @@ describe("scheduled leg auto-order eval", () => {
     assert.match(contextMenuSource, /function commitDriverScheduled[\s\S]*?\[orderedKey\]: false/);
   });
 
-  it("promotes due scheduled legs when listing shipments", () => {
-    assert.match(shipmentsSource, /buildDueSchedulePromotionInput/);
+  it("does not auto-order driver tasks when listing shipments", () => {
     assert.match(shipmentsSource, /promoteDueScheduledLegsForListedShipments/);
+    assert.doesNotMatch(
+      shipmentsSource,
+      /buildDueSchedulePromotionInput[\s\S]*?driverTaskOrdered:\s*true/,
+    );
   });
 });

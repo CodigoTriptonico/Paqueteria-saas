@@ -12,6 +12,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
+import { insetShellClass } from "@/components/ui-blocks";
+import { useFloatingPickerLifecycle } from "@/hooks/use-floating-picker-lifecycle";
 
 export type InlineSearchPickerOption = {
   value: string;
@@ -48,7 +50,7 @@ export function resolveInlineSearchPanelWidth(
 }
 
 const shellBaseClass =
-  "box-border inline-flex h-9 max-w-full items-center gap-2 rounded-lg border border-solid px-2.5 bg-surface-inset";
+  `${insetShellClass} box-border inline-flex h-9 max-w-full items-center gap-2 rounded-lg border border-solid px-2.5 bg-surface-inset`;
 
 function shellStateClass(active: boolean, disabled: boolean) {
   if (disabled) {
@@ -59,7 +61,7 @@ function shellStateClass(active: boolean, disabled: boolean) {
 }
 
 const fieldClass =
-  "min-w-0 flex-1 h-full border-0 bg-transparent p-0 text-sm font-black leading-5 outline-none";
+  "inset-field min-w-0 flex-1 h-full border-0 bg-transparent p-0 text-sm font-black leading-5 outline-none";
 
 const trailingSlotClass =
   "inline-flex h-4 w-4 shrink-0 items-center justify-center";
@@ -203,53 +205,14 @@ export function InlineSearchPicker({
     [close, onChange, onSelectOption],
   );
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    updatePanelPosition();
-    const frame = window.requestAnimationFrame(() => searchRef.current?.focus());
-
-    window.addEventListener("resize", updatePanelPosition);
-    window.addEventListener("scroll", updatePanelPosition, true);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", updatePanelPosition);
-      window.removeEventListener("scroll", updatePanelPosition, true);
-    };
-  }, [open, updatePanelPosition]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      const target = event.target as Node;
-
-      if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) {
-        return;
-      }
-
-      close();
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        close();
-      }
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [close, open]);
+  useFloatingPickerLifecycle({
+    open,
+    updatePosition: updatePanelPosition,
+    close,
+    rootRef,
+    panelRef,
+    searchRef,
+  });
 
   useEffect(() => {
     if (!openOnMount || disabled) {
@@ -522,53 +485,14 @@ export function InlineSearchCombobox({
     [close, onChange, onSelectOption],
   );
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    updatePanelPosition();
-    const frame = window.requestAnimationFrame(() => searchRef.current?.focus());
-
-    window.addEventListener("resize", updatePanelPosition);
-    window.addEventListener("scroll", updatePanelPosition, true);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", updatePanelPosition);
-      window.removeEventListener("scroll", updatePanelPosition, true);
-    };
-  }, [open, updatePanelPosition]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      const target = event.target as Node;
-
-      if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) {
-        return;
-      }
-
-      close();
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        close();
-      }
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [close, open]);
+  useFloatingPickerLifecycle({
+    open,
+    updatePosition: updatePanelPosition,
+    close,
+    rootRef,
+    panelRef,
+    searchRef,
+  });
 
   const shellClass = shellClassName
     ? shellClassName
@@ -722,143 +646,6 @@ export function InlineSearchCombobox({
         )}
       </div>
       {mounted && panel ? createPortal(panel, document.body) : null}
-    </div>
-  );
-}
-
-export type InlineSearchInputProps = {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  compact?: boolean;
-  leadingIcon?: ReactNode;
-  className?: string;
-  ariaLabel?: string;
-  minWidthClass?: string;
-};
-
-export function InlineSearchInput({
-  value,
-  onChange,
-  placeholder = "Buscar…",
-  compact = true,
-  leadingIcon,
-  className = "",
-  ariaLabel,
-  minWidthClass = "min-w-[11rem] sm:min-w-[14rem]",
-}: InlineSearchInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [open, setOpen] = useState(false);
-
-  const openInput = useCallback(() => {
-    setOpen(true);
-  }, []);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    if (!value.trim()) {
-      onChange("");
-    }
-  }, [onChange, value]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
-
-    function handlePointerDown(event: MouseEvent) {
-      const target = event.target as Node;
-      const root = inputRef.current?.closest("[data-inline-search-input]");
-
-      if (root?.contains(target)) {
-        return;
-      }
-
-      close();
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        close();
-      }
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [close, open]);
-
-  const shellClass = compact
-    ? `${shellBaseClass} ${minWidthClass}`
-    : `${shellBaseClass} h-11 w-full min-w-[12rem] max-w-xs px-3`;
-
-  const isActive = open || value.trim().length > 0;
-
-  return (
-    <div className={`relative shrink-0 ${className}`} data-inline-search-input>
-      <div className={`${shellClass} ${shellStateClass(isActive, false)}`}>
-        {leadingIcon ? (
-          <span className="shrink-0 text-slate-500">{leadingIcon}</span>
-        ) : null}
-        {open || value.trim() ? (
-          <input
-            ref={inputRef}
-            type="text"
-            className={`${fieldClass} text-[#f8fafc] placeholder:font-bold placeholder:text-slate-500`}
-            placeholder={placeholder}
-            value={value}
-            aria-label={ariaLabel}
-            onChange={(event) => onChange(event.target.value)}
-            onFocus={() => setOpen(true)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                close();
-              }
-            }}
-          />
-        ) : (
-          <button
-            type="button"
-            className={`${fieldClass} truncate text-left font-bold text-slate-500`}
-            aria-label={ariaLabel}
-            onClick={openInput}
-          >
-            {placeholder}
-          </button>
-        )}
-        {value.trim() ? (
-          <button
-            type="button"
-            className={`${trailingSlotClass} text-slate-500 hover:text-slate-300`}
-            aria-label="Limpiar búsqueda"
-            onClick={() => {
-              onChange("");
-              setOpen(false);
-            }}
-          >
-            <X className="h-3.5 w-3.5" aria-hidden />
-          </button>
-        ) : (
-          <button
-            type="button"
-            className={`${trailingSlotClass} text-slate-400`}
-            aria-label="Buscar"
-            onClick={() => (open ? close() : openInput())}
-          >
-            <ChevronDown
-              className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`}
-              aria-hidden
-            />
-          </button>
-        )}
-      </div>
     </div>
   );
 }

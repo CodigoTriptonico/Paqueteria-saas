@@ -15,7 +15,3 @@ export const FULL_BOX_LEG_LABELS = {
   scheduleAria: "Fecha para recoger",
   auditStep: "Recoger",
 } as const;
-
-export function shipmentLegLabels(kind: "empty_box" | "full_box") {
-  return kind === "empty_box" ? EMPTY_BOX_LEG_LABELS : FULL_BOX_LEG_LABELS;
-}

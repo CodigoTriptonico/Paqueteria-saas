@@ -11,7 +11,7 @@ export function canAutoCompleteRoute(
   route: Pick<LogisticsRouteRow, "status" | "stops">,
   taskStatuses: ReadonlyArray<RouteCompletionTaskStatus>,
 ): boolean {
-  if (route.status !== "planned") {
+  if (route.status !== "planned" && route.status !== "in_progress") {
     return false;
   }
 
@@ -44,8 +44,8 @@ export function routeCompletionBlockedReason(
     return "Ruta cancelada";
   }
 
-  if (route.status !== "planned") {
-    return "Solo rutas planeadas se pueden cerrar";
+  if (route.status !== "planned" && route.status !== "in_progress") {
+    return "Solo rutas planeadas o en curso se pueden cerrar";
   }
 
   if (!route.stops.length) {

@@ -40,7 +40,7 @@ function startOfMonth(value: Date) {
   return date;
 }
 
-export function dateFromDayKey(dayKey: string) {
+function dateFromDayKey(dayKey: string) {
   const [year, month, day] = dayKey.split("-").map(Number);
   return new Date(year, month - 1, day, 12, 0, 0, 0);
 }
@@ -69,14 +69,14 @@ export function defaultRangeKeys(anchor: Date = new Date()) {
   };
 }
 
-export function rangePeriodBounds(fromKey: string, toKey: string) {
+function rangePeriodBounds(fromKey: string, toKey: string) {
   const range = normalizeRangeKeys(fromKey, toKey);
   const start = startOfDay(dateFromDayKey(range.from));
   const end = addDays(startOfDay(dateFromDayKey(range.to)), 1);
   return { start, end, range };
 }
 
-export function rangePeriodLabel(fromKey: string, toKey: string) {
+function rangePeriodLabel(fromKey: string, toKey: string) {
   const range = normalizeRangeKeys(fromKey, toKey);
   const formatter = new Intl.DateTimeFormat("es-MX", {
     day: "numeric",

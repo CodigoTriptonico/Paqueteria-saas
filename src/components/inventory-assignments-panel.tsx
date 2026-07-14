@@ -30,6 +30,9 @@ type InventoryAssignmentsDrawerProps = {
     input: CloseAssignmentSubmit,
   ) => Promise<boolean>;
   closingAssignmentId?: string;
+  controlledOpen?: boolean;
+  onControlledOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 };
 
 function formatWhen(value: string) {
@@ -51,8 +54,22 @@ export function InventoryAssignmentsDrawer({
   onAssignmentsChange,
   onCloseAssignment,
   closingAssignmentId = "",
+  controlledOpen,
+  onControlledOpenChange,
+  hideTrigger = false,
 }: InventoryAssignmentsDrawerProps) {
   const [open, setOpen] = useState(false);
+  const drawerOpen = controlledOpen ?? open;
+  const setDrawerOpen = useCallback(
+    (next: boolean) => {
+      if (controlledOpen === undefined) {
+        setOpen(next);
+      }
+
+      onControlledOpenChange?.(next);
+    },
+    [controlledOpen, onControlledOpenChange],
+  );
   const [mounted, setMounted] = useState(false);
   const [members, setMembers] = useState<InventoryMemberRow[]>([]);
   const [itemQuery, setItemQuery] = useState("");
@@ -67,7 +84,7 @@ export function InventoryAssignmentsDrawer({
   }, []);
 
   useEffect(() => {
-    if (!open) {
+    if (!drawerOpen) {
       return;
     }
 
@@ -78,15 +95,15 @@ export function InventoryAssignmentsDrawer({
         }
       });
     });
-  }, [open]);
+  }, [drawerOpen]);
 
   useEffect(() => {
     if (initialItemId) {
       queueMicrotask(() => {
-        setOpen(true);
+        setDrawerOpen(true);
       });
     }
-  }, [initialItemId]);
+  }, [initialItemId, setDrawerOpen]);
 
   const memberOptions = useMemo(
     () =>
@@ -142,22 +159,22 @@ export function InventoryAssignmentsDrawer({
   }, [initialItemId, onAssignmentsChange, selectedAssigneeId, warehouseId]);
 
   useEffect(() => {
-    if (!open) {
+    if (!drawerOpen) {
       return;
     }
 
     queueMicrotask(() => {
       void reload();
     });
-  }, [open, reload]);
+  }, [drawerOpen, reload]);
 
   const closeDrawer = useCallback(() => {
-    setOpen(false);
+    setDrawerOpen(false);
     setCloseTarget(null);
-  }, []);
+  }, [setDrawerOpen]);
 
   useEffect(() => {
-    if (!open) {
+    if (!drawerOpen) {
       return;
     }
 
@@ -175,10 +192,10 @@ export function InventoryAssignmentsDrawer({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [closeDrawer, open]);
+  }, [closeDrawer, drawerOpen]);
 
   const drawer =
-    open && mounted ? (
+    drawerOpen && mounted ? (
       <div className="fixed inset-0 z-[135] flex justify-end">
         <button
           type="button"
@@ -287,19 +304,19 @@ export function InventoryAssignmentsDrawer({
 
   return (
     <>
-      {iconOnly ? (
+      {hideTrigger ? null : iconOnly ? (
         <InventoryToolbarIconButton
           icon={ClipboardList}
           label="Asignaciones activas"
           badge={assignments.length || undefined}
-          onClick={() => setOpen(true)}
+          onClick={() => setDrawerOpen(true)}
           ariaHaspopup="dialog"
-          ariaExpanded={open}
+          ariaExpanded={drawerOpen}
         />
       ) : (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => setDrawerOpen(true)}
           className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-black bg-[#1a2320] px-3 text-xs font-black text-slate-300 transition hover:bg-[#243029] hover:text-[#f8fafc]"
           title="Asignaciones activas"
           aria-label="Asignaciones activas"

@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   InventoryAssignment,
   InventoryMovement,
@@ -72,7 +73,93 @@ export type DbAssignmentRow = {
   assigned_by_profile?: ProfileJoin | ProfileJoin[];
 };
 
-export function unwrapJoinedRow<T>(value: T | T[] | null | undefined): T | null {
+export type DbInventoryItemRow = {
+  id: string;
+  name: string;
+  kind: string;
+  subcategory: string | null;
+  size: string | null;
+  location: string | null;
+  unit: string | null;
+  created_at?: string;
+};
+
+export async function resolveInventoryLeafItem(
+  supabase: SupabaseClient,
+  input: {
+    organizationId: string;
+    categoryId: string;
+    kind: string;
+    subcategory?: string | null;
+    warehouseId?: string;
+  },
+): Promise<{ data: DbInventoryItemRow | null; error: string | null }> {
+  const subcategory = input.subcategory?.trim() || null;
+
+  let query = supabase
+    .from("inventory_items")
+    .select("id, name, kind, subcategory, size, location, unit, created_at")
+    .eq("organization_id", input.organizationId)
+    .eq("category_id", input.categoryId)
+    .eq("kind", input.kind);
+
+  query = subcategory
+    ? query.eq("subcategory", subcategory)
+    : query.is("subcategory", null);
+
+  const { data: rows, error } = await query.order("created_at", {
+    ascending: true,
+  });
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  if (!rows?.length) {
+    return { data: null, error: null };
+  }
+
+  if (rows.length === 1) {
+    return { data: rows[0] as DbInventoryItemRow, error: null };
+  }
+
+  const preferred = rows[0] as DbInventoryItemRow;
+
+  if (input.warehouseId) {
+    const { data: stockRows } = await supabase
+      .from("inventory_stock")
+      .select("item_id, stock")
+      .eq("warehouse_id", input.warehouseId)
+      .in(
+        "item_id",
+        rows.map((row) => row.id),
+      );
+
+    if (stockRows?.length) {
+      const stockByItem = new Map(
+        stockRows.map((row) => [row.item_id, Number(row.stock ?? 0)]),
+      );
+      const withStock = rows
+        .filter((row) => (stockByItem.get(row.id) ?? 0) > 0)
+        .sort(
+          (a, b) => (stockByItem.get(b.id) ?? 0) - (stockByItem.get(a.id) ?? 0),
+        );
+
+      if (withStock.length) {
+        return { data: withStock[0] as DbInventoryItemRow, error: null };
+      }
+
+      const withRow = rows.find((row) => stockByItem.has(row.id));
+      if (withRow) {
+        return { data: withRow as DbInventoryItemRow, error: null };
+      }
+    }
+  }
+
+  return { data: preferred, error: null };
+}
+
+function unwrapJoinedRow<T>(value: T | T[] | null | undefined): T | null {
   if (value == null) {
     return null;
   }
@@ -129,7 +216,7 @@ export function inventoryStockJoinToItem(
   };
 }
 
-export function profileDisplayName(
+function profileDisplayName(
   profile?: ProfileJoin | ProfileJoin[] | null,
 ) {
   const row = Array.isArray(profile) ? profile[0] : profile;

@@ -22,7 +22,7 @@ export type ShipmentMilestoneSource =
 
 export const SHIPMENT_MILESTONE_ACTION = "shipment.milestone_recorded";
 
-export const MILESTONE_LABELS: Record<ShipmentMilestoneKey, string> = {
+const MILESTONE_LABELS: Record<ShipmentMilestoneKey, string> = {
   empty_box_delivered_at: "Entrega caja vacía",
   full_box_collected_at: "Recolección caja llena",
   office_received_at: "Recepción en oficina",

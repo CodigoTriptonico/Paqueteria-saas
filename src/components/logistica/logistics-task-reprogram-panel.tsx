@@ -1,29 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, Truck, Warehouse } from "lucide-react";
+import { Truck } from "lucide-react";
 import { reactivateLogisticsTaskAction } from "@/app/actions/shipments";
-import { DateInput } from "@/components/date-input";
-import { ScheduleTimeField } from "@/components/sale/schedule-time-field";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
+import {
+  LogisticsTaskEditFields,
+  type LogisticsWarehouseOption,
+} from "@/components/logistica/logistics-task-edit-fields";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import {
   buildLogisticsTaskEditPatch,
-  logisticsTaskEditDisabledReason,
   logisticsTaskEditDraftFromTask,
   logisticsTaskEditScheduleValid,
   type LogisticsTaskEditDraft,
 } from "@/lib/logistics-task-edit";
 import { logisticsReprogramStockNotice } from "@/lib/logistics-reprogram";
 import { buildDriverPickerOptions } from "@/lib/logistics-view";
-import { minScheduleDateInput } from "@/lib/schedule-date";
 import type { LogisticsTaskStatus } from "@/app/actions/shipments";
-
-type WarehouseOption = {
-  id: string;
-  name: string;
-  is_default?: boolean;
-};
 
 type LogisticsTaskReprogramPanelProps = {
   open: boolean;
@@ -39,15 +33,11 @@ type LogisticsTaskReprogramPanelProps = {
     stockDeductedAt?: string | null;
     assignedTo: string | null;
   };
-  warehouses: WarehouseOption[];
-  routeMembers: Array<{ id: string; fullName: string }>;
+  warehouses: LogisticsWarehouseOption[];
+  routeMembers: Array<{ id: string; label: string }>;
   onCancel: () => void;
   onSaved: () => void | Promise<void>;
 };
-
-function warehouseLabel(warehouse: WarehouseOption) {
-  return warehouse.is_default ? `${warehouse.name} (principal)` : warehouse.name;
-}
 
 export function LogisticsTaskReprogramPanel({
   open,
@@ -68,27 +58,33 @@ export function LogisticsTaskReprogramPanel({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setDraft(logisticsTaskEditDraftFromTask(task));
-      setAssignedTo(task.assignedTo || "");
-      setError("");
+    if (!open || submitting) {
+      return;
     }
-  }, [open, task]);
+
+    const closeFromEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onCancel();
+      }
+    };
+
+    window.addEventListener("keydown", closeFromEscape);
+    return () => window.removeEventListener("keydown", closeFromEscape);
+  }, [open, submitting, onCancel]);
 
   if (!open) {
     return null;
   }
 
-  const driverOptions = buildDriverPickerOptions(routeMembers);
+  const driverOptions = buildDriverPickerOptions(routeMembers, "Sin chofer");
   const stockNotice = logisticsReprogramStockNotice(task);
-  const warehouseDisabled = Boolean(logisticsTaskEditDisabledReason(task, "warehouse"));
   const scheduleValid = logisticsTaskEditScheduleValid(draft);
 
   async function handleReprogram() {
     setError("");
 
     try {
-      const patch = buildLogisticsTaskEditPatch(draft, task.scheduledAt);
+      const patch = buildLogisticsTaskEditPatch(draft);
       setSubmitting(true);
       const result = await reactivateLogisticsTaskAction({
         taskId: task.id,
@@ -150,109 +146,13 @@ export function LogisticsTaskReprogramPanel({
             />
           </div>
 
-          <div className="grid gap-2">
-            <span className="text-xs font-black uppercase text-slate-500">Programación</span>
-            <div className="grid grid-cols-2 gap-1 rounded-lg bg-surface-panel p-1">
-              {(
-                [
-                  ["pending", "Sin fecha"],
-                  ["scheduled", "Con fecha"],
-                ] as const
-              ).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() =>
-                    setDraft((current) => ({
-                      ...current,
-                      scheduleMode: mode,
-                    }))
-                  }
-                  className={`h-9 rounded-md text-xs font-black transition ${
-                    draft.scheduleMode === mode
-                      ? "bg-emerald-400 text-slate-950"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {draft.scheduleMode === "scheduled" ? (
-              <div className="grid gap-2 rounded-lg border border-black bg-surface-card p-3">
-                <div className="grid gap-1">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-slate-500">
-                    <CalendarDays className="h-3.5 w-3.5" />
-                    Fecha
-                  </span>
-                  <DateInput
-                    value={draft.routeDate}
-                    min={minScheduleDateInput()}
-                    onChange={(routeDate) =>
-                      setDraft((current) => ({
-                        ...current,
-                        routeDate,
-                      }))
-                    }
-                    ariaLabel="Fecha reprogramada"
-                  />
-                </div>
-                <ScheduleTimeField
-                  value={draft.routeTime}
-                  onChange={(routeTime) =>
-                    setDraft((current) => ({
-                      ...current,
-                      routeTime,
-                    }))
-                  }
-                />
-              </div>
-            ) : null}
-          </div>
-
-          {warehouses.length > 1 ? (
-            <div className="grid gap-1">
-              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-slate-500">
-                <Warehouse className="h-3.5 w-3.5" />
-                Bodega
-              </span>
-              <InlineSearchPicker
-                value={draft.warehouseId || ""}
-                onChange={(warehouseId) =>
-                  setDraft((current) => ({
-                    ...current,
-                    warehouseId: warehouseId || null,
-                  }))
-                }
-                options={warehouses.map((warehouse) => ({
-                  value: warehouse.id,
-                  label: warehouseLabel(warehouse),
-                  searchText: warehouse.name,
-                }))}
-                placeholder="Sin bodega"
-                searchPlaceholder="Buscar bodega…"
-                emptyLabel="Sin bodegas"
-                ariaLabel="Bodega"
-                disabled={warehouseDisabled}
-              />
-            </div>
-          ) : null}
-
-          <label className="grid gap-1">
-            <span className="text-[10px] font-black uppercase text-slate-500">Notas</span>
-            <textarea
-              value={draft.notes}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  notes: event.target.value,
-                }))
-              }
-              rows={3}
-              className="w-full rounded-lg border border-black bg-surface-inset px-3 py-2 text-sm font-bold text-[#f8fafc] outline-none focus:ring-2 focus:ring-emerald-500/50"
-            />
-          </label>
+          <LogisticsTaskEditFields
+            draft={draft}
+            setDraft={setDraft}
+            task={task}
+            warehouses={warehouses}
+            dateAriaLabel="Fecha reprogramada"
+          />
         </div>
 
         {error ? (

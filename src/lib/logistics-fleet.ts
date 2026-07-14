@@ -1,8 +1,8 @@
 import type { RoleSlug } from "@/lib/auth/types";
 
 export const LOGISTICS_VEHICLE_PHOTO_BUCKET = "logistics-vehicle-photos";
-export const LOGISTICS_VEHICLE_PHOTO_MAX_BYTES = 4 * 1024 * 1024;
-export const LOGISTICS_VEHICLE_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+const LOGISTICS_VEHICLE_PHOTO_MAX_BYTES = 4 * 1024 * 1024;
+const LOGISTICS_VEHICLE_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 
 export type LogisticsDriverRow = {
   id: string;
@@ -82,7 +82,7 @@ export type ValidationResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
-export function cleanFleetText(value: unknown, maxLength = 160) {
+function cleanFleetText(value: unknown, maxLength = 160) {
   return String(value || "")
     .trim()
     .replace(/\s+/g, " ")

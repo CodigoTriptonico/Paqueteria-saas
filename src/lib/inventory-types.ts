@@ -30,7 +30,7 @@ export type InventoryAssignmentOutcome =
   | "lost"
   | "partial";
 
-export type InventoryAssignmentStatus = "open" | "closed";
+type InventoryAssignmentStatus = "open" | "closed";
 
 export type InventoryAssignment = {
   id: string;

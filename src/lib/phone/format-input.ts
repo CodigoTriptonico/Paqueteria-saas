@@ -1,13 +1,12 @@
 import { normalizePhoneDigits, PHONE_MAX_DIGITS } from "@/lib/phone/normalize";
 
 /** Display length cap: 15 digits + separators + optional leading "+". */
-export const PHONE_INPUT_DISPLAY_MAX_LENGTH = PHONE_MAX_DIGITS + 7;
 
-export function phoneInputHasPlus(raw: string) {
+function phoneInputHasPlus(raw: string) {
   return /^\s*\+/.test(raw);
 }
 
-export function clampPhoneDigits(raw: string) {
+function clampPhoneDigits(raw: string) {
   return normalizePhoneDigits(raw).slice(0, PHONE_MAX_DIGITS);
 }
 

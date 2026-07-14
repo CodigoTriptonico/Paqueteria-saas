@@ -1,5 +1,6 @@
 import type { OnboardingProgress, OnboardingStepId } from "@/app/actions/onboarding";
 import { configPricesCountryHref } from "@/lib/country-options";
+import { inventarioHrefWithReturn } from "@/lib/inventario-return";
 
 export type OnboardingChecklistItem = {
   label: string;
@@ -87,7 +88,7 @@ function resolveCountriesGuide(
     {
       label: "Ir a Configuración",
       title: "Abre Configuración",
-      body: "En el menú lateral pulsa Configuración. Ahí está todo lo que debes preparar antes de vender.",
+      body: "En el menú lateral pulsa Configuración. Ahí preparas países, precios y el resto de tu paquetería.",
       actionHref: "/configuracion",
       actionLabel: "Ir a Configuración",
     },
@@ -101,7 +102,9 @@ function resolveCountriesGuide(
     {
       label: "Agregar un país",
       title: "Agrega un país destino",
-      body: "Pulsa Agregar país, busca en la lista (ej. México o Colombia) y confírmalo.",
+      body: "Elige un país de la lista y pulsa Agregar. Si no ves la lista, pulsa Agregar país arriba.",
+      actionHref: "/configuracion?view=prices",
+      actionLabel: "Ver países",
     },
   ];
 
@@ -127,21 +130,21 @@ function resolveInventoryGuide(
     {
       label: "Ir a Inventario",
       title: "Abre Inventario",
-      body: "En el menú lateral pulsa Inventario. Ahí crearás categorías y productos.",
+      body: "Menú lateral → Inventario. Aquí creas categorías y los productos que vendes.",
       actionHref: "/inventario",
       actionLabel: "Ir a Inventario",
     },
     {
       label: "Crear categoría",
       title: "Crea tu primera categoría",
-      body: "En el panel izquierdo pulsa Agregar categoría y escribe un nombre simple, por ejemplo Cajas.",
+      body: "Si la pantalla está vacía, pulsa Agregar categoría. Si ya hay categorías, usa el botón + (Agregar y estructura) y elige Nueva categoría. Ejemplo: Cajas.",
       actionHref: "/inventario",
       actionLabel: "Ir a Inventario",
     },
     {
       label: "Agregar item",
-      title: "Agrega tu primer item",
-      body: "Elige la categoría y pulsa + Agregar item. Escribe un nombre como 14x14x14 o Mediana y confirma.",
+      title: "Agrega tu primer producto",
+      body: "Elige la categoría en el filtro superior, pulsa + y selecciona Nuevo item. Escribe un nombre como Mediana o 14×14×14 y confirma.",
       actionHref: "/inventario",
       actionLabel: "Ir a Inventario",
     },
@@ -166,33 +169,34 @@ function resolvePricingGuide(
   progress: OnboardingProgress,
 ): OnboardingMicroStepState {
   const countryHref = configPricesCountryHref(progress.firstCountryName || undefined);
+  const inventarioHref = inventarioHrefWithReturn(countryHref);
 
   const steps: MicroStepDef[] = [
     {
       label: "Ir a Configuración",
       title: "Abre Configuración",
-      body: "Los precios por país se configuran dentro de Configuración.",
-      actionHref: "/configuracion",
-      actionLabel: "Ir a Configuración",
-    },
-    {
-      label: "Abrir Países y precios",
-      title: "Abre Países y precios",
-      body: "Pulsa la tarjeta Países y precios para ver tus destinos.",
+      body: "Los precios por país se configuran en Configuración → Países y precios.",
       actionHref: "/configuracion?view=prices",
-      actionLabel: "Abrir Países y precios",
+      actionLabel: "Ir a Países y precios",
     },
     {
       label: "Elegir país",
       title: "Selecciona un país",
-      body: "En la lista pulsa el país al que quieres asignar precios de venta.",
+      body: "En la lista pulsa el país al que quieres asignar productos y precios de venta.",
       actionHref: "/configuracion?view=prices",
       actionLabel: "Ver países",
     },
     {
+      label: "Vincular productos",
+      title: "Agrega productos al país",
+      body: "Si no hay productos en el catálogo, créalos en Inventario. Si ya existen, pulsa + Agregar ítems y elígelos. Desde Inventario usa Volver a precios (arriba a la izquierda) cuando termines.",
+      actionHref: inventarioHref,
+      actionLabel: "Ir a Inventario",
+    },
+    {
       label: "Asignar precios",
-      title: "Pon precio a tus productos",
-      body: "Busca cada caja o producto y escribe cuánto cuesta venderlo en ese destino.",
+      title: "Pon precio de venta",
+      body: "En la pestaña Items escribe el precio de cada producto para ese país. También puedes registrar costo y ver la ganancia.",
       actionHref: countryHref,
       actionLabel: "Ir a precios",
     },
@@ -200,15 +204,15 @@ function resolvePricingGuide(
 
   let activeIndex = 0;
 
-  if (pathname.startsWith("/configuracion")) {
+  if (pathname.startsWith("/inventario")) {
+    activeIndex = 2;
+  } else if (pathname.startsWith("/configuracion")) {
     const section = parseConfigSection(searchParams);
     const country = searchParams.get("country")?.trim();
 
     if (section === "prices" && country) {
       activeIndex = 3;
     } else if (section === "prices") {
-      activeIndex = 2;
-    } else {
       activeIndex = 1;
     }
   }
@@ -231,7 +235,7 @@ function resolveStockGuide(
     {
       label: "Registrar stock",
       title: "Registra cuánto stock tienes",
-      body: "Abre cada producto y escribe cuántas unidades hay en bodega. Sin stock, no podrás vender con seguridad.",
+      body: "Abre un producto de la lista y escribe cuántas unidades hay en bodega. Sin stock no podrás vender con seguridad.",
       actionHref: "/inventario",
       actionLabel: "Ir a Inventario",
     },
@@ -249,20 +253,32 @@ function resolveFirstSaleGuide(
     {
       label: "Ir a Nueva venta",
       title: "Abre Nueva venta",
-      body: "En el menú lateral pulsa Nueva venta para registrar tu primer envío.",
+      body: "Menú lateral → Nueva venta. Aquí registras remitentes, destinatarios y cobras envíos.",
       actionHref: "/venta",
       actionLabel: "Ir a Nueva venta",
     },
     {
-      label: "Completar venta",
-      title: "Haz tu primera venta de prueba",
-      body: "Elige remitente y destinatario, selecciona el producto y cobra. Así cierras la configuración inicial.",
+      label: "Remitente y destinatario",
+      title: "Crea remitente y destinatario",
+      body: "Agrega un remitente y luego un destinatario con su país y dirección. Si falta país o productos, la app te llevará a configurarlos.",
+      actionHref: "/venta",
+      actionLabel: "Ir a Nueva venta",
+    },
+    {
+      label: "Cobrar envío",
+      title: "Elige producto y cobra",
+      body: "Selecciona el producto, revisa el precio, añádelo al carrito y completa el pago. Con eso cierras tu configuración inicial.",
       actionHref: "/venta",
       actionLabel: "Ir a Nueva venta",
     },
   ];
 
-  const activeIndex = pathname.startsWith("/venta") ? 1 : 0;
+  let activeIndex = 0;
+
+  if (pathname.startsWith("/venta")) {
+    activeIndex = 1;
+  }
+
   return buildGuide("first_sale", progress, steps, activeIndex);
 }
 

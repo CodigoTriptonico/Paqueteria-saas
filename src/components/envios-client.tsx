@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LayoutGrid, Package, PhoneCall, Search, Star } from "lucide-react";
+import { Package, PhoneCall, Search, Star } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import {
   listLogisticsRoutesAction,
@@ -12,6 +12,7 @@ import {
   listRouteMembersAction,
   listSalesOwnersAction,
   listShipmentsAction,
+  markFullBoxReceivedAtOfficeAction,
   updateShipmentInvoicePriorityAction,
   updateShipmentLogisticsPlanAction,
   updateShipmentSalesOwnerAction,
@@ -37,16 +38,27 @@ import { PageLoading } from "@/components/page-loading";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import {
   cardClass,
+  insetShellClass,
+  listRowBaseClass,
+  listRowHoverClass,
+  listCardShellClass,
   Panel,
   primaryButtonClass,
 } from "@/components/ui-blocks";
-import { ViewLayoutToggle } from "@/components/view-layout-toggle";
+import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provider";
 import { useNotify } from "@/hooks/use-notify";
-import { useEnviosViewLayout } from "@/hooks/use-envios-view-layout";
+import { useEnviosShipmentSelection } from "@/hooks/use-envios-shipment-selection";
 import { countryNamesPickerOptions } from "@/lib/country-picker-options";
+import {
+  canApplyEnviosBulkReadiness,
+  resolveEnviosBulkReadinessPatch,
+  type EnviosBulkReadinessAction,
+} from "@/lib/envios-bulk-readiness";
 import { formatMoneyValue } from "@/lib/logistics-fees";
+import { readBillingFromPlan } from "@/lib/invoice-billing";
 import {
   DEFAULT_PAYMENT_METHOD,
+  isPaymentMethod,
   paymentMethodLabel,
   type PaymentMethod,
 } from "@/lib/payment-methods";
@@ -54,23 +66,22 @@ import {
   collectShipmentInvoiceCopy,
 } from "@/lib/shipment-invoice-copy";
 import {
-  latestShipmentContactReminderStatus,
-} from "@/lib/shipment-contact-log";
-import {
   resolveShipmentCollectAmount,
   shipmentCollectSuccessMessage,
   type ShipmentCollectMode,
 } from "@/lib/shipment-collect";
-import { buildShipmentMilestoneAges, buildShipmentTimings } from "@/lib/shipment-timing";
+import { buildShipmentMilestoneAges, buildShipmentTimingInsightPanel, buildShipmentTimings } from "@/lib/shipment-timing";
 import type { ShipmentAuditContext } from "@/lib/shipment-audit";
 import {
+  classifyEnviosReadinessBucket,
   balanceDueFromShipment,
   depositFromShipment,
-  quoteFromShipment,
   ENVIOS_STATUS_FILTER_OPTIONS,
   filterShipmentsForEnviosMode,
+  matchesEnviosReadinessFilter,
   matchesEnviosSearchQuery,
   matchesEnviosStatusFilter,
+  quoteFromShipment,
   shipmentLogisticsSteps,
   shipmentLogisticsBridgeLabel,
   shipmentOperationalAssignment,
@@ -78,6 +89,7 @@ import {
   sortShipmentsByArrivalOrder,
   totalFromShipment,
   type EnviosClientMode,
+  type EnviosReadinessFilter,
 } from "@/lib/shipment-display";
 import type { LogisticsRouteRow } from "@/lib/logistics-routing";
 import { buildLogisticaShipmentDeepLink } from "@/lib/logistics-view";
@@ -98,8 +110,22 @@ type EnviosClientProps = {
   canManageSales?: boolean;
   canUpdateShipmentStatus?: boolean;
   canManageShipmentOwners?: boolean;
-  canAccessEstadisticas?: boolean;
+  canAccessAuditoria?: boolean;
 };
+
+function driverCollectionLabel(row: ShipmentRow) {
+  const collection = readBillingFromPlan(row.logistics_plan)?.lastDriverCollection;
+
+  if (!collection) {
+    return "";
+  }
+
+  if (collection.outcome === "not_collected") {
+    return `Conductor no recibió dinero · esperado ${formatMoneyValue(collection.expectedAmount)}`;
+  }
+
+  return `Conductor recibió ${formatMoneyValue(collection.receivedAmount)} · esperado ${formatMoneyValue(collection.expectedAmount)}`;
+}
 
 export function EnviosClient({
   mode = "tracking",
@@ -111,7 +137,7 @@ export function EnviosClient({
   canManageSales = false,
   canUpdateShipmentStatus = false,
   canManageShipmentOwners = false,
-  canAccessEstadisticas = false,
+  canAccessAuditoria = false,
 }: EnviosClientProps) {
   const notify = useNotify();
   const router = useRouter();
@@ -131,14 +157,15 @@ export function EnviosClient({
   const [progressBusyId, setProgressBusyId] = useState<string | null>(null);
   const [priorityBusyId, setPriorityBusyId] = useState<string | null>(null);
   const [ownerBusyId, setOwnerBusyId] = useState<string | null>(null);
-  const { layout: viewLayout, toggleViewLayout } = useEnviosViewLayout();
+  const { layout: viewLayout } = usePageViewLayout("shipments.tracking");
   const [finalizeTarget, setFinalizeTarget] = useState<ShipmentRow | null>(null);
   const [finalizeCollectMode, setFinalizeCollectMode] = useState<ShipmentCollectMode>("choose");
   const [finalizePartialAmount, setFinalizePartialAmount] = useState("");
   const [finalizePaymentMethod, setFinalizePaymentMethod] =
     useState<PaymentMethod>(DEFAULT_PAYMENT_METHOD);
   const [finalizePaymentNote, setFinalizePaymentNote] = useState("");
-  const [contactReminderFilter, setContactReminderFilter] = useState(false);
+  const [readinessFilter, setReadinessFilter] = useState<EnviosReadinessFilter>("all");
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [contactLogShipmentId, setContactLogShipmentId] = useState<string | null>(null);
   const [shipmentMenu, setShipmentMenu] = useState<EnviosShipmentMenuState>(null);
   const [expandedShipmentIds, setExpandedShipmentIds] = useState<Set<string>>(() => new Set());
@@ -272,8 +299,6 @@ export function EnviosClient({
     return (taskId: string) => map.get(taskId);
   }, [routes]);
 
-  const reminderNow = useMemo(() => new Date(), []);
-
   const baseFilteredShipments = useMemo(() => {
     const cleanCountry = country.trim().toLowerCase();
 
@@ -289,27 +314,61 @@ export function EnviosClient({
     });
   }, [country, isHistoryMode, modeShipments, query, salesOwnerFilter, statusFilter]);
 
-  const contactReminderCount = useMemo(
-    () =>
-      baseFilteredShipments.filter(
-        (row) => latestShipmentContactReminderStatus(row.contactLogs, reminderNow) !== "none",
-      ).length,
-    [baseFilteredShipments, reminderNow],
-  );
+  const readinessSummary = useMemo(() => {
+    let listosCount = 0;
+    let pendientesCount = 0;
 
-  const filteredShipments = useMemo(() => {
-    if (!contactReminderFilter) {
-      return baseFilteredShipments;
+    for (const row of baseFilteredShipments) {
+      const bucket = classifyEnviosReadinessBucket(row);
+
+      if (bucket === "listos") {
+        listosCount += 1;
+      } else if (bucket === "pendientes") {
+        pendientesCount += 1;
+      }
     }
 
-    return baseFilteredShipments.filter(
-      (row) => latestShipmentContactReminderStatus(row.contactLogs, reminderNow) !== "none",
-    );
-  }, [baseFilteredShipments, contactReminderFilter, reminderNow]);
+    return {
+      totalCount: baseFilteredShipments.length,
+      listosCount,
+      pendientesCount,
+    };
+  }, [baseFilteredShipments]);
+
+  const filteredShipments = useMemo(
+    () =>
+      baseFilteredShipments.filter((row) => matchesEnviosReadinessFilter(row, readinessFilter)),
+    [baseFilteredShipments, readinessFilter],
+  );
 
   const displayShipments = useMemo(
     () => sortShipmentsByArrivalOrder(filteredShipments),
     [filteredShipments],
+  );
+
+  const selectionEnabled = !isHistoryMode && canManageSales;
+  const {
+    selectedIds: selectedShipmentIds,
+    selectedCount: selectedShipmentCount,
+    handleRowSelectClick,
+    selectAll: selectAllShipments,
+    clearSelection: clearShipmentSelection,
+    isSelected: isShipmentSelected,
+  } = useEnviosShipmentSelection(displayShipments);
+
+  const selectedShipments = useMemo(
+    () => displayShipments.filter((row) => selectedShipmentIds.has(row.id)),
+    [displayShipments, selectedShipmentIds],
+  );
+
+  const bulkMarkableCount = useMemo(
+    () => selectedShipments.filter((row) => canApplyEnviosBulkReadiness(row, "mark")).length,
+    [selectedShipments],
+  );
+
+  const bulkUnmarkableCount = useMemo(
+    () => selectedShipments.filter((row) => canApplyEnviosBulkReadiness(row, "unmark")).length,
+    [selectedShipments],
   );
 
   const contactLogTarget = useMemo(
@@ -317,32 +376,13 @@ export function EnviosClient({
     [contactLogShipmentId, shipments],
   );
 
-  const summary = useMemo(() => {
-    let openCount = 0;
-    let balanceTotal = 0;
-
-    for (const row of filteredShipments) {
-      if (row.invoice_status !== "open") {
-        continue;
-      }
-
-      openCount += 1;
-      balanceTotal += balanceDueFromShipment(row, quoteFromShipment(row));
-    }
-
-    return {
-      openCount,
-      balanceTotal: formatMoneyValue(balanceTotal),
-      visibleCount: filteredShipments.length,
-    };
-  }, [filteredShipments]);
 
   function openShipmentAudit(shipmentId: string) {
-    router.push(`/estadisticas?view=auditoria&shipment=${shipmentId}`);
+    router.push(`/auditoria?shipment=${shipmentId}`);
   }
 
   function handleShipmentContextMenu(event: React.MouseEvent, row: ShipmentRow) {
-    if (!canAccessEstadisticas) {
+    if (!canAccessAuditoria) {
       return;
     }
 
@@ -367,6 +407,93 @@ export function EnviosClient({
       }
       return next;
     });
+  }
+
+  function handleShipmentRowActivate(
+    event: React.MouseEvent,
+    row: ShipmentRow,
+    index: number,
+  ) {
+    if (selectionEnabled && handleRowSelectClick(event, index, row.id)) {
+      return;
+    }
+
+    if (viewLayout === "rows") {
+      toggleShipmentExpanded(row.id);
+    }
+  }
+
+  async function applyBulkReadiness(action: EnviosBulkReadinessAction) {
+    if (!selectionEnabled || bulkBusy) {
+      return;
+    }
+
+    const targets = selectedShipments.filter((row) =>
+      canApplyEnviosBulkReadiness(row, action),
+    );
+
+    if (!targets.length) {
+      notify.error(
+        action === "mark"
+          ? "Ningún envío seleccionado se puede marcar como listo"
+          : "Ningún envío seleccionado se puede desmarcar",
+      );
+      return;
+    }
+
+    setBulkBusy(true);
+
+    let updatedCount = 0;
+    let failedCount = 0;
+
+    try {
+      for (const row of targets) {
+        const patch = resolveEnviosBulkReadinessPatch(row, action);
+
+        if (!patch) {
+          continue;
+        }
+
+        const nextState = {
+          ...shipmentLogisticsEditorState(row),
+          ...patch,
+        };
+        const result = await updateShipmentLogisticsPlanAction({
+          shipmentId: row.id,
+          ...editorStateToUpdateInput(nextState),
+          audit: {
+            interaction: "bulk_action",
+            source: "envios.bulk",
+            stepTitle: action === "mark" ? "Marcar listos" : "Desmarcar listos",
+          },
+        });
+
+        if (!result.ok) {
+          failedCount += 1;
+          notify.error(`${row.code}: ${result.error}`);
+          continue;
+        }
+
+        updatedCount += 1;
+        setShipments((current) =>
+          current.map((entry) => (entry.id === row.id ? result.data : entry)),
+        );
+      }
+
+      if (updatedCount > 0) {
+        notify.success(
+          action === "mark"
+            ? `${updatedCount} envío${updatedCount === 1 ? "" : "s"} marcado${updatedCount === 1 ? "" : "s"} como listo${updatedCount === 1 ? "" : "s"}`
+            : `${updatedCount} envío${updatedCount === 1 ? "" : "s"} desmarcado${updatedCount === 1 ? "" : "s"}`,
+        );
+      }
+
+      if (failedCount > 0 && updatedCount === 0) {
+        notify.error("No se pudo actualizar la selección");
+      }
+    } finally {
+      setBulkBusy(false);
+    }
   }
 
   async function updateSalesOwner(row: ShipmentRow, salesOwnerId: string) {
@@ -537,6 +664,30 @@ export function EnviosClient({
     }
   }
 
+  async function receiveFullBoxAtOffice(row: ShipmentRow, audit: ShipmentAuditContext) {
+    if (!canManageSales) {
+      return;
+    }
+
+    setProgressBusyId(row.id);
+
+    try {
+      const result = await markFullBoxReceivedAtOfficeAction({ shipmentId: row.id, audit });
+
+      if (!result.ok) {
+        notify.error(result.error);
+        return;
+      }
+
+      setShipments((current) =>
+        current.map((entry) => (entry.id === row.id ? result.data : entry)),
+      );
+      notify.success("Caja llena recibida en oficina");
+    } finally {
+      setProgressBusyId(null);
+    }
+  }
+
   const canEditProgress = !isHistoryMode && (canManageSales || canUpdateShipmentStatus);
 
   const finalizeQuote = finalizeTarget ? quoteFromShipment(finalizeTarget) : null;
@@ -585,12 +736,11 @@ export function EnviosClient({
         <>
           <EnviosFiltersToolbar
             mode={mode}
-            openCount={summary.openCount}
-            balanceTotal={summary.balanceTotal}
-            visibleCount={summary.visibleCount}
-            contactReminderCount={contactReminderCount}
-            contactReminderFilter={contactReminderFilter}
-            onContactReminderFilterChange={setContactReminderFilter}
+            readinessFilter={readinessFilter}
+            onReadinessFilterChange={setReadinessFilter}
+            totalCount={readinessSummary.totalCount}
+            listosCount={readinessSummary.listosCount}
+            pendientesCount={readinessSummary.pendientesCount}
             query={query}
             onQueryChange={setQuery}
             canManageShipmentOwners={canManageShipmentOwners}
@@ -605,9 +755,21 @@ export function EnviosClient({
             statusFilterOptions={statusFilterOptions}
             canManageSales={canManageSales}
             isConductor={isConductor}
-            viewLayout={viewLayout}
-            onViewLayoutToggle={toggleViewLayout}
           />
+
+          {selectionEnabled && selectedShipmentCount > 0 ? (
+            <EnviosBulkSelectionBar
+              selectedCount={selectedShipmentCount}
+              visibleCount={displayShipments.length}
+              markableCount={bulkMarkableCount}
+              unmarkableCount={bulkUnmarkableCount}
+              busy={bulkBusy}
+              onSelectAll={selectAllShipments}
+              onClearSelection={clearShipmentSelection}
+              onMarkReady={() => void applyBulkReadiness("mark")}
+              onUnmarkReady={() => void applyBulkReadiness("unmark")}
+            />
+          ) : null}
 
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             {displayShipments.length ? (
@@ -629,7 +791,6 @@ export function EnviosClient({
                   priorityBusyId={priorityBusyId}
                   finalizeCopy={finalizeCopy}
                   onShipmentContextMenu={handleShipmentContextMenu}
-                  onToggleExpanded={toggleShipmentExpanded}
                   onContactLogOpen={setContactLogShipmentId}
                   onTogglePriority={toggleInvoicePriority}
                   onFinalizeOpen={(row) => {
@@ -641,12 +802,15 @@ export function EnviosClient({
                   }}
                   onLogisticsPatch={applyLogisticsPatch}
                   onStatusChange={applyShipmentStatus}
+                  onFullBoxReceivedAtOffice={receiveFullBoxAtOffice}
                   onLockedLeg={(message) => notify.error(message)}
+                  selectionEnabled={selectionEnabled}
+                  isShipmentSelected={isShipmentSelected}
+                  onShipmentRowActivate={handleShipmentRowActivate}
                 />
               ) : (
                 <EnviosShipmentCardsGrid
                   displayShipments={displayShipments}
-                  cardClass={cardClass}
                   canManageSales={canManageSales}
                   canManageShipmentOwners={canManageShipmentOwners}
                   canEditProgress={canEditProgress}
@@ -673,7 +837,11 @@ export function EnviosClient({
                   }}
                   onLogisticsPatch={applyLogisticsPatch}
                   onStatusChange={applyShipmentStatus}
+                  onFullBoxReceivedAtOffice={receiveFullBoxAtOffice}
                   onLockedLeg={(message) => notify.error(message)}
+                  selectionEnabled={selectionEnabled}
+                  isShipmentSelected={isShipmentSelected}
+                  onShipmentRowActivate={handleShipmentRowActivate}
                 />
               )
             ) : viewLayout === "cards" ? (
@@ -732,7 +900,7 @@ export function EnviosClient({
         onModeChange={setFinalizeCollectMode}
         onPartialAmountChange={setFinalizePartialAmount}
         onPaymentMethodChange={(method) => {
-          if (method !== "pending") {
+          if (isPaymentMethod(method)) {
             setFinalizePaymentMethod(method);
           }
         }}
@@ -778,12 +946,11 @@ export function EnviosClient({
 
 type EnviosFiltersToolbarProps = {
   mode: EnviosClientMode;
-  openCount: number;
-  balanceTotal: string;
-  visibleCount: number;
-  contactReminderCount: number;
-  contactReminderFilter: boolean;
-  onContactReminderFilterChange: (value: boolean) => void;
+  readinessFilter: EnviosReadinessFilter;
+  onReadinessFilterChange: (value: EnviosReadinessFilter) => void;
+  totalCount: number;
+  listosCount: number;
+  pendientesCount: number;
   query: string;
   onQueryChange: (value: string) => void;
   canManageShipmentOwners: boolean;
@@ -798,18 +965,15 @@ type EnviosFiltersToolbarProps = {
   statusFilterOptions: { value: string; label: string }[];
   canManageSales: boolean;
   isConductor: boolean;
-  viewLayout: "rows" | "cards";
-  onViewLayoutToggle: () => void;
 };
 
 const EnviosFiltersToolbar = memo(function EnviosFiltersToolbar({
   mode,
-  openCount,
-  balanceTotal,
-  visibleCount,
-  contactReminderCount,
-  contactReminderFilter,
-  onContactReminderFilterChange,
+  readinessFilter,
+  onReadinessFilterChange,
+  totalCount,
+  listosCount,
+  pendientesCount,
   query,
   onQueryChange,
   canManageShipmentOwners,
@@ -824,8 +988,6 @@ const EnviosFiltersToolbar = memo(function EnviosFiltersToolbar({
   statusFilterOptions,
   canManageSales,
   isConductor,
-  viewLayout,
-  onViewLayoutToggle,
 }: EnviosFiltersToolbarProps) {
   const isHistoryMode = mode === "history";
 
@@ -834,7 +996,7 @@ const EnviosFiltersToolbar = memo(function EnviosFiltersToolbar({
       <div className="flex flex-wrap items-center gap-2">
         <label className="min-w-0 w-full basis-full sm:w-auto sm:min-w-[14rem] sm:max-w-[20rem] sm:flex-[1_1_16rem]">
           <span className="sr-only">Buscar envíos</span>
-          <span className="flex h-9 min-w-0 items-center gap-2 rounded-lg border border-black bg-surface-inset px-3">
+          <span className={`${insetShellClass} flex h-9 min-w-0 items-center gap-2 rounded-lg border border-black bg-surface-inset px-3`}>
             <Search className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
             <input
               className="w-full bg-transparent text-sm font-bold text-[#f8fafc] outline-none placeholder:text-slate-500"
@@ -892,40 +1054,63 @@ const EnviosFiltersToolbar = memo(function EnviosFiltersToolbar({
         ) : null}
 
         <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
-          <p className="shrink-0 text-[10px] font-bold leading-none text-slate-500">
-            <span className="tabular-nums text-slate-400">{visibleCount}</span>{" "}
-            {isHistoryMode ? "entregados" : "total"}
-          </p>
           <div className="flex h-9 shrink-0 divide-x divide-black overflow-hidden rounded-lg border border-black bg-surface-inset">
-            <div className="flex min-w-[4.5rem] items-center gap-1.5 px-2">
-              <span className="text-[9px] font-black uppercase leading-none text-slate-500">Abiertos</span>
-              <span className="text-sm font-black tabular-nums leading-none text-[#f8fafc]">{openCount}</span>
-            </div>
-            <div className="flex min-w-[5.25rem] items-center gap-1.5 px-2">
-              <span className="text-[9px] font-black uppercase leading-none text-slate-500">Debe</span>
-              <span className="text-sm font-black tabular-nums leading-none text-amber-300">{balanceTotal}</span>
-            </div>
-            {!isHistoryMode ? (
             <button
               type="button"
-              aria-pressed={contactReminderFilter}
-              onClick={() => onContactReminderFilterChange(!contactReminderFilter)}
+              aria-pressed={readinessFilter === "all"}
+              onClick={() => onReadinessFilterChange("all")}
               className={`flex min-w-[4.5rem] items-center gap-1.5 px-2 transition ${
-                contactReminderFilter
+                readinessFilter === "all"
                   ? "bg-emerald-400/15 text-emerald-200"
                   : "text-slate-500 hover:bg-surface-card hover:text-slate-300"
               }`}
-              title="Ver seguimientos vencidos o de hoy"
+              title={isHistoryMode ? "Ver todos los entregados" : "Ver todos los envíos"}
             >
-              <span className="text-[9px] font-black uppercase leading-none">Hoy</span>
-              <span className="text-sm font-black tabular-nums leading-none">
-                {contactReminderCount}
+              <span className="text-[9px] font-black uppercase leading-none">
+                {isHistoryMode ? "entregados" : "total"}
+              </span>
+              <span className="text-sm font-black tabular-nums leading-none text-[#f8fafc]">
+                {totalCount}
               </span>
             </button>
+            {!isHistoryMode ? (
+              <>
+                <button
+                  type="button"
+                  aria-pressed={readinessFilter === "listos"}
+                  onClick={() => onReadinessFilterChange("listos")}
+                  className={`flex min-w-[4.75rem] items-center gap-1.5 px-2 transition ${
+                    readinessFilter === "listos"
+                      ? "bg-emerald-400/15 text-emerald-200"
+                      : "text-slate-500 hover:bg-surface-card hover:text-slate-300"
+                  }`}
+                  title="Ver envíos ya marcados para dejar o recoger"
+                >
+                  <span className="text-[9px] font-black uppercase leading-none">Listos</span>
+                  <span className="text-sm font-black tabular-nums leading-none text-[#f8fafc]">
+                    {listosCount}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={readinessFilter === "pendientes"}
+                  onClick={() => onReadinessFilterChange("pendientes")}
+                  className={`flex min-w-[5.5rem] items-center gap-1.5 px-2 transition ${
+                    readinessFilter === "pendientes"
+                      ? "bg-amber-400/15 text-amber-200"
+                      : "text-slate-500 hover:bg-surface-card hover:text-slate-300"
+                  }`}
+                  title="Ver envíos pendientes de marcar para dejar o recoger"
+                >
+                  <span className="text-[9px] font-black uppercase leading-none">Pendientes</span>
+                  <span className="text-sm font-black tabular-nums leading-none text-amber-300">
+                    {pendientesCount}
+                  </span>
+                </button>
+              </>
             ) : null}
           </div>
 
-          <ViewLayoutToggle layout={viewLayout} onToggle={onViewLayoutToggle} />
 
           {canManageSales && !isConductor && !isHistoryMode ? (
             <Link href="/venta" className={`${primaryButtonClass} h-9 shrink-0 px-4`}>
@@ -933,6 +1118,83 @@ const EnviosFiltersToolbar = memo(function EnviosFiltersToolbar({
             </Link>
           ) : null}
         </div>
+      </div>
+    </div>
+  );
+});
+
+type EnviosBulkSelectionBarProps = {
+  selectedCount: number;
+  visibleCount: number;
+  markableCount: number;
+  unmarkableCount: number;
+  busy: boolean;
+  onSelectAll: () => void;
+  onClearSelection: () => void;
+  onMarkReady: () => void;
+  onUnmarkReady: () => void;
+};
+
+const EnviosBulkSelectionBar = memo(function EnviosBulkSelectionBar({
+  selectedCount,
+  visibleCount,
+  markableCount,
+  unmarkableCount,
+  busy,
+  onSelectAll,
+  onClearSelection,
+  onMarkReady,
+  onUnmarkReady,
+}: EnviosBulkSelectionBarProps) {
+  return (
+    <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-emerald-700/50 bg-emerald-950/25 px-2.5 py-2">
+      <p className="shrink-0 text-[11px] font-black uppercase tracking-wide text-emerald-200">
+        {selectedCount} seleccionado{selectedCount === 1 ? "" : "s"}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          disabled={busy || visibleCount === 0}
+          onClick={onSelectAll}
+          className="h-8 rounded-lg border border-black bg-surface-inset px-3 text-[11px] font-black uppercase text-slate-200 transition hover:bg-surface-card disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Marcar todo
+        </button>
+        <button
+          type="button"
+          disabled={busy || markableCount === 0}
+          onClick={onMarkReady}
+          className="h-8 rounded-lg border border-emerald-700/60 bg-emerald-950/40 px-3 text-[11px] font-black uppercase text-emerald-200 transition hover:bg-emerald-900/40 disabled:cursor-not-allowed disabled:opacity-50"
+          title={
+            markableCount > 0
+              ? `Marcar ${markableCount} envío${markableCount === 1 ? "" : "s"} como listo${markableCount === 1 ? "" : "s"}`
+              : "Ningún envío seleccionado se puede marcar"
+          }
+        >
+          Marcar como listos
+        </button>
+        <button
+          type="button"
+          disabled={busy || unmarkableCount === 0}
+          onClick={onUnmarkReady}
+          className="h-8 rounded-lg border border-amber-700/60 bg-amber-950/30 px-3 text-[11px] font-black uppercase text-amber-200 transition hover:bg-amber-900/30 disabled:cursor-not-allowed disabled:opacity-50"
+          title={
+            unmarkableCount > 0
+              ? `Desmarcar ${unmarkableCount} envío${unmarkableCount === 1 ? "" : "s"}`
+              : "Ningún envío seleccionado se puede desmarcar"
+          }
+        >
+          Desmarcar como listos
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onClearSelection}
+          className="h-8 rounded-lg border border-black bg-surface-inset px-3 text-[11px] font-black uppercase text-slate-400 transition hover:bg-surface-card hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Limpiar
+        </button>
       </div>
     </div>
   );
@@ -967,12 +1229,19 @@ type EnviosShipmentListsSharedProps = {
     status: ShipmentStatus,
     audit: ShipmentAuditContext,
   ) => Promise<void>;
+  onFullBoxReceivedAtOffice: (row: ShipmentRow, audit: ShipmentAuditContext) => Promise<void>;
   onLockedLeg: (message: string) => void;
+  selectionEnabled: boolean;
+  isShipmentSelected: (shipmentId: string) => boolean;
+  onShipmentRowActivate: (
+    event: React.MouseEvent,
+    row: ShipmentRow,
+    index: number,
+  ) => void;
 };
 
 type EnviosShipmentRowsListProps = EnviosShipmentListsSharedProps & {
   expandedShipmentIds: Set<string>;
-  onToggleExpanded: (shipmentId: string) => void;
 };
 
 const EnviosShipmentRowsList = memo(function EnviosShipmentRowsList({
@@ -990,18 +1259,21 @@ const EnviosShipmentRowsList = memo(function EnviosShipmentRowsList({
   priorityBusyId,
   finalizeCopy,
   onShipmentContextMenu,
-  onToggleExpanded,
   onContactLogOpen,
   onTogglePriority,
   onFinalizeOpen,
   onLogisticsPatch,
   onStatusChange,
+  onFullBoxReceivedAtOffice,
   onLockedLeg,
+  selectionEnabled,
+  isShipmentSelected,
+  onShipmentRowActivate,
 }: EnviosShipmentRowsListProps) {
   return (
-    <div className={`${cardClass} overflow-hidden`}>
-      <div className="divide-y divide-black/70">
-        {displayShipments.map((row) => {
+    <div className={`${cardClass} overflow-hidden p-2`}>
+      <div className="flex flex-col gap-2">
+        {displayShipments.map((row, index) => {
           const quote = quoteFromShipment(row);
           const balanceDue = balanceDueFromShipment(row, quote);
           const canFinalize =
@@ -1021,24 +1293,28 @@ const EnviosShipmentRowsList = memo(function EnviosShipmentRowsList({
           );
           const timings = buildShipmentTimings(row, progressSteps);
           const milestoneAges = buildShipmentMilestoneAges(row, progressSteps);
+          const timingInsights = buildShipmentTimingInsightPanel(row, progressSteps);
           const latestPayment = row.payments[row.payments.length - 1] || null;
           const isExpanded = expandedShipmentIds.has(row.id);
+          const isSelected = selectionEnabled && isShipmentSelected(row.id);
 
           return (
             <article
               key={row.id}
-              className={`px-3 py-1.5 transition-colors sm:px-4 ${
+              className={`${listRowBaseClass} px-3 py-1.5 sm:px-4 ${
                 row.invoice_priority ? "bg-amber-950/15" : ""
-              } ${isExpanded ? "bg-surface-card-hover/40" : "hover:bg-surface-card-hover"}`}
+              } ${isSelected ? "bg-emerald-950/25 ring-1 ring-inset ring-emerald-500/60" : ""} ${
+                isExpanded ? "bg-surface-list-row-hover/80" : listRowHoverClass
+              }`}
               onContextMenu={(event) => onShipmentContextMenu(event, row)}
             >
               <div
-                className="grid w-full min-w-0 cursor-pointer grid-cols-[1.5rem_minmax(0,20rem)_9.25rem_minmax(18rem,1fr)] items-center gap-x-2 overflow-hidden sm:gap-x-3"
-                onClick={() => onToggleExpanded(row.id)}
+                className="grid w-full min-w-0 cursor-pointer grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-center gap-x-2 overflow-hidden sm:gap-x-3"
+                onClick={(event) => onShipmentRowActivate(event, row, index)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    onToggleExpanded(row.id);
+                    onShipmentRowActivate(event as unknown as React.MouseEvent, row, index);
                   }
                 }}
                 tabIndex={0}
@@ -1050,59 +1326,70 @@ const EnviosShipmentRowsList = memo(function EnviosShipmentRowsList({
                     : `Ver detalle de ${row.code}`
                 }
               >
-                <ShipmentMilestoneAgeTrigger ages={milestoneAges} className="self-center" />
-
-                <div className="min-w-0 py-0.5">
-                  <p className="truncate text-sm leading-snug">
-                    <span className="font-black tracking-tight text-[#f8fafc]">
-                      <Link
-                        href={buildLogisticaShipmentDeepLink(row.code)}
-                        className="hover:text-emerald-300"
-                      >
-                        {row.code}
-                      </Link>
-                    </span>
-                    <span className="px-1.5 text-[10px] font-bold text-slate-600">
-                      ·
-                    </span>
-                    <span className="font-bold text-slate-200">
-                      {row.customer_name}
-                    </span>
-                  </p>
-                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-[11px] font-bold leading-none">
-                    <span className="inline-flex min-w-0 shrink items-center gap-1 text-slate-300">
-                      <CountryFlag
-                        name={row.country}
-                        size="xs"
-                        className="!h-3 !w-[18px] !rounded-sm"
-                      />
-                      <span className="truncate">{row.country}</span>
-                    </span>
-                    {row.carrier ? (
-                      <>
-                        <span className="shrink-0 text-slate-600" aria-hidden>
-                          ·
-                        </span>
-                        <span className="inline-flex min-w-0 items-center gap-1 truncate text-slate-400">
-                          <Package
-                            className="h-3 w-3 shrink-0 opacity-60"
-                            aria-hidden
-                          />
-                          <span className="truncate tabular-nums">
-                            {row.carrier}
-                          </span>
-                        </span>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="min-w-0">
-                  <ShipmentPaymentProgress
-                    compact
-                    summaryRow
-                    progress={paymentProgress}
+                <div className="flex min-w-0 items-center gap-x-2 sm:gap-x-3">
+                  <ShipmentMilestoneAgeTrigger
+                    ages={milestoneAges}
+                    insights={timingInsights}
+                    className="shrink-0 self-center"
                   />
+
+                  <div className="min-w-0 max-w-[20rem] py-0.5">
+                    <p className="truncate text-sm leading-snug">
+                      <span className="font-black tracking-tight text-[#f8fafc]">
+                        <Link
+                          href={buildLogisticaShipmentDeepLink(row.code)}
+                          className="hover:text-emerald-300"
+                          onClick={(event) => {
+                            if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                              event.preventDefault();
+                            }
+                          }}
+                        >
+                          {row.code}
+                        </Link>
+                      </span>
+                      <span className="px-1.5 text-[10px] font-bold text-slate-600">
+                        ·
+                      </span>
+                      <span className="font-bold text-slate-200">
+                        {row.customer_name}
+                      </span>
+                    </p>
+                    <div className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-[11px] font-bold leading-none">
+                      <span className="inline-flex min-w-0 shrink items-center gap-1 text-slate-300">
+                        <CountryFlag
+                          name={row.country}
+                          size="xs"
+                          className="!h-3 !w-[18px] !rounded-sm"
+                        />
+                        <span className="truncate">{row.country}</span>
+                      </span>
+                      {row.carrier ? (
+                        <>
+                          <span className="shrink-0 text-slate-600" aria-hidden>
+                            ·
+                          </span>
+                          <span className="inline-flex min-w-0 items-center gap-1 truncate text-slate-400">
+                            <Package
+                              className="h-3 w-3 shrink-0 opacity-60"
+                              aria-hidden
+                            />
+                            <span className="truncate tabular-nums">
+                              {row.carrier}
+                            </span>
+                          </span>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="w-[9.25rem] shrink-0">
+                    <ShipmentPaymentProgress
+                      compact
+                      summaryRow
+                      progress={paymentProgress}
+                    />
+                  </div>
                 </div>
 
                 <div
@@ -1125,6 +1412,11 @@ const EnviosShipmentRowsList = memo(function EnviosShipmentRowsList({
                     }
                     onStatusChange={(status, audit) =>
                       void onStatusChange(row, status, audit)
+                    }
+                    onFullBoxReceivedAtOffice={
+                      !isHistoryMode && canManageSales
+                        ? (audit) => void onFullBoxReceivedAtOffice(row, audit)
+                        : undefined
                     }
                     onLockedLeg={onLockedLeg}
                   />
@@ -1206,6 +1498,11 @@ const EnviosShipmentRowsList = memo(function EnviosShipmentRowsList({
                           {latestPayment.note ? ` · ${latestPayment.note}` : ""}
                         </p>
                       ) : null}
+                      {driverCollectionLabel(row) ? (
+                        <p className="mt-1 rounded-md border border-sky-900/70 bg-sky-950/20 px-2 py-1 text-[10px] font-black text-sky-100">
+                          {driverCollectionLabel(row)}
+                        </p>
+                      ) : null}
                       <ShipmentContactLogLine shipment={row} />
                     </div>
                   </div>
@@ -1219,14 +1516,13 @@ const EnviosShipmentRowsList = memo(function EnviosShipmentRowsList({
   );
 });
 
-type EnviosShipmentCardsGridProps = EnviosShipmentListsSharedProps & {
+type EnviosShipmentCardsGridProps = Omit<EnviosShipmentListsSharedProps, "cardClass"> & {
   ownerBusyId: string | null;
   onUpdateSalesOwner: (row: ShipmentRow, salesOwnerId: string) => Promise<void>;
 };
 
 const EnviosShipmentCardsGrid = memo(function EnviosShipmentCardsGrid({
   displayShipments,
-  cardClass,
   canManageSales,
   canManageShipmentOwners,
   canEditProgress,
@@ -1247,11 +1543,15 @@ const EnviosShipmentCardsGrid = memo(function EnviosShipmentCardsGrid({
   onFinalizeOpen,
   onLogisticsPatch,
   onStatusChange,
+  onFullBoxReceivedAtOffice,
   onLockedLeg,
+  selectionEnabled,
+  isShipmentSelected,
+  onShipmentRowActivate,
 }: EnviosShipmentCardsGridProps) {
   return (
     <div className="grid items-start gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-      {displayShipments.map((row) => {
+      {displayShipments.map((row, index) => {
         const quote = quoteFromShipment(row);
         const balanceDue = balanceDueFromShipment(row, quote);
         const canFinalize =
@@ -1271,13 +1571,24 @@ const EnviosShipmentCardsGrid = memo(function EnviosShipmentCardsGrid({
         );
         const timings = buildShipmentTimings(row, progressSteps);
         const latestPayment = row.payments[row.payments.length - 1] || null;
+        const isSelected = selectionEnabled && isShipmentSelected(row.id);
 
         return (
           <article
             key={row.id}
-            className={`${cardClass} flex flex-col p-2.5${
+            role={selectionEnabled ? "checkbox" : undefined}
+            className={`${listCardShellClass} flex cursor-pointer flex-col p-2.5${
               row.invoice_priority ? " bg-amber-950/15" : ""
-            }`}
+            }${isSelected ? " ring-2 ring-emerald-500/70" : ""}`}
+            onClick={(event) => onShipmentRowActivate(event, row, index)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onShipmentRowActivate(event as unknown as React.MouseEvent, row, index);
+              }
+            }}
+            tabIndex={selectionEnabled ? 0 : undefined}
+            aria-checked={selectionEnabled ? isSelected : undefined}
             onContextMenu={(event) => onShipmentContextMenu(event, row)}
           >
             <div className="min-w-0">
@@ -1293,7 +1604,11 @@ const EnviosShipmentCardsGrid = memo(function EnviosShipmentCardsGrid({
                   labelClassName="text-[10px] font-bold text-slate-500"
                 />
                 {canManageShipmentOwners ? (
-                  <label className="flex min-w-0 flex-1 items-center gap-1 sm:min-w-[9rem]">
+                  <label
+                    className="flex min-w-0 flex-1 items-center gap-1 sm:min-w-[9rem]"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
                     <span className="shrink-0 text-[9px] font-black uppercase text-slate-500">
                       Vendedor
                     </span>
@@ -1319,7 +1634,11 @@ const EnviosShipmentCardsGrid = memo(function EnviosShipmentCardsGrid({
               </div>
             </div>
 
-            <div className="mt-2">
+            <div
+              className="mt-2"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
               <ShipmentProgressSteps
                 steps={progressSteps}
                 timings={timings}
@@ -1335,6 +1654,11 @@ const EnviosShipmentCardsGrid = memo(function EnviosShipmentCardsGrid({
                 onStatusChange={(status, audit) =>
                   void onStatusChange(row, status, audit)
                 }
+                onFullBoxReceivedAtOffice={
+                  !isHistoryMode && canManageSales
+                    ? (audit) => void onFullBoxReceivedAtOffice(row, audit)
+                    : undefined
+                }
                 onLockedLeg={onLockedLeg}
               />
             </div>
@@ -1346,6 +1670,11 @@ const EnviosShipmentCardsGrid = memo(function EnviosShipmentCardsGrid({
                   Pago: {formatMoneyValue(latestPayment.amount)} ·{" "}
                   {paymentMethodLabel(latestPayment.method)}
                   {latestPayment.note ? ` · ${latestPayment.note}` : ""}
+                </p>
+              ) : null}
+              {driverCollectionLabel(row) ? (
+                <p className="mt-1 rounded-md border border-sky-900/70 bg-sky-950/20 px-2 py-1 text-[10px] font-black text-sky-100">
+                  {driverCollectionLabel(row)}
                 </p>
               ) : null}
               <ShipmentContactLogLine shipment={row} />

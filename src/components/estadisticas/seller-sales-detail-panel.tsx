@@ -120,7 +120,7 @@ export function SellerSalesDetailPanel({
           {report?.sales.map((row) => (
             <Link
               key={row.id}
-              href={`/envios?q=${encodeURIComponent(row.code)}`}
+              href={`/seguimiento?q=${encodeURIComponent(row.code)}`}
               className="rounded-xl border border-black bg-surface-card p-3 transition hover:border-emerald-700/40 hover:bg-surface-card-hover"
             >
               <div className="flex items-start justify-between gap-2">

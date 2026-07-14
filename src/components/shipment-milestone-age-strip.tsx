@@ -1,87 +1,28 @@
 "use client";
 
 import { Clock } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAnchoredPopover } from "@/hooks/use-anchored-popover";
 import {
-  milestoneAgeDisplayValue,
   milestoneAgeIndicatorButtonClass,
-  milestoneAgeTextClass,
+  timingInsightRowTextClass,
   type ShipmentMilestoneAge,
+  type ShipmentTimingInsightRow,
 } from "@/lib/shipment-timing";
 
-const PANEL_WIDTH = 176;
+const PANEL_WIDTH = 272;
 
 export function ShipmentMilestoneAgeTrigger({
   ages,
+  insights,
   className = "",
 }: {
   ages: ShipmentMilestoneAge[];
+  insights: ShipmentTimingInsightRow[];
   className?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    function updatePosition() {
-      const anchor = buttonRef.current;
-      if (!anchor) {
-        return;
-      }
-
-      const rect = anchor.getBoundingClientRect();
-      const maxLeft = Math.max(8, window.innerWidth - PANEL_WIDTH - 8);
-      setPosition({
-        top: rect.bottom + 6,
-        left: Math.min(rect.left, maxLeft),
-      });
-    }
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      const target = event.target as Node;
-
-      if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) {
-        return;
-      }
-
-      setOpen(false);
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
+  const { open, setOpen, position, buttonRef, panelRef } =
+    useAnchoredPopover(PANEL_WIDTH);
 
   const panel =
     open && position ? (
@@ -90,23 +31,41 @@ export function ShipmentMilestoneAgeTrigger({
         className="fixed z-50 overflow-hidden rounded-xl border border-black bg-surface-panel p-2 shadow-2xl"
         style={{ top: position.top, left: position.left, width: PANEL_WIDTH }}
         role="dialog"
-        aria-label="Tiempos de venta, entrega y recolección"
+        aria-label="Tiempos entre pasos del envío"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
+        <p className="px-1 pb-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+          Tiempos del envío
+        </p>
         <div className="space-y-1">
-          {ages.map((age) => (
+          {insights.map((insight, index) => (
             <div
-              key={age.key}
-              className="flex items-center justify-between gap-2 rounded-lg border border-black/60 bg-surface-inset px-2 py-1.5"
-              title={age.detailLabel || age.label}
+              key={insight.id}
+              className={`rounded-lg border border-black/60 bg-surface-inset px-2 py-1.5 ${
+                index > 0 ? "ml-2 border-l-2 border-l-slate-700/80" : ""
+              }`}
+              title={insight.detail || insight.label}
             >
-              <span className="text-[10px] font-black uppercase text-slate-500">{age.label}</span>
-              <span
-                className={`truncate text-[11px] font-black tabular-nums ${milestoneAgeTextClass(age.status, age.elapsedMs)}`}
-              >
-                {milestoneAgeDisplayValue(age)}
-              </span>
+              <div className="flex items-start justify-between gap-2">
+                <span
+                  className={`min-w-0 flex-1 text-[10px] font-black uppercase leading-snug ${
+                    insight.id === "sale" ? "text-slate-400" : "text-slate-500"
+                  }`}
+                >
+                  {insight.label}
+                </span>
+                <span
+                  className={`shrink-0 text-[11px] font-black tabular-nums leading-none ${timingInsightRowTextClass(insight.status, insight.elapsedMs)}`}
+                >
+                  {insight.value}
+                </span>
+              </div>
+              {insight.detail && insight.id !== "sale" ? (
+                <p className="mt-1 text-[9px] font-bold leading-snug text-slate-500">
+                  {insight.detail}
+                </p>
+              ) : null}
             </div>
           ))}
         </div>
@@ -119,10 +78,10 @@ export function ShipmentMilestoneAgeTrigger({
         ref={buttonRef}
         type="button"
         className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition ${milestoneAgeIndicatorButtonClass(ages)} ${className}`}
-        aria-label="Ver tiempos de venta, entrega y recolección"
+        aria-label="Ver tiempos entre pasos del envío"
         aria-expanded={open}
         aria-haspopup="dialog"
-        title="Tiempos: venta, entrega, recolección"
+        title="Tiempos entre pasos"
         onClick={(event) => {
           event.stopPropagation();
           setOpen((current) => !current);

@@ -1,6 +1,6 @@
 # Desarrollo local
 
-La app **solo** usa Supabase local en Docker (Postgres + Auth en `127.0.0.1`). No hay modo nube en este repo.
+El desarrollo usa Supabase local en Docker (Postgres + Auth en `127.0.0.1`). La publicación a Vercel usa la configuración remota desde el flujo de publicación separado.
 
 ## Requisitos
 
@@ -59,12 +59,12 @@ Definidos en `supabase/config.toml`. Valores actuales del proyecto:
 
 | Servicio | Puerto |
 | --- | --- |
-| API / Auth | `54321` |
-| Postgres | `54322` |
-| Studio | `54323` |
-| Mailpit | `54324` |
+| API / Auth | `55021` |
+| Postgres | `55022` |
+| Studio | `55023` |
+| Mailpit | `55024` |
 
-Postgres directo: `127.0.0.1:54322`, usuario `postgres`, password `postgres`.
+Postgres directo: `127.0.0.1:55022`, usuario `postgres`, password `postgres`.
 
 Si cambias puertos en `config.toml`, ejecuta `npm run env:local` y revisa `npm run supabase:status`.
 
@@ -74,7 +74,7 @@ Nada arranca solo al encender el PC:
 
 - **Docker Desktop** puede estar abierto pero sin contenedores (Supabase parado desde ayer).
 - **Next.js** no persiste: si cerraste la terminal o reiniciaste, el puerto 3000 queda vacio (`ERR_CONNECTION_REFUSED`).
-- **Windows (Hyper-V)** reserva rangos de puertos que cambian; por eso migramos de `58021` a `54321`.
+- **Windows (Hyper-V)** reserva rangos de puertos que cambian; por eso migramos de `54321` a `55021`.
 - **`.env.local` desincronizado** con `config.toml` produce errores de login aunque la app cargue.
 
 `npm run dev:up` cubre esos cuatro casos antes de abrir el navegador.

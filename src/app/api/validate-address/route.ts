@@ -1,4 +1,5 @@
 import { resolveGoogleCountryCode } from "@/lib/country-options";
+import { filterGoogleAddressSuggestions } from "@/lib/google-address-suggestions";
 import { getAppSession } from "@/lib/auth/session";
 import {
   enforceValidateAddressRateLimit,
@@ -198,14 +199,17 @@ export async function POST(request: Request) {
         });
       }
 
-      const suggestions = await Promise.all(
-        (data.predictions || []).slice(0, 5).map(async (prediction) => ({
-          placeId: prediction.place_id,
-          description: prediction.description,
-          mainText: prediction.structured_formatting?.main_text || prediction.description,
-          secondaryText: prediction.structured_formatting?.secondary_text || "",
-          postalCode: await getPlacePostalCode(prediction.place_id, apiKey),
-        })),
+      const suggestions = filterGoogleAddressSuggestions(
+        await Promise.all(
+          (data.predictions || []).slice(0, 5).map(async (prediction) => ({
+            placeId: prediction.place_id,
+            description: prediction.description,
+            mainText: prediction.structured_formatting?.main_text || prediction.description,
+            secondaryText: prediction.structured_formatting?.secondary_text || "",
+            postalCode: await getPlacePostalCode(prediction.place_id, apiKey),
+          })),
+        ),
+        query,
       );
 
       return Response.json({

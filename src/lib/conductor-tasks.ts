@@ -8,6 +8,9 @@ import {
   balanceDueFromShipment,
   depositFromShipment,
   quoteFromShipment,
+  readShipmentBoxLines,
+  shipmentBoxLinesTriggerLabel,
+  type ShipmentBoxLine,
 } from "@/lib/shipment-display";
 import {
   readConductorTruckBoxLinesFromPlan,
@@ -27,9 +30,12 @@ export type ConductorDriverTask = {
   scheduledAt: string | null;
   warehouseId: string | null;
   shipmentCode: string;
-  customerName: string;
-  customerPhone: string | null;
-  country: string;
+  senderName: string;
+  senderPhone: string | null;
+  recipientName: string | null;
+  recipientCountry: string | null;
+  recipientPhone: string | null;
+  recipientCity: string | null;
   routeId: string | null;
   routeName: string | null;
   routeDate: string | null;
@@ -42,6 +48,8 @@ export type ConductorDriverTask = {
   zoneLabel: string | null;
   boxLines: ConductorTruckBoxLine[];
   boxSummary: string;
+  boxDisplayLines: ShipmentBoxLine[];
+  boxTotal: string;
   paid: number;
   depositDue: number;
   balanceDue: number;
@@ -52,6 +60,24 @@ export const conductorTaskTypeLabel: Record<LogisticsTaskType, string> = {
   deliver_empty_box: "Dejar caja vacia",
   pickup_full_box: "Recoger caja llena",
 };
+
+export function conductorRecipientFromShipment(
+  shipment: Pick<ShipmentRow, "recipientSnapshot" | "country">,
+) {
+  const snapshot = shipment.recipientSnapshot;
+
+  return {
+    name: snapshot
+      ? [String(snapshot.firstName ?? "").trim(), String(snapshot.lastName ?? "").trim()]
+          .filter(Boolean)
+          .join(" ")
+          .trim() || null
+      : null,
+    country: shipment.country?.trim() || null,
+    phone: snapshot ? String(snapshot.phone ?? "").trim() || null : null,
+    city: snapshot ? String(snapshot.city ?? "").trim() || null : null,
+  };
+}
 
 export function buildRouteByTaskId(routes: ReadonlyArray<LogisticsRouteRow>) {
   const map = new Map<string, { route: LogisticsRouteRow; stop: LogisticsRouteStopRow }>();
@@ -69,12 +95,54 @@ export function buildRouteByTaskId(routes: ReadonlyArray<LogisticsRouteRow>) {
   return map;
 }
 
+function conductorTaskMatchesScopeDate(
+  task: {
+    status: string;
+    scheduledAt: string | null;
+    assignedTo?: string | null;
+    scheduleConfirmationStatus?: "pending" | "confirmed";
+  },
+  routeInfo: { route: Pick<LogisticsRouteRow, "routeDate" | "status"> } | undefined,
+  scopeDate: string,
+  driverId?: string | null,
+) {
+  if (task.status === "loaded_to_truck") {
+    return true;
+  }
+
+  if (task.scheduledAt && task.scheduleConfirmationStatus === "pending") {
+    return false;
+  }
+
+  if (routeInfo && routeInfo.route.status !== "cancelled") {
+    return (
+      routeInfo.route.routeDate === scopeDate ||
+      scheduleMatchesScopeDate(task.scheduledAt, scopeDate)
+    );
+  }
+
+  if (!routeInfo) {
+    if (scheduleMatchesScopeDate(task.scheduledAt, scopeDate)) {
+      return true;
+    }
+
+    if (driverId && task.assignedTo === driverId && !task.scheduledAt) {
+      return true;
+    }
+
+    return false;
+  }
+
+  return false;
+}
+
 export function isTaskAssignedToDriver(
   task: { assignedTo: string | null; status: string },
   routeInfo: { route: { assignedTo: string | null } } | undefined,
   driverId: string,
+  options?: { includeClosed?: boolean },
 ) {
-  if (isClosedLogisticsStatus(task.status)) {
+  if (!options?.includeClosed && isClosedLogisticsStatus(task.status)) {
     return false;
   }
 
@@ -89,7 +157,7 @@ export function conductorScopeDate(reference = new Date()) {
   return formatScheduleDateInput(reference);
 }
 
-export function scheduledAtScopeDate(scheduledAt: string | null) {
+function scheduledAtScopeDate(scheduledAt: string | null) {
   if (!scheduledAt) {
     return null;
   }
@@ -119,6 +187,7 @@ export function isConductorTaskInScope(
     status: string;
     scheduledAt: string | null;
     assignedTo?: string | null;
+    scheduleConfirmationStatus?: "pending" | "confirmed";
   },
   routeInfo: { route: Pick<LogisticsRouteRow, "routeDate" | "status"> } | undefined,
   scopeDate: string,
@@ -128,31 +197,28 @@ export function isConductorTaskInScope(
     return false;
   }
 
-  if (task.status === "loaded_to_truck") {
-    return true;
-  }
+  return conductorTaskMatchesScopeDate(task, routeInfo, scopeDate, driverId);
+}
 
-  if (routeInfo && routeInfo.route.status !== "cancelled") {
-    return (
-      routeInfo.route.routeDate === scopeDate ||
-      scheduleMatchesScopeDate(task.scheduledAt, scopeDate)
-    );
-  }
-
-  if (!routeInfo) {
-    if (scheduleMatchesScopeDate(task.scheduledAt, scopeDate)) {
-      return true;
-    }
-
-    if (driverId && task.assignedTo === driverId && !task.scheduledAt) {
-      return true;
-    }
-
+export function isConductorClosedTaskInScope(
+  task: {
+    status: string;
+    scheduledAt: string | null;
+    assignedTo?: string | null;
+    scheduleConfirmationStatus?: "pending" | "confirmed";
+  },
+  routeInfo: { route: Pick<LogisticsRouteRow, "routeDate" | "status"> } | undefined,
+  scopeDate: string,
+  driverId?: string | null,
+) {
+  if (!isClosedLogisticsStatus(task.status)) {
     return false;
   }
 
-  return false;
+  return conductorTaskMatchesScopeDate(task, routeInfo, scopeDate, driverId);
 }
+
+export type ConductorDriverTaskVisibility = "open" | "closed";
 
 export function buildConductorDriverTasks(input: {
   shipments: ReadonlyArray<ShipmentRow>;
@@ -161,12 +227,14 @@ export function buildConductorDriverTasks(input: {
   vehicles?: ReadonlyArray<Pick<LogisticsVehicleRow, "id" | "name" | "plate">>;
   driverId: string | null;
   scopeDate?: string;
+  visibility?: ConductorDriverTaskVisibility;
 }): ConductorDriverTask[] {
   if (!input.driverId) {
     return [];
   }
 
   const scopeDate = input.scopeDate ?? conductorScopeDate();
+  const visibility = input.visibility ?? "open";
   const routeByTaskId = buildRouteByTaskId(input.routes);
   const addressByTaskId = new Map(input.taskAddresses.map((row) => [row.taskId, row]));
   const vehicleById = new Map((input.vehicles || []).map((vehicle) => [vehicle.id, vehicle]));
@@ -176,11 +244,20 @@ export function buildConductorDriverTasks(input: {
     for (const task of shipment.logisticsTasks) {
       const routeInfo = routeByTaskId.get(task.id);
 
-      if (!isTaskAssignedToDriver(task, routeInfo, input.driverId)) {
+      if (
+        !isTaskAssignedToDriver(task, routeInfo, input.driverId, {
+          includeClosed: visibility === "closed",
+        })
+      ) {
         continue;
       }
 
-      if (!isConductorTaskInScope(task, routeInfo, scopeDate, input.driverId)) {
+      const inScope =
+        visibility === "closed"
+          ? isConductorClosedTaskInScope(task, routeInfo, scopeDate, input.driverId)
+          : isConductorTaskInScope(task, routeInfo, scopeDate, input.driverId);
+
+      if (!inScope) {
         continue;
       }
 
@@ -190,6 +267,8 @@ export function buildConductorDriverTasks(input: {
         : null;
       const quote = quoteFromShipment(shipment);
       const boxLines = readConductorTruckBoxLinesFromPlan(shipment.logistics_plan);
+      const displayBoxLines = readShipmentBoxLines(shipment);
+      const recipient = conductorRecipientFromShipment(shipment);
 
       tasks.push({
         id: task.id,
@@ -199,9 +278,12 @@ export function buildConductorDriverTasks(input: {
         scheduledAt: task.scheduledAt,
         warehouseId: task.warehouseId,
         shipmentCode: shipment.code,
-        customerName: shipment.customer_name,
-        customerPhone: shipment.customerPhone || null,
-        country: shipment.country,
+        senderName: shipment.customer_name,
+        senderPhone: shipment.customerPhone || null,
+        recipientName: recipient.name,
+        recipientCountry: recipient.country,
+        recipientPhone: recipient.phone,
+        recipientCity: recipient.city,
         routeId: routeInfo?.route.id ?? null,
         routeName: routeInfo?.route.name ?? null,
         routeDate: routeInfo?.route.routeDate ?? null,
@@ -213,7 +295,9 @@ export function buildConductorDriverTasks(input: {
         addressLine: address?.address.formattedAddress || null,
         zoneLabel: address?.zoneLabel || null,
         boxLines,
-        boxSummary: quote?.label || boxLines.map((line) => `(${line.quantity}) ${line.label}`).join(" + "),
+        boxSummary: shipmentBoxLinesTriggerLabel(displayBoxLines) || quote?.label || "",
+        boxDisplayLines: displayBoxLines,
+        boxTotal: quote?.total || "",
         paid: shipment.paid,
         depositDue: Math.max(depositFromShipment(shipment) - shipment.paid, 0),
         balanceDue: balanceDueFromShipment(shipment, quote),
@@ -224,10 +308,25 @@ export function buildConductorDriverTasks(input: {
 
   return tasks.sort(
     (left, right) =>
+      (visibility === "closed"
+        ? new Date(right.sortAt).getTime() - new Date(left.sortAt).getTime()
+        : 0) ||
       (left.routeDate || "").localeCompare(right.routeDate || "") ||
       (left.stopOrder ?? 9999) - (right.stopOrder ?? 9999) ||
       new Date(left.sortAt).getTime() - new Date(right.sortAt).getTime(),
   );
+}
+
+export function conductorTaskOutcomeLabel(status: ConductorDriverTask["status"]) {
+  if (status === "completed") {
+    return "Listo";
+  }
+
+  if (status === "cancelled") {
+    return "No se pudo";
+  }
+
+  return "";
 }
 
 export function conductorTaskStatusClass(status: LogisticsTaskStatus) {

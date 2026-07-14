@@ -1,5 +1,5 @@
 /**
- * Demo local: 15 invoices para ver un dia real de logistica.
+ * Demo local: 25 invoices (15 entregar + 10 recoger) asignadas a Conductor 1.
  * Uso: node scripts/seed-logistics-workday.mjs
  */
 import fs from "node:fs";
@@ -11,22 +11,37 @@ const DEMO_PREFIX = "INV-WD-";
 const DEMO_EMAIL_PREFIX = "workday.demo+";
 const OUT_DIR = "/tmp/boxario-logistics-workday";
 
+const BOX_PRICING = {
+  "14x14x14": { paid: "$35", cost: "$22" },
+  "16x16x16": { paid: "$50", cost: "$31" },
+};
+
 const CUSTOMERS = [
-  ["Ana", "Morales", "661-555-0101", "Golden Valley Rd", "19205", "Canyon Country", "Santa Clarita", "CA", "91387", 34.41495, -118.45977, "Entregar", "14x14x14 x1"],
-  ["Luis", "Herrera", "661-555-0102", "Bouquet Canyon Rd", "26650", "Saugus", "Santa Clarita", "CA", "91350", 34.43891, -118.53593, "Entregar", "16x16x16 x1"],
-  ["Sandra", "Ruiz", "661-555-0103", "Soledad Canyon Rd", "18358", "Canyon Country", "Santa Clarita", "CA", "91351", 34.41639, -118.45274, "Entregar", "18x18x18 x1"],
-  ["Fernando", "Castro", "661-555-0104", "McBean Pkwy", "24303", "Valencia", "Santa Clarita", "CA", "91355", 34.41309, -118.56041, "Entregar", "14x14x14 x2"],
-  ["Marta", "Pineda", "661-555-0105", "Newhall Ranch Rd", "27550", "Valencia", "Santa Clarita", "CA", "91355", 34.44009, -118.54852, "Entregar", "16x16x16 x1"],
-  ["Carlos", "Vega", "661-555-0106", "Via Princessa", "18635", "Canyon Country", "Santa Clarita", "CA", "91387", 34.41236, -118.46922, "Entregar", "18x18x18 x1"],
-  ["Rosa", "Navarro", "661-555-0107", "Railroad Ave", "22935", "Newhall", "Santa Clarita", "CA", "91321", 34.37941, -118.52732, "Entregar", "14x14x14 x1"],
-  ["Jorge", "Salazar", "661-555-0108", "Lyons Ave", "24250", "Newhall", "Santa Clarita", "CA", "91321", 34.37821, -118.55709, "Entregar", "16x16x16 x2"],
-  ["Elena", "Cortez", "661-555-0109", "Sierra Hwy", "27567", "Canyon Country", "Santa Clarita", "CA", "91351", 34.42296, -118.45481, "Recoger", "14x14x14 x1"],
-  ["Miguel", "Ortega", "661-555-0110", "Copper Hill Dr", "27745", "Saugus", "Santa Clarita", "CA", "91350", 34.46041, -118.53622, "Recoger", "16x16x16 x1"],
-  ["Patricia", "Lopez", "661-555-0111", "Seco Canyon Rd", "27931", "Saugus", "Santa Clarita", "CA", "91350", 34.45473, -118.53148, "Recoger", "18x18x18 x1"],
-  ["Hector", "Mendoza", "661-555-0112", "Tournament Rd", "24700", "Valencia", "Santa Clarita", "CA", "91355", 34.39701, -118.56828, "Recoger", "14x14x14 x2"],
-  ["Isabel", "Torres", "661-555-0113", "Plum Canyon Rd", "19130", "Saugus", "Santa Clarita", "CA", "91350", 34.45964, -118.50621, "Recoger", "16x16x16 x1"],
-  ["Roberto", "Funes", "661-555-0114", "Magic Mountain Pkwy", "26111", "Valencia", "Santa Clarita", "CA", "91355", 34.42152, -118.58537, "Recoger", "18x18x18 x1"],
-  ["Beatriz", "Aguilar", "661-555-0115", "Whites Canyon Rd", "18625", "Canyon Country", "Santa Clarita", "CA", "91351", 34.42213, -118.46621, "Recoger", "14x14x14 x1"],
+  ["Ana", "Morales", "661-555-0101", "Golden Valley Rd", "19205", "Canyon Country", "Santa Clarita", "CA", "91387", 34.41495, -118.45977, "Entregar", "14x14x14", 1],
+  ["Luis", "Herrera", "661-555-0102", "Bouquet Canyon Rd", "26650", "Saugus", "Santa Clarita", "CA", "91350", 34.43891, -118.53593, "Entregar", "16x16x16", 1],
+  ["Sandra", "Ruiz", "661-555-0103", "Soledad Canyon Rd", "18358", "Canyon Country", "Santa Clarita", "CA", "91351", 34.41639, -118.45274, "Entregar", "14x14x14", 1],
+  ["Fernando", "Castro", "661-555-0104", "McBean Pkwy", "24303", "Valencia", "Santa Clarita", "CA", "91355", 34.41309, -118.56041, "Entregar", "14x14x14", 2],
+  ["Marta", "Pineda", "661-555-0105", "Newhall Ranch Rd", "27550", "Valencia", "Santa Clarita", "CA", "91355", 34.44009, -118.54852, "Entregar", "16x16x16", 1],
+  ["Carlos", "Vega", "661-555-0106", "Via Princessa", "18635", "Canyon Country", "Santa Clarita", "CA", "91387", 34.41236, -118.46922, "Entregar", "16x16x16", 1],
+  ["Rosa", "Navarro", "661-555-0107", "Railroad Ave", "22935", "Newhall", "Santa Clarita", "CA", "91321", 34.37941, -118.52732, "Entregar", "14x14x14", 1],
+  ["Jorge", "Salazar", "661-555-0108", "Lyons Ave", "24250", "Newhall", "Santa Clarita", "CA", "91321", 34.37821, -118.55709, "Entregar", "16x16x16", 2],
+  ["Daniel", "Rios", "661-555-0116", "Davenport Rd", "28450", "Saugus", "Santa Clarita", "CA", "91350", 34.44712, -118.52104, "Entregar", "14x14x14", 1],
+  ["Carmen", "Silva", "661-555-0117", "Decoro Dr", "24580", "Valencia", "Santa Clarita", "CA", "91355", 34.40588, -118.55421, "Entregar", "16x16x16", 1],
+  ["Pedro", "Guzman", "661-555-0118", "Hasley Canyon Rd", "25200", "Castaic", "Santa Clarita", "CA", "91384", 34.46831, -118.61204, "Entregar", "14x14x14", 1],
+  ["Lucia", "Marin", "661-555-0119", "Creekside Rd", "22900", "Newhall", "Santa Clarita", "CA", "91350", 34.39102, -118.54133, "Entregar", "14x14x14", 2],
+  ["Oscar", "Delgado", "661-555-0120", "Wiley Canyon Rd", "23500", "Newhall", "Santa Clarita", "CA", "91321", 34.36741, -118.51288, "Entregar", "16x16x16", 1],
+  ["Teresa", "Campos", "661-555-0121", "Sand Canyon Rd", "28100", "Canyon Country", "Santa Clarita", "CA", "91387", 34.42851, -118.47892, "Entregar", "16x16x16", 1],
+  ["Raul", "Medina", "661-555-0122", "Valencia Blvd", "24200", "Valencia", "Santa Clarita", "CA", "91355", 34.40981, -118.57102, "Entregar", "14x14x14", 1],
+  ["Elena", "Cortez", "661-555-0109", "Sierra Hwy", "27567", "Canyon Country", "Santa Clarita", "CA", "91351", 34.42296, -118.45481, "Recoger", "14x14x14", 1],
+  ["Miguel", "Ortega", "661-555-0110", "Copper Hill Dr", "27745", "Saugus", "Santa Clarita", "CA", "91350", 34.46041, -118.53622, "Recoger", "16x16x16", 1],
+  ["Patricia", "Lopez", "661-555-0111", "Seco Canyon Rd", "27931", "Saugus", "Santa Clarita", "CA", "91350", 34.45473, -118.53148, "Recoger", "16x16x16", 1],
+  ["Hector", "Mendoza", "661-555-0112", "Tournament Rd", "24700", "Valencia", "Santa Clarita", "CA", "91355", 34.39701, -118.56828, "Recoger", "14x14x14", 2],
+  ["Isabel", "Torres", "661-555-0113", "Plum Canyon Rd", "19130", "Saugus", "Santa Clarita", "CA", "91350", 34.45964, -118.50621, "Recoger", "16x16x16", 1],
+  ["Roberto", "Funes", "661-555-0114", "Magic Mountain Pkwy", "26111", "Valencia", "Santa Clarita", "CA", "91355", 34.42152, -118.58537, "Recoger", "14x14x14", 1],
+  ["Beatriz", "Aguilar", "661-555-0115", "Whites Canyon Rd", "18625", "Canyon Country", "Santa Clarita", "CA", "91351", 34.42213, -118.46621, "Recoger", "14x14x14", 1],
+  ["Gabriel", "Nunez", "661-555-0123", "Ruether Ave", "26600", "Canyon Country", "Santa Clarita", "CA", "91351", 34.41902, -118.44881, "Recoger", "16x16x16", 1],
+  ["Diana", "Soto", "661-555-0124", "Smyth Dr", "25800", "Valencia", "Santa Clarita", "CA", "91355", 34.40122, -118.56241, "Recoger", "14x14x14", 1],
+  ["Alberto", "Reyes", "661-555-0125", "Mint Canyon Rd", "29400", "Canyon Country", "Santa Clarita", "CA", "91387", 34.43501, -118.44102, "Recoger", "16x16x16", 1],
 ];
 
 const RECIPIENTS = [
@@ -163,20 +178,157 @@ function recipientSnapshot(index) {
   };
 }
 
-function logisticsPlan(action, boxLabel) {
+function catalogKey(boxSize) {
+  return `cajas|${boxSize.toLowerCase()}|`;
+}
+
+function boxLine(boxSize, quantity) {
+  const pricing = BOX_PRICING[boxSize] || { paid: "$50", cost: "$31" };
   return {
-    box: {
-      label: boxLabel,
-      paid: "$50",
-      cost: "$31",
-    },
-    boxCount: Number(boxLabel.match(/x(\d+)$/)?.[1] || 1),
-    emptyBox: {
-      mode: action === "Recoger" ? "Cliente ya tiene caja vacia" : "Entregar caja vacia a domicilio",
+    cost: pricing.cost,
+    paid: pricing.paid,
+    time: "3-5 dias",
+    label: boxSize,
+    carrier: "",
+    quantity,
+    catalogKey: catalogKey(boxSize),
+  };
+}
+
+async function loadInventoryBoxSizes(client) {
+  const { rows } = await client.query(
+    `
+      select distinct ii.kind
+      from public.inventory_items ii
+      join public.inventory_categories ic on ic.id = ii.category_id
+      where ii.organization_id = $1
+        and lower(ic.name) = 'cajas'
+      order by ii.kind
+    `,
+    [SCGS_ORG_ID],
+  );
+
+  return rows.map((row) => row.kind);
+}
+
+function assertCustomersUseInventoryBoxSizes(inventorySizes) {
+  const allowed = new Set(inventorySizes.map((size) => size.toLowerCase()));
+  const missing = new Set();
+
+  for (const row of CUSTOMERS) {
+    const boxSize = String(row[12] || "").toLowerCase();
+    if (!allowed.has(boxSize)) {
+      missing.add(row[12]);
+    }
+  }
+
+  if (missing.size) {
+    throw new Error(
+      `El seed usa cajas que no existen en inventario: ${[...missing].join(", ")}. Disponibles: ${inventorySizes.join(", ")}`,
+    );
+  }
+}
+
+function logisticsPlan(action, boxSize, boxQty, warehouseId) {
+  const line = boxLine(boxSize, boxQty);
+  const subtotal = boxQty * Number.parseInt(line.paid.replace(/\D/g, ""), 10);
+
+  if (action === "Recoger") {
+    return {
+      box: { cost: line.cost, paid: line.paid, time: line.time, label: boxSize, carrier: "" },
+      fees: { total: "$0", fullBoxPickup: "$0", emptyBoxDelivery: "$0" },
+      notes: "",
+      billing: {
+        payNow: "$0",
+        boxCount: boxQty,
+        balanceDue: line.paid,
+        boxSubtotal: line.paid,
+        quotedTotal: line.paid,
+        boxUnitPrice: line.paid,
+        fullBoxPickup: "$0",
+        minimumDeposit: "$20",
+        emptyBoxDelivery: "$0",
+        logisticsFeeMode: "per_trip",
+        logisticsSubtotal: "$0",
+        promotionDiscount: "$0",
+        boxSubtotalBeforeDiscount: line.paid,
+        promotionSelectionRequired: false,
+        promotionCandidates: [],
+        cartLines: [line],
+        promotion: null,
+      },
+      fullBox: {
+        mode: "Recoger caja llena a domicilio",
+        label: "full_box",
+        deferred: true,
+        scheduleAt: null,
+        scheduleMode: null,
+        driverTaskType: "pickup_full_box",
+        driverTaskNeeded: true,
+      },
+      summary: "Caja vacia: Cliente ya tiene caja vacia | Caja llena: Recoleccion pendiente",
+      boxCount: boxQty,
+      boxLines: [line],
+      emptyBox: {
+        mode: "Cliente ya tiene caja vacia",
+        label: "empty_box",
+        handingNow: null,
+        scheduleAt: null,
+        warehouseId,
+        scheduleMode: null,
+        driverTaskType: null,
+        driverTaskNeeded: false,
+      },
+      driverTaskCount: 1,
+    };
+  }
+
+  return {
+    box: { cost: line.cost, paid: line.paid, time: line.time, label: boxSize, carrier: "" },
+    fees: { total: "$0", fullBoxPickup: "$0", emptyBoxDelivery: "$0" },
+    notes: "",
+    billing: {
+      payNow: "$0",
+      boxCount: boxQty,
+      balanceDue: `$${subtotal}`,
+      boxSubtotal: `$${subtotal}`,
+      quotedTotal: `$${subtotal}`,
+      boxUnitPrice: line.paid,
+      fullBoxPickup: "$0",
+      minimumDeposit: "$20",
+      emptyBoxDelivery: "$0",
+      logisticsFeeMode: "per_trip",
+      logisticsSubtotal: "$0",
+      promotionDiscount: "$0",
+      boxSubtotalBeforeDiscount: `$${subtotal}`,
+      promotionSelectionRequired: false,
+      promotionCandidates: [],
+      cartLines: [line],
+      promotion: null,
     },
     fullBox: {
       mode: "Recoger caja llena a domicilio",
+      label: "full_box",
+      deferred: true,
+      scheduleAt: null,
+      scheduleMode: null,
+      driverTaskType: null,
+      driverTaskNeeded: false,
     },
+    summary: "Caja vacia: Entregar caja vacia a domicilio | Caja llena: Recoleccion pendiente",
+    boxCount: boxQty,
+    boxLines: [line],
+    emptyBox: {
+      mode: "Entregar caja vacia a domicilio",
+      label: "empty_box",
+      handingNow: null,
+      scheduleAt: null,
+      scheduleMode: "pending",
+      driverTaskType: "deliver_empty_box",
+      driverTaskNeeded: true,
+      warehouseId,
+    },
+    driverTaskCount: 1,
   };
 }
 
@@ -184,6 +336,20 @@ async function deletePreviousDemo(client) {
   const previous = await snapshotDemoRows(client, "before");
   writeCsv(path.join(OUT_DIR, "before.csv"), previous);
 
+  await client.query(
+    `
+      delete from public.logistics_route_stops
+      where route_id in (
+        select id from public.logistics_routes
+        where organization_id = $1 and name like 'Ruta demo Conductor 1%'
+      )
+    `,
+    [SCGS_ORG_ID],
+  );
+  await client.query(
+    "delete from public.logistics_routes where organization_id = $1 and name like $2",
+    [SCGS_ORG_ID, "Ruta demo Conductor 1%"],
+  );
   await client.query(
     "delete from public.shipments where organization_id = $1 and code like $2",
     [SCGS_ORG_ID, `${DEMO_PREFIX}%`],
@@ -202,10 +368,11 @@ async function insertWorkday(client, ownerId, warehouseId) {
 
   for (let index = 0; index < CUSTOMERS.length; index += 1) {
     const row = CUSTOMERS[index];
-    const [firstName, lastName, phone, street, house, neighborhood, city, state, zip, lat, lng, action, boxLabel] = row;
+    const [firstName, lastName, phone, street, house, neighborhood, city, state, zip, lat, lng, action, boxSize, boxQty] = row;
     const code = `${DEMO_PREFIX}${String(index + 1).padStart(3, "0")}`;
     const scheduledAt = new Date(base.getTime() + index * 35 * 60 * 1000).toISOString();
     const address = formattedAddress(row);
+    const boxSummary = boxQty > 1 ? `${boxSize} x${boxQty}` : boxSize;
 
     const customer = await client.query(
       `
@@ -262,8 +429,8 @@ async function insertWorkday(client, ownerId, warehouseId) {
         null,
         ownerId,
         action === "Recoger" ? new Date(base.getTime() - 24 * 60 * 60 * 1000).toISOString() : null,
-        `Demo workday: ${action.toLowerCase()} ${boxLabel}`,
-        JSON.stringify(logisticsPlan(action, boxLabel)),
+        `Demo workday: ${action.toLowerCase()} ${boxSummary}`,
+        JSON.stringify(logisticsPlan(action, boxSize, boxQty, warehouseId)),
       ],
     );
 
@@ -281,10 +448,139 @@ async function insertWorkday(client, ownerId, warehouseId) {
         action === "Recoger" ? "pickup_full_box" : "deliver_empty_box",
         scheduledAt,
         warehouseId,
-        `${action} ${boxLabel} - ${address}`,
+        `${action} ${boxSummary} - ${address}`,
       ],
     );
   }
+}
+
+async function assignRouteToConductor1(client, ownerId, warehouseId) {
+  const conductor = await client.query(
+    `
+      select id, full_name
+      from public.profiles
+      where email = 'conductor1@scgs.local'
+        and organization_id = $1
+      limit 1
+    `,
+    [SCGS_ORG_ID],
+  );
+
+  if (!conductor.rowCount) {
+    throw new Error("No existe Conductor 1. Ejecuta: node scripts/seed-conductors.mjs");
+  }
+
+  const conductorId = conductor.rows[0].id;
+  const routeDate = new Date().toISOString().slice(0, 10);
+
+  const vehicle = await client.query(
+    `
+      select id
+      from public.logistics_vehicles
+      where organization_id = $1
+        and is_active = true
+      order by created_at asc
+      limit 1
+    `,
+    [SCGS_ORG_ID],
+  );
+
+  const tasks = await client.query(
+    `
+      select
+        t.id as task_id,
+        s.id as shipment_id,
+        c.formatted_address,
+        c.lat,
+        c.lng,
+        c.postal_code,
+        c.city,
+        t.scheduled_at
+      from public.shipment_logistics_tasks t
+      join public.shipments s on s.id = t.shipment_id
+      join public.customers c on c.id = s.customer_id
+      where s.organization_id = $1
+        and s.code like $2
+      order by t.scheduled_at asc nulls last, s.code asc
+    `,
+    [SCGS_ORG_ID, `${DEMO_PREFIX}%`],
+  );
+
+  if (!tasks.rowCount) {
+    throw new Error("No hay tareas demo para asignar.");
+  }
+
+  const route = await client.query(
+    `
+      insert into public.logistics_routes (
+        organization_id, route_date, name, status, assigned_to, vehicle_id,
+        warehouse_id, zone_key, published_at, created_by, created_at
+      )
+      values ($1,$2,$3,'planned',$4,$5,$6,$7,now(),$8,now())
+      returning id
+    `,
+    [
+      SCGS_ORG_ID,
+      routeDate,
+      `Ruta demo Conductor 1 ${routeDate}`,
+      conductorId,
+      vehicle.rows[0]?.id ?? null,
+      warehouseId,
+      "santa-clarita",
+      ownerId,
+    ],
+  );
+
+  const routeId = route.rows[0].id;
+  const now = new Date().toISOString();
+
+  for (let index = 0; index < tasks.rows.length; index += 1) {
+    const task = tasks.rows[index];
+    await client.query(
+      `
+        insert into public.logistics_route_stops (
+          organization_id, route_id, task_id, stop_order, address_snapshot,
+          lat, lng, postal_code, city, created_at
+        )
+        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
+      `,
+      [
+        SCGS_ORG_ID,
+        routeId,
+        task.task_id,
+        index + 1,
+        JSON.stringify({ formattedAddress: task.formatted_address }),
+        task.lat,
+        task.lng,
+        task.postal_code,
+        task.city,
+      ],
+    );
+
+    await client.query(
+      `
+        update public.shipment_logistics_tasks
+        set assigned_to = $2, assigned_at = $3, status = 'assigned', updated_at = $3
+        where id = $1
+      `,
+      [task.task_id, conductorId, now],
+    );
+
+    await client.query(
+      `
+        update public.shipments
+        set assigned_to = $2
+        where id = $1
+      `,
+      [task.shipment_id, conductorId],
+    );
+  }
+
+  return {
+    conductorName: conductor.rows[0].full_name,
+    routeId,
+    taskCount: tasks.rowCount,
+  };
 }
 
 async function main() {
@@ -295,13 +591,22 @@ async function main() {
   const { client, label } = await connectPg();
   try {
     const { orgName, ownerId, warehouseId } = await ensureOrgAndOwner(client);
-    logProgress(`Seed workday demo: 15% - DB ${label}, org ${orgName}`);
+    const inventorySizes = await loadInventoryBoxSizes(client);
+    assertCustomersUseInventoryBoxSizes(inventorySizes);
+    logProgress(`Seed workday demo: 15% - DB ${label}, org ${orgName}, cajas ${inventorySizes.join(", ")}`);
 
     await client.query("begin");
     const before = await deletePreviousDemo(client);
     logProgress(`Seed workday demo: 35% - demo anterior removido: ${before.length} tareas`);
 
     await insertWorkday(client, ownerId, warehouseId);
+    logProgress("Seed workday demo: 70% - envios creados");
+
+    const assignment = await assignRouteToConductor1(client, ownerId, warehouseId);
+    logProgress(
+      `Seed workday demo: 90% - ruta asignada a ${assignment.conductorName} (${assignment.taskCount} tareas)`,
+    );
+
     const after = await snapshotDemoRows(client, "after");
     writeCsv(path.join(OUT_DIR, "after.csv"), after);
     writeCsv(path.join(OUT_DIR, "before-after.csv"), [...before, ...after]);

@@ -29,31 +29,25 @@ describe("logistics-task-edit", () => {
   });
 
   it("builds pending and scheduled patches", () => {
-    const pending = buildLogisticsTaskEditPatch(
-      {
-        scheduleMode: "pending",
-        routeDate: "2026-07-08",
-        routeTime: "10:00",
-        warehouseId: "wh-1",
-        notes: "  nota  ",
-      },
-      null,
-    );
+    const pending = buildLogisticsTaskEditPatch({
+      scheduleMode: "pending",
+      routeDate: "2026-07-08",
+      routeTime: "10:00",
+      warehouseId: "wh-1",
+      notes: "  nota  ",
+    });
 
     assert.equal(pending.scheduledAt, null);
     assert.equal(pending.warehouseId, "wh-1");
     assert.equal(pending.notes, "nota");
 
-    const scheduled = buildLogisticsTaskEditPatch(
-      {
-        scheduleMode: "scheduled",
-        routeDate: "2026-07-08",
-        routeTime: "14:00",
-        warehouseId: null,
-        notes: "",
-      },
-      null,
-    );
+    const scheduled = buildLogisticsTaskEditPatch({
+      scheduleMode: "scheduled",
+      routeDate: "2026-07-08",
+      routeTime: "14:00",
+      warehouseId: null,
+      notes: "",
+    });
 
     assert.match(scheduled.scheduledAt || "", /2026-07-08/);
     assert.equal(logisticsTaskEditScheduleValid({

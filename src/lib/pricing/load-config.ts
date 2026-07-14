@@ -317,20 +317,5 @@ export async function loadPricingConfigForSession(
   };
 }
 
-export async function promotionsRuleJsonColumnAvailable(
-  supabase: NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>,
-) {
-  const { error } = await supabase.from("pricing_promotions").select("id, rule_json").limit(1);
 
-  if (error?.code === "42P01") {
-    return false;
-  }
-
-  if (error && isMissingRuleJsonColumn(error.message)) {
-    return false;
-  }
-
-  return true;
-}
-
-export { isMissingRuleJsonColumn, syncLinkedRouteSchedules };
+export {  syncLinkedRouteSchedules };

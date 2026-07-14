@@ -1,14 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #263241;
+  --background: #29312d;
   --foreground: #f8fafc;
   --surface-shell: #29312d;
   --surface-panel: #1e2623;
-  --surface-card: #3d4844;
-  --surface-card-hover: #47534e;
+  --surface-card: #29312d;
+  --surface-card-hover: #2f3834;
   --surface-card-header: #252e2b;
-  --surface-inset: #2a322f;
+  --surface-inset: #252e2b;
+  --surface-list-row: #2c3340;
+  --surface-list-row-hover: #343d4d;
   color-scheme: dark;
 }
 
@@ -21,6 +23,8 @@
   --color-surface-card-hover: var(--surface-card-hover);
   --color-surface-card-header: var(--surface-card-header);
   --color-surface-inset: var(--surface-inset);
+  --color-surface-list-row: var(--surface-list-row);
+  --color-surface-list-row-hover: var(--surface-list-row-hover);
   --font-sans: Arial, Helvetica, sans-serif;
   --font-mono: Consolas, "Courier New", monospace;
 }
@@ -50,8 +54,16 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-input:not(.client-form-field) {
+input:not(.client-form-field):not(.inset-field) {
   background: #0B1220;
+}
+
+/* Inputs dentro de shells inset: un solo fondo, sin caja oscura anidada */
+.inset-shell input:not(.client-form-field),
+.bg-surface-inset input:not(.client-form-field),
+input.inset-field {
+  background: transparent;
+  color: #f8fafc;
 }
 
 input.client-form-field {
@@ -59,21 +71,27 @@ input.client-form-field {
   color: #f8fafc;
 }
 
-.sale-invoice-paper input {
+/* Más específico que input:not(.client-form-field):not(.inset-field) */
+.sale-invoice-paper input:not(.client-form-field):not(.inset-field) {
   background: transparent;
   color: #0f172a;
   border: none;
   box-shadow: none;
 }
 
-.sale-invoice-paper input:focus {
+.sale-invoice-paper input:not(.client-form-field):not(.inset-field):focus {
   outline: none;
   box-shadow: none;
 }
 
-.sale-invoice-paper input:focus-visible {
+.sale-invoice-paper input:not(.client-form-field):not(.inset-field):focus-visible {
   outline: 1px solid #94a3b8;
   outline-offset: 2px;
+}
+
+.sale-invoice-paper {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
 }
 
 @media print {
@@ -104,10 +122,12 @@ input.client-form-field {
     inset: 0;
     margin: 0 auto;
     max-width: none;
-    min-height: auto;
+    min-height: calc(297mm - 24mm);
     box-shadow: none !important;
     border: none !important;
     background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 }
 
@@ -281,12 +301,107 @@ textarea::placeholder {
   animation: onboarding-help-glow 2.2s ease-in-out infinite;
 }
 
+@keyframes onboarding-step-expand-hint {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: translateX(0);
+    text-shadow: 0 0 0 rgba(52, 211, 153, 0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(2px);
+    text-shadow: 0 0 10px rgba(52, 211, 153, 0.85);
+  }
+}
+
+.onboarding-step-expand-hint {
+  animation: onboarding-step-expand-hint 1.8s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .onboarding-help-button-glow {
     animation: none;
     box-shadow:
       0 0 0 1px rgba(56, 189, 248, 0.4),
       0 0 10px rgba(56, 189, 248, 0.3);
+  }
+
+  .onboarding-step-expand-hint {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+@keyframes onboarding-coach-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(52, 211, 153, 0.55),
+      0 0 12px rgba(52, 211, 153, 0.35),
+      0 0 28px rgba(52, 211, 153, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(110, 231, 183, 0.85),
+      0 0 18px rgba(52, 211, 153, 0.55),
+      0 0 36px rgba(52, 211, 153, 0.28);
+  }
+}
+
+.onboarding-coach-target-glow {
+  animation: onboarding-coach-glow 2s ease-in-out infinite;
+}
+
+.onboarding-coach-ring {
+  box-shadow:
+    0 0 0 2px rgba(110, 231, 183, 0.9),
+    0 0 0 6px rgba(52, 211, 153, 0.22),
+    0 0 24px rgba(52, 211, 153, 0.35);
+  animation: onboarding-coach-glow 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-coach-target-glow,
+  .onboarding-coach-ring {
+    animation: none;
+  }
+}
+
+.onboarding-coach-countdown-pill {
+  animation: onboarding-coach-countdown-enter 260ms ease-out;
+}
+
+.onboarding-coach-countdown-track {
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.onboarding-coach-countdown-fill {
+  background: linear-gradient(90deg, #34d399, #6ee7b7);
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.45);
+  transform-origin: left center;
+  transition: transform 80ms linear;
+  will-change: transform;
+}
+
+@keyframes onboarding-coach-countdown-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-coach-countdown-pill {
+    animation: none;
+  }
+
+  .onboarding-coach-countdown-fill {
+    transition: none;
   }
 }
 
@@ -347,17 +462,65 @@ textarea::placeholder {
 @keyframes shipment-step-active-pulse {
   0%,
   100% {
-    box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.45);
+    box-shadow:
+      inset 0 0 0 1px rgba(52, 211, 153, 0.42),
+      0 0 0 rgba(52, 211, 153, 0);
   }
 
   50% {
-    box-shadow: inset 0 0 0 1px rgba(252, 211, 77, 0.95);
+    box-shadow:
+      inset 0 0 0 1px rgba(52, 211, 153, 0.86),
+      0 0 10px rgba(52, 211, 153, 0.18);
   }
 }
 
 .shipment-step-active-pulse {
   animation: shipment-step-active-pulse 2.2s ease-in-out infinite;
   contain: paint;
+}
+
+@keyframes shipment-step-flow-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 1px rgba(52, 211, 153, 0.3));
+    opacity: 0.78;
+  }
+
+  50% {
+    filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.7));
+    opacity: 1;
+  }
+}
+
+.shipment-step-flow-glow {
+  animation: shipment-step-flow-glow 2.2s ease-in-out infinite;
+}
+
+.sidebar-group-expanded {
+  border-color: rgba(52, 211, 153, 0.58);
+  background-color: #163c30;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 0 1px rgba(52, 211, 153, 0.32),
+    0 8px 18px rgba(6, 78, 59, 0.24),
+    0 0 16px rgba(16, 185, 129, 0.2);
+}
+
+.sidebar-group-expanded:hover {
+  border-color: rgba(110, 231, 183, 0.68);
+  background-color: #1b4c3d;
+}
+
+.sidebar-group-expanded-icon {
+  border-color: rgba(110, 231, 183, 0.35);
+  background-color: rgb(52, 211, 153);
+  color: rgb(2, 44, 34);
+}
+
+.sidebar-group-expanded-chevron {
+  border-color: rgba(52, 211, 153, 0.35);
+  background-color: rgba(2, 44, 34, 0.55);
+  color: rgb(167, 243, 208);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -374,7 +537,8 @@ textarea::placeholder {
   .skeleton-block,
   .logistics-unassigned-alert,
   .logistics-priority-awaiting-driver,
-  .shipment-step-active-pulse {
+  .shipment-step-active-pulse,
+  .shipment-step-flow-glow {
     animation: none;
   }
 

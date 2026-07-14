@@ -7,6 +7,7 @@ export type OrganizationSettings = {
   company_address?: string;
   currency?: string;
   onboarding_dismissed?: boolean;
+  onboarding_started?: boolean;
 };
 
 export function parsePlanLimit(value: unknown): number | null {
@@ -31,7 +32,7 @@ export function getConfiguredWarehouseLimit(
   return parsePlanLimit(settings?.max_warehouses);
 }
 
-export function resolveWarehouseLimit(
+function resolveWarehouseLimit(
   settings: OrganizationSettings | null | undefined,
 ): number {
   const configured = getConfiguredWarehouseLimit(settings);

@@ -15,6 +15,7 @@ const conductorClientSource = readFileSync(
   "utf8",
 );
 const conductorViewSource = readFileSync(join(root, "lib/conductor-tareas-view.ts"), "utf8");
+const conductorActionsSource = readFileSync(join(root, "app/actions/conductor-tasks.ts"), "utf8");
 
 describe("conductor tareas shell eval", () => {
   it("registers tareas conductor nav item", () => {
@@ -43,42 +44,64 @@ describe("conductor tareas shell eval", () => {
     assert.match(conductorPageSource, /requirePathAccess\("\/conductor\/tareas"\)/);
     assert.match(conductorPageSource, /resolveConductorTasksView/);
     assert.match(conductorPageSource, /listConductorDriverTasksAction/);
-    assert.match(conductorPageSource, /listConductorTaskActivityHistoryAction/);
+    assert.match(conductorPageSource, /listConductorClosedDriverTasksAction/);
     assert.match(conductorPageSource, /initialTasks=/);
-    assert.match(conductorPageSource, /initialHistory=/);
+    assert.match(conductorPageSource, /initialCompletedTasks=/);
   });
 
   it("wires admin preview picker into the conductor tasks client", () => {
     assert.match(conductorClientSource, /Vista previa admin/);
     assert.match(conductorClientSource, /InlineSearchPicker/);
     assert.match(conductorClientSource, /params\.set\("conductor"/);
-    assert.match(conductorClientSource, /conductorTaskTypeLabel/);
+    assert.doesNotMatch(conductorClientSource, /conductorTaskTypeLabel/);
     assert.match(conductorViewSource, /canPreviewConductorTasks/);
     assert.match(conductorViewSource, /resolveConductorTasksView/);
   });
 
   it("shows sender address before box details on driver cards", () => {
-    const senderIndex = conductorClientSource.indexOf("task.customerName");
+    const senderIndex = conductorClientSource.indexOf("task.senderName");
     const addressIndex = conductorClientSource.indexOf("task.addressLine");
     const boxIndex = conductorClientSource.indexOf("task.boxSummary");
 
     assert.ok(senderIndex >= 0);
     assert.ok(addressIndex > senderIndex);
     assert.ok(boxIndex > addressIndex);
-    assert.doesNotMatch(conductorClientSource, /Destinatario/);
+    assert.match(conductorClientSource, /ConductorTaskRecipientPeek/);
+    assert.match(conductorClientSource, /Remitente/);
     assert.doesNotMatch(conductorClientSource, /CountryName/);
     assert.doesNotMatch(conductorClientSource, /task\.country/);
   });
 
-  it("loads conductor task history and renders audit entries", () => {
-    assert.match(conductorClientSource, /initialHistory/);
-    assert.match(conductorClientSource, /AuditHistoryEntry/);
-    assert.match(conductorClientSource, /Historial/);
-    assert.match(conductorClientSource, /listConductorTaskActivityHistoryAction/);
+  it("keeps the route result summary visible alongside the dedicated completed view", () => {
+    assert.match(conductorClientSource, /Faltan/);
+    assert.match(conductorClientSource, /Listas/);
+    assert.match(conductorClientSource, /No se pudo/);
+    assert.match(conductorClientSource, /Resueltas/);
+    assert.match(conductorClientSource, /listMode === "completed"/);
+    assert.match(conductorClientSource, /conductorTaskOutcomeLabel/);
+    assert.doesNotMatch(conductorClientSource, /Historial/);
   });
 
-  it("opens history after marking no se pudo", () => {
-    assert.match(conductorClientSource, /setHistoryOpen\(true\)/);
+  it("keeps the chosen box filter when switching task lists", () => {
+    assert.match(conductorClientSource, /function handleListModeChange\(next: TaskListMode\)/);
+    assert.match(conductorClientSource, /setListMode\(next\)/);
+    assert.doesNotMatch(conductorClientSource, /setTaskFilter\(defaultTaskFilter/);
+  });
+
+  it("does not hide driver tasks when vehicle metadata is unavailable", () => {
+    assert.match(conductorActionsSource, /vehicles: vehiclesResult\.ok \? vehiclesResult\.data : \[\]/);
+    assert.doesNotMatch(conductorActionsSource, /if \(!vehiclesResult\.ok\) \{\s*throw new Error\(vehiclesResult\.error\);/);
+  });
+
+  it("opens completed view after marking no se pudo", () => {
+    assert.match(conductorClientSource, /setCompletedTasks/);
     assert.match(conductorClientSource, /dialog\.result === "failed"/);
+  });
+
+  it("lets drivers reactivate failed visits from completed view", () => {
+    assert.match(conductorActionsSource, /export async function reactivateConductorTaskAction/);
+    assert.match(conductorClientSource, /reactivateConductorTaskAction/);
+    assert.match(conductorClientSource, /Volver al listado/);
+    assert.match(conductorClientSource, /task\.status === "cancelled"/);
   });
 });

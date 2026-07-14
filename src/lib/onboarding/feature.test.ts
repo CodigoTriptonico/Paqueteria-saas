@@ -7,7 +7,7 @@ import {
 } from "@/lib/onboarding/feature";
 
 describe("onboarding tutorial feature flag", () => {
-  it("keeps the tutorial disabled until re-enabled", () => {
+  it("keeps the tutorial disabled for now", () => {
     assert.equal(ONBOARDING_TUTORIAL_ENABLED, false);
     assert.equal(isOnboardingTutorialEnabled(), false);
   });
@@ -16,6 +16,7 @@ describe("onboarding tutorial feature flag", () => {
     assert.deepEqual(onboardingTutorialDisabledProgress(), {
       eligible: false,
       dismissed: false,
+      started: false,
       steps: [],
       completedCount: 0,
       totalCount: 5,

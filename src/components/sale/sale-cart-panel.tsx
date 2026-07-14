@@ -1,14 +1,12 @@
 "use client";
 
-import { ChevronDown, ShoppingCart, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { ChevronDown, ShoppingCart, Trash2 } from "lucide-react";
 import { PromotionSelector } from "@/components/sale/promotion-selector";
 import { inputClass, primaryButtonClass } from "@/components/ui-blocks";
 import type { InvoiceBillingSnapshot } from "@/lib/invoice-billing";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
 
-export type SaleCartPanelLine = {
+type SaleCartPanelLine = {
   id: string;
   label: string;
   unitPrice: string;
@@ -262,252 +260,11 @@ export function SaleCartPanel({
   );
 }
 
-type SaleCartDrawerProps = SaleCartPanelProps & {
-  open: boolean;
-  onClose: () => void;
-};
-
-export function SaleCartDrawer({
-  open,
-  onClose,
-  ...panelProps
-}: SaleCartDrawerProps) {
-  const [mounted, setMounted] = useState(false);
-  const itemCount = panelProps.lines.reduce((sum, line) => sum + line.quantity, 0);
-
-  useEffect(() => {
-    queueMicrotask(() => setMounted(true));
-  }, []);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, open]);
-
-  if (!mounted || !open) {
-    return null;
-  }
-
-  return createPortal(
-    <div className="fixed inset-0 z-[140]">
-      <button
-        type="button"
-        aria-label="Cerrar carrito"
-        className="absolute inset-0 bg-black/55"
-        onClick={onClose}
-      />
-      <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-black bg-[#1a221f] shadow-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-black px-4 py-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-emerald-400/15 text-emerald-300">
-              <ShoppingCart className="h-5 w-5" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase text-slate-500">Carrito</p>
-              <h2 className="text-xl font-black text-[#f8fafc]">
-                {itemCount
-                  ? `${itemCount} producto${itemCount === 1 ? "" : "s"}`
-                  : "Vacío"}
-              </h2>
-              {panelProps.billing && itemCount ? (
-                <p className="mt-1 text-sm font-black tabular-nums text-emerald-300">
-                  {panelProps.billing.quotedTotal}
-                </p>
-              ) : null}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card"
-            aria-label="Cerrar"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <CartContents {...panelProps} />
-        </div>
-      </aside>
-    </div>,
-    document.body,
-  );
-}
-
-/** Columna lateral: carrito fijo junto al paso activo (escritorio). */
-export function SaleCartRail({
-  children,
-  cart,
-  mobileTrigger,
-}: {
-  children: React.ReactNode;
-  cart: React.ReactNode;
-  mobileTrigger?: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
-      <div className="min-w-0 flex-1 space-y-3">
-        {mobileTrigger ? <div className="xl:hidden">{mobileTrigger}</div> : null}
-        {children}
-      </div>
-      <aside className="hidden xl:block xl:w-[19rem] xl:shrink-0">
-        <div className="sticky top-2">{cart}</div>
-      </aside>
-    </div>
-  );
-}
-
-export function SaleCartMobileChip({
-  itemCount,
-  total,
-  onClick,
-}: {
-  itemCount: number;
-  total: string | null;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-lg border border-black bg-surface-card px-3 py-2.5 text-left transition hover:bg-surface-card-hover"
-    >
-      <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-emerald-400/15 text-emerald-300">
-        <ShoppingCart className="h-4 w-4" aria-hidden />
-        {itemCount > 0 ? (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border border-black bg-emerald-400 px-0.5 text-[9px] font-black text-slate-950">
-            {itemCount}
-          </span>
-        ) : null}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs font-black uppercase text-slate-500">Carrito</span>
-        <span className="block truncate text-sm font-black text-[#f8fafc]">
-          {itemCount
-            ? `${itemCount} producto${itemCount === 1 ? "" : "s"}`
-            : "Vacío — toca para ver"}
-        </span>
-      </span>
-      {total && itemCount ? (
-        <span className="shrink-0 text-sm font-black tabular-nums text-emerald-300">
-          {total}
-        </span>
-      ) : null}
-    </button>
-  );
-}
-
-/** @deprecated Use SaleCartRail */
-export function SaleCartBottomBar({
-  itemCount,
-  total,
-  open,
-  onClick,
-  onContinue,
-  continueLabel = "Continuar",
-}: {
+type SaleStepCartTriggerProps = {
   itemCount: number;
   total: string | null;
   open: boolean;
   onClick: () => void;
-  onContinue?: () => void;
-  continueLabel?: string;
-}) {
-  return (
-    <div className="sticky bottom-0 z-30 -mx-1 mt-4 border-t border-black bg-[#1a221f]/96 px-1 py-2 backdrop-blur-sm sm:-mx-0 sm:px-0">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onClick}
-          aria-expanded={open}
-          className={`flex min-w-0 flex-1 items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition ${
-            open
-              ? "border-emerald-600 bg-emerald-400/15"
-              : itemCount
-                ? "border-emerald-800/60 bg-[#1c2822] hover:border-emerald-700/70"
-                : "border-black bg-surface-card hover:bg-surface-card-hover"
-          }`}
-        >
-          <span
-            className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${
-              itemCount
-                ? "border-emerald-700/50 bg-emerald-400/15 text-emerald-300"
-                : "border-black bg-surface-inset text-slate-500"
-            }`}
-          >
-            <ShoppingCart className="h-5 w-5" aria-hidden />
-            {itemCount > 0 ? (
-              <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border border-black bg-emerald-400 px-1 text-[10px] font-black text-slate-950">
-                {itemCount}
-              </span>
-            ) : null}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-xs font-black uppercase tracking-wide text-slate-500">
-              Carrito
-            </span>
-            <span className="block truncate text-sm font-black text-[#f8fafc]">
-              {itemCount
-                ? `${itemCount} producto${itemCount === 1 ? "" : "s"}`
-                : "Vacío"}
-            </span>
-          </span>
-          {total && itemCount ? (
-            <span className="shrink-0 text-base font-black tabular-nums text-emerald-300">
-              {total}
-            </span>
-          ) : null}
-        </button>
-        {onContinue && itemCount > 0 ? (
-          <button
-            type="button"
-            onClick={onContinue}
-            className={`${primaryButtonClass} h-11 shrink-0 px-4 text-sm`}
-          >
-            {continueLabel}
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-/** @deprecated Use SaleCartBottomBar */
-export function SaleCartDock({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    queueMicrotask(() => setMounted(true));
-  }, []);
-
-  if (!mounted) {
-    return null;
-  }
-
-  return createPortal(
-    <div className="pointer-events-none fixed bottom-5 right-4 z-[130] lg:bottom-auto lg:top-5 lg:right-5">
-      <div className="pointer-events-auto">{children}</div>
-    </div>,
-    document.body,
-  );
-}
-
-type SaleCartIconButtonProps = {
-  itemCount: number;
-  total: string | null;
-  open: boolean;
-  onClick: () => void;
-  compact?: boolean;
 };
 
 export function SaleStepCartTrigger({
@@ -515,7 +272,7 @@ export function SaleStepCartTrigger({
   total,
   open,
   onClick,
-}: SaleCartIconButtonProps) {
+}: SaleStepCartTriggerProps) {
   return (
     <button
       type="button"
@@ -578,49 +335,3 @@ export function SaleStepCartTrigger({
     </button>
   );
 }
-
-export function SaleCartIconButton({
-  itemCount,
-  total,
-  open,
-  onClick,
-  compact = false,
-}: SaleCartIconButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-expanded={open}
-      aria-label={
-        itemCount
-          ? `Carrito, ${itemCount} producto${itemCount === 1 ? "" : "s"}${total ? `, ${total}` : ""}`
-          : "Carrito vacío"
-      }
-      title={total ? `Carrito · ${total}` : "Carrito"}
-      className={`relative flex shrink-0 items-center justify-center border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
-        compact
-          ? "h-9 w-9 rounded-lg"
-          : "h-12 w-12 rounded-xl shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
-      } ${
-        open
-          ? "border-emerald-600 bg-emerald-400 text-slate-950 shadow-[0_8px_20px_rgba(16,185,129,0.28)]"
-          : itemCount
-            ? "border-emerald-700/50 bg-[#1c2822] text-emerald-300 hover:border-emerald-600/60 hover:bg-[#243029]"
-            : "border-black bg-surface-card text-slate-400 hover:border-black hover:bg-surface-card-hover hover:text-slate-200"
-      }`}
-    >
-      <ShoppingCart className="h-5 w-5" aria-hidden />
-      {itemCount > 0 ? (
-        <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border border-black bg-emerald-400 px-1 text-[10px] font-black text-slate-950">
-          {itemCount}
-        </span>
-      ) : null}
-    </button>
-  );
-}
-
-/** @deprecated Use SaleCartDrawer */
-export const SaleCartMobileDrawer = SaleCartDrawer;
-
-/** @deprecated Use SaleCartIconButton */
-export const SaleCartFloatingTrigger = SaleCartIconButton;

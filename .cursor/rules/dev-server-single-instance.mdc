@@ -1,0 +1,37 @@
+# Servidor de desarrollo — una sola instancia
+
+## Causa habitual de RAM explotada
+
+Varias instancias de `npm run dev` / Next.js abiertas a la vez (agente en terminal de Cursor + ventana CMD + `npm run phone`, etc.). Cada una genera decenas de procesos `node.exe` hijos. Con el tiempo se acumulan miles y la RAM se dispara.
+
+## Prohibido para agentes de IA (sin pedido explícito de Pablo)
+
+- **NO** ejecutar `npm run dev` en terminales integradas o en background de Cursor
+- **NO** usar `Start-Process` ni `start cmd` para arrancar otro dev server
+- **NO** matar todos los `node.exe` del sistema (`taskkill /F /IM node.exe`) salvo emergencia extrema con RAM al límite
+- **NO** lanzar varias comprobaciones HTTP largas contra un servidor colgado en `:3000`
+
+## Usar siempre para arrancar
+
+1. `abrir_servidor.bat` (doble clic), o
+2. `npm run dev:open`
+
+Eso limpia solo el servidor del proyecto y abre **una** ventana CMD visible con hot reload.
+
+## Para limpiar sin tocar Cursor ni otros proyectos
+
+```powershell
+npm run dev:kill
+```
+
+Mata procesos en el puerto 3000 y procesos `node` cuyo comando pertenece a este repo (`next dev`, `start-server.js`, etc.).
+
+## Si Pablo pide "abrir el servidor"
+
+1. Ejecutar `npm run dev:kill`
+2. Ejecutar `npm run dev:open` (no `npm run dev` directo)
+3. No iniciar un segundo servidor si el puerto 3000 ya responde
+
+## Arranque completo (Supabase + migraciones + Next)
+
+`npm run dev:up` — solo si hace falta levantar Docker/Supabase; no combinar con otra instancia de `npm run dev`.

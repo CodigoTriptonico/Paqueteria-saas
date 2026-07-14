@@ -35,13 +35,16 @@ import {
 } from "@/components/inventory/inventory-toolbar-icon-button";
 import { InventoryNewItemPopover } from "@/components/inventory/inventory-new-item-popover";
 import { InventoryStructureOptionsMenu } from "@/components/inventory/inventory-structure-options-menu";
+import { ViewLayoutToggle } from "@/components/view-layout-toggle";
 import { useNotify } from "@/hooks/use-notify";
+import { useViewLayout } from "@/hooks/use-view-layout";
+import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 import {
   addBtnClass,
   categoryLeafEntries,
   formatScopedItemCount,
   iconBtnClass,
-  INVENTORY_CATEGORIES_CONFIG_HREF,
+  INVENTORY_HREF,
   movementsForItem,
   sameStockLeaf,
   STRUCTURE_MENU_WIDTH,
@@ -51,11 +54,13 @@ import {
 } from "@/lib/inventory-structure-utils";
 import {
   primaryButtonClass,
-  secondaryButtonClass,
 } from "@/components/ui-blocks";
 import { StockBadgeDisplay } from "@/components/stock-badge";
 import {
+  collectCategoryTreeLeaves,
+  countInventoryArticles,
   inventoryItemsForLeaf,
+  inventoryLeafKey,
   resolveCategoryStockItems,
   resolveSubcategoryStockItems,
   type InventoryStockItem,
@@ -89,10 +94,17 @@ type InventoryStructureEditorProps = {
   onViewItemAssignments?: (itemId: string) => void;
   layout?: "sidebar" | "inline";
   showCategoryCreate?: boolean;
+  showStructureDelete?: boolean;
   embedded?: boolean;
   headerSlot?: React.ReactNode;
   toolbarEndSlot?: React.ReactNode;
   footerSlot?: React.ReactNode;
+  truckQty?: number;
+  truckTabOpen?: boolean;
+  onTruckTabChange?: (open: boolean) => void;
+  truckPanel?: React.ReactNode;
+  pricingReturnHref?: string | null;
+  pricingReturnLabel?: string | null;
 };
 
 export function InventoryStructureEditor({
@@ -110,13 +122,21 @@ export function InventoryStructureEditor({
   onViewItemAssignments,
   layout = "sidebar",
   showCategoryCreate = false,
+  showStructureDelete = false,
   embedded = false,
   headerSlot,
   toolbarEndSlot,
   footerSlot,
+  truckQty = 0,
+  truckTabOpen = false,
+  onTruckTabChange,
+  truckPanel,
+  pricingReturnHref,
+  pricingReturnLabel,
 }: InventoryStructureEditorProps) {
   const setShellConfig = useSetShellConfig();
   const notify = useNotify();
+  const { layout: viewLayout, toggleViewLayout } = useViewLayout();
   const [categoryQuery, setCategoryQuery] = useState("");
   const [itemQuery, setItemQuery] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -157,7 +177,10 @@ export function InventoryStructureEditor({
   const [stockError, setStockError] = useState("");
 
   const showStructureOptions = showCategoryCreate;
-  const structureEditingEnabled = showStructureOptions && optionsOpen;
+  // Las acciones de una categoría seleccionada no deben depender de que el
+  // menú de creación esté visible: editar o borrar tiene que estar siempre
+  // disponible desde el engrane de la propia categoría.
+  const structureEditingEnabled = optionsOpen;
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -481,7 +504,7 @@ export function InventoryStructureEditor({
 
     return (
       <div
-        className={`flex min-w-[12rem] flex-1 items-center gap-1.5 rounded-lg border border-black bg-[#111827] p-1.5 ${
+        className={`inset-shell flex min-w-[12rem] flex-1 items-center gap-1.5 rounded-lg border border-black bg-[#111827] p-1.5 ${
           compact ? "sm:max-w-xs" : "max-w-md"
         }`}
       >
@@ -1067,16 +1090,6 @@ export function InventoryStructureEditor({
     notify.success(movementLabels[movementType]);
   }
 
-  const leafEntryByItemId = useMemo(() => {
-    if (!selectedCategoryData) {
-      return new Map<string, CategoryLeafEntry>();
-    }
-
-    return new Map(
-      categoryLeafEntries(selectedCategoryData).map((entry) => [entry.item.id, entry]),
-    );
-  }, [selectedCategoryData]);
-
   const categorySidebar = useMemo(
     () => (
       <InventoryCategorySidebar
@@ -1128,6 +1141,8 @@ export function InventoryStructureEditor({
         openStructureOptions={openStructureOptions}
         subcategoryStockItems={subcategoryStockItems}
         renderSubcategoryForm={renderSubcategoryForm}
+        showStructureDelete={showStructureDelete}
+        selectedSubcategory={selectedSubcategory}
       />
     ),
     // Sidebar shell: handlers close over latest state; full deps would rebuild every keystroke.
@@ -1285,6 +1300,33 @@ export function InventoryStructureEditor({
     );
   }, [itemHistoryContext, movements]);
 
+  const inventoryItemsInTree = useMemo(() => {
+    const treeKeys = new Set(
+      categoryConfigs.flatMap((category) =>
+        collectCategoryTreeLeaves(category).map((leaf) => inventoryLeafKey(leaf)),
+      ),
+    );
+
+    return inventoryItems.filter((item) => treeKeys.has(inventoryLeafKey(item)));
+  }, [categoryConfigs, inventoryItems]);
+
+  const inventoryOverview = useMemo(() => {
+    const activeAssignments = assignments.filter((row) => row.status === "open");
+
+    return {
+      itemCount: countInventoryArticles(categoryConfigs),
+      warehouseQty: inventoryItemsInTree.reduce((total, item) => total + item.stock, 0),
+      assignedQty: inventoryItemsInTree.reduce(
+        (total, item) => total + (item.assigned || 0),
+        0,
+      ),
+      attentionCount: inventoryItemsInTree.filter(
+        (item) => item.stock <= Math.max(item.minStock, 0),
+      ).length,
+      activeAssignments: activeAssignments.length,
+    };
+  }, [assignments, categoryConfigs, inventoryItemsInTree]);
+
   const contextMenuAssignments = useMemo(() => {
     if (!itemContextMenu) {
       return [];
@@ -1352,32 +1394,22 @@ export function InventoryStructureEditor({
                 type="button"
                 onClick={() => openStructureOptions({ addCategory: true })}
                 className={primaryButtonClass}
+                data-onboarding-target={ONBOARDING_TARGETS.INVENTORY_ADD_CATEGORY}
               >
                 <Plus className="h-3.5 w-3.5" />
                 Agregar categoría
               </button>
-              {!embedded ? (
-                <Link
-                  href={INVENTORY_CATEGORIES_CONFIG_HREF}
-                  className={secondaryButtonClass}
-                >
-                  Ir a configuración
-                </Link>
-              ) : null}
             </div>
           ) : (
-            <Link
-              href={INVENTORY_CATEGORIES_CONFIG_HREF}
-              className={`${primaryButtonClass} mt-5`}
-            >
-              Configurar categorías
+            <Link href={INVENTORY_HREF} className={`${primaryButtonClass} mt-5`}>
+              Ir a inventario
             </Link>
           )}
 
           {showStructureOptions && showNewCategoryInput ? (
             <div
               ref={emptyCategoryFormRef}
-              className="mt-5 flex w-full max-w-md items-center gap-2 rounded-xl bg-[#111827] p-2"
+              className="inset-shell mt-5 flex w-full max-w-md items-center gap-2 rounded-xl bg-[#111827] p-2"
             >
               <input
                 className="h-10 min-w-0 flex-1 bg-transparent px-2 text-sm font-black text-[#f8fafc] outline-none placeholder:text-slate-500"
@@ -1441,7 +1473,6 @@ export function InventoryStructureEditor({
       itemQueryTrimmed={itemQueryTrimmed}
       itemQueryActive={itemQueryActive}
       itemCountLabel={itemCountLabel}
-      leafEntryByItemId={leafEntryByItemId}
       inventoryItems={inventoryItems}
       editingItemId={editingItemId}
       editingItemName={editingItemName}
@@ -1456,6 +1487,7 @@ export function InventoryStructureEditor({
       beginAddCategory={beginAddCategory}
       onItemContextMenu={openItemContextMenu}
       onSaveItem={saveItem}
+      viewLayout={viewLayout}
     />
   );
 
@@ -1481,10 +1513,10 @@ export function InventoryStructureEditor({
 
   const sidebarLayout = embedded ? (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black bg-[#25302c] shadow-[0_10px_26px_rgba(0,0,0,0.22)]">
-      <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-black/70 bg-[#1a2320] px-3 py-2 sm:px-4">
-        <div className={inventoryToolbarFiltersClass}>
+      <div className="flex shrink-0 items-center gap-2 border-b border-black/70 bg-[#1a2320] px-3 py-2 sm:px-4">
+        <div className={`${inventoryToolbarFiltersClass} min-w-0 flex-1`}>
           {headerSlot}
-          {categoryConfigs.length ? (
+          {!truckTabOpen && categoryConfigs.length ? (
             <InlineSearchPicker
               value={selectedCategory}
               onChange={selectCategory}
@@ -1497,7 +1529,7 @@ export function InventoryStructureEditor({
               minWidthClass="min-w-[8.5rem] sm:min-w-[10rem]"
             />
           ) : null}
-          {selectedCategoryData && embeddedSubcategoryOptions.length > 1 ? (
+          {!truckTabOpen && selectedCategoryData && embeddedSubcategoryOptions.length > 1 ? (
             <InlineSearchPicker
               value={selectedSubcategoryId}
               onChange={(nextId) => {
@@ -1517,53 +1549,126 @@ export function InventoryStructureEditor({
               minWidthClass="min-w-[8.5rem] sm:min-w-[10rem]"
             />
           ) : null}
+          {!truckTabOpen && selectedCategoryData ? (
+            <InlineSearchCombobox
+              value={itemQuery}
+              onChange={setItemQuery}
+              placeholder={itemSearchPlaceholder}
+              emptyLabel="Sin items"
+              ariaLabel="Buscar items"
+              leadingIcon={<Search className="h-4 w-4" aria-hidden />}
+              options={embeddedItemOptions}
+              className="shrink-0"
+              minWidthClass="w-[8.75rem] sm:w-[10rem]"
+              persistent
+            />
+          ) : null}
+          {!truckTabOpen && (toolbarEndSlot || showStructureOptions) ? (
+            <div className={inventoryToolbarGroupClass}>
+              {!truckTabOpen && selectedCategoryData ? (
+                <ViewLayoutToggle layout={viewLayout} onToggle={toggleViewLayout} />
+              ) : null}
+              {toolbarEndSlot}
+              {showStructureOptions ? (
+                <InventoryToolbarIconButton
+                  buttonRef={structureButtonRef}
+                  icon={Plus}
+                  label="Agregar y estructura"
+                  showLabel
+                  visibleLabel="Agregar"
+                  tone={optionsOpen || showNewItemForm ? "active" : "primary"}
+                  disabled={!selectedCategoryData && categoryConfigs.length > 0}
+                  ariaExpanded={optionsOpen || showNewItemForm}
+                  ariaHaspopup="menu"
+                  onboardingTarget={ONBOARDING_TARGETS.INVENTORY_STRUCTURE_MENU}
+                  onClick={() => {
+                    if (showNewItemForm) {
+                      setShowNewItemForm(false);
+                      return;
+                    }
+
+                    if (!categoryConfigs.length) {
+                      setOptionsOpen(true);
+                      return;
+                    }
+
+                    setOptionsOpen((current) => !current);
+                  }}
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
-        {selectedCategoryData ? (
-          <InlineSearchCombobox
-            value={itemQuery}
-            onChange={setItemQuery}
-            placeholder={itemSearchPlaceholder}
-            emptyLabel="Sin items"
-            ariaLabel="Buscar items"
-            leadingIcon={<Search className="h-4 w-4" aria-hidden />}
-            options={embeddedItemOptions}
-            className="shrink-0"
-            minWidthClass="w-[8.75rem] sm:w-[10rem]"
-            persistent
-          />
-        ) : null}
-        {toolbarEndSlot || showStructureOptions ? (
-          <div className={`${inventoryToolbarGroupClass} ml-auto`}>
-            {toolbarEndSlot}
-            {showStructureOptions ? (
-              <InventoryToolbarIconButton
-                buttonRef={structureButtonRef}
-                icon={Plus}
-                label="Agregar y estructura"
-                tone={optionsOpen || showNewItemForm ? "active" : "primary"}
-                disabled={!selectedCategoryData && categoryConfigs.length > 0}
-                ariaExpanded={optionsOpen || showNewItemForm}
-                ariaHaspopup="menu"
-                onClick={() => {
-                  if (showNewItemForm) {
-                    setShowNewItemForm(false);
-                    return;
-                  }
-
-                  if (!categoryConfigs.length) {
-                    setOptionsOpen(true);
-                    return;
-                  }
-
-                  setOptionsOpen((current) => !current);
-                }}
-              />
-            ) : null}
+        <dl className="ml-auto flex shrink-0 overflow-hidden rounded-xl border border-black bg-[#17201d]">
+          <div className="min-w-[5.5rem] border-r border-black/70 px-2.5 py-2">
+            <dt className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+              Artículos
+            </dt>
+            <dd className="mt-0.5 text-base font-black tabular-nums text-slate-100">
+              {inventoryOverview.itemCount}
+            </dd>
           </div>
-        ) : null}
+          <button
+            type="button"
+            className={`min-w-[5.5rem] border-r border-black/70 px-2.5 py-2 text-left transition ${
+              !truckTabOpen ? "bg-emerald-400/10" : "hover:bg-white/[0.03]"
+            }`}
+            onClick={() => onTruckTabChange?.(false)}
+            aria-pressed={!truckTabOpen}
+          >
+            <dt className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+              En bodega
+            </dt>
+            <dd className="mt-0.5 text-base font-black tabular-nums text-emerald-300">
+              {inventoryOverview.warehouseQty}
+            </dd>
+          </button>
+          <button
+            type="button"
+            className={`min-w-[5.5rem] border-r border-black/70 px-2.5 py-2 text-left transition ${
+              truckTabOpen ? "bg-sky-400/10" : "hover:bg-white/[0.03]"
+            }`}
+            onClick={() => onTruckTabChange?.(true)}
+            aria-pressed={truckTabOpen}
+          >
+            <dt className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+              En camiones
+            </dt>
+            <dd className="mt-0.5 text-base font-black tabular-nums text-sky-300">
+              {truckQty}
+            </dd>
+          </button>
+          <div className="min-w-[5.5rem] border-r border-black/70 px-2.5 py-2">
+            <dt className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+              Con empleados
+            </dt>
+            <dd className="mt-0.5 flex items-baseline gap-1 text-base font-black tabular-nums text-violet-300">
+              {inventoryOverview.assignedQty}
+              {inventoryOverview.activeAssignments ? (
+                <span className="text-[9px] font-bold text-violet-300/60">
+                  {inventoryOverview.activeAssignments} entregas
+                </span>
+              ) : null}
+            </dd>
+          </div>
+          <div className="min-w-[5.5rem] px-2.5 py-2">
+            <dt className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+              Por revisar
+            </dt>
+            <dd
+              className={`mt-0.5 text-base font-black tabular-nums ${
+                inventoryOverview.attentionCount ? "text-amber-300" : "text-slate-300"
+              }`}
+            >
+              {inventoryOverview.attentionCount}
+            </dd>
+          </div>
+        </dl>
       </div>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{itemsPanel}</div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {truckTabOpen && truckPanel ? truckPanel : itemsPanel}
+      </div>
 
       {footerSlot ? (
         <div className="shrink-0 border-t border-black/70 bg-[#1a2320]">
@@ -1601,6 +1706,10 @@ export function InventoryStructureEditor({
         beginAddItem={beginAddItem}
         beginAddSubcategory={beginAddSubcategory}
         renderSubcategoryForm={renderSubcategoryForm}
+        showStructureDelete={showStructureDelete}
+        selectedCategoryName={selectedCategory}
+        deleteCategory={deleteCategory}
+        deleteSubcategory={deleteSubcategory}
       />
       <InventoryNewItemPopover
         open={showNewItemForm}
@@ -1620,6 +1729,8 @@ export function InventoryStructureEditor({
         }
         onAdd={addItem}
         onClose={() => setShowNewItemForm(false)}
+        pricingReturnHref={pricingReturnHref}
+        pricingReturnLabel={pricingReturnLabel}
       />
     </>
   );

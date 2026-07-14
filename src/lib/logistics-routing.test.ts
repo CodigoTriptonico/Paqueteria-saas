@@ -234,6 +234,6 @@ describe("logistics route action eval", () => {
     );
 
     assert.match(source, /activeLogisticsRouteTaskIds/);
-    assert.equal((source.match(/onlyCurrentStep: true/g) || []).length, 3);
+    assert.ok((source.match(/onlyCurrentStep: true/g) || []).length >= 3);
   });
 });

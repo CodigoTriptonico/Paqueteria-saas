@@ -28,6 +28,7 @@ import {
   senderPhonesLabel,
 } from "@/components/sale/venta-parts";
 import type { ViewLayout } from "@/lib/view-layout";
+import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 
 type SaleSenderListProps = {
   query: string;
@@ -37,7 +38,6 @@ type SaleSenderListProps = {
   searchActive?: boolean;
   recentSenders: Sender[];
   viewLayout: ViewLayout;
-  onViewLayoutToggle: () => void;
   onQueryChange: (value: string) => void;
   onNewClient: () => void;
   onChoose: (sender: Sender) => void;
@@ -91,7 +91,6 @@ export function SaleSenderList({
   searchActive = false,
   recentSenders,
   viewLayout,
-  onViewLayoutToggle,
   onQueryChange,
   onNewClient,
   onChoose,
@@ -116,6 +115,7 @@ export function SaleSenderList({
           personFullName(sender),
           sender.firstName,
           sender.lastName,
+          ...sender.emails,
           ...sender.phones,
           sender.street,
           sender.city,
@@ -129,12 +129,11 @@ export function SaleSenderList({
   return (
     <div className={flowPersonListSectionClass}>
       <SalePersonListToolbar
-        viewLayout={viewLayout}
-        onViewLayoutToggle={onViewLayoutToggle}
+        onCreate={onNewClient}
         createIcon={<UserPlus className="h-4 w-4" />}
         createLabel="Nuevo remitente"
         createShortLabel="Nuevo"
-        onCreate={onNewClient}
+        createOnboardingTarget={ONBOARDING_TARGETS.VENTA_NEW_SENDER}
         countLabel={countLabel}
         recents={
           recentSenders.length ? (
@@ -156,6 +155,7 @@ export function SaleSenderList({
             leadingIcon={<Search className="h-4 w-4" aria-hidden />}
             className="w-full"
             minWidthClass="min-w-0 w-full"
+            persistent
             shellClassName={flowPersonToolbarSearchShellClass}
             onSelectOption={(option) => {
               const sender = matchingSenders.find(
@@ -232,6 +232,7 @@ export function SaleSenderList({
                 return (
                   <SalePersonCard
                     key={senderPhoneKey(sender)}
+                    pageSurfaceTint
                     name={personFullName(sender)}
                     phone={senderPhonesLabel(sender)}
                     address={{

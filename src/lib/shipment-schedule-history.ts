@@ -1,8 +1,7 @@
-import { formatScheduleAtDisplay, scheduleAtToTimestamp } from "@/components/sale/schedule-time";
+import { formatScheduleAtDisplay, scheduleAtToTimestamp } from "@/lib/sale/schedule-time";
 import { formatScheduleDateInput } from "@/lib/schedule-date";
 import { logisticsLegSnapshot } from "@/lib/shipment-audit";
 import { EMPTY_BOX_LEG_LABELS, FULL_BOX_LEG_LABELS } from "@/lib/shipment-leg-labels";
-import { formatShipmentAbsolute } from "@/lib/shipment-timing";
 
 export type LogisticsLegKey = "emptyBox" | "fullBox";
 
@@ -265,12 +264,4 @@ export function scheduleHistoryDetailFromMetadata(metadata: Record<string, unkno
   }
 
   return "";
-}
-
-export function scheduleChangedRelativeLabel(changedAt: string | null | undefined) {
-  if (!changedAt) {
-    return "";
-  }
-
-  return formatShipmentAbsolute(changedAt) || "";
 }

@@ -3,10 +3,6 @@ export type LogisticsFeeConfig = {
   fullBoxPickupFee: string;
 };
 
-export const emptyLogisticsFeeConfig: LogisticsFeeConfig = {
-  emptyBoxDeliveryFee: "$0",
-  fullBoxPickupFee: "$0",
-};
 
 export function parseMoneyValue(value: string) {
   return Number(value.replace(/[^\d.-]/g, "")) || 0;
@@ -40,15 +36,14 @@ export function computeLogisticsFees(input: {
   fullBoxDriver: boolean;
   fees: LogisticsFeeConfig;
   boxCount?: number;
-  logisticsFeeMode?: "per_trip" | "per_box";
+  logisticsFeeMode?: "per_shipment" | "per_box";
 }) {
-  const multiplier =
-    input.logisticsFeeMode === "per_box" ? Math.max(Math.floor(input.boxCount || 1), 1) : 1;
+  const multiplier = input.logisticsFeeMode === "per_box" ? Math.max(1, input.boxCount || 1) : 1;
   const emptyBoxDelivery = input.emptyBoxDriver
-    ? Math.max(parseMoneyValue(input.fees.emptyBoxDeliveryFee), 0) * multiplier
+    ? parseMoneyValue(input.fees.emptyBoxDeliveryFee) * multiplier
     : 0;
   const fullBoxPickup = input.fullBoxDriver
-    ? Math.max(parseMoneyValue(input.fees.fullBoxPickupFee), 0) * multiplier
+    ? parseMoneyValue(input.fees.fullBoxPickupFee) * multiplier
     : 0;
   const total = emptyBoxDelivery + fullBoxPickup;
 
@@ -63,6 +58,5 @@ export function computeLogisticsFees(input: {
 }
 
 export function logisticsDriverFeeLabel(fee: string) {
-  const amount = parseMoneyValue(fee);
-  return amount > 0 ? formatMoneyValue(amount) : "";
+  return parseMoneyValue(fee) > 0 ? formatMoneyValue(parseMoneyValue(fee)) : "";
 }

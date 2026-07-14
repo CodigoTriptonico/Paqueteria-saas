@@ -26,6 +26,6 @@ const phoneCol = await client.query(`
   order by column_name
 `);
 
-console.log(JSON.stringify({ database: label, migrations: migrations.rows, counts: counts.rows[0], orgs: orgs.rows, phoneColumns: phoneCol.rows.map((r) => r.column_name) }, null, 2));
+console.log(JSON.stringify({ connection: label, migrations: migrations.rows, counts: counts.rows[0], orgs: orgs.rows, phoneColumns: phoneCol.rows.map((r) => r.column_name) }, null, 2));
 
 await client.end();

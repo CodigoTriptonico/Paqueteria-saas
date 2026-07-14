@@ -59,6 +59,24 @@ describe("salePricingFromConfig", () => {
     assert.equal(result.promotions.length, 1);
     assert.equal(result.promotions[0]?.name, "Combo");
   });
+
+  it("includes configured countries even when they have no priced items yet", () => {
+    const result = salePricingFromConfig(
+      [
+        ...countries,
+        {
+          code: "MX",
+          name: "Mexico",
+          deliveryTime: "5 dias",
+          boxes: [],
+        },
+      ],
+      [],
+    );
+
+    assert.deepEqual(Object.keys(result.countryBoxes).sort(), ["Mexico", "USA"]);
+    assert.deepEqual(result.countryBoxes.Mexico, []);
+  });
 });
 
 describe("saleLogisticsFeesFromRouteConfig", () => {

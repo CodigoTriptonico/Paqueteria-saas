@@ -29,6 +29,8 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "@/components/ui-blocks";
+import { DateTimeInput } from "@/components/date-time-input";
+import { formatDateTimeInputValue } from "@/lib/date-picker";
 
 type ShipmentContactLogDialogProps = {
   open: boolean;
@@ -246,12 +248,11 @@ export function ShipmentContactLogDialog({
             <div className="mt-3">
               <label className="grid gap-1 text-[10px] font-black uppercase text-slate-500">
                 Recordarme
-                <input
-                  className={`${inputClass} h-10 text-xs`}
-                  type="datetime-local"
+                <DateTimeInput
                   value={followUpAt}
                   disabled={saving}
-                  onChange={(event) => setFollowUpAt(event.target.value)}
+                  ariaLabel="recordatorio de seguimiento"
+                  onChange={setFollowUpAt}
                 />
               </label>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -394,16 +395,6 @@ function reminderInputValue(dayOffset: number, hour: number) {
   date.setDate(date.getDate() + dayOffset);
   date.setHours(hour, 0, 0, 0);
   return formatDateTimeInputValue(date);
-}
-
-function formatDateTimeInputValue(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-
-  return `${year}-${month}-${day}T${hour}:${minute}`;
 }
 
 function formatContactDate(value: string) {

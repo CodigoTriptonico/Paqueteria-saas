@@ -1,4 +1,4 @@
-export type LogisticsEvidenceItem = {
+type LogisticsEvidenceItem = {
   id: string;
   shipmentCode: string;
   taskId: string | null;

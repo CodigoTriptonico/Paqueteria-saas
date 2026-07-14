@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { ShipmentRow } from "@/app/actions/shipments";
 import {
   buildConductorDriverTasks,
+  conductorRecipientFromShipment,
   isConductorTaskInScope,
   isTaskAssignedToDriver,
 } from "@/lib/conductor-tasks";
@@ -16,7 +17,7 @@ function shipment(partial: Partial<ShipmentRow> & Pick<ShipmentRow, "code">): Sh
     code: partial.code,
     customerId: null,
     recipientId: null,
-    recipientSnapshot: null,
+    recipientSnapshot: partial.recipientSnapshot ?? null,
     customer_name: partial.customer_name || "Cliente",
     country: partial.country || "Mexico",
     carrier: "",
@@ -97,6 +98,58 @@ describe("conductor tasks", () => {
     assert.equal(tasks.length, 1);
     assert.equal(tasks[0]?.shipmentCode, "INV-1");
     assert.equal(tasks[0]?.taskType, "deliver_empty_box");
+  });
+
+  it("maps sender and recipient fields for driver tasks", () => {
+    const tasks = buildConductorDriverTasks({
+      driverId: "driver-1",
+      routes: [],
+      taskAddresses: [],
+      scopeDate: SCOPE_DATE,
+      shipments: [
+        shipment({
+          code: "INV-2",
+          customer_name: "Maria Sender",
+          country: "Guatemala",
+          recipientSnapshot: {
+            firstName: "Ana",
+            lastName: "Morales",
+            phone: "5025555",
+            city: "Guatemala City",
+          },
+          logisticsTasks: [
+            {
+              id: "task-2",
+              shipmentId: "ship-1",
+              taskType: "pickup_full_box",
+              status: "assigned",
+              assignedTo: "driver-1",
+              scheduledAt: `${SCOPE_DATE}T15:00:00.000Z`,
+              warehouseId: null,
+              createdAt: `${SCOPE_DATE}T10:00:00.000Z`,
+            },
+          ],
+        }),
+      ],
+    });
+
+    assert.equal(tasks[0]?.senderName, "Maria Sender");
+    assert.equal(tasks[0]?.recipientName, "Ana Morales");
+    assert.equal(tasks[0]?.recipientCountry, "Guatemala");
+    assert.equal(tasks[0]?.recipientPhone, "5025555");
+    assert.equal(tasks[0]?.recipientCity, "Guatemala City");
+    assert.deepEqual(
+      conductorRecipientFromShipment({
+        country: "Guatemala",
+        recipientSnapshot: { firstName: "Ana", lastName: "Morales" },
+      }),
+      {
+        name: "Ana Morales",
+        country: "Guatemala",
+        phone: null,
+        city: null,
+      },
+    );
   });
 
   it("includes tasks inherited from a routed driver assignment on today's route", () => {
@@ -209,6 +262,76 @@ describe("conductor tasks", () => {
     });
 
     assert.equal(tasks.length, 0);
+  });
+
+  it("lists completed and cancelled tasks only in closed visibility", () => {
+    const sharedShipment = shipment({
+      code: "INV-4",
+      logisticsTasks: [
+        {
+          id: "task-done",
+          shipmentId: "ship-4",
+          taskType: "deliver_empty_box",
+          status: "completed",
+          assignedTo: "driver-1",
+          scheduledAt: `${SCOPE_DATE}T15:00:00.000Z`,
+          warehouseId: null,
+          notes: "",
+          stockDeductedAt: null,
+          completedAt: "2026-07-07T16:00:00.000Z",
+          orderedAt: null,
+          assignedAt: null,
+          loadedAt: null,
+          createdAt: "2026-07-07T11:00:00.000Z",
+        },
+        {
+          id: "task-failed",
+          shipmentId: "ship-4",
+          taskType: "pickup_full_box",
+          status: "cancelled",
+          assignedTo: "driver-1",
+          scheduledAt: `${SCOPE_DATE}T16:00:00.000Z`,
+          warehouseId: null,
+          notes: "Cliente no contesto",
+          stockDeductedAt: null,
+          completedAt: null,
+          orderedAt: null,
+          assignedAt: null,
+          loadedAt: null,
+          createdAt: "2026-07-07T11:30:00.000Z",
+        },
+        {
+          id: "task-open",
+          shipmentId: "ship-4",
+          taskType: "deliver_empty_box",
+          status: "assigned",
+          assignedTo: "driver-1",
+          scheduledAt: `${SCOPE_DATE}T17:00:00.000Z`,
+          warehouseId: null,
+          notes: "",
+          stockDeductedAt: null,
+          completedAt: null,
+          orderedAt: null,
+          assignedAt: null,
+          loadedAt: null,
+          createdAt: "2026-07-07T12:00:00.000Z",
+        },
+      ],
+    });
+
+    const closedTasks = buildConductorDriverTasks({
+      driverId: "driver-1",
+      routes: [],
+      taskAddresses: [],
+      scopeDate: SCOPE_DATE,
+      visibility: "closed",
+      shipments: [sharedShipment],
+    });
+
+    assert.deepEqual(
+      closedTasks.map((task) => task.id),
+      ["task-failed", "task-done"],
+    );
   });
 
   it("includes today's route and excludes a future route", () => {
@@ -490,6 +613,41 @@ describe("conductor tasks", () => {
 
     assert.equal(tasks.length, 1);
     assert.equal(tasks[0]?.shipmentCode, "INV-NO-SCHEDULE");
+  });
+
+  it("hides a scheduled task until logistics confirms its date", () => {
+    const tasks = buildConductorDriverTasks({
+      driverId: "driver-1",
+      routes: [],
+      taskAddresses: [],
+      scopeDate: SCOPE_DATE,
+      shipments: [
+        shipment({
+          code: "INV-PENDING-CONFIRMATION",
+          logisticsTasks: [
+            {
+              id: "task-pending-confirmation",
+              shipmentId: "ship-1",
+              taskType: "pickup_full_box",
+              status: "assigned",
+              assignedTo: "driver-1",
+              scheduledAt: `${SCOPE_DATE}T15:00:00.000Z`,
+              scheduleConfirmationStatus: "pending",
+              warehouseId: null,
+              notes: "",
+              stockDeductedAt: null,
+              completedAt: null,
+              orderedAt: null,
+              assignedAt: null,
+              loadedAt: null,
+              createdAt: `${SCOPE_DATE}T10:00:00.000Z`,
+            },
+          ],
+        }),
+      ],
+    });
+
+    assert.equal(tasks.length, 0);
   });
 
   it("includes routed tasks scheduled today even if route date differs", () => {

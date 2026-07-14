@@ -1,6 +1,8 @@
 import type { LogisticsTaskStatus, LogisticsTaskType, ShipmentRow } from "@/app/actions/shipments";
-import { shipmentLogisticsSteps } from "@/lib/shipment-display";
-import { buildShipmentTimings, formatShipmentDuration, type ShipmentTimings } from "@/lib/shipment-timing";
+import { scheduledAtToLocalDateInput } from "@/lib/schedule-date";
+import { resolveRouteDateForTemplate } from "@/lib/logistics-route-week";
+import { logisticsWeekdayKeys } from "@/lib/logistics-route-catalog";
+import { formatShipmentDuration } from "@/lib/shipment-timing";
 
 const CLOSED_LOGISTICS_STATUSES = new Set(["completed", "cancelled"]);
 
@@ -27,7 +29,7 @@ export type LogisticsInvoiceStepShipment<TTask extends LogisticsInvoiceTaskInput
   logisticsTasks: TTask[];
 };
 
-export const logisticsTaskStatusLabel: Record<LogisticsTaskStatus, string> = {
+const logisticsTaskStatusLabel: Record<LogisticsTaskStatus, string> = {
   pending: "Pendiente",
   scheduled: "Con fecha",
   assigned: "Asignada",
@@ -69,6 +71,79 @@ export type DriverPickerOption = {
   label: string;
   searchText: string;
 };
+
+export type RoutePickerOption = {
+  value: string;
+  label: string;
+  searchText: string;
+};
+
+export function taskRoutePickerDate(taskScheduledAt: string | null, fallbackDate: string) {
+  return scheduledAtToLocalDateInput(taskScheduledAt) || fallbackDate;
+}
+
+export function buildTaskRoutePickerOptions(input: {
+  routes: ReadonlyArray<{
+    id: string;
+    name: string;
+    routeDate: string;
+    routeTemplateId?: string | null;
+    assignedTo?: string | null;
+    status?: string;
+  }>;
+  templates?: ReadonlyArray<{
+    id: string;
+    name: string;
+    weekday: number;
+  }>;
+  enabledWeekdays?: ReadonlyArray<string>;
+  taskDate: string;
+  driverLabelById?: ReadonlyMap<string, string>;
+  emptyLabel?: string;
+}): RoutePickerOption[] {
+  const emptyLabel = input.emptyLabel || "Sin ruta";
+  const operationalForDate = input.routes.filter((route) => route.routeDate === input.taskDate);
+  const enabledWeekdaySet = new Set(input.enabledWeekdays || []);
+  const templateIsEnabled = (templateWeekday: number) =>
+    !enabledWeekdaySet.size || enabledWeekdaySet.has(logisticsWeekdayKeys[templateWeekday as 0 | 1 | 2 | 3 | 4 | 5 | 6]);
+
+  const templateOptions = (input.templates || [])
+    .filter((template) => templateIsEnabled(template.weekday))
+    .filter((template) => {
+      const routeDate = resolveRouteDateForTemplate(input.taskDate, template.weekday);
+      const covered = input.routes.some(
+        (route) =>
+          route.routeTemplateId === template.id &&
+          route.routeDate === routeDate &&
+          (route.status === "draft" || route.status === "planned"),
+      );
+      return !covered;
+    })
+    .map((template) => {
+      const weekdayLabel = logisticsWeekdayKeys[template.weekday as 0 | 1 | 2 | 3 | 4 | 5 | 6];
+      const routeDate = resolveRouteDateForTemplate(input.taskDate, template.weekday);
+
+      return {
+        value: `template:${template.id}`,
+        label: `${template.name} (${weekdayLabel})`,
+        searchText: `${template.name} ${weekdayLabel} ${routeDate} plantilla semanal`.trim(),
+      };
+    });
+
+  const routeOptions = operationalForDate.map((route) => ({
+    value: `route:${route.id}`,
+    label: route.name,
+    searchText: `${route.name} ${route.routeDate} ${
+      route.assignedTo ? input.driverLabelById?.get(route.assignedTo) || "" : ""
+    }`.trim(),
+  }));
+
+  return [
+    { value: "", label: emptyLabel, searchText: `${emptyLabel} sin ruta`.toLowerCase() },
+    ...routeOptions,
+    ...templateOptions,
+  ];
+}
 
 export function buildDriverPickerOptions(
   members: ReadonlyArray<{ id: string; label: string }>,
@@ -313,26 +388,14 @@ export function logisticsScheduleDisplayParts(
   return { primary, secondary };
 }
 
-export function resolveLogisticsCardTimings(
-  shipment: ShipmentRow,
-  nowMs = Date.now(),
-): ShipmentTimings {
-  const steps = shipmentLogisticsSteps(shipment);
-  return buildShipmentTimings(shipment, steps, nowMs);
-}
-
 export type LogisticsTaskWaiting = {
   elapsedMs: number;
   waitingText: string;
   requestLabel: "entrega" | "recolección";
 };
 
-export function logisticsTaskRequestLabel(taskType: LogisticsTaskType) {
+function logisticsTaskRequestLabel(taskType: LogisticsTaskType) {
   return taskType === "deliver_empty_box" ? "entrega" : "recolección";
-}
-
-export function logisticsTaskActionWord(taskType: LogisticsTaskType) {
-  return taskType === "deliver_empty_box" ? "dejar" : "recoger";
 }
 
 export function logisticsActionIconWellClass(taskType: LogisticsTaskType) {
@@ -361,16 +424,12 @@ export function logisticsPriorityAwaitingDriverClass(
 
 export function logisticsPriorityCardClass(
   invoicePriority: boolean,
-  _assignedTo?: string | null,
-  _canAssignDriver?: boolean,
 ) {
   return invoicePriority ? "border-amber-600" : "border-black";
 }
 
 export function logisticsPriorityHeaderClass(
   invoicePriority: boolean,
-  _assignedTo?: string | null,
-  _canAssignDriver?: boolean,
 ) {
   if (!invoicePriority) {
     return "bg-surface-card-header";
@@ -430,7 +489,7 @@ function taskByType<TTask extends LogisticsInvoiceTaskInput>(
   return tasks.find((task) => task.taskType === taskType && task.status !== "cancelled") || null;
 }
 
-export function logisticsEmptyBoxDelivered<TTask extends LogisticsInvoiceTaskInput>(
+function logisticsEmptyBoxDelivered<TTask extends LogisticsInvoiceTaskInput>(
   shipment: LogisticsInvoiceStepShipment<TTask>,
 ) {
   const deliveryTask = taskByType(shipment.logisticsTasks, "deliver_empty_box");
@@ -559,7 +618,7 @@ export function resolveLogisticsShipmentDeepLink<
   };
 }
 
-export function compareShipmentInvoicePriority(
+function compareShipmentInvoicePriority(
   left: Pick<ShipmentRow, "invoice_priority" | "created_at">,
   right: Pick<ShipmentRow, "invoice_priority" | "created_at">,
 ) {
@@ -633,7 +692,7 @@ export function logisticsUnroutedTaskCardClass(options: {
   } else if (options.invoicePriority) {
     classes.push(
       "bg-surface-card",
-      logisticsPriorityCardClass(true, options.assignedTo, options.canAssignDriver ?? true),
+      logisticsPriorityCardClass(true),
     );
   } else {
     classes.push("border-black bg-surface-card");

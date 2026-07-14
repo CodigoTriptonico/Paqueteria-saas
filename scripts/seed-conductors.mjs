@@ -158,7 +158,7 @@ try {
   console.log(`Organizacion: ${org.name}`);
   console.log("Rol: conductor");
   for (const user of users) {
-    console.log(`Usuario: ${user.email} / ${user.password} (solo al crear; existentes sin cambio)`);
+    console.log(`Usuario: ${user.email} (credencial local configurada; existentes sin cambio)`);
   }
 } catch (error) {
   await client.query("rollback");

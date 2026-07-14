@@ -31,7 +31,11 @@ http://localhost:3000/login
 | `npm run dev` | App local |
 | `npm run build` | Compilar |
 | `npm run lint` | Revisar codigo |
-| `npm test` | Tests |
+| `npm run check:code` | Exigir ESLint sin warnings, código usado y duplicación menor al 3% |
+| `npm run check:duplicates` | Medir clones de producción desde 5 líneas y 50 tokens |
+| `npm run test:gate` | Tests determinísticos rápidos |
+| `npm run test:eval` | Evals periódicos de comportamiento y estructura |
+| `npm test` | Ejecutar gate y evals |
 | `npm run supabase:start` | Levantar Supabase local |
 | `npm run supabase:stop` | Apagar Supabase local |
 | `npm run supabase:status` | Ver URLs/keys locales |

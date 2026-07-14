@@ -36,7 +36,7 @@ describe("sale person row layout eval", () => {
     assert.equal(senderListSource.includes("SalePersonRow"), true);
     assert.equal(senderListSource.includes("SalePersonCard"), true);
     assert.equal(senderListSource.includes('viewLayout === "rows"'), true);
-    assert.equal(senderListSource.includes("onViewLayoutToggle"), true);
+    assert.equal(senderListSource.includes("onViewLayoutToggle"), false);
     assert.equal(recipientListSource.includes("SalePersonRow"), true);
     assert.equal(recipientListSource.includes("SalePersonCard"), true);
     assert.equal(recipientListSource.includes("flowPersonRowListSlotClass"), true);
@@ -71,14 +71,15 @@ describe("sale person row layout eval", () => {
     assert.equal(ventaClientSource.includes("salePersonRowSelectedClass"), true);
     assert.equal(ventaClientSource.includes("salePersonRowContextActiveClass"), true);
     assert.equal(ventaClientSource.includes("selectedCardClass"), true);
-    assert.equal(ventaClientSource.includes("useViewLayout"), true);
+    assert.equal(ventaClientSource.includes("usePageViewLayout(saleListPaletteContext)"), true);
   });
 
   it("shows person list total in toolbar without pagination", () => {
     assert.equal(flowStylesSource.includes("flowPersonToolbarCountClass"), true);
     assert.equal(senderListSource.includes("countLabel={countLabel}"), true);
     assert.equal(recipientListSource.includes("SalePersonListFooter"), false);
-    assert.equal(personCardSource.includes("formatSalePersonListCount"), true);
+    assert.equal(senderListSource.includes("formatSalePersonListCount"), true);
+    assert.equal(ventaClientSource.includes("formatSalePersonListCount"), true);
     assert.equal(ventaClientSource.includes("recipientCountLabel"), true);
     assert.equal(senderListSource.includes("onPageChange"), false);
     assert.equal(recipientListSource.includes("onPageChange"), false);

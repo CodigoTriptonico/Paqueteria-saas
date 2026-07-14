@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Copy, Edit3, History, MoreHorizontal, Package, Plus } from "lucide-react";
+import { ChevronRight, Copy, Edit3, History, MoreHorizontal, Package, Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ContextMenuFlyout } from "@/components/context-menu-flyout";
 import type { ContextMenuState } from "@/components/sale/venta-parts";
@@ -33,6 +33,7 @@ type SaleContextMenuProps = {
   onViewHistory?: () => void;
   onQuickEmptyBox?: () => void;
   onAddReferral?: () => void;
+  onDelete?: () => void;
 };
 
 export function SaleContextMenu({
@@ -47,6 +48,7 @@ export function SaleContextMenu({
   onViewHistory,
   onQuickEmptyBox,
   onAddReferral,
+  onDelete,
 }: SaleContextMenuProps) {
   const resolvedMoreActions: MoreAction[] =
     moreActions.length > 0
@@ -195,6 +197,19 @@ export function SaleContextMenu({
             </button>
           ))}
         </ContextMenuFlyout>
+      ) : null}
+
+      {onDelete && menu.type !== "caja" ? (
+        <button
+          type="button"
+          onClick={onDelete}
+          className="mt-1 flex h-11 w-full items-center gap-3 rounded-lg border border-rose-700/60 bg-rose-950/40 px-3 text-left font-black text-rose-100 hover:bg-rose-900/50"
+        >
+          <Trash2 className="h-5 w-5" />
+          <span className="flex-1">
+            {menu.type === "remitente" ? "Eliminar remitente" : "Eliminar destinatario"}
+          </span>
+        </button>
       ) : null}
     </div>
   );

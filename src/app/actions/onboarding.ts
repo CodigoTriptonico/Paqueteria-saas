@@ -1,11 +1,11 @@
 "use server";
 
 import { requireAppSession } from "@/lib/auth/session";
-import { sessionHasPermission } from "@/lib/auth/permissions";
 import { isClientOrganization } from "@/lib/organizations/kind";
 import type { OrganizationSettings } from "@/lib/organizations/settings";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
+import { configPricesCountryHref } from "@/lib/country-options";
 import {
   isOnboardingTutorialEnabled,
   onboardingTutorialDisabledProgress,
@@ -29,6 +29,7 @@ export type OnboardingStep = {
 export type OnboardingProgress = {
   eligible: boolean;
   dismissed: boolean;
+  started: boolean;
   steps: OnboardingStep[];
   completedCount: number;
   totalCount: number;
@@ -48,10 +49,6 @@ function isPositivePrice(price: string | null | undefined) {
   return Number.isFinite(numeric) && numeric > 0;
 }
 
-function treeDataHasItems(treeData: unknown) {
-  return Array.isArray(treeData) && treeData.length > 0;
-}
-
 function buildSteps(input: {
   hasCountries: boolean;
   hasInventoryCategory: boolean;
@@ -60,40 +57,40 @@ function buildSteps(input: {
   hasStock: boolean;
   hasFirstSale: boolean;
   firstCountryName: string | null;
-}): OnboardingStep[] {
+  }): OnboardingStep[] {
   return [
-    {
-      id: "countries",
-      title: "Países destino",
-      description: "Configura los países adonde envías paquetes.",
-      href: "/configuracion",
-      completed: input.hasCountries,
-    },
     {
       id: "inventory",
       title: "Inventario",
-      description: "Crea categorías y los productos que vendes.",
+      description: "Crea categorías y productos en el catálogo (cajas, tamaños).",
       href: "/inventario",
       completed: input.hasInventoryCategory && input.hasInventoryItems,
     },
     {
+      id: "countries",
+      title: "Países destino",
+      description: "Agrega los países adonde envías (ej. México, Colombia).",
+      href: "/configuracion?view=prices",
+      completed: input.hasCountries,
+    },
+    {
       id: "pricing",
       title: "Precios por país",
-      description: "Asigna el precio de venta de cada producto por destino.",
-      href: "/configuracion",
+      description: "Vincula productos a cada país y asigna su precio de venta.",
+      href: configPricesCountryHref(input.firstCountryName || undefined),
       completed: input.hasPricedProducts,
     },
     {
       id: "stock",
       title: "Stock inicial",
-      description: "Registra cuántas unidades tienes en bodega.",
+      description: "Registra cuántas unidades de cada producto hay en bodega.",
       href: "/inventario",
       completed: input.hasStock,
     },
     {
       id: "first_sale",
       title: "Primera venta",
-      description: "Registra un remitente, destinatario y cobra tu primer envío.",
+      description: "Crea remitente y destinatario, elige producto y cobra el envío.",
       href: "/venta",
       completed: input.hasFirstSale,
     },
@@ -132,6 +129,7 @@ export async function getOnboardingProgressAction(): Promise<ActionResult<Onboar
       return ok({
         eligible: false,
         dismissed: false,
+        started: false,
         steps: [],
         completedCount: 0,
         totalCount: 5,
@@ -145,6 +143,7 @@ export async function getOnboardingProgressAction(): Promise<ActionResult<Onboar
 
     const settings = (org?.settings || {}) as OrganizationSettings;
     const dismissed = Boolean(settings.onboarding_dismissed);
+    const started = Boolean(settings.onboarding_started);
 
     const [
       countriesResult,
@@ -153,7 +152,6 @@ export async function getOnboardingProgressAction(): Promise<ActionResult<Onboar
       pricedBoxesResult,
       stockResult,
       shipmentsResult,
-      customersResult,
     ] = await Promise.all([
       supabase
         .from("pricing_countries")
@@ -162,7 +160,10 @@ export async function getOnboardingProgressAction(): Promise<ActionResult<Onboar
         .order("sort_order", { ascending: true })
         .order("created_at", { ascending: true })
         .limit(1),
-      supabase.from("inventory_categories").select("tree_data", { count: "exact" }).eq("organization_id", orgId),
+      supabase
+        .from("inventory_categories")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId),
       supabase
         .from("inventory_items")
         .select("id", { count: "exact", head: true })
@@ -182,11 +183,6 @@ export async function getOnboardingProgressAction(): Promise<ActionResult<Onboar
         .from("shipments")
         .select("id", { count: "exact", head: true })
         .eq("organization_id", orgId),
-      supabase
-        .from("customers")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", orgId)
-        .eq("is_active", true),
     ]);
 
     if (countriesResult.error) {
@@ -213,22 +209,19 @@ export async function getOnboardingProgressAction(): Promise<ActionResult<Onboar
       return fail(shipmentsResult.error.message);
     }
 
-    if (customersResult.error) {
-      return fail(customersResult.error.message);
-    }
-
     const hasCountries = (countriesResult.count || 0) > 0;
     const firstCountryName = countriesResult.data?.[0]?.name || null;
     const hasInventoryCategory = (categoriesResult.count || 0) > 0;
-    const hasInventoryItems =
-      (inventoryItemsResult.count || 0) > 0 ||
-      (categoriesResult.data || []).some((row) => treeDataHasItems(row.tree_data));
+    // La estructura de una categoría (tree_data) puede contener grupos vacíos.
+    // Solo un registro real en inventory_items debe completar este paso.
+    const hasInventoryItems = (inventoryItemsResult.count || 0) > 0;
     const hasPricedProducts = (pricedBoxesResult.data || []).some((row) =>
       isPositivePrice(row.price),
     );
     const hasStock = (stockResult.data || []).length > 0;
-    const hasFirstSale =
-      (shipmentsResult.count || 0) > 0 || (customersResult.count || 0) > 0;
+    // Crear un remitente o destinatario no es una venta. Este paso solo debe
+    // completarse cuando exista al menos un envío/factura registrado.
+    const hasFirstSale = (shipmentsResult.count || 0) > 0;
 
     const steps = buildSteps({
       hasCountries,
@@ -246,6 +239,7 @@ export async function getOnboardingProgressAction(): Promise<ActionResult<Onboar
     return ok({
       eligible: true,
       dismissed,
+      started,
       steps,
       completedCount,
       totalCount: steps.length,
@@ -259,17 +253,9 @@ export async function getOnboardingProgressAction(): Promise<ActionResult<Onboar
     return fail(actionErrorMessage(error));
   }
 }
-
-export async function setOnboardingDismissedAction(
-  dismissed: boolean,
-): Promise<ActionResult<{ dismissed: boolean }>> {
+export async function setOnboardingStartedAction(): Promise<ActionResult<{ started: boolean }>> {
   try {
     const session = await requireAppSession();
-
-    if (!sessionHasPermission(session, "settings.manage")) {
-      throw new Error("FORBIDDEN");
-    }
-
     const supabase = await createScopedSupabase(session);
 
     if (!supabase) {
@@ -288,7 +274,7 @@ export async function setOnboardingDismissedAction(
 
     const nextSettings = {
       ...((org?.settings || {}) as OrganizationSettings),
-      onboarding_dismissed: dismissed,
+      onboarding_started: true,
     };
 
     const { error: updateError } = await supabase
@@ -300,7 +286,7 @@ export async function setOnboardingDismissedAction(
       return fail(updateError.message);
     }
 
-    return ok({ dismissed });
+    return ok({ started: true });
   } catch (error) {
     return fail(actionErrorMessage(error));
   }

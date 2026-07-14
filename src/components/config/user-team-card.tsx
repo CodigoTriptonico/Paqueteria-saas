@@ -19,8 +19,7 @@ import type { RoleRow, RoleSlug } from "@/lib/auth/types";
 import { formatPhoneForInput } from "@/lib/phone/format-input";
 import { normalizePhoneDigits } from "@/lib/phone/normalize";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
-
-const fieldLabelClass = "grid gap-1.5 text-[11px] font-black uppercase text-slate-400";
+import { settingsFieldLabelClass as fieldLabelClass } from "@/components/config/settings-panel-styles";
 
 const ROLE_ICONS: Partial<Record<RoleSlug, typeof Shield>> = {
   administrador: Shield,

@@ -40,7 +40,10 @@ describe("shipment compact progress UI eval", () => {
     assert.equal(source.includes("[contain:paint]"), true);
     assert.equal(source.includes("transition-colors"), true);
     assert.equal(cssSource.includes("contain: paint"), true);
-    assert.equal(cssSource.includes("0 0 16px"), false);
+    const pulseStart = cssSource.indexOf("@keyframes shipment-step-active-pulse");
+    const pulseEnd = cssSource.indexOf(".shipment-step-active-pulse", pulseStart);
+    assert.ok(pulseStart >= 0 && pulseEnd > pulseStart);
+    assert.equal(cssSource.slice(pulseStart, pulseEnd).includes("0 0 16px"), false);
   });
 
   it("does not show the last completed gap summary row", () => {

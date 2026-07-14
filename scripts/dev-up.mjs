@@ -6,6 +6,12 @@ import {
   loadDevUpConfig,
   waitForHttp,
 } from "./lib/dev-up.mjs";
+import {
+  collectDevServerPids,
+  devServerPort,
+  getListenerPidsOnPort,
+  killDevServer,
+} from "./lib/dev-server.mjs";
 
 const root = process.cwd();
 const openBrowser = !process.argv.includes("--no-open");
@@ -93,10 +99,22 @@ async function ensureApp(config) {
   if (await isReachable(config.appUrl)) {
     log(
       "next",
-      `ya responde en ${config.appUrl} — si es preview/produccion, los cambios no se ven al guardar; usa npm run phone o mata :3000 y corre npm run up`,
+      `ya responde en ${config.appUrl} — si es preview/produccion, los cambios no se ven al guardar; usa npm run phone o npm run dev:kill y corre npm run up`,
     );
     openApp(config.appUrl);
     return;
+  }
+
+  const listeners = getListenerPidsOnPort(devServerPort());
+  if (listeners.length > 0) {
+    log(
+      "next",
+      `puerto ${devServerPort()} ocupado (${listeners.join(", ")}) pero no responde; limpiando instancias colgadas`,
+    );
+    killDevServer(root);
+  } else if (collectDevServerPids(root).length > 0) {
+    log("next", "procesos next dev huerfanos detectados; limpiando antes de arrancar");
+    killDevServer(root);
   }
 
   log("next", "iniciando npm run dev");

@@ -13,7 +13,7 @@ export function useViewLayout() {
   const [layout, setLayout] = useState<ViewLayout>(DEFAULT_VIEW_LAYOUT);
 
   useEffect(() => {
-    setLayout(readViewLayout());
+    queueMicrotask(() => setLayout(readViewLayout()));
   }, []);
 
   const setViewLayout = useCallback((next: ViewLayout) => {

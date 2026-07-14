@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { getEmailDomainSuggestions } from "@/lib/email/domains";
+import {
+  appendAtToEmailLocalPart,
+  emailDomainSuggestionsShouldOpen,
+  getEmailDomainSuggestions,
+  normalizeEmailInputValue,
+  shouldShowEmailAtSuggestion,
+} from "@/lib/email/domains";
 
 type EmailDomainSuggestionsInputProps = {
   value: string;
@@ -17,7 +23,7 @@ type EmailDomainSuggestionsInputProps = {
 };
 
 const listboxClass =
-  "absolute left-0 right-0 top-[calc(100%+6px)] z-[999] rounded-lg border border-black bg-[#101820] shadow-2xl";
+  "absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-lg border border-black bg-[#101820] shadow-2xl";
 
 function renderSuggestionLabel(currentValue: string, suggestion: string, highlighted: boolean) {
   const prefix =
@@ -62,10 +68,19 @@ export function EmailDomainSuggestionsInput({
   const [open, setOpen] = useState(false);
 
   const cleanValue = value.trim();
-  const showAtSuggestion = cleanValue.length > 0 && !cleanValue.includes("@");
+  const showAtSuggestion = shouldShowEmailAtSuggestion(value);
   const suggestions = useMemo(() => getEmailDomainSuggestions(value), [value]);
-  const visibleOptions = suggestions;
-  const showList = open && visibleOptions.length > 0;
+  const showList = open && suggestions.length > 0;
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setHighlightIndex(-1);
+    });
+    return () => {
+      active = false;
+    };
+  }, [value, suggestions.length]);
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -79,32 +94,25 @@ export function EmailDomainSuggestionsInput({
 
   function applySuggestion(next: string) {
     onChange(next);
-    const nextSuggestions = getEmailDomainSuggestions(next);
-    setOpen(next.endsWith("@") && nextSuggestions.length > 0);
+    setOpen(emailDomainSuggestionsShouldOpen(next));
     setHighlightIndex(-1);
   }
 
   function handleChange(next: string) {
-    const at = next.indexOf("@");
-    const normalized =
-      at === -1 ? next : `${next.slice(0, at + 1)}${next.slice(at + 1).replace(/@/g, "")}`;
-
+    const normalized = normalizeEmailInputValue(next);
     onChange(normalized);
-    const hasOptions =
-      normalized.includes("@") && getEmailDomainSuggestions(normalized).length > 0;
-    setOpen(hasOptions);
-    setHighlightIndex(-1);
+    setOpen(emailDomainSuggestionsShouldOpen(normalized));
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (showAtSuggestion && event.key === " ") {
       event.preventDefault();
-      applySuggestion(`${cleanValue}@`);
+      applySuggestion(appendAtToEmailLocalPart(value));
       return;
     }
 
     if (!showList) {
-      if (event.key === "ArrowDown" && visibleOptions.length > 0) {
+      if (event.key === "ArrowDown" && suggestions.length > 0) {
         event.preventDefault();
         setOpen(true);
         setHighlightIndex(0);
@@ -114,7 +122,7 @@ export function EmailDomainSuggestionsInput({
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setHighlightIndex((current) => Math.min(current + 1, visibleOptions.length - 1));
+      setHighlightIndex((current) => Math.min(current + 1, suggestions.length - 1));
       return;
     }
 
@@ -126,7 +134,7 @@ export function EmailDomainSuggestionsInput({
 
     if (event.key === "Enter" && highlightIndex >= 0) {
       event.preventDefault();
-      applySuggestion(visibleOptions[highlightIndex]!);
+      applySuggestion(suggestions[highlightIndex]!);
       return;
     }
 
@@ -160,7 +168,7 @@ export function EmailDomainSuggestionsInput({
           aria-expanded={showList}
           onChange={(event) => handleChange(event.target.value)}
           onFocus={() => {
-            if (visibleOptions.length > 0) {
+            if (suggestions.length > 0) {
               setOpen(true);
             }
           }}
@@ -177,7 +185,7 @@ export function EmailDomainSuggestionsInput({
               tabIndex={-1}
               className="pointer-events-auto text-slate-400/70 hover:text-emerald-300"
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applySuggestion(`${cleanValue}@`)}
+              onClick={() => applySuggestion(appendAtToEmailLocalPart(value))}
             >
               @
             </button>
@@ -185,7 +193,7 @@ export function EmailDomainSuggestionsInput({
         ) : null}
         {showList ? (
           <div id={listboxId} role="listbox" className={listboxClass}>
-            {visibleOptions.map((suggestion, index) => {
+            {suggestions.map((suggestion, index) => {
               const highlighted = index === highlightIndex;
               return (
                 <button

@@ -32,13 +32,14 @@ export type CategoryLeafEntry = {
   subcategoryName?: string;
 };
 
-export const INVENTORY_CATEGORIES_CONFIG_HREF =
-  "/configuracion?view=inventory&inventory=categories";
+export const INVENTORY_HREF = "/inventario";
+
+export const INVENTORY_WAREHOUSES_HREF = "/inventario?bodegas=1";
 
 export const STRUCTURE_MENU_WIDTH = 320;
 
 export const itemsGridClass =
-  "grid grid-cols-[repeat(auto-fill,minmax(272px,1fr))] gap-3 sm:gap-4";
+  "grid grid-cols-[repeat(auto-fill,minmax(13.5rem,1fr))] gap-3";
 
 export const addBtnClass =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-400 text-slate-950 transition hover:brightness-110";
@@ -49,9 +50,9 @@ export const iconBtnClass =
 export const countBadgeClass =
   "inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md border border-black bg-surface-inset px-1.5 text-[11px] font-semibold tabular-nums text-slate-200";
 
-export const categoryCardSelectedClass = "border-black bg-emerald-400/10";
+const categoryCardSelectedClass = "border-black bg-emerald-400/10";
 
-export const subcategoryRowSelectedClass = "border-black bg-emerald-400/10";
+const subcategoryRowSelectedClass = "border-black bg-emerald-400/10";
 
 export const categoryCardClass = (active: boolean) =>
   `overflow-hidden rounded-lg border transition ${

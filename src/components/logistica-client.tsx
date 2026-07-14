@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  CalendarDays,
   CheckCircle2,
   ClipboardList,
   Loader2,
-  MapPin,
   PackageCheck,
   PackageOpen,
   Pencil,
@@ -19,10 +19,9 @@ import {
   PlusCircle,
   Route,
   Search,
+  SlidersHorizontal,
   Trash2,
   Truck,
-  Warehouse,
-  Wand2,
   X,
   XCircle,
 } from "lucide-react";
@@ -30,13 +29,15 @@ import {
   addLogisticsRouteStopAction,
   assignLogisticsRouteDriverAction,
   assignLogisticsRouteVehicleAction,
+  assignLogisticsTaskToRouteFromPickerAction,
   cancelLogisticsRouteAction,
-  createLogisticsRouteFromSuggestionAction,
+  confirmLogisticsTaskScheduleAction,
+  listLogisticsRouteCatalogAction,
   listLogisticsRoutesAction,
   listLogisticsTaskAddressesAction,
   removeLogisticsRouteStopAction,
   reorderLogisticsRouteStopsAction,
-  suggestLogisticsRoutesAction,
+  type LogisticsRouteCatalog as LogisticsRouteCatalogData,
   type LogisticsTaskAddressRow,
 } from "@/app/actions/logistics-routes";
 import {
@@ -55,28 +56,33 @@ import { ActionConfirmDialog } from "@/components/action-confirm-dialog";
 import { CountryName } from "@/components/country-flag";
 import { DateInput } from "@/components/date-input";
 import { InvoicePriorityBadge } from "@/components/invoice-priority-badge";
-import { LogisticsAddressGeoEditor } from "@/components/logistica/logistics-address-geo-editor";
-import { LogisticsEvidenceGallery } from "@/components/logistica/logistics-evidence-gallery";
 import { LogisticsDriverChangeDialog } from "@/components/logistica/logistics-driver-change-dialog";
-import { LogisticsKpisStrip } from "@/components/logistica/logistics-kpis-strip";
+import { LogisticsRouteCatalog } from "@/components/logistica/logistics-route-catalog";
 import { LogisticsTaskEditPanel } from "@/components/logistica/logistics-task-edit-panel";
 import { LogisticsTaskReprogramPanel } from "@/components/logistica/logistics-task-reprogram-panel";
+import { LogisticsTaskScheduleConfirmPanel } from "@/components/logistica/logistics-task-schedule-confirm-panel";
 import { LogisticsSectionNav } from "@/components/logistica/logistics-section-nav";
 import { LogisticsTaskStatusBadge } from "@/components/logistica/logistics-task-status-badge";
 import { InlineSearchCombobox, InlineSearchPicker } from "@/components/inline-search-picker";
 import { PageLoading } from "@/components/page-loading";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import {
-  cardClass,
+  listCardShellClass,
+  listRowBaseClass,
+  listRowHoverClass,
   Panel,
+  panelListScrollClass,
+  panelListStackClass,
+  panelToolbarClass,
   primaryButtonClass,
   secondaryButtonClass,
   textMutedClass,
 } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
+import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provider";
 import {
   buildDriverPickerOptions,
-  driverLabel,
+  buildTaskRoutePickerOptions,
   formatLogisticsTaskStatusLabel,
   logisticsScheduleDisplayParts,
   logisticsActionIconWellClass,
@@ -84,30 +90,28 @@ import {
   logisticsPriorityHeaderClass,
   logisticsPriorityAwaitingDriver,
   logisticsTaskWaitingParts,
-  logisticsUnroutedTaskCardClass,
   logisticsWaitingToneClass,
-  prioritizeLogisticsTasks,
   resolveLogisticsInvoiceStep,
   sortLogisticsInvoiceItemsByPriority,
   resolveLogisticsShipmentDeepLink,
   resolveRouteConfirmCopy,
   shouldConfirmDriverChange,
-  splitLogisticsTasksByOpenState,
+  taskRoutePickerDate,
   type LogisticsInvoiceStep,
 } from "@/lib/logistics-view";
 import { canEditLogisticsTaskFields } from "@/lib/logistics-task-edit";
 import { estimateRouteStopEtaMinutes, formatEtaMinutes } from "@/lib/logistics-eta";
 import { isLogisticsFailedTask } from "@/lib/logistics-reprogram";
 import { LOGISTICS_LIVE_REFRESH_MS, shouldRunLogisticsLiveRefresh } from "@/lib/logistics-live-refresh";
-import { quoteFromShipment, type ShipmentQuote } from "@/lib/shipment-display";
+import { quoteFromShipment, readShipmentBoxLines, type ShipmentQuote } from "@/lib/shipment-display";
+import { ShipmentBoxLinesTrigger } from "@/components/shipment-box-lines-trigger";
+import { formatScheduleDateInput, scheduledAtToLocalDateInput } from "@/lib/schedule-date";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { WarehouseRow } from "@/lib/auth/types";
 import type {
   LogisticsRouteRow,
   LogisticsRouteStatus,
   LogisticsRouteStopRow,
-  LogisticsRouteSuggestion,
-  LogisticsRouteTaskInput,
 } from "@/lib/logistics-routing";
 import type { LogisticsVehicleRow } from "@/lib/logistics-fleet";
 
@@ -125,7 +129,10 @@ type LogisticsInvoiceItem = {
 };
 
 const LOGISTICS_CARD_PICKER_SHELL =
-  "box-border inline-flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md border-0 bg-transparent px-0";
+  "inset-shell box-border inline-flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md border-0 bg-transparent px-0";
+
+const LOGISTICS_INVOICE_CARD_GRID_CLASS =
+  "grid auto-rows-max gap-3 xl:grid-cols-2 2xl:grid-cols-3";
 
 type PendingDriverChange = {
   task: LogisticsTaskItem;
@@ -140,9 +147,8 @@ type ReprogrammingTaskState = {
   task: LogisticsTaskItem;
 };
 
-type GeoEditingTaskState = {
+type ConfirmingScheduleTaskState = {
   task: LogisticsTaskItem;
-  initialQuery?: string;
 };
 
 type PendingRouteConfirm =
@@ -167,35 +173,6 @@ type TaskAddressMeta = LogisticsTaskAddressRow & {
   routeName?: string;
 };
 
-type GoogleMarker = {
-  setMap: (map: GoogleMap | null) => void;
-};
-
-type GoogleMap = {
-  fitBounds: (bounds: GoogleLatLngBounds) => void;
-  setCenter: (point: { lat: number; lng: number }) => void;
-  setZoom: (zoom: number) => void;
-};
-
-type GoogleLatLngBounds = {
-  extend: (point: { lat: number; lng: number }) => void;
-};
-
-type GoogleMapsLike = {
-  maps: {
-    Map: new (element: HTMLElement, options: Record<string, unknown>) => GoogleMap;
-    Marker: new (options: Record<string, unknown>) => GoogleMarker;
-    LatLngBounds: new () => GoogleLatLngBounds;
-  };
-};
-
-declare global {
-  interface Window {
-    google?: GoogleMapsLike;
-    __boxarioGoogleMapsPromise?: Promise<void>;
-  }
-}
-
 const taskTypeLabel: Record<LogisticsTaskType, string> = {
   deliver_empty_box: "Dejar",
   pickup_full_box: "Recoger",
@@ -214,6 +191,7 @@ const taskActionVerb: Record<LogisticsTaskType, string> = {
 const routeStatusLabel: Record<LogisticsRouteStatus, string> = {
   draft: "Draft",
   planned: "Planeada",
+  in_progress: "En curso",
   cancelled: "Cancelada",
   completed: "Completada",
 };
@@ -234,12 +212,33 @@ function useWideLogisticsLayout() {
   return isWide;
 }
 
-function todayInput() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function formatSchedule(value: string | null) {
   return logisticsScheduleDisplayParts(value).primary;
+}
+
+function formatTaskDate(value: string | null) {
+  if (!value) {
+    return "Sin fecha";
+  }
+
+  const localDate = scheduledAtToLocalDateInput(value);
+  if (!localDate) {
+    return "Sin fecha";
+  }
+
+  const [year, month, day] = localDate.split("-").map(Number);
+  if (!year || !month || !day) {
+    return "Sin fecha";
+  }
+
+  const label = new Intl.DateTimeFormat("es-MX", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(year, month - 1, day, 12));
+
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function LogisticsTaskWaitingBanner({
@@ -332,7 +331,7 @@ function invoiceActionLabel(taskType: LogisticsTaskType) {
 
 const LOGISTICS_FIELD_BASE = "border-black bg-surface-inset";
 
-function invoiceActionFieldClass(_taskType: LogisticsTaskType) {
+function invoiceActionFieldClass() {
   return `${LOGISTICS_FIELD_BASE} text-slate-200`;
 }
 
@@ -346,169 +345,27 @@ function invoiceDriverFieldClass(assignedTo: string | null | undefined, hasTask:
     : "logistics-unassigned-alert border-rose-500/90 bg-rose-950/50 text-rose-50";
 }
 
-function routeStopPoint(stop: LogisticsRouteStopRow) {
-  if (Number.isFinite(stop.lat) && Number.isFinite(stop.lng)) {
-    return { lat: stop.lat as number, lng: stop.lng as number };
-  }
-
-  if (Number.isFinite(stop.address.lat) && Number.isFinite(stop.address.lng)) {
-    return { lat: stop.address.lat as number, lng: stop.address.lng as number };
-  }
-
-  return null;
-}
-
-function loadGoogleMaps(apiKey: string) {
-  if (typeof window === "undefined") {
-    return Promise.reject(new Error("Browser requerido"));
-  }
-
-  if (window.google?.maps) {
-    return Promise.resolve();
-  }
-
-  if (window.__boxarioGoogleMapsPromise) {
-    return window.__boxarioGoogleMapsPromise;
-  }
-
-  window.__boxarioGoogleMapsPromise = new Promise<void>((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}`;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("No se pudo cargar Google Maps"));
-    document.head.appendChild(script);
-  });
-
-  return window.__boxarioGoogleMapsPromise;
-}
-
-function LogisticsMap({
-  route,
-  taskById,
-}: {
-  route: LogisticsRouteRow | null;
-  taskById: Map<string, LogisticsTaskItem>;
-}) {
-  const mapRef = useRef<HTMLDivElement | null>(null);
-  const mapInstanceRef = useRef<GoogleMap | null>(null);
-  const markersRef = useRef<GoogleMarker[]>([]);
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-  const [mapError, setMapError] = useState("");
-
-  useEffect(() => {
-    markersRef.current.forEach((marker) => marker.setMap(null));
-    markersRef.current = [];
-
-    if (!apiKey || !mapRef.current || !route?.stops.length) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void loadGoogleMaps(apiKey)
-      .then(() => {
-        if (cancelled || !window.google?.maps || !mapRef.current || !route?.stops.length) {
-          return;
-        }
-
-        const firstPoint = routeStopPoint(route.stops[0]);
-        const center = firstPoint || { lat: 34.0522, lng: -118.2437 };
-
-        if (!mapInstanceRef.current) {
-          mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
-            center,
-            zoom: 10,
-            disableDefaultUI: true,
-            zoomControl: true,
-            backgroundColor: "#17211d",
-          });
-        }
-
-        const bounds = new window.google.maps.LatLngBounds();
-        const nextMarkers: GoogleMarker[] = [];
-
-        route.stops.forEach((stop, index) => {
-          const point = routeStopPoint(stop);
-          if (!point || !window.google?.maps || !mapInstanceRef.current) {
-            return;
-          }
-
-          bounds.extend(point);
-          const task = taskById.get(stop.taskId);
-          nextMarkers.push(
-            new window.google.maps.Marker({
-              position: point,
-              map: mapInstanceRef.current,
-              label: {
-                text: String(index + 1),
-                color: "#0f172a",
-                fontWeight: "900",
-              },
-              title: task ? `${task.shipment.code} · ${task.shipment.customer_name}` : stop.address.name,
-            }),
-          );
-        });
-
-        markersRef.current = nextMarkers;
-
-        if (nextMarkers.length > 1) {
-          mapInstanceRef.current.fitBounds(bounds);
-        } else {
-          mapInstanceRef.current.setCenter(center);
-          mapInstanceRef.current.setZoom(12);
-        }
-
-        setMapError("");
-      })
-      .catch((error: Error) => setMapError(error.message));
-
-    return () => {
-      cancelled = true;
-    };
-  }, [apiKey, route, taskById]);
-
-  if (!apiKey) {
-    return (
-      <div className="flex h-full min-h-72 items-center justify-center rounded-lg border border-black bg-surface-inset p-4 text-center">
-        <div>
-          <MapPin className="mx-auto h-8 w-8 text-slate-600" />
-          <p className="mt-2 text-sm font-black text-slate-300">Mapa apagado</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">
-            Falta NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative min-h-72 overflow-hidden rounded-lg border border-black bg-surface-inset">
-      <div ref={mapRef} className="h-full min-h-72 w-full" />
-      {mapError ? (
-        <div className="absolute inset-x-3 bottom-3 rounded-md border border-amber-700 bg-amber-400 px-3 py-2 text-xs font-black text-slate-950">
-          {mapError}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 export function LogisticaClient({
   initialShipments,
   initialRouteMembers,
   initialWarehouses,
   initialRoutes,
   initialTaskAddresses,
+  initialRouteCatalog,
+  canManageRoutes = false,
 }: {
   initialShipments?: ShipmentRow[];
   initialRouteMembers?: RouteMemberRow[];
   initialWarehouses?: WarehouseRow[];
   initialRoutes?: LogisticsRouteRow[];
   initialTaskAddresses?: LogisticsTaskAddressRow[];
+  initialRouteCatalog?: LogisticsRouteCatalogData;
+  canManageRoutes?: boolean;
 }) {
   const notify = useNotify();
+  const { layout: viewLayout } = usePageViewLayout("logistics.tasks");
   const searchParams = useSearchParams();
+  const isRoutesView = searchParams.get("view") === "rutas";
   const isWideLayout = useWideLogisticsLayout();
   const appliedDeepLinkRef = useRef(false);
   const supabaseReady = isSupabaseConfigured();
@@ -520,18 +377,20 @@ export function LogisticaClient({
   const [taskAddresses, setTaskAddresses] = useState<LogisticsTaskAddressRow[]>(
     initialTaskAddresses || [],
   );
+  const [routeCatalog, setRouteCatalog] = useState<LogisticsRouteCatalogData | undefined>(
+    initialRouteCatalog,
+  );
   const [query, setQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
+  const [todayDate] = useState(() => formatScheduleDateInput(new Date()));
+  const [dateFilter, setDateFilter] = useState(() => formatScheduleDateInput(new Date()));
   const [typeFilter, setTypeFilter] = useState("");
   const [driverFilter, setDriverFilter] = useState("");
-  const [warehouseFilter, setWarehouseFilter] = useState("");
   const [zoneFilter, setZoneFilter] = useState("");
   const [failedFilter, setFailedFilter] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedRouteId, setSelectedRouteId] = useState<string>("");
-  const [advancedRoutesOpen, setAdvancedRoutesOpen] = useState(false);
   const [routeDetailDrawerOpen, setRouteDetailDrawerOpen] = useState(false);
   const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<LogisticsRouteSuggestion[]>([]);
   const [loaded, setLoaded] = useState(
     !supabaseReady ||
       Boolean(
@@ -546,8 +405,11 @@ export function LogisticaClient({
   const [pendingDriverChange, setPendingDriverChange] = useState<PendingDriverChange | null>(null);
   const [editingTask, setEditingTask] = useState<EditingTaskState | null>(null);
   const [reprogrammingTask, setReprogrammingTask] = useState<ReprogrammingTaskState | null>(null);
-  const [geoEditingTask, setGeoEditingTask] = useState<GeoEditingTaskState | null>(null);
+  const [confirmingScheduleTask, setConfirmingScheduleTask] = useState<ConfirmingScheduleTaskState | null>(null);
   const [pendingRouteConfirm, setPendingRouteConfirm] = useState<PendingRouteConfirm | null>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [routeAssignmentOpen, setRouteAssignmentOpen] = useState(false);
+
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -564,16 +426,16 @@ export function LogisticaClient({
     return () => window.cancelAnimationFrame(frame);
   }, [isWideLayout, selectedRouteId]);
 
-  async function reloadShipments() {
+  const reloadShipments = useCallback(async () => {
     const result = await listShipmentsAction();
     if (result.ok) {
       setShipments(result.data);
     } else {
       notify.error(result.error);
     }
-  }
+  }, [notify]);
 
-  async function reloadRoutesAndAddresses() {
+  const reloadRoutesAndAddresses = useCallback(async () => {
     const [routesResult, addressesResult] = await Promise.all([
       listLogisticsRoutesAction(),
       listLogisticsTaskAddressesAction(),
@@ -590,18 +452,28 @@ export function LogisticaClient({
     } else {
       notify.error(addressesResult.error);
     }
-  }
+  }, [notify]);
 
-  async function reloadAll() {
+  const reloadRouteCatalog = useCallback(async () => {
+    const result = await listLogisticsRouteCatalogAction();
+    if (result.ok) {
+      setRouteCatalog(result.data);
+    }
+  }, []);
+
+  const reloadAll = useCallback(async () => {
     const vehiclesResult = await listLogisticsVehiclesAction();
     if (vehiclesResult.ok) {
       setVehicles(vehiclesResult.data);
     }
-    await Promise.all([reloadShipments(), reloadRoutesAndAddresses()]);
-  }
+    await Promise.all([reloadShipments(), reloadRoutesAndAddresses(), reloadRouteCatalog()]);
+  }, [reloadRouteCatalog, reloadRoutesAndAddresses, reloadShipments]);
 
-  const reloadAllRef = useRef(reloadAll);
-  reloadAllRef.current = reloadAll;
+  useEffect(() => {
+    queueMicrotask(() => {
+      void reloadRouteCatalog();
+    });
+  }, [reloadRouteCatalog]);
 
   useEffect(() => {
     if (
@@ -624,6 +496,7 @@ export function LogisticaClient({
           routesResult,
           addressesResult,
           vehiclesResult,
+          catalogResult,
         ] = await Promise.all([
           listShipmentsAction(),
           listRouteMembersAction(),
@@ -631,6 +504,7 @@ export function LogisticaClient({
           listLogisticsRoutesAction(),
           listLogisticsTaskAddressesAction(),
           listLogisticsVehiclesAction(),
+          listLogisticsRouteCatalogAction(),
         ]);
 
         if (shipmentsResult.ok) {
@@ -659,6 +533,10 @@ export function LogisticaClient({
           setVehicles(vehiclesResult.data);
         }
 
+        if (catalogResult.ok) {
+          setRouteCatalog(catalogResult.data);
+        }
+
         setLoaded(true);
       })();
     });
@@ -679,7 +557,7 @@ export function LogisticaClient({
 
     const refresh = () => {
       if (shouldRunLogisticsLiveRefresh()) {
-        void reloadAllRef.current().then(() => notify.info("Board actualizado"));
+        void reloadAll().then(() => notify.info("Board actualizado"));
       }
     };
 
@@ -690,7 +568,7 @@ export function LogisticaClient({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [loaded, notify, supabaseReady]);
+  }, [loaded, notify, reloadAll, supabaseReady]);
 
   const memberById = useMemo(() => {
     return new Map(routeMembers.map((member) => [member.id, member.label]));
@@ -759,10 +637,6 @@ export function LogisticaClient({
     () => buildDriverPickerOptions(routeMembers, "Todo chofer"),
     [routeMembers],
   );
-
-  const warehouseById = useMemo(() => {
-    return new Map(warehouses.map((warehouse) => [warehouse.id, warehouse.name]));
-  }, [warehouses]);
 
   const routeByTaskId = useMemo(() => {
     const map = new Map<string, { route: LogisticsRouteRow; stop: LogisticsRouteStopRow }>();
@@ -897,7 +771,6 @@ export function LogisticaClient({
     const cleanQuery = query.trim().toLowerCase();
     const cleanType = typeFilter.trim();
     const cleanDriver = driverFilter.trim();
-    const cleanWarehouse = warehouseFilter.trim();
     const cleanZone = zoneFilter.trim();
 
     return sortLogisticsInvoiceItemsByPriority(
@@ -907,7 +780,11 @@ export function LogisticaClient({
         const address = fallbackTask ? addressByTaskId.get(fallbackTask.id) : undefined;
         const routeInfo = task ? routeByTaskId.get(task.id) : undefined;
         const dateMatches =
-          !dateFilter || Boolean(task?.scheduledAt && task.scheduledAt.slice(0, 10) === dateFilter);
+          !dateFilter ||
+          Boolean(
+            task?.scheduledAt &&
+              scheduledAtToLocalDateInput(task.scheduledAt) === dateFilter,
+          );
         const haystack = [
           item.shipment.code,
           item.shipment.customer_name,
@@ -932,7 +809,6 @@ export function LogisticaClient({
           (!cleanQuery || haystack.includes(cleanQuery)) &&
           (!cleanType || item.step.stepType === cleanType) &&
           (!cleanDriver || task?.assignedTo === cleanDriver || routeInfo?.route.assignedTo === cleanDriver) &&
-          (!cleanWarehouse || task?.warehouseId === cleanWarehouse || routeInfo?.route.warehouseId === cleanWarehouse) &&
           (!cleanZone || address?.zoneKey === cleanZone)
         );
       }),
@@ -946,7 +822,6 @@ export function LogisticaClient({
     query,
     routeByTaskId,
     typeFilter,
-    warehouseFilter,
     zoneFilter,
   ]);
 
@@ -954,14 +829,17 @@ export function LogisticaClient({
     const cleanQuery = query.trim().toLowerCase();
     const cleanType = typeFilter.trim();
     const cleanDriver = driverFilter.trim();
-    const cleanWarehouse = warehouseFilter.trim();
     const cleanZone = zoneFilter.trim();
 
     return allTasks.filter((task) => {
       const address = addressByTaskId.get(task.id);
       const routeInfo = routeByTaskId.get(task.id);
-      const dateMatches =
-        !dateFilter || !task.scheduledAt || task.scheduledAt.slice(0, 10) === dateFilter;
+        const dateMatches =
+          !dateFilter ||
+          Boolean(
+            task.scheduledAt &&
+              scheduledAtToLocalDateInput(task.scheduledAt) === dateFilter,
+          );
       const haystack = [
         task.shipment.code,
         task.shipment.customer_name,
@@ -986,7 +864,6 @@ export function LogisticaClient({
         (!cleanQuery || haystack.includes(cleanQuery)) &&
         (!cleanType || task.taskType === cleanType) &&
         (!cleanDriver || task.assignedTo === cleanDriver || routeInfo?.route.assignedTo === cleanDriver) &&
-        (!cleanWarehouse || task.warehouseId === cleanWarehouse || routeInfo?.route.warehouseId === cleanWarehouse) &&
         (!cleanZone || address?.zoneKey === cleanZone)
       );
     });
@@ -999,34 +876,36 @@ export function LogisticaClient({
     query,
     routeByTaskId,
     typeFilter,
-    warehouseFilter,
     zoneFilter,
   ]);
-
-  const { open: openTasks } = useMemo(
-    () => splitLogisticsTasksByOpenState(filteredTasks),
-    [filteredTasks],
-  );
-
-  const unroutedTasks = useMemo(
-    () =>
-      prioritizeLogisticsTasks(
-        openTasks.filter((task) => {
-          const step = invoiceStepByTaskId.get(task.id);
-          return step?.currentTask?.id === task.id && !routeByTaskId.has(task.id);
-        }),
-        {
-          missingGeo: (task) => !addressByTaskId.get(task.id)?.hasGeo,
-          shipment: (task) => task.shipment,
-        },
-      ),
-    [addressByTaskId, invoiceStepByTaskId, openTasks, routeByTaskId],
-  );
 
   const failedTasks = useMemo(
     () =>
       filteredTasks.filter((task) => isLogisticsFailedTask(task) && !routeByTaskId.has(task.id)),
     [filteredTasks, routeByTaskId],
+  );
+
+  const failedInvoiceItems = useMemo<LogisticsInvoiceItem[]>(() => {
+    return failedTasks.map((task) => ({
+      shipment: task.shipment,
+      quote: task.quote,
+      step: {
+        stepType: task.taskType,
+        currentTask: task,
+        nextTask: null,
+        emptyBoxDone: false,
+        pickupReady: false,
+        canAssignDriver: false,
+        assignment: "unassigned",
+      },
+      currentTask: task,
+      nextTask: null,
+    }));
+  }, [failedTasks]);
+
+  const visibleInvoiceItems = useMemo(
+    () => (failedFilter ? failedInvoiceItems : filteredInvoiceItems),
+    [failedFilter, failedInvoiceItems, filteredInvoiceItems],
   );
 
   useEffect(() => {
@@ -1076,26 +955,69 @@ export function LogisticaClient({
       window.cancelAnimationFrame(frame);
       window.clearTimeout(timeout);
     };
-  }, [highlightTaskId, unroutedTasks, selectedRouteId]);
+  }, [filteredInvoiceItems, highlightTaskId, selectedRouteId]);
 
   const filteredRoutes = useMemo(() => {
     return routes
       .filter((route) => route.status !== "cancelled" && route.status !== "completed")
       .filter((route) => !dateFilter || route.routeDate === dateFilter)
       .filter((route) => !driverFilter || route.assignedTo === driverFilter)
-      .filter((route) => !warehouseFilter || route.warehouseId === warehouseFilter)
       .filter((route) => !zoneFilter || route.zoneKey === zoneFilter)
       .sort((a, b) => a.routeDate.localeCompare(b.routeDate) || a.name.localeCompare(b.name));
-  }, [dateFilter, driverFilter, routes, warehouseFilter, zoneFilter]);
+  }, [dateFilter, driverFilter, routes, zoneFilter]);
 
   const selectedRoute = useMemo(() => {
     return routes.find((route) => route.id === selectedRouteId) || filteredRoutes[0] || null;
   }, [filteredRoutes, routes, selectedRouteId]);
 
-  const openCount = filteredInvoiceItems.length;
   const hasFilters = Boolean(
-    query.trim() || dateFilter || typeFilter || driverFilter || warehouseFilter || zoneFilter || failedFilter,
+    query.trim() || dateFilter !== todayDate || typeFilter || driverFilter || zoneFilter || failedFilter,
   );
+  const selectedTasks = useMemo(
+    () => allTasks.filter((task) => selectedTaskIds.includes(task.id)),
+    [allTasks, selectedTaskIds],
+  );
+  const assignableRoutes = useMemo(
+    () => routes.filter((route) => route.status === "draft" || route.status === "planned"),
+    [routes],
+  );
+
+  function taskCanBeSelectedForRoute(task: LogisticsTaskItem, routeInfo?: { route: LogisticsRouteRow }) {
+    return !routeInfo && task.status !== "completed" && task.status !== "cancelled";
+  }
+
+  function toggleTaskSelection(task: LogisticsTaskItem, routeInfo?: { route: LogisticsRouteRow }) {
+    if (!taskCanBeSelectedForRoute(task, routeInfo)) {
+      return;
+    }
+
+    setSelectedTaskIds((current) =>
+      current.includes(task.id) ? current.filter((id) => id !== task.id) : [...current, task.id],
+    );
+  }
+
+  async function assignSelectedTasksToRoute(route: LogisticsRouteRow) {
+    if (!selectedTasks.length) {
+      return;
+    }
+
+    setBusyId(`assign-selection:${route.id}`);
+    const results = await Promise.all(
+      selectedTasks.map((task) => addLogisticsRouteStopAction({ routeId: route.id, taskId: task.id })),
+    );
+    setBusyId(null);
+
+    const failed = results.find((result) => !result.ok);
+    if (failed && !failed.ok) {
+      notify.error(failed.error);
+      return;
+    }
+
+    await reloadAll();
+    setSelectedTaskIds([]);
+    setRouteAssignmentOpen(false);
+    notify.success(`${selectedTasks.length} tareas asignadas a ${route.name}`);
+  }
 
   async function changeTask(
     task: LogisticsTaskItem,
@@ -1110,12 +1032,13 @@ export function LogisticaClient({
     if (!result.ok) {
       notify.error(result.error);
       setBusyId(null);
-      return;
+      return false;
     }
 
     await reloadAll();
     setBusyId(null);
     notify.success("Tarea actualizada");
+    return true;
   }
 
   async function saveTaskEdit(
@@ -1129,8 +1052,45 @@ export function LogisticaClient({
       return;
     }
 
-    await changeTask(editingTask.task, patch);
+    const previousDate = scheduledAtToLocalDateInput(editingTask.task.scheduledAt);
+    const saved = await changeTask(editingTask.task, patch);
+
+    if (!saved) {
+      return;
+    }
+
     setEditingTask(null);
+
+    const nextDate = scheduledAtToLocalDateInput(patch.scheduledAt);
+    if (nextDate && nextDate !== previousDate && dateFilter === previousDate) {
+      setDateFilter(nextDate);
+    }
+  }
+
+  async function confirmTaskSchedule(input: {
+    scheduledAt: string;
+    driverId: string;
+    routeTemplateId: string;
+  }) {
+    if (!confirmingScheduleTask) return;
+
+    const task = confirmingScheduleTask.task;
+    setBusyId(`confirm:${task.id}`);
+    const result = await confirmLogisticsTaskScheduleAction({
+      taskId: task.id,
+      ...input,
+    });
+    setBusyId(null);
+
+    if (!result.ok) {
+      notify.error(result.error);
+      return;
+    }
+
+    setConfirmingScheduleTask(null);
+    setSelectedRouteId(result.data.id);
+    await reloadAll();
+    notify.success("Tarea confirmada y agregada a la ruta");
   }
 
   function requestDriverChange(task: LogisticsTaskItem, nextAssignedTo: string | null) {
@@ -1206,72 +1166,169 @@ export function LogisticaClient({
     return true;
   }
 
-  async function loadSuggestions() {
-    setBusyId("suggestions");
-    const result = await suggestLogisticsRoutesAction({ routeDate: dateFilter || todayInput() });
-    setBusyId(null);
-
-    if (!result.ok) {
-      notify.error(result.error);
-      return;
+  function canChangeTaskRoute(
+    task: LogisticsTaskItem,
+    routeInfo?: { route: LogisticsRouteRow; stop: LogisticsRouteStopRow },
+    hasGeo = true,
+  ) {
+    if (!canManageRoutes || !canEditLogisticsTaskFields(task)) {
+      return false;
     }
 
-    setSuggestions(result.data);
-    notify.success(`${result.data.length} sugerencias listas`);
+    if (task.status === "completed" || task.status === "cancelled") {
+      return false;
+    }
+
+    if (routeInfo && routeInfo.route.status !== "draft" && routeInfo.route.status !== "planned") {
+      return false;
+    }
+
+    if (!routeInfo && !hasGeo) {
+      return false;
+    }
+
+    if (busyId === task.id || busyId === `route:${task.id}`) {
+      return false;
+    }
+
+    return true;
   }
 
-  async function createRoute(suggestion: LogisticsRouteSuggestion) {
-    setBusyId(`suggestion:${suggestion.id}`);
-    const result = await createLogisticsRouteFromSuggestionAction({
-      routeDate: suggestion.routeDate,
-      name: suggestion.name,
-      zoneKey: suggestion.zoneKey,
-      warehouseId: suggestion.warehouseId,
-      taskIds: suggestion.taskIds,
+  function routePickerOptionsForTask(task: LogisticsTaskItem) {
+    return buildTaskRoutePickerOptions({
+      routes: assignableRoutes.map((route) => ({
+        id: route.id,
+        name: route.name,
+        routeDate: route.routeDate,
+        routeTemplateId: route.routeTemplateId,
+        assignedTo: route.assignedTo,
+        status: route.status,
+      })),
+      templates: routeCatalog?.templates || [],
+      enabledWeekdays: routeCatalog?.enabledDays || [],
+      taskDate: taskRoutePickerDate(task.scheduledAt, dateFilter || todayDate),
+      driverLabelById: memberById,
     });
-    setBusyId(null);
-
-    if (!result.ok) {
-      notify.error(result.error);
-      return;
-    }
-
-    setSelectedRouteId(result.data.id);
-    setSuggestions((current) => current.filter((entry) => entry.id !== suggestion.id));
-    await reloadAll();
-    notify.success("Ruta creada");
   }
 
-  async function addToRoute(task: LogisticsTaskItem) {
-    if (!selectedRoute) {
+  function parseRoutePickerValue(value: string) {
+    if (!value) {
+      return null;
+    }
+
+    if (value.startsWith("template:")) {
+      return { routeTemplateId: value.slice("template:".length) };
+    }
+
+    if (value.startsWith("route:")) {
+      return { routeId: value.slice("route:".length) };
+    }
+
+    return { routeId: value };
+  }
+
+  function routePickerValueForTask(routeInfo?: { route: LogisticsRouteRow }) {
+    return routeInfo ? `route:${routeInfo.route.id}` : "";
+  }
+
+  async function saveTaskRouteChange(
+    task: LogisticsTaskItem,
+    nextSelection: string,
+    routeInfo?: { route: LogisticsRouteRow; stop: LogisticsRouteStopRow },
+  ) {
+    const parsed = parseRoutePickerValue(nextSelection);
+
+    if (!parsed) {
       return;
     }
 
-    setBusyId(`add:${task.id}`);
-    const result = await addLogisticsRouteStopAction({
-      routeId: selectedRoute.id,
+    setBusyId(`route:${task.id}`);
+
+    if (routeInfo && routeInfo.route.id !== parsed.routeId) {
+      const removeResult = await removeLogisticsRouteStopAction({
+        routeId: routeInfo.route.id,
+        stopId: routeInfo.stop.id,
+      });
+
+      if (!removeResult.ok) {
+        notify.error(removeResult.error);
+        setBusyId(null);
+        return;
+      }
+    }
+
+    const assignResult = await assignLogisticsTaskToRouteFromPickerAction({
       taskId: task.id,
+      routeId: parsed.routeId,
+      routeTemplateId: parsed.routeTemplateId,
+      routeDate: taskRoutePickerDate(task.scheduledAt, dateFilter || todayDate),
     });
     setBusyId(null);
 
-    if (!result.ok) {
-      notify.error(result.error);
+    if (!assignResult.ok) {
+      notify.error(assignResult.error);
+      await reloadAll();
       return;
     }
 
-    setSelectedRouteId(result.data.id);
+    setSelectedRouteId(assignResult.data.id);
     await reloadAll();
-    notify.success("Parada agregada");
+    notify.success(routeInfo ? "Ruta actualizada" : "Tarea asignada a la ruta");
   }
 
-  async function removeStop(stop: LogisticsRouteStopRow) {
-    if (!selectedRoute) {
+  function requestTaskRouteChange(
+    task: LogisticsTaskItem,
+    nextSelection: string | null,
+    routeInfo?: { route: LogisticsRouteRow; stop: LogisticsRouteStopRow },
+  ) {
+    const currentSelection = routePickerValueForTask(routeInfo);
+
+    if ((nextSelection || "") === currentSelection) {
       return;
     }
 
+    if (routeInfo && !nextSelection) {
+      requestRemoveStop(routeInfo.route, routeInfo.stop);
+      return;
+    }
+
+    if (!nextSelection) {
+      return;
+    }
+
+    void saveTaskRouteChange(task, nextSelection, routeInfo);
+  }
+
+  function renderTaskRoutePicker(
+    task: LogisticsTaskItem,
+    routeInfo: { route: LogisticsRouteRow; stop: LogisticsRouteStopRow } | undefined,
+    shipmentCode: string,
+    className = "w-[10rem] shrink-0",
+  ) {
+    const hasGeo = Boolean(addressByTaskId.get(task.id)?.hasGeo);
+
+    return (
+      <InlineSearchPicker
+        className={className}
+        minWidthClass="w-full min-w-0"
+        shellClassName={LOGISTICS_CARD_PICKER_SHELL}
+        value={routePickerValueForTask(routeInfo)}
+        onChange={(nextValue) => requestTaskRouteChange(task, nextValue || null, routeInfo)}
+        options={routePickerOptionsForTask(task)}
+        placeholder="Sin ruta"
+        searchPlaceholder="Buscar ruta…"
+        emptyLabel="Sin rutas para ese día"
+        ariaLabel={`Ruta de ${shipmentCode}`}
+        disabled={!canChangeTaskRoute(task, routeInfo, hasGeo)}
+        formatSelectedLabel={(option) => option?.label || "Sin ruta"}
+      />
+    );
+  }
+
+  async function removeStop(route: LogisticsRouteRow, stop: LogisticsRouteStopRow) {
     setBusyId(`remove:${stop.id}`);
     const result = await removeLogisticsRouteStopAction({
-      routeId: selectedRoute.id,
+      routeId: route.id,
       stopId: stop.id,
     });
     setBusyId(null);
@@ -1285,16 +1342,12 @@ export function LogisticaClient({
     notify.success("Parada liberada");
   }
 
-  function requestRemoveStop(stop: LogisticsRouteStopRow) {
-    if (!selectedRoute) {
-      return;
-    }
-
+  function requestRemoveStop(route: LogisticsRouteRow, stop: LogisticsRouteStopRow) {
     const task = taskById.get(stop.taskId);
     const shipmentCode = task?.shipment.code || stop.address.name || stop.taskId;
     setPendingRouteConfirm({
       kind: "remove-stop",
-      route: selectedRoute,
+      route,
       stop,
       shipmentCode,
     });
@@ -1312,7 +1365,7 @@ export function LogisticaClient({
     }
 
     if (pendingRouteConfirm.kind === "remove-stop") {
-      await removeStop(pendingRouteConfirm.stop);
+      await removeStop(pendingRouteConfirm.route, pendingRouteConfirm.stop);
       setPendingRouteConfirm(null);
       return;
     }
@@ -1438,13 +1491,6 @@ export function LogisticaClient({
     notify.success("Ruta cancelada");
   }
 
-  function selectRoute(routeId: string) {
-    setSelectedRouteId(routeId);
-    if (!isWideLayout) {
-      setRouteDetailDrawerOpen(true);
-    }
-  }
-
   function closeRouteDetailDrawer() {
     setRouteDetailDrawerOpen(false);
   }
@@ -1459,16 +1505,9 @@ export function LogisticaClient({
       highlightTaskId === task?.id || Boolean(nextTask && highlightTaskId === nextTask.id);
     const missingGeo = Boolean(displayTask && !address?.hasGeo);
     const canChangeDriver = task ? canChangeTaskDriver(task, routeInfo) : false;
-    const priorityCardClass = logisticsPriorityCardClass(
-      item.shipment.invoice_priority,
-      task?.assignedTo,
-      Boolean(task),
-    );
-    const priorityHeaderClass = logisticsPriorityHeaderClass(
-      item.shipment.invoice_priority,
-      task?.assignedTo,
-      Boolean(task),
-    );
+    const isFailed = Boolean(task && isLogisticsFailedTask(task));
+    const priorityCardClass = logisticsPriorityCardClass(item.shipment.invoice_priority);
+    const priorityHeaderClass = logisticsPriorityHeaderClass(item.shipment.invoice_priority);
     const priorityAwaitingDriver = logisticsPriorityAwaitingDriver(
       item.shipment.invoice_priority,
       task?.assignedTo,
@@ -1477,11 +1516,22 @@ export function LogisticaClient({
 
     return (
       <article
-        key={item.shipment.id}
+        key={task?.id || item.shipment.id}
         data-logistics-task-id={task?.id || nextTask?.id || item.shipment.id}
-        className={`rounded-lg border bg-surface-card shadow-[0_6px_18px_rgba(0,0,0,0.18)] ${priorityCardClass} ${highlighted ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#1a2320]" : ""}`}
+        className={`${listCardShellClass} shadow-[0_6px_18px_rgba(0,0,0,0.18)] ${priorityCardClass} ${isFailed ? "border-amber-700/70" : ""} ${highlighted ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#1a2320]" : ""}`}
       >
         <div className={`relative border-b border-black px-3 py-2.5 ${priorityHeaderClass}`}>
+          {task && !isFailed && taskCanBeSelectedForRoute(task, routeInfo) ? (
+            <label className="absolute left-2 top-2 z-10 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-black bg-surface-inset">
+              <input
+                type="checkbox"
+                className="h-5 w-5 accent-emerald-400"
+                checked={selectedTaskIds.includes(task.id)}
+                onChange={() => toggleTaskSelection(task, routeInfo)}
+                aria-label={`Seleccionar ${item.shipment.code} para asignar a ruta`}
+              />
+            </label>
+          ) : null}
           {item.shipment.invoice_priority ? (
             <div className="absolute right-2 top-2 z-10">
               <InvoicePriorityBadge variant="chip" pulsing={priorityAwaitingDriver} />
@@ -1508,12 +1558,6 @@ export function LogisticaClient({
                   Falta geo
                 </span>
               ) : null}
-              {routeInfo ? (
-                <span className="inline-flex items-center gap-1 rounded-md border border-black bg-surface-inset px-2 py-0.5 text-[10px] font-black text-emerald-300">
-                  <Route className="h-3 w-3" />
-                  {routeInfo.route.name}
-                </span>
-              ) : null}
             </div>
           </div>
         </div>
@@ -1537,7 +1581,7 @@ export function LogisticaClient({
 
           <div className="grid gap-2 sm:grid-cols-2">
             <div
-              className={`relative flex items-center gap-2.5 rounded-md border px-2 py-2 ${invoiceActionFieldClass(item.step.stepType)}`}
+              className={`relative flex items-center gap-2.5 rounded-md border px-2 py-2 ${invoiceActionFieldClass()}`}
             >
               <span
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border ${logisticsActionIconWellClass(item.step.stepType)}`}
@@ -1566,7 +1610,16 @@ export function LogisticaClient({
                 <Truck className="h-3.5 w-3.5" />
                 Chofer
               </span>
-              {task ? (
+              {task && isFailed ? (
+                <button
+                  type="button"
+                  className={`${primaryButtonClass} h-9 w-full text-xs`}
+                  disabled={busyId === task.id}
+                  onClick={() => setReprogrammingTask({ task })}
+                >
+                  Reprogramar
+                </button>
+              ) : task ? (
                 <InlineSearchPicker
                   className="w-full min-w-0"
                   minWidthClass="w-full min-w-0"
@@ -1590,7 +1643,32 @@ export function LogisticaClient({
             </div>
           </div>
 
-          {task && canEditLogisticsTaskFields(task) ? (
+          {task && !isFailed ? (
+            <div className="relative grid gap-1 rounded-md border border-black bg-surface-inset px-2 py-2">
+              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-slate-500">
+                <Route className="h-3.5 w-3.5" />
+                Ruta
+              </span>
+              {renderTaskRoutePicker(task, routeInfo, item.shipment.code, "w-full shrink-0")}
+              {busyId === `route:${task.id}` ? (
+                <Loader2 className="pointer-events-none absolute right-2 top-2 h-3.5 w-3.5 animate-spin text-emerald-300" />
+              ) : null}
+            </div>
+          ) : null}
+
+          {task && !isFailed && canEditLogisticsTaskFields(task) && !routeInfo ? (
+            <button
+              type="button"
+              className={`${primaryButtonClass} h-9 w-full text-xs`}
+              disabled={busyId === `confirm:${task.id}` || !canManageRoutes}
+              onClick={() => setConfirmingScheduleTask({ task })}
+            >
+              <CalendarDays className="h-4 w-4" />
+              Confirmar y programar
+            </button>
+          ) : null}
+
+          {task && !isFailed && canEditLogisticsTaskFields(task) ? (
             <button
               type="button"
               className={`${secondaryButtonClass} h-9 w-full text-xs`}
@@ -1598,222 +1676,158 @@ export function LogisticaClient({
               onClick={() => setEditingTask({ task })}
             >
               <Pencil className="h-4 w-4" />
-              Editar tarea
+              Programar y editar
             </button>
           ) : null}
 
-          {item.quote?.label ? (
-            <p className="rounded-md border border-black bg-[#26312c] px-3 py-2 text-center text-sm font-black tabular-nums tracking-tight text-[#f8fafc] sm:text-base">
-              {item.quote.label}
-            </p>
+          {item.quote ? (
+            <ShipmentBoxLinesTrigger
+              lines={readShipmentBoxLines(item.shipment)}
+              variant="card"
+            />
           ) : null}
         </div>
       </article>
     );
   }
 
-  function renderTaskCard(
-    task: LogisticsTaskItem,
-    mode: "unrouted" | "route" | "failed" = "unrouted",
-  ) {
-    const address = addressByTaskId.get(task.id);
-    const routeInfo = routeByTaskId.get(task.id);
-    const missingGeo = mode === "unrouted" && !address?.hasGeo;
-    const highlighted = highlightTaskId === task.id;
-    const warehouseLabel = task.warehouseId
-      ? warehouseById.get(task.warehouseId) || task.warehouseId
-      : "Default";
-    const canAdd =
-      mode === "unrouted" &&
-      selectedRoute &&
-      selectedRoute.status !== "cancelled" &&
-      selectedRoute.status !== "completed" &&
-      address?.hasGeo;
-    const showChoferPicker = mode === "unrouted";
-    const showFailedActions = mode === "failed";
-    const priorityHeaderClass = logisticsPriorityHeaderClass(
-      task.shipment.invoice_priority,
-      task.assignedTo,
-      true,
-    );
+  function renderInvoiceRow(item: LogisticsInvoiceItem) {
+    const task = item.currentTask;
+    const nextTask = item.nextTask;
+    const displayTask = task || nextTask;
+    const address = displayTask ? addressByTaskId.get(displayTask.id) : undefined;
+    const routeInfo = task ? routeByTaskId.get(task.id) : undefined;
+    const highlighted =
+      highlightTaskId === task?.id || Boolean(nextTask && highlightTaskId === nextTask.id);
+    const missingGeo = Boolean(displayTask && !address?.hasGeo);
+    const canChangeDriver = task ? canChangeTaskDriver(task, routeInfo) : false;
+    const isFailed = Boolean(task && isLogisticsFailedTask(task));
     const priorityAwaitingDriver = logisticsPriorityAwaitingDriver(
-      task.shipment.invoice_priority,
-      task.assignedTo,
-      true,
+      item.shipment.invoice_priority,
+      task?.assignedTo,
+      Boolean(task),
     );
 
     return (
       <article
-        key={task.id}
-        data-logistics-task-id={task.id}
-        className={logisticsUnroutedTaskCardClass({
-          missingGeo,
-          highlighted,
-          invoicePriority: task.shipment.invoice_priority,
-          assignedTo: task.assignedTo,
-          canAssignDriver: true,
-        })}
+        key={task?.id || item.shipment.id}
+        data-logistics-task-id={task?.id || nextTask?.id || item.shipment.id}
+        className={`${listRowBaseClass} px-3 py-2 sm:px-4 ${
+          highlighted
+            ? "bg-emerald-950/25 ring-1 ring-inset ring-emerald-500/50"
+            : listRowHoverClass
+        } ${isFailed ? "bg-amber-950/25" : ""} ${logisticsPriorityCardClass(item.shipment.invoice_priority)}`}
       >
-        <div
-          className={`relative border-b border-black px-3 py-2 ${
-            missingGeo ? "bg-amber-950/55" : priorityHeaderClass
-          }`}
-        >
-          {task.shipment.invoice_priority ? (
-            <div className="absolute right-2 top-2 z-10">
-              <InvoicePriorityBadge variant="chip" pulsing={priorityAwaitingDriver} />
-            </div>
-          ) : null}
-          <div className={`flex items-start justify-between gap-2 ${task.shipment.invoice_priority ? "pr-14" : ""}`}>
-            <div className="min-w-0">
-              <p className="truncate text-base font-black text-[#f8fafc]">
-                <span className="truncate">{task.shipment.code}</span>
-              </p>
-              <p className="truncate text-xs font-black text-slate-300">
-                {task.shipment.customer_name}
-              </p>
-              {task.shipment.customerPhone ? (
-                <p className="mt-0.5 inline-flex max-w-full items-center gap-1 truncate text-[11px] font-black text-slate-400">
-                  <Phone className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{task.shipment.customerPhone}</span>
-                </p>
+        <div className="flex w-full min-w-0 flex-col gap-y-2 lg:flex-row lg:items-center lg:gap-x-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              {task && !isFailed && taskCanBeSelectedForRoute(task, routeInfo) ? (
+                <label className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded border border-black bg-surface-inset">
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 accent-emerald-400"
+                    checked={selectedTaskIds.includes(task.id)}
+                    onChange={() => toggleTaskSelection(task, routeInfo)}
+                    aria-label={`Seleccionar ${item.shipment.code} para asignar a ruta`}
+                  />
+                </label>
               ) : null}
-            </div>
-            {busyId === task.id || busyId === `add:${task.id}` ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-300" />
-            ) : null}
-          </div>
-
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-black bg-surface-inset px-2 py-1 text-[11px] font-black text-slate-200">
-              {taskTypeIcon(task.taskType)}
-              {taskTypeShortLabel[task.taskType]}
-            </span>
-            <LogisticsTaskStatusBadge
-              status={task.status}
-              assignedTo={task.assignedTo}
-              memberById={memberById}
-              routeMembers={routeMembers}
-              disabled={!canChangeTaskDriver(task, routeInfo)}
-              shipmentCode={task.shipment.code}
-              onDriverChangeRequest={(nextAssignedTo) =>
-                requestDriverChange(task, nextAssignedTo)
-              }
-              statusBadgeClass={statusBadgeClass}
-            />
-            {!address?.hasGeo ? (
-              <span className="inline-flex items-center gap-1 rounded-md border border-amber-700/70 bg-amber-400/15 px-2 py-0.5 text-[10px] font-black text-amber-100">
-                <AlertTriangle className="h-3 w-3" />
-                Falta geo
+              {item.shipment.invoice_priority ? (
+                <InvoicePriorityBadge variant="chip" pulsing={priorityAwaitingDriver} />
+              ) : null}
+              <span className="text-sm font-black text-[#f8fafc]">{item.shipment.code}</span>
+              <span className="truncate text-sm font-bold text-slate-300">{item.shipment.customer_name}</span>
+              <span className="inline-flex items-center gap-1 rounded-md border border-black/70 bg-surface-inset px-1.5 py-0.5 text-[10px] font-black uppercase text-slate-300">
+                {taskTypeIcon(item.step.stepType, "h-3 w-3")}
+                {invoiceActionLabel(item.step.stepType)}
               </span>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="grid gap-2 p-3">
-          {missingGeo ? (
-            <button
-              type="button"
-              className={`${secondaryButtonClass} h-9 w-full text-xs`}
-              onClick={() =>
-                setGeoEditingTask({
-                  task,
-                  initialQuery:
-                    address?.address.formattedAddress || task.notes || task.shipment.customer_name,
-                })
-              }
-            >
-              <MapPin className="h-4 w-4" />
-              Corregir direccion
-            </button>
-          ) : null}
-          <p
-            className={`line-clamp-2 rounded-md border px-2 py-1 text-xs font-bold leading-snug ${
-              missingGeo
-                ? "border-amber-700 bg-amber-400/15 text-amber-100"
-                : "border-black bg-surface-inset text-slate-300"
-            }`}
-          >
-            {missingGeo
-              ? address?.address.formattedAddress || task.notes || "Sin geolocalizacion para ruta"
-              : address?.address.formattedAddress || task.notes || "Sin direccion para ruta"}
-          </p>
-
-          <LogisticsTaskWaitingBanner
-            taskType={task.taskType}
-            orderedAt={task.orderedAt}
-            createdAt={task.createdAt}
-          />
-
-          {showChoferPicker ? (
-            <div className="relative grid gap-1 rounded-md border border-black bg-[#26312c] px-2 py-2">
-                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-slate-500">
-                  <Truck className="h-3.5 w-3.5 text-emerald-300" />
-                  Chofer
+              {isFailed ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-amber-200">
+                  <AlertTriangle className="h-3 w-3" />
+                  Fallida
                 </span>
-                <InlineSearchPicker
-                  className="w-full min-w-0"
-                  minWidthClass="w-full min-w-0"
-                  shellClassName={LOGISTICS_CARD_PICKER_SHELL}
-                  value={task.assignedTo || ""}
-                  onChange={(nextValue) => requestDriverChange(task, nextValue || null)}
-                  options={taskDriverPickerOptions}
-                  placeholder="Sin asignar"
-                  searchPlaceholder="Buscar chofer…"
-                  emptyLabel="Sin conductores"
-                  ariaLabel="Chofer"
-                  disabled={!canChangeTaskDriver(task, routeInfo)}
-                  formatSelectedLabel={(option) =>
-                    option?.label || driverLabel(task.assignedTo, memberById)
-                  }
-                />
-              </div>
-          ) : null}
-
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1 text-[11px] font-black text-slate-500">
-              <Warehouse className="h-3.5 w-3.5" />
-              {warehouseLabel}
-            </span>
-            <div className="flex flex-wrap items-center gap-2">
-              {showFailedActions ? (
-                <button
-                  type="button"
-                  className={`${primaryButtonClass} h-9 px-3 text-xs`}
-                  disabled={busyId === task.id}
-                  onClick={() => setReprogrammingTask({ task })}
-                >
-                  Reprogramar
-                </button>
               ) : null}
-              {canEditLogisticsTaskFields(task) && !showFailedActions ? (
-                <button
-                  type="button"
-                  className={`${secondaryButtonClass} h-9 px-3 text-xs`}
-                  disabled={busyId === task.id}
-                  onClick={() => setEditingTask({ task })}
-                >
-                  <Pencil className="h-4 w-4" />
-                  Editar
-                </button>
+              {missingGeo ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-200">
+                  <AlertTriangle className="h-3 w-3" />
+                  Falta geo
+                </span>
               ) : null}
-            {routeInfo ? (
-              <span className="inline-flex items-center gap-1 rounded-md border border-black bg-surface-inset px-2 py-1 text-[11px] font-black text-emerald-300">
-                <Route className="h-3.5 w-3.5" />
-                {routeInfo.route.name}
+            </div>
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-bold leading-snug text-slate-400">
+              <span className="line-clamp-1 min-w-0 flex-1">
+                {address?.address.formattedAddress || displayTask?.notes || "Sin direccion"}
               </span>
-            ) : (
+              {item.quote ? (
+                <ShipmentBoxLinesTrigger
+                  lines={readShipmentBoxLines(item.shipment)}
+                  variant="inline"
+                />
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5 lg:justify-end">
+            {isFailed && task ? (
               <button
                 type="button"
-                className={`${secondaryButtonClass} h-9 px-3 text-xs disabled:opacity-45`}
-                disabled={!canAdd || busyId === `add:${task.id}`}
-                onClick={() => void addToRoute(task)}
+                className={`${primaryButtonClass} h-8 shrink-0 whitespace-nowrap px-2.5 text-[10px]`}
+                disabled={busyId === task.id}
+                onClick={() => setReprogrammingTask({ task })}
               >
-                <PlusCircle className="h-4 w-4" />
-                Agregar
+                Reprogramar
               </button>
+            ) : null}
+            {task && !isFailed ? (
+              <InlineSearchPicker
+                className="w-[9rem] shrink-0"
+                minWidthClass="w-full min-w-0"
+                shellClassName={LOGISTICS_CARD_PICKER_SHELL}
+                value={task.assignedTo || ""}
+                onChange={(nextValue) => requestDriverChange(task, nextValue || null)}
+                options={taskDriverPickerOptions}
+                placeholder="Sin chofer"
+                searchPlaceholder="Buscar chofer…"
+                emptyLabel="Sin conductores"
+                ariaLabel={`Chofer de ${item.shipment.code}`}
+                disabled={!canChangeDriver}
+                formatSelectedLabel={(option) => option?.label || "Sin chofer"}
+              />
+            ) : (
+              <span className="text-[11px] font-black text-slate-400">Primero entrega</span>
             )}
-            </div>
+            {task && !isFailed ? renderTaskRoutePicker(task, routeInfo, item.shipment.code) : null}
+            {task && !isFailed && canEditLogisticsTaskFields(task) && !routeInfo ? (
+              <button
+                type="button"
+                className={`${primaryButtonClass} h-8 shrink-0 whitespace-nowrap px-2.5 text-[10px]`}
+                disabled={busyId === `confirm:${task.id}` || !canManageRoutes}
+                title="Confirmar fecha, ruta y conductor"
+                onClick={() => setConfirmingScheduleTask({ task })}
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                Programar
+              </button>
+            ) : null}
+            {task && !isFailed && canEditLogisticsTaskFields(task) ? (
+              <button
+                type="button"
+                className={`${secondaryButtonClass} h-8 shrink-0 whitespace-nowrap px-2.5 text-[10px]`}
+                title="Cambiar la fecha, hora, bodega o notas"
+                onClick={() => setEditingTask({ task })}
+              >
+                <CalendarDays className="h-3.5 w-3.5 text-emerald-300" />
+                {formatTaskDate(task.scheduledAt)}
+              </button>
+            ) : task ? (
+              <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-black bg-surface-inset px-2 text-[10px] font-black text-slate-300">
+                <CalendarDays className="h-3.5 w-3.5 text-emerald-300" />
+                {formatTaskDate(task.scheduledAt)}
+              </span>
+            ) : null}
+            {task && (busyId === task.id || busyId === `route:${task.id}`) ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-300" />
+            ) : null}
           </div>
         </div>
       </article>
@@ -1978,7 +1992,7 @@ export function LogisticaClient({
                         type="button"
                         className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-black bg-surface-inset text-rose-200 disabled:opacity-40"
                         disabled={busyId === `remove:${stop.id}`}
-                        onClick={() => requestRemoveStop(stop)}
+                        onClick={() => requestRemoveStop(selectedRoute, stop)}
                         aria-label="Quitar parada"
                       >
                         {busyId === `remove:${stop.id}` ? (
@@ -2082,27 +2096,49 @@ export function LogisticaClient({
     return <PageLoading inline />;
   }
 
+  if (isRoutesView) {
+    return (
+      <Panel title="Logistica" hideHeader clipContent={false}>
+        {!supabaseReady ? (
+          <SupabaseRequiredBanner detail="La logistica se lee desde shipments, shipment_logistics_tasks y logistics_routes en Supabase." />
+        ) : null}
+        {supabaseReady ? (
+          <div className="grid w-full min-w-0 gap-4">
+            <div className={`${panelToolbarClass} flex flex-wrap items-center justify-between gap-3`}>
+              <div className="px-1">
+                <p className="text-sm font-black text-[#f8fafc]">Rutas semanales</p>
+                <p className="mt-0.5 text-xs font-bold text-slate-500">Disponibilidad y recorridos recurrentes.</p>
+              </div>
+              <LogisticsSectionNav active="routes" className="ml-auto" />
+            </div>
+            <LogisticsRouteCatalog
+              initialCatalog={routeCatalog}
+              canManage={canManageRoutes}
+              routeMembers={routeMembers}
+              onCatalogChange={() => void reloadRouteCatalog()}
+            />
+          </div>
+        ) : null}
+      </Panel>
+    );
+  }
+
   return (
-    <Panel title="Logistica" hideHeader clipContent={false}>
+    <Panel
+      title="Logistica"
+      hideHeader
+      clipContent={false}
+      className="flex min-h-0 w-full flex-col lg:flex-1 lg:overflow-hidden"
+      contentClassName="flex min-h-0 w-full min-w-0 flex-1 flex-col p-3 sm:p-4"
+    >
       {!supabaseReady ? (
         <SupabaseRequiredBanner detail="La logistica se lee desde shipments, shipment_logistics_tasks y logistics_routes en Supabase." />
       ) : null}
 
       {supabaseReady ? (
-        <div className="grid gap-4">
-          <div className={`${cardClass} overflow-visible p-2`}>
+        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+          <div className={panelToolbarClass}>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex h-9 shrink-0 divide-x divide-black overflow-hidden rounded-lg border border-black bg-surface-inset">
-                <div className="flex min-w-[5rem] items-center gap-1.5 px-2">
-                  <span className="text-[9px] font-black uppercase leading-none text-slate-500">
-                    Invoices
-                  </span>
-                  <span className="text-sm font-black tabular-nums leading-none text-[#f8fafc]">
-                    {openCount}
-                  </span>
-                </div>
-              </div>
-
               <InlineSearchCombobox
                 value={query}
                 onChange={setQuery}
@@ -2111,7 +2147,7 @@ export function LogisticaClient({
                 emptyLabel="Sin tareas"
                 ariaLabel="Buscar tareas de logistica"
                 leadingIcon={<Search className="h-4 w-4" aria-hidden />}
-                className="min-w-[14rem] flex-[1_1_18rem]"
+                className="min-w-[14rem] flex-[1_1_24rem]"
                 minWidthClass="w-full min-w-0"
                 onSelectOption={(option) => {
                   const item = invoiceItems.find((entry) => entry.shipment.id === option.value);
@@ -2121,24 +2157,78 @@ export function LogisticaClient({
                 }}
               />
 
-              <DateInput
-                className="w-[8.5rem] shrink-0"
-                value={dateFilter}
-                ariaLabel="Fecha"
-                onChange={setDateFilter}
-              />
+              <div className="flex shrink-0 items-center gap-1">
+                {dateFilter ? (
+                  <>
+                    <DateInput
+                      className="w-[11.5rem] shrink-0 border-emerald-500 bg-emerald-950/50"
+                      value={dateFilter}
+                      ariaLabel="Fecha"
+                      onChange={setDateFilter}
+                    />
+                    <button
+                      type="button"
+                      className={`${secondaryButtonClass} h-9 w-9 shrink-0 p-0`}
+                      aria-label="Quitar filtro de fecha"
+                      title="Ver todas las fechas"
+                      onClick={() => setDateFilter("")}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className={`${primaryButtonClass} h-9 shrink-0 gap-1.5 px-2.5 text-xs font-black`}
+                    aria-label="Mostrando tareas de todas las fechas"
+                    title="Mostrando todas las fechas"
+                    onClick={() => setDateFilter(todayDate)}
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                    Todas las fechas
+                  </button>
+                )}
+              </div>
 
               <select
-                className="h-9 w-[8rem] shrink-0 rounded-lg border border-black bg-surface-inset px-2.5 text-sm font-black text-[#f8fafc] outline-none"
+                className={`h-9 min-w-[12rem] shrink-0 rounded-lg border px-2.5 pr-8 text-sm font-black outline-none ${
+                  typeFilter
+                    ? "border-emerald-500 bg-emerald-950/50 text-emerald-100"
+                    : "border-black bg-surface-inset text-[#f8fafc]"
+                }`}
                 value={typeFilter}
                 onChange={(event) => setTypeFilter(event.target.value)}
-                aria-label="Filtrar por tipo de tarea"
+                aria-label="Filtrar tareas por acción"
               >
-                <option value="">Todo tipo</option>
-                <option value="deliver_empty_box">Dejar</option>
-                <option value="pickup_full_box">Recoger</option>
+                <option value="">Todas las tareas</option>
+                <option value="deliver_empty_box">Dejar cajas</option>
+                <option value="pickup_full_box">Recoger cajas</option>
               </select>
 
+              {selectedTasks.length ? (
+                <button
+                  type="button"
+                  className={`${primaryButtonClass} h-9 shrink-0 px-3 text-xs`}
+                  onClick={() => setRouteAssignmentOpen(true)}
+                >
+                  <Route className="h-4 w-4" />
+                  Asignar {selectedTasks.length} a ruta
+                </button>
+              ) : null}
+
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  className={`${filtersOpen || hasFilters ? primaryButtonClass : secondaryButtonClass} h-9 shrink-0 px-2.5 text-xs`}
+                  aria-expanded={filtersOpen}
+                  onClick={() => setFiltersOpen((current) => !current)}
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Filtros
+                </button>
+
+                {filtersOpen ? (
+                  <div className="absolute left-0 top-full z-[120] mt-2 flex w-max max-w-[calc(100vw-2rem)] flex-wrap items-center gap-2 rounded-xl border border-black bg-surface-card p-2 shadow-[0_16px_36px_rgba(0,0,0,0.45)]">
               <InlineSearchPicker
                 className="w-[9rem] shrink-0"
                 minWidthClass="w-full min-w-0"
@@ -2151,20 +2241,6 @@ export function LogisticaClient({
                 ariaLabel="Filtrar por chofer"
                 leadingIcon={<Truck className="h-4 w-4 text-emerald-300" aria-hidden />}
               />
-
-              <select
-                className="h-9 w-[9rem] shrink-0 rounded-lg border border-black bg-surface-inset px-2.5 text-sm font-black text-[#f8fafc] outline-none"
-                value={warehouseFilter}
-                onChange={(event) => setWarehouseFilter(event.target.value)}
-                aria-label="Filtrar por bodega"
-              >
-                <option value="">Toda bodega</option>
-                {warehouses.map((warehouse) => (
-                  <option key={warehouse.id} value={warehouse.id}>
-                    {warehouse.name}
-                  </option>
-                ))}
-              </select>
 
               <select
                 className="h-9 w-[8rem] shrink-0 rounded-lg border border-black bg-surface-inset px-2.5 text-sm font-black text-[#f8fafc] outline-none"
@@ -2182,9 +2258,7 @@ export function LogisticaClient({
 
               <button
                 type="button"
-                className={`${secondaryButtonClass} h-9 shrink-0 px-2.5 text-xs ${
-                  failedFilter ? "ring-2 ring-amber-500/70" : ""
-                }`}
+                className={`${failedFilter ? primaryButtonClass : secondaryButtonClass} h-9 shrink-0 px-2.5 text-xs`}
                 onClick={() => setFailedFilter((current) => !current)}
               >
                 Fallidas
@@ -2201,10 +2275,9 @@ export function LogisticaClient({
                 disabled={!hasFilters}
                 onClick={() => {
                   setQuery("");
-                  setDateFilter("");
+                  setDateFilter(todayDate);
                   setTypeFilter("");
                   setDriverFilter("");
-                  setWarehouseFilter("");
                   setZoneFilter("");
                   setFailedFilter(false);
                 }}
@@ -2212,298 +2285,153 @@ export function LogisticaClient({
                 <XCircle className="h-4 w-4" />
                 Limpiar
               </button>
+                </div>
+              ) : null}
+              </div>
+
+
 
               <LogisticsSectionNav
-                active="routes"
-                className="ml-auto"
-                routesOnClick={() => setAdvancedRoutesOpen((current) => !current)}
-                extraActions={
-                  advancedRoutesOpen ? (
-                    <button
-                      type="button"
-                      className={`${primaryButtonClass} h-9 shrink-0 px-2.5 disabled:opacity-50`}
-                      disabled={busyId === "suggestions"}
-                      onClick={() => void loadSuggestions()}
-                    >
-                      {busyId === "suggestions" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Wand2 className="h-4 w-4" />
-                      )}
-                      Sugerir
-                    </button>
-                  ) : null
-                }
+                active="tasks"
+                className="basis-full border-t border-black/70 pt-2 lg:ml-auto lg:basis-auto lg:border-t-0 lg:pt-0"
               />
             </div>
           </div>
 
-          <LogisticsKpisStrip routes={routes} tasks={allTasks} />
-
-          <LogisticsEvidenceGallery />
-
-          <section className="overflow-hidden rounded-xl border border-black bg-surface-panel">
-            <div className="grid max-h-[72vh] auto-rows-max gap-3 overflow-y-auto p-3 xl:grid-cols-2 2xl:grid-cols-3">
-              {filteredInvoiceItems.length ? (
-                filteredInvoiceItems.map((item) => renderInvoiceCard(item))
+          <div className={`${panelListScrollClass} pt-3`}>
+            {visibleInvoiceItems.length ? (
+              viewLayout === "rows" ? (
+                <div className={panelListStackClass}>
+                  {visibleInvoiceItems.map((item) => renderInvoiceRow(item))}
+                </div>
               ) : (
-                <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-black bg-surface-inset px-4 text-center">
-                  <div>
-                    <ClipboardList className="mx-auto h-7 w-7 text-slate-600" />
-                    <p className="mt-2 text-sm font-black text-slate-300">Sin invoices</p>
-                  </div>
+                <div className={LOGISTICS_INVOICE_CARD_GRID_CLASS}>
+                  {visibleInvoiceItems.map((item) => renderInvoiceCard(item))}
                 </div>
-              )}
-            </div>
-          </section>
-
-          {advancedRoutesOpen && suggestions.length ? (
-            <section className="overflow-hidden rounded-xl border border-black bg-surface-panel">
-              <div className="border-b border-black bg-surface-card-header px-3 py-3">
-                <p className="text-base font-black text-[#f8fafc]">Sugerencias</p>
-                <p className="mt-0.5 text-xs font-bold text-slate-500">
-                  Grupos por fecha, bodega, ciudad y CP. Tu decides crear.
+              )
+            ) : (
+              <div className="flex min-h-40 flex-col items-center justify-center px-4 text-center">
+                <ClipboardList className="h-7 w-7 text-slate-600" />
+                <p className="mt-2 text-sm font-black text-slate-300">
+                  {failedFilter ? "Sin tareas fallidas" : "Sin invoices"}
                 </p>
               </div>
-              <div className="grid gap-2 p-3 md:grid-cols-2 2xl:grid-cols-3">
-                {suggestions.map((suggestion) => (
-                  <article
-                    key={suggestion.id}
-                    className="rounded-lg border border-black bg-surface-card p-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-black text-[#f8fafc]">
-                          {suggestion.name}
-                        </p>
-                        <p className="mt-1 text-xs font-bold text-slate-500">
-                          {suggestion.routeDate} · {suggestion.zoneLabel}
-                        </p>
-                      </div>
-                      <span className="rounded-md border border-black bg-surface-inset px-2 py-1 text-sm font-black text-emerald-300">
-                        {suggestion.stopCount}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <p className="truncate text-xs font-bold text-slate-400">
-                        {suggestion.stops
-                          .slice(0, 3)
-                          .map((stop: LogisticsRouteTaskInput) => stop.shipmentCode)
-                          .join(", ")}
-                      </p>
-                      <button
-                        type="button"
-                        className={`${primaryButtonClass} h-9 px-3 text-xs disabled:opacity-50`}
-                        disabled={busyId === `suggestion:${suggestion.id}`}
-                        onClick={() => void createRoute(suggestion)}
-                      >
-                        {busyId === `suggestion:${suggestion.id}` ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <PlusCircle className="h-4 w-4" />
-                        )}
-                        Crear ruta
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {advancedRoutesOpen ? (
-          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.05fr)_minmax(22rem,0.8fr)]">
-            <section className="overflow-hidden rounded-xl border border-black bg-surface-panel">
-              <div className="border-b border-black bg-surface-card-header px-3 py-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-base font-black text-[#f8fafc]">Sin ruta</p>
-                    <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
-                      Tareas abiertas disponibles
-                    </p>
-                  </div>
-                  <span className="rounded-md border border-black bg-surface-inset px-2 py-1 text-sm font-black text-slate-200">
-                    {unroutedTasks.length}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid max-h-[70vh] gap-3 overflow-y-auto p-3">
-                {failedFilter && failedTasks.length ? (
-                  <div className="grid gap-2">
-                    <p className="text-xs font-black uppercase text-amber-300">Fallidas</p>
-                    {failedTasks.map((task) => renderTaskCard(task, "failed"))}
-                  </div>
-                ) : null}
-                {unroutedTasks.length ? (
-                  unroutedTasks.map((task) => renderTaskCard(task))
-                ) : !failedFilter || !failedTasks.length ? (
-                  <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-black bg-surface-inset px-4 text-center">
-                    <div>
-                      <ClipboardList className="mx-auto h-7 w-7 text-slate-600" />
-                      <p className="mt-2 text-sm font-black text-slate-300">Sin tareas sueltas</p>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </section>
-
-            <section className="overflow-hidden rounded-xl border border-black bg-surface-panel">
-              <div className="border-b border-black bg-surface-card-header px-3 py-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-base font-black text-[#f8fafc]">Rutas</p>
-                    <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
-                      Draft y planeadas
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {!isWideLayout && selectedRoute ? (
-                      <button
-                        type="button"
-                        className={`${secondaryButtonClass} h-8 px-2.5 text-[11px]`}
-                        onClick={() => setRouteDetailDrawerOpen(true)}
-                      >
-                        Ver detalle
-                      </button>
-                    ) : null}
-                    <span className="rounded-md border border-black bg-surface-inset px-2 py-1 text-sm font-black text-slate-200">
-                      {filteredRoutes.length}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid max-h-[70vh] gap-2 overflow-y-auto p-3">
-                {filteredRoutes.length ? (
-                  filteredRoutes.map((route) => (
-                    <button
-                      key={route.id}
-                      type="button"
-                      className={`grid gap-2 rounded-lg border p-3 text-left transition ${
-                        selectedRoute?.id === route.id
-                          ? "border-emerald-600 bg-emerald-950/45"
-                          : "border-black bg-surface-card hover:bg-surface-card-hover"
-                      }`}
-                      onClick={() => selectRoute(route.id)}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-[#f8fafc]">{route.name}</p>
-                          <p className="mt-0.5 text-xs font-bold text-slate-500">
-                            {route.routeDate} · {memberById.get(route.assignedTo || "") || "Sin chofer"}
-                          </p>
-                        </div>
-                        <span
-                          className={`rounded-md border px-2 py-1 text-[11px] font-black ${routeStatusClass(route.status)}`}
-                        >
-                          {routeStatusLabel[route.status]}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs font-black text-slate-400">
-                        <span className="inline-flex items-center gap-1">
-                          <MapPin className="h-3.5 w-3.5" />
-                          {route.stops.length} paradas
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <Warehouse className="h-3.5 w-3.5" />
-                          {warehouseById.get(route.warehouseId || "") || "Default"}
-                        </span>
-                      </div>
-                    </button>
-                  ))
-                ) : (
-                  <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-black bg-surface-inset px-4 text-center">
-                    <div>
-                      <Route className="mx-auto h-7 w-7 text-slate-600" />
-                      <p className="mt-2 text-sm font-black text-slate-300">Sin rutas</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section className="hidden overflow-hidden rounded-xl border border-black bg-surface-panel 2xl:block">
-              {renderRouteDetailContent()}
-            </section>
-
-            <section className="overflow-hidden rounded-xl border border-black bg-surface-panel lg:col-span-2 2xl:col-span-1">
-              <div className="border-b border-black bg-surface-card-header px-3 py-3">
-                <p className="text-base font-black text-[#f8fafc]">Mapa</p>
-                <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
-                  Paradas numeradas de la ruta seleccionada
-                </p>
-              </div>
-              <div className="p-3">
-                <LogisticsMap route={selectedRoute} taskById={taskById} />
-              </div>
-            </section>
+            )}
           </div>
-          ) : null}
+
         </div>
       ) : null}
 
       {routeDetailDrawer ? createPortal(routeDetailDrawer, document.body) : null}
 
-      <LogisticsAddressGeoEditor
-        open={Boolean(geoEditingTask)}
-        taskId={geoEditingTask?.task.id || ""}
-        shipmentCode={geoEditingTask?.task.shipment.code || ""}
-        initialQuery={geoEditingTask?.initialQuery}
-        onCancel={() => setGeoEditingTask(null)}
-        onSaved={async () => {
-          setGeoEditingTask(null);
-          await reloadAll();
-          notify.success("Direccion actualizada");
-        }}
-      />
+      {routeAssignmentOpen ? (
+        <div className="fixed inset-0 z-[145] flex items-center justify-center bg-black/70 p-4">
+          <button
+            type="button"
+            className="absolute inset-0"
+            aria-label="Cerrar asignación de ruta"
+            onClick={() => setRouteAssignmentOpen(false)}
+          />
+          <section className="relative w-full max-w-lg overflow-hidden rounded-xl border border-black bg-surface-panel shadow-2xl">
+            <header className="border-b border-black bg-surface-card-header px-4 py-3">
+              <p className="text-lg font-black text-[#f8fafc]">Asignar a ruta</p>
+              <p className="mt-0.5 text-sm font-bold text-slate-400">
+                {selectedTasks.length} invoices seleccionadas. Elige la ruta operativa para agregarlas.
+              </p>
+            </header>
+            <div className="grid max-h-[55dvh] gap-2 overflow-y-auto p-3">
+              {assignableRoutes.length ? (
+                assignableRoutes.map((route) => (
+                  <button
+                    key={route.id}
+                    type="button"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-black bg-surface-card px-3 py-3 text-left transition hover:bg-surface-card-hover disabled:opacity-50"
+                    disabled={busyId === `assign-selection:${route.id}`}
+                    onClick={() => void assignSelectedTasksToRoute(route)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-black text-[#f8fafc]">{route.name}</span>
+                      <span className="mt-0.5 block text-xs font-bold text-slate-500">
+                        {formatTaskDate(route.routeDate)} · {route.stops.length} paradas
+                      </span>
+                    </span>
+                    {busyId === `assign-selection:${route.id}` ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-300" />
+                    ) : (
+                      <PlusCircle className="h-4 w-4 shrink-0 text-emerald-300" />
+                    )}
+                  </button>
+                ))
+              ) : (
+                <div className="rounded-lg border border-dashed border-black bg-surface-inset p-5 text-center">
+                  <Route className="mx-auto h-7 w-7 text-slate-600" />
+                  <p className="mt-2 text-sm font-black text-slate-300">Sin rutas abiertas</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    Crea o abre una ruta operativa antes de asignar estas tareas.
+                  </p>
+                </div>
+              )}
+            </div>
+            <footer className="border-t border-black p-3">
+              <button type="button" className={`${secondaryButtonClass} h-9 px-3 text-xs`} onClick={() => setRouteAssignmentOpen(false)}>
+                Cancelar
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
 
-      <LogisticsTaskReprogramPanel
-        open={Boolean(reprogrammingTask)}
-        shipmentCode={reprogrammingTask?.task.shipment.code || ""}
-        customerName={reprogrammingTask?.task.shipment.customer_name || ""}
+      {reprogrammingTask ? (
+        <LogisticsTaskReprogramPanel
+          key={reprogrammingTask.task.id}
+          open
+          shipmentCode={reprogrammingTask.task.shipment.code}
+          customerName={reprogrammingTask.task.shipment.customer_name}
+          taskTypeLabel={taskTypeLabel[reprogrammingTask.task.taskType]}
+          task={reprogrammingTask.task}
+          warehouses={warehouses}
+          routeMembers={routeMembers}
+          onCancel={() => setReprogrammingTask(null)}
+          onSaved={async () => {
+            setReprogrammingTask(null);
+            await reloadAll();
+            notify.success("Tarea reprogramada");
+          }}
+        />
+      ) : null}
+
+      {editingTask ? (
+        <LogisticsTaskEditPanel
+          key={editingTask.task.id}
+          open
+          shipmentCode={editingTask.task.shipment.code}
+          customerName={editingTask.task.shipment.customer_name}
+          taskTypeLabel={taskTypeLabel[editingTask.task.taskType]}
+          task={editingTask.task}
+          warehouses={warehouses}
+          saving={busyId === editingTask.task.id}
+          onCancel={() => setEditingTask(null)}
+          onSave={saveTaskEdit}
+        />
+      ) : null}
+
+      <LogisticsTaskScheduleConfirmPanel
+        key={confirmingScheduleTask?.task.id || "no-task"}
+        open={Boolean(confirmingScheduleTask)}
+        shipmentCode={confirmingScheduleTask?.task.shipment.code || ""}
+        customerName={confirmingScheduleTask?.task.shipment.customer_name || ""}
         taskTypeLabel={
-          reprogrammingTask ? taskTypeLabel[reprogrammingTask.task.taskType] : ""
+          confirmingScheduleTask
+            ? taskTypeLabel[confirmingScheduleTask.task.taskType]
+            : ""
         }
-        task={
-          reprogrammingTask?.task || {
-            id: "",
-            status: "cancelled",
-            scheduledAt: null,
-            warehouseId: null,
-            notes: "",
-            assignedTo: null,
-          }
-        }
-        warehouses={warehouses}
+        scheduledAt={confirmingScheduleTask?.task.scheduledAt || null}
+        templates={routeCatalog?.templates || []}
+        defaultDriverByWeekday={routeCatalog?.defaultDriverByWeekday || Array<string | null>(7).fill(null)}
         routeMembers={routeMembers}
-        onCancel={() => setReprogrammingTask(null)}
-        onSaved={async () => {
-          setReprogrammingTask(null);
-          await reloadAll();
-          notify.success("Tarea reprogramada");
-        }}
-      />
-
-      <LogisticsTaskEditPanel
-        open={Boolean(editingTask)}
-        shipmentCode={editingTask?.task.shipment.code || ""}
-        customerName={editingTask?.task.shipment.customer_name || ""}
-        taskTypeLabel={
-          editingTask ? taskTypeLabel[editingTask.task.taskType] : ""
-        }
-        task={
-          editingTask?.task || {
-            status: "pending",
-            scheduledAt: null,
-            warehouseId: null,
-            notes: "",
-          }
-        }
-        warehouses={warehouses}
-        saving={editingTask ? busyId === editingTask.task.id : false}
-        onCancel={() => setEditingTask(null)}
-        onSave={saveTaskEdit}
+        saving={Boolean(confirmingScheduleTask && busyId === `confirm:${confirmingScheduleTask.task.id}`)}
+        onCancel={() => setConfirmingScheduleTask(null)}
+        onConfirm={confirmTaskSchedule}
       />
 
       <LogisticsDriverChangeDialog

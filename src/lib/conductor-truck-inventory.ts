@@ -17,7 +17,32 @@ export const CONDUCTOR_TASK_FAILURE_REASONS = [
 
 export type ConductorTaskFailureReason = (typeof CONDUCTOR_TASK_FAILURE_REASONS)[number];
 
-export type ConductorTruckEventType = "load" | "deliver" | "return" | "adjust";
+export const CONDUCTOR_TRUCK_RETURN_REASONS = [
+  "Sobro carga",
+  "Caja danada",
+  "Error al subir",
+  "Ruta reprogramada",
+  "Fin de jornada",
+  "Cambio de vehiculo",
+  "Otra",
+] as const;
+
+type ConductorTruckReturnReason = (typeof CONDUCTOR_TRUCK_RETURN_REASONS)[number];
+
+const CONDUCTOR_TRUCK_VEHICLE_CHANGE_REASON: ConductorTruckReturnReason = "Cambio de vehiculo";
+
+export type ConductorTransferVehicleOption = {
+  id: string;
+  label: string;
+};
+
+export type ConductorTruckEventType =
+  | "load"
+  | "deliver"
+  | "return"
+  | "adjust"
+  | "collect_full_box"
+  | "unload_full_box";
 
 export type ConductorTruckBoxLine = {
   key: string;
@@ -97,6 +122,147 @@ export type ConductorTruckInventorySummary = {
   ready: boolean;
 };
 
+export type ConductorTruckOnTruckLine = {
+  key: string;
+  lineKey: string;
+  label: string;
+  qty: number;
+  maxReturnQty: number;
+  itemId: string | null;
+  warehouseId: string | null;
+  catalogKey: string;
+  origin: "route" | "extra";
+};
+
+export function splitTruckLineOnTruckQty(
+  line: Pick<ConductorTruckInventoryLine, "requiredQty" | "deliveredQty" | "currentQty">,
+) {
+  if (line.currentQty <= 0) {
+    return { routeQty: 0, extraQty: 0 };
+  }
+
+  const routeNeedRemaining = Math.max(line.requiredQty - line.deliveredQty, 0);
+  const routeQty =
+    line.requiredQty > 0 ? Math.min(line.currentQty, routeNeedRemaining) : 0;
+  const extraQty = Math.max(line.currentQty - routeQty, 0);
+
+  return { routeQty, extraQty };
+}
+
+function buildOnTruckLine(
+  line: ConductorTruckInventoryLine,
+  qty: number,
+  origin: "route" | "extra",
+): ConductorTruckOnTruckLine | null {
+  if (qty <= 0) {
+    return null;
+  }
+
+  return {
+    key: `${origin}:${line.key}`,
+    lineKey: line.key,
+    label: line.label,
+    qty,
+    maxReturnQty: qty,
+    itemId: line.itemId,
+    warehouseId: line.warehouseId,
+    catalogKey: line.catalogKey,
+    origin,
+  };
+}
+
+export function buildRouteBoxesOnTruck(
+  lines: ReadonlyArray<ConductorTruckInventoryLine>,
+): ConductorTruckOnTruckLine[] {
+  return lines
+    .map((line) => {
+      const { routeQty } = splitTruckLineOnTruckQty(line);
+      return buildOnTruckLine(line, routeQty, "route");
+    })
+    .filter((line): line is ConductorTruckOnTruckLine => Boolean(line))
+    .sort((left, right) => left.label.localeCompare(right.label, "es"));
+}
+
+export type ConductorRouteDeliveryBoardLine = {
+  key: string;
+  label: string;
+  requiredQty: number;
+  onTruckQty: number;
+  pendingQty: number;
+  line: ConductorTruckInventoryLine;
+};
+
+export function buildRouteDeliveryBoard(
+  lines: ReadonlyArray<ConductorTruckInventoryLine>,
+): ConductorRouteDeliveryBoardLine[] {
+  return lines
+    .filter((line) => line.requiredQty > 0)
+    .map((line) => {
+      const { routeQty } = splitTruckLineOnTruckQty(line);
+      return {
+        key: line.key,
+        label: line.label,
+        requiredQty: line.requiredQty,
+        onTruckQty: routeQty,
+        pendingQty: line.shortageQty,
+        line,
+      };
+    })
+    .sort((left, right) => left.label.localeCompare(right.label, "es"));
+}
+
+export function sumRouteDeliveryOnTruck(lines: ReadonlyArray<ConductorRouteDeliveryBoardLine>) {
+  return lines.reduce((sum, line) => sum + line.onTruckQty, 0);
+}
+
+export function sumRouteDeliveryPending(lines: ReadonlyArray<ConductorRouteDeliveryBoardLine>) {
+  return lines.reduce((sum, line) => sum + line.pendingQty, 0);
+}
+
+export function buildExtraBoxesOnTruck(
+  lines: ReadonlyArray<ConductorTruckInventoryLine>,
+): ConductorTruckOnTruckLine[] {
+  return lines
+    .map((line) => {
+      const { extraQty } = splitTruckLineOnTruckQty(line);
+      return buildOnTruckLine(line, extraQty, "extra");
+    })
+    .filter((line): line is ConductorTruckOnTruckLine => Boolean(line))
+    .sort((left, right) => left.label.localeCompare(right.label, "es"));
+}
+
+export function sumOnTruckLines(lines: ReadonlyArray<ConductorTruckOnTruckLine>) {
+  return lines.reduce((sum, line) => sum + line.qty, 0);
+}
+
+export type ConductorTruckBalance = {
+  vehicleId: string;
+  vehicleName: string;
+  vehiclePlate: string;
+  assignedDriverId: string | null;
+  assignedDriverName: string;
+  lines: ConductorTruckInventoryLine[];
+  totalQty: number;
+};
+
+type ConductorFullBoxCargoLine = {
+  key: string;
+  taskId: string;
+  shipmentId: string | null;
+  routeId: string | null;
+  label: string;
+  collectedQty: number;
+  unloadedQty: number;
+  pendingQty: number;
+};
+
+export type ConductorFullBoxCargoSummary = {
+  lines: ConductorFullBoxCargoLine[];
+  collectedTotal: number;
+  unloadedTotal: number;
+  pendingTotal: number;
+};
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -168,7 +334,7 @@ export function conductorTruckStockCatalogKey(item: ConductorTruckStockItem) {
   });
 }
 
-export function findStockForTruckLine(
+function findStockForTruckLine(
   line: Pick<ConductorTruckInventoryLine, "catalogKey" | "label" | "warehouseId">,
   stock: ReadonlyArray<ConductorTruckStockItem>,
 ) {
@@ -206,11 +372,11 @@ function eventKey(event: Pick<ConductorTruckInventoryEvent, "catalogKey" | "item
   });
 }
 
-export function conductorTruckBoxLineIdentity(catalogKey: string, itemLabel: string) {
+function conductorTruckBoxLineIdentity(catalogKey: string, itemLabel: string) {
   return conductorTruckLineKey({ catalogKey, label: itemLabel });
 }
 
-export function eventCreatedAtScopeDate(createdAt?: string) {
+function eventCreatedAtScopeDate(createdAt?: string) {
   if (!createdAt) {
     return null;
   }
@@ -232,6 +398,10 @@ export function buildConductorTruckInventoryScope(
   const routeIds: string[] = [];
 
   for (const task of tasks) {
+    if (!isOpenTruckDeliveryTask(task)) {
+      continue;
+    }
+
     if (!taskIds.includes(task.id)) {
       taskIds.push(task.id);
     }
@@ -246,6 +416,18 @@ export function buildConductorTruckInventoryScope(
     taskIds,
     routeIds,
   };
+}
+
+/** Directly assigned deliveries also need to travel in the driver's truck. */
+export function conductorTruckLoadTasks(
+  tasks: ReadonlyArray<ConductorTruckTaskInput>,
+  selectedRouteId: string | null,
+) {
+  return tasks.filter(
+    (task) =>
+      isOpenTruckDeliveryTask(task) &&
+      (!task.routeId || task.routeId === selectedRouteId),
+  );
 }
 
 export function isConductorTruckEventInScope(
@@ -298,11 +480,14 @@ export function hasPickupReturnEventForTaskLine(
 
   return events.some(
     (event) =>
-      event.eventType === "return" &&
+      (event.eventType === "collect_full_box" ||
+        event.eventType === "unload_full_box" ||
+        event.eventType === "return") &&
       event.taskId === taskId &&
       eventKey(event) === identity,
   );
 }
+
 
 function eventDelta(event: ConductorTruckInventoryEvent) {
   const qty = Number(event.qty) || 0;
@@ -318,7 +503,7 @@ function eventDelta(event: ConductorTruckInventoryEvent) {
   return -Math.abs(qty);
 }
 
-export function isOpenTruckDeliveryTask(task: Pick<ConductorTruckTaskInput, "taskType" | "status">) {
+function isOpenTruckDeliveryTask(task: Pick<ConductorTruckTaskInput, "taskType" | "status">) {
   return (
     task.taskType === "deliver_empty_box" &&
     task.status !== "completed" &&
@@ -331,9 +516,12 @@ export function buildConductorTruckInventory(input: {
   events: ReadonlyArray<ConductorTruckInventoryEvent>;
   stock: ReadonlyArray<ConductorTruckStockItem>;
   scope?: ConductorTruckInventoryScope;
+  includePersistentEvents?: boolean;
 }): ConductorTruckInventorySummary {
   const requirements = new Map<string, ConductorTruckInventoryLine>();
-  const scopedEvents = input.scope
+  const scopedEvents = input.includePersistentEvents
+    ? input.events
+    : input.scope
     ? input.events.filter((event) => isConductorTruckEventInScope(event, input.scope!))
     : input.events;
 
@@ -377,6 +565,45 @@ export function buildConductorTruckInventory(input: {
   }
 
   for (const event of scopedEvents) {
+    if (
+      input.includePersistentEvents &&
+      (event.eventType === "load" ||
+        event.eventType === "deliver" ||
+        event.eventType === "return" ||
+        event.eventType === "adjust")
+    ) {
+      const key = eventKey(event);
+
+      if (!requirements.has(key)) {
+        requirements.set(key, {
+          key,
+          catalogKey: event.catalogKey,
+          label: event.itemLabel || event.itemName || "Caja",
+          requiredQty: 0,
+          loadedQty: 0,
+          deliveredQty: 0,
+          returnedQty: 0,
+          currentQty: 0,
+          shortageQty: 0,
+          stockQty: 0,
+          itemId: event.itemId,
+          itemName: event.itemName || event.itemLabel || "Caja",
+          warehouseId: event.warehouseId,
+          taskIds: [],
+          routeIds: event.routeId ? [event.routeId] : [],
+        });
+      }
+    }
+
+    if (
+      event.eventType !== "load" &&
+      event.eventType !== "deliver" &&
+      event.eventType !== "return" &&
+      event.eventType !== "adjust"
+    ) {
+      continue;
+    }
+
     const key = eventKey(event);
     const line = requirements.get(key);
 
@@ -397,22 +624,25 @@ export function buildConductorTruckInventory(input: {
     line.currentQty += eventDelta(event);
   }
 
-  const lines = [...requirements.values()].map((line) => {
-    const stock = findStockForTruckLine(line, input.stock);
-    const stockQty = Math.max(Number(stock?.stock) || 0, 0);
-    const currentQty = Math.max(Math.round(line.currentQty * 100) / 100, 0);
-    const shortageQty = Math.max(line.requiredQty - currentQty, 0);
+  const lines = [...requirements.values()]
+    .map((line) => {
+      const stock = findStockForTruckLine(line, input.stock);
+      const stockQty = Math.max(Number(stock?.stock) || 0, 0);
+      const currentQty = Math.max(Math.round(line.currentQty * 100) / 100, 0);
+      const shortageQty = Math.max(line.requiredQty - currentQty, 0);
 
-    return {
-      ...line,
-      currentQty,
-      shortageQty,
-      stockQty,
-      itemId: stock?.itemId || null,
-      itemName: stock?.itemName || line.label,
-      warehouseId: stock?.warehouseId || line.warehouseId,
-    };
-  }).sort((left, right) => left.label.localeCompare(right.label, "es"));
+      return {
+        ...line,
+        currentQty,
+        shortageQty,
+        stockQty,
+        itemId: stock?.itemId || line.itemId || null,
+        itemName: stock?.itemName || line.itemName || line.label,
+        warehouseId: stock?.warehouseId || line.warehouseId,
+      };
+    })
+    .filter((line) => !input.includePersistentEvents || line.requiredQty > 0 || line.currentQty > 0)
+    .sort((left, right) => left.label.localeCompare(right.label, "es"));
 
   const requiredTotal = lines.reduce((sum, line) => sum + line.requiredQty, 0);
   const loadedTotal = lines.reduce((sum, line) => sum + line.loadedQty, 0);
@@ -428,6 +658,82 @@ export function buildConductorTruckInventory(input: {
     currentTotal,
     shortageTotal,
     ready: shortageTotal <= 0,
+  };
+}
+
+export function buildConductorTruckBalance(input: {
+  vehicleId: string;
+  vehicleName?: string;
+  vehiclePlate?: string;
+  assignedDriverId?: string | null;
+  assignedDriverName?: string;
+  events: ReadonlyArray<ConductorTruckInventoryEvent>;
+  stock: ReadonlyArray<ConductorTruckStockItem>;
+}): ConductorTruckBalance {
+  const summary = buildConductorTruckInventory({
+    tasks: [],
+    events: input.events,
+    stock: input.stock,
+    includePersistentEvents: true,
+  });
+
+  return {
+    vehicleId: input.vehicleId,
+    vehicleName: input.vehicleName?.trim() || "",
+    vehiclePlate: input.vehiclePlate?.trim() || "",
+    assignedDriverId: input.assignedDriverId ?? null,
+    assignedDriverName: input.assignedDriverName?.trim() || "",
+    lines: summary.lines,
+    totalQty: summary.currentTotal,
+  };
+}
+
+export function buildConductorFullBoxCargo(
+  events: ReadonlyArray<ConductorTruckInventoryEvent>,
+  routeId?: string | null,
+): ConductorFullBoxCargoSummary {
+  const lines = new Map<string, ConductorFullBoxCargoLine>();
+
+  for (const event of events) {
+    if (
+      event.eventType !== "collect_full_box" &&
+      event.eventType !== "unload_full_box"
+    ) {
+      continue;
+    }
+    if (routeId && event.routeId !== routeId) {
+      continue;
+    }
+    if (!event.taskId) {
+      continue;
+    }
+
+    const key = `${event.taskId}|${event.catalogKey}|${event.itemLabel}`;
+    const current = lines.get(key) || {
+      key,
+      taskId: event.taskId,
+      shipmentId: event.shipmentId,
+      routeId: event.routeId,
+      label: event.itemLabel || event.itemName || "Caja llena",
+      collectedQty: 0,
+      unloadedQty: 0,
+      pendingQty: 0,
+    };
+    const qty = Math.abs(Number(event.qty) || 0);
+    if (event.eventType === "collect_full_box") current.collectedQty += qty;
+    if (event.eventType === "unload_full_box") current.unloadedQty += qty;
+    current.pendingQty = Math.max(current.collectedQty - current.unloadedQty, 0);
+    lines.set(key, current);
+  }
+
+  const result = [...lines.values()].sort(
+    (left, right) => left.label.localeCompare(right.label, "es") || left.key.localeCompare(right.key),
+  );
+  return {
+    lines: result,
+    collectedTotal: result.reduce((sum, line) => sum + line.collectedQty, 0),
+    unloadedTotal: result.reduce((sum, line) => sum + line.unloadedQty, 0),
+    pendingTotal: result.reduce((sum, line) => sum + line.pendingQty, 0),
   };
 }
 
@@ -510,6 +816,27 @@ export function validateConductorTruckReturn(line: ConductorTruckInventoryLine, 
   }
 
   return "";
+}
+
+export function validateConductorTruckReturnInput(input: {
+  reason: string;
+  targetVehicleId?: string | null;
+}) {
+  const reason = String(input.reason || "").trim();
+
+  if (!CONDUCTOR_TRUCK_RETURN_REASONS.includes(reason as ConductorTruckReturnReason)) {
+    return "Selecciona un motivo";
+  }
+
+  if (reason === CONDUCTOR_TRUCK_VEHICLE_CHANGE_REASON && !String(input.targetVehicleId || "").trim()) {
+    return "Selecciona el vehículo destino";
+  }
+
+  return "";
+}
+
+export function isConductorTruckVehicleChangeReason(reason: string) {
+  return String(reason || "").trim() === CONDUCTOR_TRUCK_VEHICLE_CHANGE_REASON;
 }
 
 export function validateConductorTaskResultInput(input: {

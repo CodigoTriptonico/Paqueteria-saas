@@ -4,7 +4,8 @@ export type ShipmentAuditInteraction =
   | "left_click"
   | "right_click"
   | "context_menu"
-  | "schedule_due";
+  | "schedule_due"
+  | "bulk_action";
 
 export type ShipmentAuditContext = {
   interaction: ShipmentAuditInteraction;
@@ -13,7 +14,7 @@ export type ShipmentAuditContext = {
   stepKind?: string;
 };
 
-export function shipmentAuditInteractionLabel(interaction: ShipmentAuditInteraction) {
+function shipmentAuditInteractionLabel(interaction: ShipmentAuditInteraction) {
   if (interaction === "left_click") {
     return "Clic izquierdo en tarjeta";
   }
@@ -24,6 +25,10 @@ export function shipmentAuditInteractionLabel(interaction: ShipmentAuditInteract
 
   if (interaction === "schedule_due") {
     return "Fecha programada cumplida";
+  }
+
+  if (interaction === "bulk_action") {
+    return "Acción en lote";
   }
 
   return "Menú contextual";
@@ -74,7 +79,7 @@ export function describeLogisticsAuditChange(input: {
   return chunks.join(" · ");
 }
 
-export function logisticsTaskTypeLabel(
+function logisticsTaskTypeLabel(
   taskType: "deliver_empty_box" | "pickup_full_box",
 ) {
   return taskType === "deliver_empty_box" ? "Entrega de caja vacía" : "Recolección de caja llena";
@@ -176,6 +181,10 @@ export function shipmentAuditActionLabel(action: string) {
 
   if (action === "shipment.logistics_task_failed") {
     return "Visita fallida";
+  }
+
+  if (action === "shipment.driver_payment_not_collected") {
+    return "Cobro pendiente";
   }
 
   if (action === "sale.invoice_finalized") {

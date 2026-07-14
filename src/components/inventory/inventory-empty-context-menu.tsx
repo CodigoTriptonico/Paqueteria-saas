@@ -4,7 +4,7 @@ import { FolderPlus, Layers3, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-export const INVENTORY_EMPTY_CONTEXT_MENU_ATTR = "data-inventory-empty-context-menu";
+const INVENTORY_EMPTY_CONTEXT_MENU_ATTR = "data-inventory-empty-context-menu";
 
 export type InventoryEmptyContextMenuState = {
   x: number;

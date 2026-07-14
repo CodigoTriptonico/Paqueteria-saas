@@ -2,17 +2,18 @@
 
 import Link from "next/link";
 import { Printer, X } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
+import { InvoiceQrCode } from "@/components/sale/invoice-qr-code";
 import type { QuickEmptyBoxDraft } from "@/components/sale/sale-quick-empty-box-modal";
 import { PromotionSelector } from "@/components/sale/promotion-selector";
 import {
+  EMPTY_BOX_OFFICE_MODE,
   personFullName,
   SaleInvoicePaper,
   senderPhonesLabel,
 } from "@/components/sale/venta-parts";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { saleFinishActionLabel, type InvoiceBillingSnapshot } from "@/lib/invoice-billing";
-import type { SalePaymentChoice } from "@/lib/sale-payment-choice";
+import { SALE_PAYMENT_UNSET, type SalePaymentSelection } from "@/lib/sale-payment-choice";
 import { SaleInvoiceConfirmDialog } from "@/components/sale/sale-invoice-confirm-dialog";
 import { useState } from "react";
 
@@ -26,9 +27,9 @@ type SaleQuickCheckoutModalProps = {
   payNowDraft: string;
   payNowDraftTouched?: boolean;
   onPayNowDraftChange: (value: string) => void;
-  paymentMethod: SalePaymentChoice;
+  paymentMethod: SalePaymentSelection;
   paymentNote: string;
-  onPaymentMethodChange: (method: SalePaymentChoice) => void;
+  onPaymentMethodChange: (method: SalePaymentSelection) => void;
   onPaymentNoteChange: (note: string) => void;
   completed?: boolean;
   stockMessage: string;
@@ -123,7 +124,7 @@ export function SaleQuickCheckoutModal({
 
           <div className="no-print rounded-xl border border-black bg-surface-card p-4 text-center text-[#f8fafc]">
             <div className="rounded-lg bg-[#f8fafc] p-3">
-              <QRCodeSVG value={`invoice:${invoiceNumber}`} size={144} level="M" marginSize={1} />
+              <InvoiceQrCode invoiceNumber={invoiceNumber} size={144} />
             </div>
             <p className="mt-3 text-lg font-black">{invoiceNumber}</p>
             <p className="text-sm font-bold text-slate-300">QR del invoice</p>
@@ -150,10 +151,10 @@ export function SaleQuickCheckoutModal({
                 Imprimir
               </button>
               <Link
-                href="/envios"
+                href="/seguimiento"
                 className={`${secondaryButtonClass} flex h-14 items-center justify-center text-lg font-black`}
               >
-                Ver en Envíos
+                Ver en Seguimiento
               </Link>
               <button
                 type="button"
@@ -170,7 +171,11 @@ export function SaleQuickCheckoutModal({
               </button>
               <button
                 type="button"
-                onClick={() => setConfirmOpen(true)}
+                onClick={() => {
+                  onPaymentMethodChange(SALE_PAYMENT_UNSET);
+                  onPaymentNoteChange("");
+                  setConfirmOpen(true);
+                }}
                 disabled={!billing || billing.promotionSelectionRequired || confirming}
                 className="h-14 rounded-lg bg-emerald-400 text-lg font-black text-slate-950 disabled:opacity-40"
               >
@@ -187,12 +192,11 @@ export function SaleQuickCheckoutModal({
           title="¿Crear este invoice?"
           invoiceLabel={`Factura ${invoiceNumber}`}
           lines={
-            billingForPayment
+            billing
               ? [
-                  { label: "Remitente", value: personFullName(draft.sender) },
-                  { label: "Total", value: billingForPayment.quotedTotal },
-                  { label: "Depósito", value: billingForPayment.payNow },
-                  { label: "Pendiente", value: billingForPayment.balanceDue },
+                  { label: "Total", value: billing.quotedTotal },
+                  { label: "Depósito", value: billing.payNow },
+                  { label: "Pendiente", value: billing.balanceDue },
                 ]
               : []
           }
@@ -200,6 +204,7 @@ export function SaleQuickCheckoutModal({
           confirming={confirming}
           paymentMethod={paymentMethod}
           paymentNote={paymentNote}
+          pendingPaymentSource={draft.emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? "office" : "driver"}
           onPaymentMethodChange={onPaymentMethodChange}
           onPaymentNoteChange={onPaymentNoteChange}
           onCancel={() => {

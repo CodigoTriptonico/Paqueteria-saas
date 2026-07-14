@@ -37,6 +37,7 @@ next-live-debug.log
 .next-dev*.log
 .next-prod*.log
 .dev-tunnel.url
+.dev-server.pid
 .playwright-cli/
 
 # env files (can opt-in for committing if needed)

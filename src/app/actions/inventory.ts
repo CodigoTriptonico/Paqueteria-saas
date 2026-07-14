@@ -17,6 +17,7 @@ import {
   categoriesToConfig,
   movementsFromDb,
   MOVEMENT_SELECT,
+  resolveInventoryLeafItem,
   stockRowsToItems,
   type DbAssignmentRow,
   type DbCategory,
@@ -28,7 +29,13 @@ import type { CategoryConfig } from "@/lib/inventory-tree";
 import { InvalidQuantityError, readPositiveQty } from "@/lib/security/qty";
 import { recordInventoryMovementAtomic } from "@/lib/security/inventory-movement";
 import {
+  ensureInventoryLeafState,
+  inventoryLeafStateToItem,
+} from "@/lib/inventory-leaf-state";
+import {
   collectCategoryTreeLeaves,
+  inventoryLeafKey,
+  mergeOrphanItemsIntoCategoryConfigs,
   mergeTreeIntoInventoryItems,
 } from "@/lib/inventory-stock";
 
@@ -42,8 +49,6 @@ export type WarehouseInventoryHistoryPayload = {
   assignments: InventoryAssignment[];
 };
 
-export type WarehouseInventoryPayload = WarehouseInventoryCorePayload &
-  WarehouseInventoryHistoryPayload;
 
 async function loadWarehouseInventoryCore(
   supabase: SupabaseClient,
@@ -78,7 +83,35 @@ async function loadWarehouseInventoryCore(
   let items = stockRowsToItems((stockRows || []) as unknown as DbStockRow[]);
   items = mergeTreeIntoInventoryItems(categoryConfigs, items);
 
-  return ok({ categoryConfigs, items });
+  const syncedCategoryConfigs = mergeOrphanItemsIntoCategoryConfigs(
+    categoryConfigs,
+    items,
+  );
+
+  if (JSON.stringify(syncedCategoryConfigs) !== JSON.stringify(categoryConfigs)) {
+    const categoryIdByName = new Map(
+      ((categories || []) as DbCategory[]).map((row) => [row.name, row.id]),
+    );
+
+    for (const category of syncedCategoryConfigs) {
+      const categoryId = categoryIdByName.get(category.name);
+
+      if (!categoryId) {
+        continue;
+      }
+
+      const { error: healError } = await supabase
+        .from("inventory_categories")
+        .update({ tree_data: category.items || [] })
+        .eq("id", categoryId);
+
+      if (healError) {
+        return fail(healError.message);
+      }
+    }
+  }
+
+  return ok({ categoryConfigs: syncedCategoryConfigs, items });
 }
 
 async function loadWarehouseInventoryHistory(
@@ -169,39 +202,8 @@ export async function loadWarehouseInventoryHistoryAction(
   }
 }
 
-export async function loadWarehouseInventoryAction(
-  warehouseId: string,
-): Promise<ActionResult<WarehouseInventoryPayload>> {
-  try {
-    const { session, supabase } = await requireInventoryWarehouseAccess(warehouseId);
 
-    if (!supabase) {
-      return fail("Supabase no configurado");
-    }
-
-    const [coreResult, historyResult] = await Promise.all([
-      loadWarehouseInventoryCore(supabase, session.organizationId, warehouseId),
-      loadWarehouseInventoryHistory(supabase, session.organizationId, warehouseId),
-    ]);
-
-    if (!coreResult.ok) {
-      return fail(coreResult.error);
-    }
-
-    if (!historyResult.ok) {
-      return fail(historyResult.error);
-    }
-
-    return ok({
-      ...coreResult.data,
-      ...historyResult.data,
-    });
-  } catch (error) {
-    return fail(actionErrorMessage(error));
-  }
-}
-
-export async function saveInventoryCategoriesAction(
+async function saveInventoryCategoriesAction(
   categoryConfigs: CategoryConfig[],
 ): Promise<ActionResult<null>> {
   try {
@@ -287,12 +289,202 @@ export async function saveInventoryCategoriesAction(
   }
 }
 
+async function ensureLeafInCategoryTree(
+  supabase: SupabaseClient,
+  organizationId: string,
+  categoryName: string,
+  kind: string,
+  subcategory: string | null,
+) {
+  const { data: categoryRow, error: categoryError } = await supabase
+    .from("inventory_categories")
+    .select("id, name, tree_data")
+    .eq("organization_id", organizationId)
+    .eq("name", categoryName)
+    .maybeSingle();
+
+  if (categoryError || !categoryRow) {
+    return;
+  }
+
+  const categoryConfigs = categoriesToConfig([categoryRow as DbCategory]);
+  const syncedCategoryConfigs = mergeOrphanItemsIntoCategoryConfigs(categoryConfigs, [
+    {
+      id: "sync",
+      name: kind,
+      category: categoryName,
+      kind,
+      subcategory: subcategory || undefined,
+      stock: 0,
+      reserved: 0,
+      assigned: 0,
+      unavailable: 0,
+      minStock: 2,
+    },
+  ]);
+
+  if (JSON.stringify(syncedCategoryConfigs) === JSON.stringify(categoryConfigs)) {
+    return;
+  }
+
+  await supabase
+    .from("inventory_categories")
+    .update({ tree_data: syncedCategoryConfigs[0]?.items || [] })
+    .eq("id", categoryRow.id);
+}
+
+async function pruneWarehouseItemsNotInTree(
+  supabase: SupabaseClient,
+  organizationId: string,
+  warehouseId: string,
+  categoryConfigs: CategoryConfig[],
+) {
+  const allowedKeys = new Set(
+    categoryConfigs.flatMap((category) =>
+      collectCategoryTreeLeaves(category).map((leaf) => inventoryLeafKey(leaf)),
+    ),
+  );
+
+  const { data: stockRows, error: stockError } = await supabase
+    .from("inventory_stock")
+    .select(
+      "id, item_id, stock, reserved, assigned, unavailable, inventory_items(id, kind, subcategory, inventory_categories(name))",
+    )
+    .eq("warehouse_id", warehouseId)
+    .eq("organization_id", organizationId);
+
+  if (stockError) {
+    throw new Error(stockError.message);
+  }
+
+  for (const row of stockRows || []) {
+    const itemRow = Array.isArray(row.inventory_items)
+      ? row.inventory_items[0]
+      : row.inventory_items;
+
+    if (!itemRow) {
+      continue;
+    }
+
+    const categoryRow = Array.isArray(itemRow.inventory_categories)
+      ? itemRow.inventory_categories[0]
+      : itemRow.inventory_categories;
+    const key = inventoryLeafKey({
+      category: categoryRow?.name || "",
+      kind: itemRow.kind,
+      subcategory: itemRow.subcategory || undefined,
+    });
+
+    if (allowedKeys.has(key)) {
+      continue;
+    }
+
+    const stock = Number(row.stock ?? 0);
+    const reserved = Number(row.reserved ?? 0);
+    const assigned = Number(row.assigned ?? 0);
+    const unavailable = Number(row.unavailable ?? 0);
+
+    if (stock !== 0 || reserved !== 0 || assigned !== 0 || unavailable !== 0) {
+      continue;
+    }
+
+    const [{ count: movementCount, error: movementError }, { count: assignmentCount, error: assignmentError }] =
+      await Promise.all([
+        supabase
+          .from("inventory_movements")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", organizationId)
+          .eq("item_id", row.item_id),
+        supabase
+          .from("inventory_assignments")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", organizationId)
+          .eq("item_id", row.item_id),
+      ]);
+
+    if (movementError) {
+      throw new Error(movementError.message);
+    }
+
+    if (assignmentError) {
+      throw new Error(assignmentError.message);
+    }
+
+    if ((movementCount || 0) > 0 || (assignmentCount || 0) > 0) {
+      continue;
+    }
+
+    const { count: remainingStockCount, error: remainingStockError } = await supabase
+      .from("inventory_stock")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .eq("item_id", row.item_id)
+      .neq("id", row.id);
+
+    if (remainingStockError) {
+      throw new Error(remainingStockError.message);
+    }
+
+    await supabase.from("inventory_stock").delete().eq("id", row.id);
+
+    if ((remainingStockCount || 0) === 0) {
+      await supabase
+        .from("inventory_items")
+        .delete()
+        .eq("organization_id", organizationId)
+        .eq("id", row.item_id);
+    }
+  }
+}
+
+async function saveWarehouseInventoryState(
+  supabase: SupabaseClient,
+  organizationId: string,
+  warehouseId: string,
+  categoryConfigs: CategoryConfig[],
+  items: InventoryStockItem[],
+  createdBy: string,
+  options?: { persistCategories?: boolean },
+) {
+  const syncedCategoryConfigs = mergeOrphanItemsIntoCategoryConfigs(
+    categoryConfigs,
+    items,
+  );
+
+  if (options?.persistCategories !== false) {
+    const categoriesResult = await saveInventoryCategoriesAction(syncedCategoryConfigs);
+
+    if (!categoriesResult.ok) {
+      throw new Error(categoriesResult.error);
+    }
+  }
+
+  await ensureItemsForWarehouse(
+    supabase,
+    organizationId,
+    warehouseId,
+    syncedCategoryConfigs,
+    items,
+    createdBy,
+  );
+
+  if (options?.persistCategories !== false) {
+    await pruneWarehouseItemsNotInTree(
+      supabase,
+      organizationId,
+      warehouseId,
+      syncedCategoryConfigs,
+    );
+  }
+}
+
 async function ensureItemsForWarehouse(
   supabase: SupabaseClient,
   organizationId: string,
   warehouseId: string,
   categoryConfigs: CategoryConfig[],
   items: InventoryStockItem[],
+  createdBy: string,
 ) {
   const { data: categories } = await supabase
     .from("inventory_categories")
@@ -323,14 +515,18 @@ async function ensureItemsForWarehouse(
     let itemId = match?.id;
 
     if (!itemId || itemId.startsWith("inv-") || itemId.startsWith("virtual-")) {
-      const { data: existingItem } = await supabase
-        .from("inventory_items")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("category_id", leaf.categoryId)
-        .eq("kind", leaf.kind)
-        .eq("subcategory", leaf.subcategory || null)
-        .maybeSingle();
+      const { data: existingItem, error: existingItemError } =
+        await resolveInventoryLeafItem(supabase, {
+          organizationId,
+          categoryId: leaf.categoryId,
+          kind: leaf.kind,
+          subcategory: leaf.subcategory || null,
+          warehouseId,
+        });
+
+      if (existingItemError) {
+        throw new Error(existingItemError);
+      }
 
       if (existingItem?.id) {
         itemId = existingItem.id;
@@ -355,20 +551,26 @@ async function ensureItemsForWarehouse(
       }
     }
 
+    if (!itemId) {
+      throw new Error("No se pudo resolver item de inventario");
+    }
+
     const stockItem = items.find((item) => item.id === match?.id) || match;
 
     const { data: stockRow } = await supabase
       .from("inventory_stock")
-      .select("id")
+      .select("id, stock")
       .eq("warehouse_id", warehouseId)
       .eq("item_id", itemId)
       .maybeSingle();
 
+    const desiredStock = Math.max(Number(stockItem?.stock ?? 0) || 0, 0);
+    const currentStock = Number(stockRow?.stock ?? 0) || 0;
     const stockPayload = {
       organization_id: organizationId,
       warehouse_id: warehouseId,
       item_id: itemId,
-      stock: stockItem?.stock ?? 0,
+      stock: 0,
       reserved: stockItem?.reserved ?? 0,
       min_stock: stockItem?.minStock ?? 2,
     };
@@ -377,7 +579,6 @@ async function ensureItemsForWarehouse(
       await supabase
         .from("inventory_stock")
         .update({
-          stock: stockPayload.stock,
           reserved: stockPayload.reserved,
           min_stock: stockPayload.min_stock,
         })
@@ -385,46 +586,27 @@ async function ensureItemsForWarehouse(
     } else {
       await supabase.from("inventory_stock").insert(stockPayload);
     }
+
+    if (desiredStock !== currentStock) {
+      const movementType = desiredStock > 0 ? "ajuste" : "salida";
+      const movementQty = desiredStock > 0 ? desiredStock : currentStock;
+
+      if (movementQty > 0) {
+        await recordInventoryMovementAtomic(supabase, {
+          organizationId,
+          warehouseId,
+          itemId,
+          itemName: stockItem?.name || leaf.name,
+          type: movementType,
+          qty: movementQty,
+          note: `Ajuste manual de inventario - ${stockItem?.name || leaf.name}`,
+          createdBy,
+        });
+      }
+    }
   }
 }
 
-export async function saveWarehouseStockAction(input: {
-  warehouseId: string;
-  categoryConfigs: CategoryConfig[];
-  items: InventoryStockItem[];
-}): Promise<ActionResult<null>> {
-  try {
-    const session = await requireAppSession();
-
-    if (
-      !sessionHasPermission(session, "inventory.adjust") &&
-      !sessionHasPermission(session, "inventory.reserve")
-    ) {
-      throw new Error("FORBIDDEN");
-    }
-
-    if (!canAccessWarehouse(session, input.warehouseId)) {
-      throw new Error("FORBIDDEN");
-    }
-
-    const supabase = await createScopedSupabase(session);
-    if (!supabase) {
-      return fail("Supabase no configurado");
-    }
-
-    await ensureItemsForWarehouse(
-      supabase,
-      session.organizationId,
-      input.warehouseId,
-      input.categoryConfigs,
-      input.items,
-    );
-
-    return ok(null);
-  } catch (error) {
-    return fail(actionErrorMessage(error));
-  }
-}
 
 export async function saveWarehouseInventoryAction(input: {
   warehouseId: string;
@@ -450,20 +632,13 @@ export async function saveWarehouseInventoryAction(input: {
       return fail("Supabase no configurado");
     }
 
-    const categoriesResult = await saveInventoryCategoriesAction(
-      input.categoryConfigs,
-    );
-
-    if (!categoriesResult.ok) {
-      return categoriesResult;
-    }
-
-    await ensureItemsForWarehouse(
+    await saveWarehouseInventoryState(
       supabase,
       session.organizationId,
       input.warehouseId,
       input.categoryConfigs,
       input.items,
+      session.userId,
     );
 
     return ok(null);
@@ -472,186 +647,7 @@ export async function saveWarehouseInventoryAction(input: {
   }
 }
 
-export async function deductStockForBoxSaleAction(input: {
-  boxLabel: string;
-  warehouseId?: string;
-  qty?: number;
-  note?: string;
-}): Promise<ActionResult<InventoryMovement | null>> {
-  try {
-    const session = await requireAppSession();
-    if (!sessionHasPermission(session, "inventory.adjust")) {
-      return fail("No tienes permiso para ajustar inventario");
-    }
 
-    const supabase = await createScopedSupabase(session);
-
-    if (!supabase) {
-      return fail("Supabase no configurado");
-    }
-
-    let warehouseId = input.warehouseId;
-
-    if (!warehouseId) {
-      const { data: warehouse } = await supabase
-        .from("warehouses")
-        .select("id")
-        .eq("organization_id", session.organizationId)
-        .eq("is_active", true)
-        .order("is_default", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      warehouseId = warehouse?.id;
-    }
-
-    if (!warehouseId) {
-      return fail("No hay bodega activa");
-    }
-
-    if (!canAccessWarehouse(session, warehouseId)) {
-      return fail("No tienes acceso a esta bodega");
-    }
-
-    const normalizedBox = input.boxLabel
-      .normalize("NFD")
-      .replace(/\p{Diacritic}/gu, "")
-      .toLowerCase()
-      .replace(/\s+/g, "");
-
-    const { data: stockRows, error: stockError } = await supabase
-      .from("inventory_stock")
-      .select("item_id, stock, inventory_items(id, name, kind)")
-      .eq("warehouse_id", warehouseId)
-      .eq("organization_id", session.organizationId);
-
-    if (stockError) {
-      return fail(stockError.message);
-    }
-
-    const match = (stockRows || []).find((row) => {
-      const itemRow = row.inventory_items as
-        | { id: string; name: string; kind: string }
-        | { id: string; name: string; kind: string }[]
-        | null;
-      const item = Array.isArray(itemRow) ? itemRow[0] : itemRow;
-      if (!item) {
-        return false;
-      }
-
-      const candidates = [
-        item.kind,
-        item.name,
-        `Caja ${item.kind}`,
-        `Caja ${item.name}`,
-      ];
-      return candidates.some(
-        (value) =>
-          value
-            .normalize("NFD")
-            .replace(/\p{Diacritic}/gu, "")
-            .toLowerCase()
-            .replace(/\s+/g, "")
-            .includes(normalizedBox) ||
-          normalizedBox.includes(
-            value
-              .normalize("NFD")
-              .replace(/\p{Diacritic}/gu, "")
-              .toLowerCase()
-              .replace(/\s+/g, ""),
-          ),
-      );
-    });
-
-    if (!match) {
-      return fail(`No hay stock registrado para la caja ${input.boxLabel}`);
-    }
-
-    const itemRow = match.inventory_items as
-      | { id: string; name: string; kind: string }
-      | { id: string; name: string; kind: string }[];
-    const item = Array.isArray(itemRow) ? itemRow[0] : itemRow;
-    const qty = input.qty ?? 1;
-
-    if (Number(match.stock) < qty) {
-      return fail(`Stock insuficiente para ${input.boxLabel}`);
-    }
-
-    return recordInventoryMovementAction({
-      warehouseId,
-      itemId: item.id,
-      itemName: item.name || item.kind,
-      type: "salida",
-      qty,
-      note: input.note || `Venta caja ${input.boxLabel}`,
-    });
-  } catch (error) {
-    return fail(actionErrorMessage(error));
-  }
-}
-
-export async function recordInventoryMovementAction(input: {
-  warehouseId: string;
-  itemId: string;
-  itemName: string;
-  type: "entrada" | "salida" | "ajuste";
-  qty: number;
-  note?: string;
-}): Promise<ActionResult<InventoryMovement>> {
-  try {
-    const session = await requireAppSession();
-
-    const canAdjust = sessionHasPermission(session, "inventory.adjust");
-    const canReserve = sessionHasPermission(session, "inventory.reserve");
-
-    if ((input.type === "entrada" || input.type === "ajuste") && !canAdjust) {
-      throw new Error("FORBIDDEN");
-    }
-
-    if (input.type === "salida" && !canReserve && !canAdjust) {
-      throw new Error("FORBIDDEN");
-    }
-
-    if (!canAccessWarehouse(session, input.warehouseId)) {
-      throw new Error("FORBIDDEN");
-    }
-
-    const supabase = await createScopedSupabase(session);
-    if (!supabase) {
-      return fail("Supabase no configurado");
-    }
-
-    const qty = readPositiveQty(input.qty);
-
-    const result = await recordInventoryMovementAtomic(supabase, {
-      organizationId: session.organizationId,
-      warehouseId: input.warehouseId,
-      itemId: input.itemId,
-      itemName: input.itemName,
-      type: input.type,
-      qty,
-      note: input.note,
-      createdBy: session.userId,
-    });
-
-    const { data: movement, error: movError } = await supabase
-      .from("inventory_movements")
-      .select(MOVEMENT_SELECT)
-      .eq("id", result.movementId)
-      .single();
-
-    if (movError || !movement) {
-      return fail(movError?.message || "No se pudo registrar el movimiento");
-    }
-
-    return ok(movementsFromDb([movement])[0]);
-  } catch (error) {
-    if (error instanceof InvalidQuantityError) {
-      return fail(error.message);
-    }
-    return fail(actionErrorMessage(error));
-  }
-}
 
 export async function ensureInventoryLeafItemAction(input: {
   warehouseId: string;
@@ -680,138 +676,27 @@ export async function ensureInventoryLeafItemAction(input: {
       return fail("Supabase no configurado");
     }
 
-    const categoryName = input.category.trim();
-    const itemName = input.itemName.trim() || input.kind.trim();
-    const kind = input.kind.trim() || itemName;
-    const subcategory = input.subcategory?.trim() || null;
-    const minStock = input.minStock ?? 2;
+    const leafResult = await ensureInventoryLeafState(
+      supabase,
+      session.organizationId,
+      input,
+    );
 
-    let categoryId = "";
-    const { data: existingCategory, error: categoryError } = await supabase
-      .from("inventory_categories")
-      .select("id")
-      .eq("organization_id", session.organizationId)
-      .eq("name", categoryName)
-      .maybeSingle();
-
-    if (categoryError) {
-      return fail(categoryError.message);
+    if (!leafResult.ok) {
+      return fail(leafResult.error);
     }
 
-    if (existingCategory?.id) {
-      categoryId = existingCategory.id;
-    } else {
-      const { data: insertedCategory, error: insertCategoryError } =
-        await supabase
-          .from("inventory_categories")
-          .insert({
-            organization_id: session.organizationId,
-            name: categoryName,
-            tree_data: [],
-          })
-          .select("id")
-          .single();
+    const leafState = leafResult.data;
+    const { categoryName, kind, subcategory } = leafState;
+    await ensureLeafInCategoryTree(
+      supabase,
+      session.organizationId,
+      categoryName,
+      kind,
+      subcategory,
+    );
 
-      if (insertCategoryError || !insertedCategory) {
-        return fail(
-          insertCategoryError?.message || "No se pudo crear categoria",
-        );
-      }
-
-      categoryId = insertedCategory.id;
-    }
-
-    let itemQuery = supabase
-      .from("inventory_items")
-      .select("id, name, kind, subcategory, size, location, unit")
-      .eq("organization_id", session.organizationId)
-      .eq("category_id", categoryId)
-      .eq("kind", kind);
-
-    itemQuery = subcategory
-      ? itemQuery.eq("subcategory", subcategory)
-      : itemQuery.is("subcategory", null);
-
-    const { data: existingItem, error: itemError } =
-      await itemQuery.maybeSingle();
-
-    if (itemError) {
-      return fail(itemError.message);
-    }
-
-    let itemRow = existingItem;
-
-    if (!itemRow?.id) {
-      const { data: insertedItem, error: insertItemError } = await supabase
-        .from("inventory_items")
-        .insert({
-          organization_id: session.organizationId,
-          category_id: categoryId,
-          name: itemName,
-          kind,
-          subcategory,
-        })
-        .select("id, name, kind, subcategory, size, location, unit")
-        .single();
-
-      if (insertItemError || !insertedItem) {
-        return fail(insertItemError?.message || "No se pudo crear item");
-      }
-
-      itemRow = insertedItem;
-    }
-
-    const { data: existingStockRow, error: stockError } = await supabase
-      .from("inventory_stock")
-      .select("id, stock, reserved, assigned, unavailable, min_stock")
-      .eq("warehouse_id", input.warehouseId)
-      .eq("item_id", itemRow.id)
-      .maybeSingle();
-
-    if (stockError) {
-      return fail(stockError.message);
-    }
-
-    let stockRow = existingStockRow;
-
-    if (!stockRow?.id) {
-      const { data: insertedStock, error: insertStockError } = await supabase
-        .from("inventory_stock")
-        .insert({
-          organization_id: session.organizationId,
-          warehouse_id: input.warehouseId,
-          item_id: itemRow.id,
-          stock: 0,
-          reserved: 0,
-          assigned: 0,
-          unavailable: 0,
-          min_stock: minStock,
-        })
-        .select("id, stock, reserved, assigned, unavailable, min_stock")
-        .single();
-
-      if (insertStockError || !insertedStock) {
-        return fail(insertStockError?.message || "No se pudo crear stock");
-      }
-
-      stockRow = insertedStock;
-    }
-
-    return ok({
-      id: itemRow.id,
-      name: itemRow.name || itemName,
-      category: categoryName,
-      kind: itemRow.kind || kind,
-      subcategory: itemRow.subcategory || undefined,
-      size: itemRow.size || undefined,
-      stock: Number(stockRow.stock || 0),
-      reserved: Number(stockRow.reserved || 0),
-      assigned: Number(stockRow.assigned ?? 0),
-      unavailable: Number(stockRow.unavailable ?? 0),
-      minStock: Number(stockRow.min_stock ?? minStock),
-      location: itemRow.location || undefined,
-      unit: itemRow.unit || undefined,
-    });
+    return ok(inventoryLeafStateToItem(leafState));
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -853,122 +738,18 @@ export async function recordInventoryMovementForLeafAction(input: {
       return fail("Supabase no configurado");
     }
 
-    const categoryName = input.category.trim();
-    const itemName = input.itemName.trim() || input.kind.trim();
-    const kind = input.kind.trim() || itemName;
-    const subcategory = input.subcategory?.trim() || null;
-    const minStock = input.minStock ?? 2;
+    const leafResult = await ensureInventoryLeafState(
+      supabase,
+      session.organizationId,
+      input,
+    );
 
-    let categoryId = "";
-    const { data: existingCategory, error: categoryError } = await supabase
-      .from("inventory_categories")
-      .select("id")
-      .eq("organization_id", session.organizationId)
-      .eq("name", categoryName)
-      .maybeSingle();
-
-    if (categoryError) {
-      return fail(categoryError.message);
+    if (!leafResult.ok) {
+      return fail(leafResult.error);
     }
 
-    if (existingCategory?.id) {
-      categoryId = existingCategory.id;
-    } else {
-      const { data: insertedCategory, error: insertCategoryError } =
-        await supabase
-          .from("inventory_categories")
-          .insert({
-            organization_id: session.organizationId,
-            name: categoryName,
-            tree_data: [],
-          })
-          .select("id")
-          .single();
-
-      if (insertCategoryError || !insertedCategory) {
-        return fail(
-          insertCategoryError?.message || "No se pudo crear categoria",
-        );
-      }
-
-      categoryId = insertedCategory.id;
-    }
-
-    let itemQuery = supabase
-      .from("inventory_items")
-      .select("id, name, kind, subcategory, size, location, unit")
-      .eq("organization_id", session.organizationId)
-      .eq("category_id", categoryId)
-      .eq("kind", kind);
-
-    itemQuery = subcategory
-      ? itemQuery.eq("subcategory", subcategory)
-      : itemQuery.is("subcategory", null);
-
-    const { data: existingItem, error: itemError } =
-      await itemQuery.maybeSingle();
-
-    if (itemError) {
-      return fail(itemError.message);
-    }
-
-    let itemRow = existingItem;
-
-    if (!itemRow?.id) {
-      const { data: insertedItem, error: insertItemError } = await supabase
-        .from("inventory_items")
-        .insert({
-          organization_id: session.organizationId,
-          category_id: categoryId,
-          name: itemName,
-          kind,
-          subcategory,
-        })
-        .select("id, name, kind, subcategory, size, location, unit")
-        .single();
-
-      if (insertItemError || !insertedItem) {
-        return fail(insertItemError?.message || "No se pudo crear item");
-      }
-
-      itemRow = insertedItem;
-    }
-
-    const { data: existingStockRow, error: stockError } = await supabase
-      .from("inventory_stock")
-      .select("id, stock, reserved, assigned, unavailable, min_stock")
-      .eq("warehouse_id", input.warehouseId)
-      .eq("item_id", itemRow.id)
-      .maybeSingle();
-
-    if (stockError) {
-      return fail(stockError.message);
-    }
-
-    let stockRow = existingStockRow;
-
-    if (!stockRow?.id) {
-      const { data: insertedStock, error: insertStockError } = await supabase
-        .from("inventory_stock")
-        .insert({
-          organization_id: session.organizationId,
-          warehouse_id: input.warehouseId,
-          item_id: itemRow.id,
-          stock: 0,
-          reserved: 0,
-          assigned: 0,
-          unavailable: 0,
-          min_stock: minStock,
-        })
-        .select("id, stock, reserved, assigned, unavailable, min_stock")
-        .single();
-
-      if (insertStockError || !insertedStock) {
-        return fail(insertStockError?.message || "No se pudo crear stock");
-      }
-
-      stockRow = insertedStock;
-    }
+    const leafState = leafResult.data;
+    const { itemName, itemRow } = leafState;
 
     const qty = readPositiveQty(input.qty);
 
@@ -994,21 +775,7 @@ export async function recordInventoryMovementForLeafAction(input: {
     }
 
     return ok({
-      item: {
-        id: itemRow.id,
-        name: itemRow.name || itemName,
-        category: categoryName,
-        kind: itemRow.kind || kind,
-        subcategory: itemRow.subcategory || undefined,
-        size: itemRow.size || undefined,
-        stock: result.stock,
-        reserved: Number(stockRow.reserved || 0),
-        assigned: Number(stockRow.assigned ?? 0),
-        unavailable: Number(stockRow.unavailable ?? 0),
-        minStock: Number(stockRow.min_stock ?? minStock),
-        location: itemRow.location || undefined,
-        unit: itemRow.unit || undefined,
-      },
+      item: inventoryLeafStateToItem(leafState, result.stock),
       movement: movementsFromDb([movement])[0],
     });
   } catch (error) {

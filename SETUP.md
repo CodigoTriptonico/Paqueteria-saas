@@ -52,7 +52,7 @@ http://localhost:3000/login
 | --- | --- |
 | Administrador | Todo + Configuracion + Logistica |
 | Vendedor | Inicio, Venta, Inventario |
-| Conductor | Inicio, Envios |
+| Conductor | Inicio, Tareas, Inventario camion |
 
 Logistica (`/logistica`) es solo para administrador.
 
@@ -70,16 +70,16 @@ Venta:
 2. Confirmar cobro.
 3. Debe crear envio y descontar stock.
 
-Envios:
+Tareas del conductor:
 
-1. Conductor solo ve envios asignados.
-2. Puede cambiar estado.
+1. En `/conductor/tareas`, el conductor solo ve sus tareas asignadas.
+2. En `/conductor/inventario-camion`, ve y controla la carga de su vehículo.
 
 ## 8. Calidad
 
 ```powershell
 npm test
-npm run lint
+npm run check:code
 npm run build
 ```
 

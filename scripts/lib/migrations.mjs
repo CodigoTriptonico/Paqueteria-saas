@@ -12,7 +12,8 @@ export const LEGACY_MIGRATION_ALIASES = {
   "045_conductor_truck_inventory.sql": "044_conductor_truck_inventory.sql",
 };
 
-export function listMigrationFiles(root) {  const migrationsDir = join(root, "supabase", "migrations");
+export function listMigrationFiles(root) {
+  const migrationsDir = join(root, "supabase", "migrations");
   return readdirSync(migrationsDir)
     .filter((file) => /^\d{3}_.+\.sql$/.test(file))
     .sort();

@@ -1,6 +1,6 @@
 import type { OnboardingProgress } from "@/app/actions/onboarding";
 
-/** Pausa el tutorial de configuración inicial hasta el próximo aviso. */
+/** Tutorial de configuración inicial en el panel de notificaciones. */
 export const ONBOARDING_TUTORIAL_ENABLED = false;
 
 export function isOnboardingTutorialEnabled() {
@@ -11,6 +11,7 @@ export function onboardingTutorialDisabledProgress(): OnboardingProgress {
   return {
     eligible: false,
     dismissed: false,
+    started: false,
     steps: [],
     completedCount: 0,
     totalCount: 5,

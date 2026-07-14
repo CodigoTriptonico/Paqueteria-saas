@@ -11,10 +11,7 @@ import {
 } from "@/lib/pricing/load-config";
 import {
   saleCountryBoxesFromCountries,
-  saleLogisticsFeesFromRouteConfig,
-  salePricingFromConfig,
 } from "@/lib/pricing/sale-derivatives";
-import type { SaleLogisticsFeesPayload, SalePricingPayload } from "@/lib/pricing/sale-derivatives";
 import type { PricingConfigPayload } from "@/lib/pricing/types";
 import { buildPricingRpcPayload } from "@/lib/pricing/rpc-payload";
 
@@ -26,7 +23,7 @@ export type {
   PricingDistributorPrices,
   PricingRouteConfig,
 } from "@/lib/pricing/types";
-export type { SaleLogisticsFeesPayload, SalePricingPayload } from "@/lib/pricing/sale-derivatives";
+;
 
 export async function loadPricingConfigAction(): Promise<ActionResult<PricingConfigPayload>> {
   try {
@@ -89,37 +86,7 @@ export async function loadSaleCountryBoxesAction(): Promise<
   }
 }
 
-export async function loadSalePricingAction(): Promise<ActionResult<SalePricingPayload>> {
-  try {
-    const session = await requireAppSession();
 
-    if (!canReadPricingSession(session)) {
-      throw new Error("FORBIDDEN");
-    }
-
-    const config = await loadPricingConfigForSession(session);
-    return ok(salePricingFromConfig(config.countries, config.promotions));
-  } catch (error) {
-    return fail(actionErrorMessage(error));
-  }
-}
-
-export async function loadSaleLogisticsFeesAction(): Promise<
-  ActionResult<SaleLogisticsFeesPayload>
-> {
-  try {
-    const session = await requireAppSession();
-
-    if (!canReadPricingSession(session)) {
-      throw new Error("FORBIDDEN");
-    }
-
-    const config = await loadPricingConfigForSession(session);
-    return ok(saleLogisticsFeesFromRouteConfig(config.routeConfig));
-  } catch (error) {
-    return fail(actionErrorMessage(error));
-  }
-}
 
 export async function allocateInvoiceNumberAction(): Promise<ActionResult<{ invoiceNumber: string }>> {
   try {

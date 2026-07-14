@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "scripts/**/*.{mjs,ts,ps1}",
+    "src/**/*.test.{ts,tsx}",
+    "tests/**/*.test.mjs"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "scripts/**/*.{mjs,ts}",
+    "tests/**/*.mjs"
+  ],
+  "ignoreBinaries": [
+    "lsof",
+    "netstat",
+    "ps",
+    "taskkill"
+  ],
+  "ignoreDependencies": [
+    "tailwindcss",
+    "tsx"
+  ]
+}

@@ -3,7 +3,7 @@ import type {
   ShipmentRow,
   ShipmentStatus,
 } from "@/app/actions/shipments";
-import { formatScheduleAtDisplay } from "@/components/sale/schedule-time";
+import { formatScheduleAtDisplay } from "@/lib/sale/schedule-time";
 import { readBillingFromPlan } from "@/lib/invoice-billing";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
 import { legHasScheduleChange } from "@/lib/shipment-schedule-history";
@@ -12,7 +12,7 @@ import {
   FULL_BOX_LEG_LABELS,
 } from "@/lib/shipment-leg-labels";
 
-export type ShipmentProgressStepState = "done" | "active" | "pending";
+type ShipmentProgressStepState = "done" | "active" | "pending";
 
 export type ShipmentProgressKind =
   | "sale"
@@ -47,12 +47,12 @@ const FULL_BOX_DRIVER_MODE = "Programar recoleccion caja llena";
 export const PENDING_EMPTY_BOX_STATUS = "Pendiente entrega caja vacía" as const;
 export const PENDING_FULL_BOX_STATUS = "Pendiente recolección caja llena" as const;
 
-export const PENDING_SHIPMENT_STATUSES = [
+const PENDING_SHIPMENT_STATUSES = [
   PENDING_EMPTY_BOX_STATUS,
   PENDING_FULL_BOX_STATUS,
 ] as const satisfies readonly ShipmentStatus[];
 
-export const TRANSIT_SHIPMENT_STATUSES = [
+const TRANSIT_SHIPMENT_STATUSES = [
   "En oficina",
   "Pickup",
   "Enviado",
@@ -76,7 +76,7 @@ export const ENVIOS_STATUS_FILTER_OPTIONS: ReadonlyArray<{
   { value: "en_transito", label: "En tránsito" },
 ];
 
-export const ENVIOS_STATUS_BUCKET_LABEL: Record<EnviosStatusFilterBucket, string> = {
+const ENVIOS_STATUS_BUCKET_LABEL: Record<EnviosStatusFilterBucket, string> = {
   recolecciones: "Recolecciones",
   entregas: "Entregas",
   en_oficina: "En oficina",
@@ -182,7 +182,7 @@ export function matchesEnviosSearchQuery(row: ShipmentRow, query: string) {
     .every((term) => haystack.includes(term));
 }
 
-export function classifyEnviosStatusFilterBucket(row: ShipmentRow): EnviosStatusFilterBucket {
+function classifyEnviosStatusFilterBucket(row: ShipmentRow): EnviosStatusFilterBucket {
   if (row.status === "Entregado") {
     return "en_destino_final";
   }
@@ -255,7 +255,7 @@ export function isPendingShipmentStatus(status: ShipmentStatus): boolean {
   return (PENDING_SHIPMENT_STATUSES as readonly string[]).includes(status);
 }
 
-export function isTransitShipmentStatus(status: ShipmentStatus): boolean {
+function isTransitShipmentStatus(status: ShipmentStatus): boolean {
   return (TRANSIT_SHIPMENT_STATUSES as readonly string[]).includes(status);
 }
 
@@ -343,6 +343,13 @@ export type ShipmentQuote = {
   total: string;
 };
 
+export type ShipmentBoxLine = {
+  label: string;
+  quantity: number;
+  paid: string;
+  cost: string;
+};
+
 export function formatBoxQuantityLabel(label: string, quantity = 1) {
   const cleanLabel = String(label || "").trim();
   const count = Math.max(Number(quantity) || 1, 1);
@@ -354,38 +361,41 @@ export function formatBoxQuantityLabel(label: string, quantity = 1) {
   return `(${count}) ${cleanLabel}`;
 }
 
-export function quoteFromShipment(row: ShipmentRow): ShipmentQuote | null {
+function readBoxLineEntries(plan: Record<string, unknown>): ShipmentBoxLine[] {
+  const rawLines = Array.isArray(plan.boxLines) ? plan.boxLines : [];
+
+  return rawLines
+    .map((entry) => {
+      const line = entry && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : null;
+
+      if (!line) {
+        return null;
+      }
+
+      const label = String(line.label || "").trim();
+
+      if (!label) {
+        return null;
+      }
+
+      return {
+        label,
+        quantity: Math.max(Number(line.quantity) || 1, 1),
+        paid: String(line.paid || "0"),
+        cost: String(line.cost || "0"),
+      } satisfies ShipmentBoxLine;
+    })
+    .filter((line): line is ShipmentBoxLine => Boolean(line));
+}
+
+export function readShipmentBoxLines(row: ShipmentRow): ShipmentBoxLine[] {
   const plan = row.logistics_plan || {};
-  const boxLines = Array.isArray(plan.boxLines)
-    ? (plan.boxLines as Record<string, unknown>[])
-    : [];
+  const lines = readBoxLineEntries(plan);
 
-  if (boxLines.length) {
-    const labels = boxLines
-      .map((line) => {
-        const label = String(line.label || "").trim();
-        const quantity = Math.max(Number(line.quantity) || 1, 1);
-        return formatBoxQuantityLabel(label, quantity);
-      })
-      .filter(Boolean);
-
-    const total = boxLines.reduce(
-      (sum, line) =>
-        sum + parseMoneyValue(String(line.paid || "0")) * Math.max(Number(line.quantity) || 1, 1),
-      0,
-    );
-    const cost = boxLines.reduce(
-      (sum, line) =>
-        sum + parseMoneyValue(String(line.cost || "0")) * Math.max(Number(line.quantity) || 1, 1),
-      0,
-    );
-
-    return {
-      label: labels.join(" + "),
-      paid: formatMoneyValue(total),
-      cost: formatMoneyValue(cost),
-      total: formatMoneyValue(total),
-    };
+  if (lines.length) {
+    return lines;
   }
 
   const box =
@@ -396,18 +406,64 @@ export function quoteFromShipment(row: ShipmentRow): ShipmentQuote | null {
   const boxCount = Math.max(Number(plan.boxCount) || 1, 1);
 
   if (!label) {
-    return null;
+    return [];
   }
 
-  const unitPaid = parseMoneyValue(String(box?.paid || "0"));
-  const unitCost = parseMoneyValue(String(box?.cost || "0"));
+  return [
+    {
+      label,
+      quantity: boxCount,
+      paid: String(box?.paid || "0"),
+      cost: String(box?.cost || "0"),
+    },
+  ];
+}
 
-  return {
-    label: formatBoxQuantityLabel(label, boxCount),
-    paid: formatMoneyValue(unitPaid),
-    cost: formatMoneyValue(unitCost),
-    total: formatMoneyValue(unitPaid * boxCount),
-  };
+export function shipmentBoxLinesTriggerLabel(lines: ShipmentBoxLine[]): string {
+  if (!lines.length) {
+    return "";
+  }
+
+  if (lines.length === 1 && lines[0].quantity === 1) {
+    return formatBoxQuantityLabel(lines[0].label, 1);
+  }
+
+  return "Cajas";
+}
+
+export function shipmentBoxLinesDetailLabel(lines: ShipmentBoxLine[]): string {
+  return lines
+    .map((line) => formatBoxQuantityLabel(line.label, line.quantity))
+    .filter(Boolean)
+    .join(" + ");
+}
+
+export function shipmentBoxLineTotal(line: ShipmentBoxLine): string {
+  return formatMoneyValue(parseMoneyValue(line.paid) * line.quantity);
+}
+
+export function quoteFromShipment(row: ShipmentRow): ShipmentQuote | null {
+  const lines = readShipmentBoxLines(row);
+
+  if (lines.length) {
+    const total = lines.reduce(
+      (sum, line) => sum + parseMoneyValue(line.paid) * line.quantity,
+      0,
+    );
+    const cost = lines.reduce(
+      (sum, line) => sum + parseMoneyValue(line.cost) * line.quantity,
+      0,
+    );
+
+    return {
+      label: shipmentBoxLinesDetailLabel(lines),
+      paid: formatMoneyValue(total),
+      cost: formatMoneyValue(cost),
+      total: formatMoneyValue(total),
+    };
+  }
+
+  return null;
 }
 
 export function balanceDueFromShipment(row: ShipmentRow, quote: ShipmentQuote | null) {
@@ -843,12 +899,6 @@ export function sortShipmentsByArrivalOrder<T extends Pick<ShipmentRow, "id" | "
   });
 }
 
-export function shipmentVisibleIdSetKey<T extends Pick<ShipmentRow, "id">>(rows: T[]): string {
-  return rows
-    .map((row) => row.id)
-    .sort()
-    .join("\0");
-}
 
 /** Keeps order when the visible id set is unchanged (e.g. toggling invoice_priority). */
 export function reconcileShipmentDisplayOrderIds<T extends Pick<ShipmentRow, "id" | "created_at">>(
@@ -1244,4 +1294,44 @@ export function shipmentOperationalAssignmentLabel(
     : assignment.driverLabel;
 
   return `${routeLabel} · ${driverLabel}`;
+}
+
+export type EnviosReadinessFilter = "all" | "listos" | "pendientes";
+
+export type EnviosReadinessBucket = "listos" | "pendientes";
+
+function activeHomeLogisticsStep(row: ShipmentRow): ShipmentProgressStep | null {
+  const step = shipmentLogisticsSteps(row).find((item) => item.state === "active");
+
+  if (!step || (step.kind !== "empty_box" && step.kind !== "full_box")) {
+    return null;
+  }
+
+  if (step.channel === "office") {
+    return null;
+  }
+
+  return step;
+}
+
+export function classifyEnviosReadinessBucket(row: ShipmentRow): EnviosReadinessBucket | null {
+  const step = activeHomeLogisticsStep(row);
+
+  if (!step) {
+    return null;
+  }
+
+  if (step.awaitingOrder || step.driverTaskOrdered !== true) {
+    return "pendientes";
+  }
+
+  return "listos";
+}
+
+export function matchesEnviosReadinessFilter(row: ShipmentRow, filter: EnviosReadinessFilter) {
+  if (filter === "all") {
+    return true;
+  }
+
+  return classifyEnviosReadinessBucket(row) === filter;
 }

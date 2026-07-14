@@ -81,7 +81,7 @@ export function isConductorAdminActing(input: {
   );
 }
 
-export function conductorAdminActorLabel(actorName: string) {
+function conductorAdminActorLabel(actorName: string) {
   const label = String(actorName || "").trim();
   return label || "Administrador";
 }

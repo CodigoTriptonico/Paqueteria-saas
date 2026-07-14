@@ -3,11 +3,6 @@ import { parseMoneyValue } from "@/lib/logistics-fees";
 import type { PricingPromotionConfig } from "@/lib/pricing-promotions";
 import type { PricingCountryConfig, PricingRouteConfig } from "@/lib/pricing/types";
 
-export type SalePricingPayload = {
-  countryBoxes: Record<string, string[][]>;
-  promotions: PricingPromotionConfig[];
-};
-
 export type SaleLogisticsFeesPayload = Pick<
   PricingRouteConfig,
   "emptyBoxDeliveryFee" | "fullBoxPickupFee" | "minimumDeposit" | "logisticsFeeMode"
@@ -20,10 +15,6 @@ export function saleCountryBoxesFromCountries(countries: PricingCountryConfig[])
     const pricedBoxes = country.boxes.filter(
       (box) => parseMoneyValue(box.price || "$0") > 0,
     );
-
-    if (!pricedBoxes.length) {
-      continue;
-    }
 
     countryBoxes[country.name] = pricedBoxes.map((box) => [
       box.size,

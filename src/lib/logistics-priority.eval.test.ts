@@ -19,8 +19,8 @@ const viewSource = readFileSync(
 describe("logistics invoice priority eval", () => {
   it("shows priority once on logistics invoice cards", () => {
     const invoiceCardStart = logisticaSource.indexOf("function renderInvoiceCard");
-    const taskCardStart = logisticaSource.indexOf("function renderTaskCard");
-    const invoiceCard = logisticaSource.slice(invoiceCardStart, taskCardStart);
+    const invoiceRowStart = logisticaSource.indexOf("function renderInvoiceRow");
+    const invoiceCard = logisticaSource.slice(invoiceCardStart, invoiceRowStart);
 
     assert.equal(invoiceCard.includes('aria-label="Prioridad"'), false);
     assert.equal(invoiceCard.includes('<InvoicePriorityBadge variant="chip"'), true);
@@ -31,15 +31,13 @@ describe("logistics invoice priority eval", () => {
     assert.equal(badgeSource.includes("<Star"), true);
   });
 
-  it("shows priority on unrouted tasks and route stops", () => {
+  it("shows priority on invoices and route stops", () => {
     assert.equal(logisticaSource.includes("<InvoicePriorityBadge"), true);
     assert.equal(logisticaSource.includes("task?.shipment.invoice_priority ?"), true);
   });
 
-  it("sorts logistics invoices and unrouted tasks by invoice priority", () => {
+  it("sorts active logistics invoices by invoice priority", () => {
     assert.equal(logisticaSource.includes("sortLogisticsInvoiceItemsByPriority"), true);
-    assert.equal(logisticaSource.includes("prioritizeLogisticsTasks"), true);
-    assert.equal(viewSource.includes("export function compareShipmentInvoicePriority"), true);
     assert.equal(viewSource.includes("export function sortLogisticsInvoiceItemsByPriority"), true);
     assert.equal(viewSource.includes("export function prioritizeLogisticsTasks"), true);
   });

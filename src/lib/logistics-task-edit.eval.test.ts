@@ -15,6 +15,13 @@ const panelSource = readFileSync(
   ),
   "utf8",
 );
+const fieldsSource = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../components/logistica/logistics-task-edit-fields.tsx",
+  ),
+  "utf8",
+);
 
 describe("logistics task edit eval", () => {
   it("wires task edit panel and updateLogisticsTaskAction patch fields", () => {
@@ -22,7 +29,8 @@ describe("logistics task edit eval", () => {
     assert.match(logisticaSource, /changeTask\(/);
     assert.match(logisticaSource, /scheduledAt/);
     assert.match(logisticaSource, /warehouseId/);
-    assert.match(panelSource, /ScheduleTimeField/);
+    assert.match(panelSource, /LogisticsTaskEditFields/);
+    assert.match(fieldsSource, /ScheduleTimeField/);
     assert.match(panelSource, /buildLogisticsTaskEditPatch/);
   });
 });

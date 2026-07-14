@@ -88,4 +88,29 @@ describe("native picker", () => {
       false,
     );
   });
+
+  it("suppresses dismiss while interacting with the custom date picker panel", () => {
+    const panelChild = {
+      nodeType: 1,
+      closest(selector: string) {
+        return selector.includes("data-time-picker-panel") ? panel : null;
+      },
+    } as unknown as Node;
+    const panel = { nodeType: 1 } as unknown as Element;
+    const outside = { nodeType: 1, id: "outside" } as unknown as Node;
+    const container = {
+      contains() {
+        return false;
+      },
+    };
+
+    assert.equal(
+      shouldSuppressDismissForNativePicker({ target: panelChild }, container, null),
+      true,
+    );
+    assert.equal(
+      shouldSuppressDismissForNativePicker({ target: outside }, container, null),
+      false,
+    );
+  });
 });

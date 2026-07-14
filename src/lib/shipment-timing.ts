@@ -1,4 +1,9 @@
 import type { ShipmentLogisticsTaskRow, ShipmentRow } from "@/app/actions/shipments";
+import {
+  EMPTY_BOX_DRIVER_MODE,
+  EMPTY_BOX_OFFICE_MODE,
+  FULL_BOX_DRIVER_MODE,
+} from "@/components/sale/venta-parts";
 import type { ShipmentProgressKind, ShipmentProgressStep } from "@/lib/shipment-display";
 import {
   milestoneKeyForProgressKind,
@@ -342,28 +347,46 @@ export function buildShipmentTimings(
 
   if (activeStep) {
     activeStepShortName = stepShortName(activeStep.kind);
-    const previousStep = activeIndex > 0 ? steps[activeIndex - 1] : null;
+    const canTrackActiveWait =
+      activeStep.kind === "empty_box"
+        ? shouldTrackEmptyBoxInProgressWait(
+            row,
+            activeStep,
+            resolveStepCompletedAt(row, "empty_box"),
+          )
+        : activeStep.kind === "full_box"
+          ? shouldTrackFullBoxInProgressWait(
+              row,
+              activeStep,
+              resolveStepCompletedAt(row, "full_box"),
+              resolveStepCompletedAt(row, "empty_box"),
+            )
+          : true;
 
-    if (previousStep?.state === "done") {
-      anchorKind = previousStep.kind;
-    } else {
-      anchorKind = "sale";
-    }
+    if (canTrackActiveWait) {
+      const previousStep = activeIndex > 0 ? steps[activeIndex - 1] : null;
 
-    const anchorIso =
-      (anchorKind !== "sale" && anchorKind && completedAtByKind[anchorKind]) ||
-      saleIso ||
-      null;
+      if (previousStep?.state === "done") {
+        anchorKind = previousStep.kind;
+      } else {
+        anchorKind = "sale";
+      }
 
-    const anchorMs = parseIso(anchorIso);
-    if (anchorMs !== null) {
-      activeElapsedMs = Math.max(0, nowMs - anchorMs);
-      const durationLabel = formatShipmentDuration(activeElapsedMs);
-      activeElapsedDetail = formatActiveElapsed(durationLabel, anchorKind);
-      activeElapsedLabel = activeElapsedDetail;
-      waitingHeadline = formatWaitingHeadline(durationLabel);
-      waitingSinceLabel = formatWaitingSince(anchorKind);
-      waitingText = [waitingHeadline, waitingSinceLabel].filter(Boolean).join(" ") || null;
+      const anchorIso =
+        (anchorKind !== "sale" && anchorKind && completedAtByKind[anchorKind]) ||
+        saleIso ||
+        null;
+
+      const anchorMs = parseIso(anchorIso);
+      if (anchorMs !== null) {
+        activeElapsedMs = Math.max(0, nowMs - anchorMs);
+        const durationLabel = formatShipmentDuration(activeElapsedMs);
+        activeElapsedDetail = formatActiveElapsed(durationLabel, anchorKind);
+        activeElapsedLabel = activeElapsedDetail;
+        waitingHeadline = formatWaitingHeadline(durationLabel);
+        waitingSinceLabel = formatWaitingSince(anchorKind);
+        waitingText = [waitingHeadline, waitingSinceLabel].filter(Boolean).join(" ") || null;
+      }
     }
   }
 
@@ -396,9 +419,9 @@ export function buildShipmentTimings(
   };
 }
 
-export type ShipmentMilestoneAgeKey = "sale" | "empty_box" | "full_box";
+type ShipmentMilestoneAgeKey = "sale" | "empty_box" | "full_box";
 
-export type ShipmentMilestoneAgeStatus = "done" | "waiting" | "pending";
+type ShipmentMilestoneAgeStatus = "done" | "waiting" | "pending";
 
 export type ShipmentMilestoneAge = {
   key: ShipmentMilestoneAgeKey;
@@ -426,21 +449,6 @@ function elapsedSince(iso: string | null, nowMs: number): number | null {
   return Math.max(0, nowMs - at);
 }
 
-export function milestoneAgeTextClass(
-  status: ShipmentMilestoneAgeStatus,
-  elapsedMs: number | null,
-): string {
-  if (status === "pending") {
-    return "text-slate-600";
-  }
-
-  if (status === "waiting") {
-    return elapsedMs !== null && elapsedMs >= DAY_MS ? "text-amber-300" : "text-amber-400/90";
-  }
-
-  return saleAgeTextClass(elapsedMs ?? 0);
-}
-
 export function milestoneAgeDisplayValue(age: ShipmentMilestoneAge): string {
   if (age.status === "pending" || age.elapsedMs === null) {
     return "—";
@@ -450,7 +458,7 @@ export function milestoneAgeDisplayValue(age: ShipmentMilestoneAge): string {
   return duration === "inmediato" ? "ahora" : duration;
 }
 
-export function milestoneAgeFocus(ages: ShipmentMilestoneAge[]): ShipmentMilestoneAge {
+function milestoneAgeFocus(ages: ShipmentMilestoneAge[]): ShipmentMilestoneAge {
   return (
     ages.find((age) => age.status === "waiting") ||
     ages.find((age) => age.key === "full_box" && age.status === "pending") ||
@@ -535,7 +543,11 @@ function buildWaitingMilestoneAge(
   };
 }
 
-function buildPendingMilestoneAge(key: ShipmentMilestoneAgeKey, label: string): ShipmentMilestoneAge {
+function buildPendingMilestoneAge(
+  key: ShipmentMilestoneAgeKey,
+  label: string,
+  detailLabel?: string,
+): ShipmentMilestoneAge {
   return {
     key,
     label,
@@ -543,8 +555,96 @@ function buildPendingMilestoneAge(key: ShipmentMilestoneAgeKey, label: string): 
     completedAt: null,
     elapsedMs: null,
     elapsedLabel: null,
-    detailLabel: `${label} · pendiente`,
+    detailLabel: detailLabel ?? `${label} · pendiente`,
   };
+}
+
+function activeStepForKind(
+  steps: ShipmentProgressStep[],
+  kind: ShipmentProgressKind,
+): ShipmentProgressStep | null {
+  return steps.find((step) => step.kind === kind && step.state === "active") ?? null;
+}
+
+function legIsMarkedReady(step: ShipmentProgressStep | null) {
+  return step?.driverTaskOrdered === true;
+}
+
+function logisticsLegMode(plan: Record<string, unknown>, key: "emptyBox" | "fullBox") {
+  return String(planLeg(plan, key)?.mode || "");
+}
+
+function shouldTrackEmptyBoxInProgressWait(
+  row: ShipmentRow,
+  step: ShipmentProgressStep | null,
+  emptyCompletedAt: string | null,
+) {
+  if (!step || emptyCompletedAt || step.awaitingOrder) {
+    return false;
+  }
+
+  const mode = logisticsLegMode(row.logistics_plan, "emptyBox");
+  if (!mode) {
+    return false;
+  }
+
+  if (mode === EMPTY_BOX_DRIVER_MODE) {
+    return legIsMarkedReady(step);
+  }
+
+  return mode === EMPTY_BOX_OFFICE_MODE;
+}
+
+function shouldTrackFullBoxInProgressWait(
+  row: ShipmentRow,
+  step: ShipmentProgressStep | null,
+  fullCompletedAt: string | null,
+  emptyCompletedAt: string | null,
+) {
+  if (!step || fullCompletedAt || step.awaitingOrder) {
+    return false;
+  }
+
+  const mode = logisticsLegMode(row.logistics_plan, "fullBox");
+  if (!mode) {
+    return false;
+  }
+
+  if (mode === FULL_BOX_DRIVER_MODE) {
+    return legIsMarkedReady(step);
+  }
+
+  return Boolean(emptyCompletedAt);
+}
+
+function legOrderAnchorIso(
+  row: ShipmentRow,
+  taskType: ShipmentLogisticsTaskRow["taskType"],
+): string | null {
+  const task = taskByType(row, taskType);
+  return task?.orderedAt || null;
+}
+
+function buildActiveLegMilestoneAge(
+  key: ShipmentMilestoneAgeKey,
+  label: string,
+  step: ShipmentProgressStep,
+  row: ShipmentRow,
+  taskType: ShipmentLogisticsTaskRow["taskType"],
+  saleIso: string | null,
+  fallbackSinceLabel: string,
+  fallbackAnchorIso: string | null,
+  nowMs: number,
+): ShipmentMilestoneAge {
+  if (!legIsMarkedReady(step)) {
+    return buildPendingMilestoneAge(key, label, `${label} · sin marcar`);
+  }
+
+  const anchorIso = legOrderAnchorIso(row, taskType) || saleIso;
+  const sinceLabel =
+    anchorIso && anchorIso !== saleIso ? "desde que se marcó" : fallbackSinceLabel;
+
+  return buildWaitingMilestoneAge(key, label, anchorIso, sinceLabel, nowMs);
 }
 
 export function buildShipmentMilestoneAges(
@@ -557,6 +657,8 @@ export function buildShipmentMilestoneAges(
   const fullCompletedAt = resolveStepCompletedAt(row, "full_box");
   const emptyState = progressStepState(steps, "empty_box");
   const fullState = progressStepState(steps, "full_box");
+  const emptyLabel = stepShortName("empty_box");
+  const fullLabel = stepShortName("full_box");
 
   const saleAge = saleIso
     ? buildDoneMilestoneAge("sale", "Venta", saleIso, nowMs)
@@ -564,30 +666,309 @@ export function buildShipmentMilestoneAges(
 
   let emptyAge: ShipmentMilestoneAge;
   if (emptyCompletedAt) {
-    emptyAge = buildDoneMilestoneAge("empty_box", "Entrega", emptyCompletedAt, nowMs);
+    emptyAge = buildDoneMilestoneAge("empty_box", emptyLabel, emptyCompletedAt, nowMs);
   } else if (emptyState === "active") {
-    emptyAge = buildWaitingMilestoneAge("empty_box", "Entrega", saleIso, "desde la venta", nowMs);
+    const activeEmptyStep = activeStepForKind(steps, "empty_box");
+    emptyAge = activeEmptyStep
+      ? buildActiveLegMilestoneAge(
+          "empty_box",
+          emptyLabel,
+          activeEmptyStep,
+          row,
+          "deliver_empty_box",
+          saleIso,
+          "desde la venta",
+          saleIso,
+          nowMs,
+        )
+      : buildPendingMilestoneAge("empty_box", emptyLabel);
   } else {
-    emptyAge = buildPendingMilestoneAge("empty_box", "Entrega");
+    emptyAge = buildPendingMilestoneAge("empty_box", emptyLabel);
   }
 
   let fullAge: ShipmentMilestoneAge;
   if (fullCompletedAt) {
-    fullAge = buildDoneMilestoneAge("full_box", "Recolección", fullCompletedAt, nowMs);
+    fullAge = buildDoneMilestoneAge("full_box", fullLabel, fullCompletedAt, nowMs);
   } else if (fullState === "active") {
-    const anchor = emptyCompletedAt || saleIso;
-    const since = emptyCompletedAt ? "desde la entrega" : "desde la venta";
-    fullAge = buildWaitingMilestoneAge("full_box", "Recolección", anchor, since, nowMs);
+    const activeFullStep = activeStepForKind(steps, "full_box");
+    const fallbackAnchor = emptyCompletedAt || saleIso;
+    const fallbackSince = emptyCompletedAt ? "desde dejar" : "desde la venta";
+    fullAge = activeFullStep
+      ? buildActiveLegMilestoneAge(
+          "full_box",
+          fullLabel,
+          activeFullStep,
+          row,
+          "pickup_full_box",
+          saleIso,
+          fallbackSince,
+          fallbackAnchor,
+          nowMs,
+        )
+      : buildPendingMilestoneAge("full_box", fullLabel);
   } else {
-    fullAge = buildPendingMilestoneAge("full_box", "Recolección");
+    fullAge = buildPendingMilestoneAge("full_box", fullLabel);
   }
 
   return [saleAge, emptyAge, fullAge];
 }
 
-export type LogisticsPhaseKey = "ordered" | "scheduled" | "assigned" | "loaded" | "completed";
+export type ShipmentTimingInsightStatus = "done" | "active" | "pending";
 
-export type LogisticsPhase = {
+export type ShipmentTimingInsightRow = {
+  id: string;
+  label: string;
+  value: string;
+  status: ShipmentTimingInsightStatus;
+  detail: string | null;
+  elapsedMs: number | null;
+};
+
+function legUsesDriverDelivery(plan: Record<string, unknown>, key: "emptyBox" | "fullBox") {
+  const leg = planLeg(plan, key);
+  const driverMode = key === "emptyBox" ? EMPTY_BOX_DRIVER_MODE : FULL_BOX_DRIVER_MODE;
+  return String(leg?.mode || "") === driverMode;
+}
+
+function insightDurationValue(durationMs: number) {
+  const duration = formatShipmentDuration(durationMs);
+  return duration === "inmediato" ? "<1 min" : duration;
+}
+
+function insightGapRow(
+  id: string,
+  label: string,
+  fromIso: string | null,
+  toIso: string | null,
+  nowMs: number,
+  options?: {
+    allowInProgress?: boolean;
+    pendingDetail?: string;
+    activePrefix?: string;
+  },
+): ShipmentTimingInsightRow {
+  if (!fromIso) {
+    return {
+      id,
+      label,
+      value: "—",
+      status: "pending",
+      detail: options?.pendingDetail ?? "Pendiente",
+      elapsedMs: null,
+    };
+  }
+
+  if (!toIso) {
+    if (!options?.allowInProgress) {
+      return {
+        id,
+        label,
+        value: "—",
+        status: "pending",
+        detail: options?.pendingDetail ?? "Pendiente",
+        elapsedMs: null,
+      };
+    }
+
+    const elapsedMs = elapsedSince(fromIso, nowMs);
+    const duration = formatShipmentDuration(elapsedMs ?? 0);
+
+    return {
+      id,
+      label,
+      value: duration === "inmediato" ? "ahora" : duration,
+      status: "active",
+      detail: `${options?.activePrefix ?? "Lleva"} ${duration} · desde ${formatShipmentAbsolute(fromIso)}`,
+      elapsedMs,
+    };
+  }
+
+  const fromMs = parseIso(fromIso);
+  const toMs = parseIso(toIso);
+
+  if (fromMs === null || toMs === null || toMs < fromMs) {
+    return {
+      id,
+      label,
+      value: "—",
+      status: "pending",
+      detail: null,
+      elapsedMs: null,
+    };
+  }
+
+  const durationMs = toMs - fromMs;
+
+  return {
+    id,
+    label,
+    value: insightDurationValue(durationMs),
+    status: "done",
+    detail: `${formatShipmentAbsolute(fromIso)} → ${formatShipmentAbsolute(toIso)}`,
+    elapsedMs: durationMs,
+  };
+}
+
+export function timingInsightRowTextClass(
+  status: ShipmentTimingInsightStatus,
+  elapsedMs: number | null,
+): string {
+  if (status === "pending") {
+    return "text-slate-600";
+  }
+
+  if (status === "active") {
+    return elapsedMs !== null && elapsedMs >= DAY_MS ? "text-amber-300" : "text-amber-400/90";
+  }
+
+  return saleAgeTextClass(elapsedMs ?? 0);
+}
+
+export function buildShipmentTimingInsightPanel(
+  row: ShipmentRow,
+  steps: ShipmentProgressStep[],
+  nowMs = Date.now(),
+): ShipmentTimingInsightRow[] {
+  const saleIso = row.created_at || null;
+  const plan = row.logistics_plan;
+  const emptyTask = taskByType(row, "deliver_empty_box");
+  const fullTask = taskByType(row, "pickup_full_box");
+  const emptyOrderedAt = emptyTask?.orderedAt || null;
+  const fullOrderedAt = fullTask?.orderedAt || null;
+  const emptyCompletedAt = resolveStepCompletedAt(row, "empty_box");
+  const fullCompletedAt = resolveStepCompletedAt(row, "full_box");
+  const emptyDriver = legUsesDriverDelivery(plan, "emptyBox");
+  const fullDriver = legUsesDriverDelivery(plan, "fullBox");
+  const emptyActive = activeStepForKind(steps, "empty_box");
+  const fullActive = activeStepForKind(steps, "full_box");
+
+  const rows: ShipmentTimingInsightRow[] = [];
+
+  if (saleIso) {
+    const elapsedMs = elapsedSince(saleIso, nowMs) ?? 0;
+    const relative = formatShipmentRelative(saleIso, nowMs);
+
+    rows.push({
+      id: "sale",
+      label: "Venta",
+      value: relative.replace(/^hace /, ""),
+      status: "done",
+      detail: `Registrada ${relative} · ${formatShipmentAbsolute(saleIso)}`,
+      elapsedMs,
+    });
+  } else {
+    rows.push({
+      id: "sale",
+      label: "Venta",
+      value: "—",
+      status: "pending",
+      detail: "Sin fecha de venta",
+      elapsedMs: null,
+    });
+  }
+
+  if (emptyDriver) {
+    rows.push(
+      insightGapRow(
+        "sale-mark-empty",
+        "Venta → marcar dejar",
+        saleIso,
+        emptyOrderedAt,
+        nowMs,
+        {
+          pendingDetail: emptyActive && !legIsMarkedReady(emptyActive)
+            ? "Aún no se marca para dejar"
+            : "Pendiente",
+        },
+      ),
+      insightGapRow(
+        "mark-empty-done",
+        "Marcar dejar → dejado",
+        emptyOrderedAt,
+        emptyCompletedAt,
+        nowMs,
+        {
+          allowInProgress: Boolean(
+            emptyOrderedAt &&
+              !emptyCompletedAt &&
+              legIsMarkedReady(emptyActive),
+          ),
+          pendingDetail: "Aún no se marca para dejar",
+          activePrefix: "Lleva dejando",
+        },
+      ),
+    );
+  } else {
+    rows.push(
+      insightGapRow("sale-empty-done", "Venta → dejado", saleIso, emptyCompletedAt, nowMs, {
+        allowInProgress: shouldTrackEmptyBoxInProgressWait(row, emptyActive, emptyCompletedAt),
+        pendingDetail: "Aún no se deja la caja vacía",
+        activePrefix: "Lleva pendiente dejar",
+      }),
+    );
+  }
+
+  if (fullDriver) {
+    rows.push(
+      insightGapRow(
+        "empty-mark-full",
+        "Dejado → marcar recoger",
+        emptyCompletedAt,
+        fullOrderedAt,
+        nowMs,
+        {
+          pendingDetail: !emptyCompletedAt
+            ? "Primero hay que dejar la caja vacía"
+            : "Aún no se marca para recoger",
+        },
+      ),
+      insightGapRow(
+        "mark-full-done",
+        "Marcar recoger → recogido",
+        fullOrderedAt,
+        fullCompletedAt,
+        nowMs,
+        {
+          allowInProgress: Boolean(
+            fullOrderedAt &&
+              !fullCompletedAt &&
+              legIsMarkedReady(fullActive),
+          ),
+          pendingDetail: !fullOrderedAt ? "Aún no se marca para recoger" : "Pendiente",
+          activePrefix: "Lleva recogiendo",
+        },
+      ),
+    );
+  } else if (String(planLeg(plan, "fullBox")?.mode || "").trim()) {
+    rows.push(
+      insightGapRow(
+        "empty-full-done",
+        "Dejado → recogido",
+        emptyCompletedAt,
+        fullCompletedAt,
+        nowMs,
+        {
+          allowInProgress: shouldTrackFullBoxInProgressWait(
+            row,
+            fullActive,
+            fullCompletedAt,
+            emptyCompletedAt,
+          ),
+          pendingDetail: !emptyCompletedAt
+            ? "Primero hay que dejar la caja vacía"
+            : "Aún no se recoge la caja llena",
+          activePrefix: "Lleva pendiente recoger",
+        },
+      ),
+    );
+  }
+
+  return rows;
+}
+
+type LogisticsPhaseKey = "ordered" | "scheduled" | "assigned" | "loaded" | "completed";
+
+type LogisticsPhase = {
   key: LogisticsPhaseKey;
   label: string;
   at: string | null;
@@ -596,7 +977,7 @@ export type LogisticsPhase = {
   gapFromPreviousLabel: string | null;
 };
 
-export type LogisticsLegTiming = {
+type LogisticsLegTiming = {
   taskType: ShipmentLogisticsTaskRow["taskType"];
   legLabel: string;
   orderedAt: string | null;
@@ -612,7 +993,7 @@ export type LogisticsLegTiming = {
   orderToCompleteLabel: string | null;
 };
 
-export type LogisticsSubGap = {
+type LogisticsSubGap = {
   fromLabel: string;
   toLabel: string;
   durationMs: number;
@@ -720,7 +1101,7 @@ function buildLogisticsLegTiming(
   };
 }
 
-export function buildLogisticsLegTimings(row: ShipmentRow, nowMs = Date.now()) {
+function buildLogisticsLegTimings(row: ShipmentRow, nowMs = Date.now()) {
   const emptyTask = taskByType(row, "deliver_empty_box");
   const fullTask = taskByType(row, "pickup_full_box");
 
@@ -788,7 +1169,6 @@ export function buildShipmentAuditTimings(
 
 export function stepTimingTooltip(
   step: ShipmentProgressStep,
-  _timings?: ShipmentTimings,
 ): string | undefined {
   return step.title;
 }

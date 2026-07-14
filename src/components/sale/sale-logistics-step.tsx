@@ -121,7 +121,6 @@ function SchedulePanel({
             <span className="text-[11px] font-black uppercase text-slate-500">Fecha</span>
             <DateInput
               compact={false}
-              className="w-full"
               min={minScheduleDateInput()}
               value={routeDate}
               ariaLabel="Fecha de entrega"
@@ -369,7 +368,7 @@ export function SaleLogisticsStep({
           mode={emptyBoxMode}
           officeMode={EMPTY_BOX_OFFICE_MODE}
           driverMode={EMPTY_BOX_DRIVER_MODE}
-          officeLabel="Cliente recoge"
+          officeLabel="Entrega en oficina"
           driverLabel="Chofer entrega"
           officeDetail="Se entrega ahora en mostrador."
           driverDetail="La llevamos a su domicilio."

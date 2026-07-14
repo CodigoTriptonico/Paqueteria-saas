@@ -1,8 +1,15 @@
-import { routeStopsWithinVehicleCapacity } from "@/lib/logistics-route-capacity";
+import { parseVehicleCargoCapacity, routeStopsWithinVehicleCapacity } from "@/lib/logistics-route-capacity";
 
 export type LogisticsTaskType = "deliver_empty_box" | "pickup_full_box";
 
-export type LogisticsRouteStatus = "draft" | "planned" | "cancelled" | "completed";
+export type LogisticsRouteStatus =
+  | "draft"
+  | "planned"
+  | "in_progress"
+  | "cancelled"
+  | "completed";
+
+type LogisticsRouteStopOutcome = "completed" | "failed" | "cancelled";
 
 export type LogisticsRouteStopAddress = {
   source: "customer" | "recipient_snapshot" | "unknown";
@@ -28,6 +35,9 @@ export type LogisticsRouteTaskInput = {
   customerName: string;
   taskType: LogisticsTaskType;
   scheduledAt: string | null;
+  scheduleKind?: "exact" | "range" | "from" | null;
+  windowStartAt?: string | null;
+  windowEndAt?: string | null;
   warehouseId: string | null;
   assignedTo: string | null;
   address: LogisticsRouteStopAddress;
@@ -43,6 +53,10 @@ export type LogisticsRouteStopRow = {
   lng: number | null;
   postalCode: string;
   city: string;
+  outcome?: LogisticsRouteStopOutcome | null;
+  outcomeAt?: string | null;
+  releasedAt?: string | null;
+  releaseReason?: string;
   createdAt: string;
 };
 
@@ -56,12 +70,16 @@ export type LogisticsRouteRow = {
   warehouseId: string | null;
   zoneKey: string;
   notes: string;
+  routeTemplateId?: string | null;
+  publishedAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   stops: LogisticsRouteStopRow[];
 };
 
-export type LogisticsRouteSuggestion = {
+type LogisticsRouteSuggestion = {
   id: string;
   routeDate: string;
   name: string;
@@ -77,6 +95,7 @@ export type SuggestLogisticsRoutesOptions = {
   fallbackDate: string;
   minimumStops?: number;
   vehicleCargoCapacity?: string | null;
+  startPoint?: { lat: number; lng: number } | null;
 };
 
 const MISSING_GEO_ZONE = "falta-geo";
@@ -172,6 +191,9 @@ function routeStartPoint(tasks: LogisticsRouteTaskInput[]) {
 
 function stableTaskCompare(a: LogisticsRouteTaskInput, b: LogisticsRouteTaskInput) {
   return (
+    (a.windowStartAt || a.scheduledAt || "9999").localeCompare(
+      b.windowStartAt || b.scheduledAt || "9999",
+    ) ||
     a.address.postalCode.localeCompare(b.address.postalCode) ||
     a.address.city.localeCompare(b.address.city) ||
     a.shipmentCode.localeCompare(b.shipmentCode) ||
@@ -179,7 +201,10 @@ function stableTaskCompare(a: LogisticsRouteTaskInput, b: LogisticsRouteTaskInpu
   );
 }
 
-export function orderStopsByProximity(tasks: LogisticsRouteTaskInput[]) {
+export function orderStopsByProximity(
+  tasks: LogisticsRouteTaskInput[],
+  options?: { startPoint?: { lat: number; lng: number } | null },
+) {
   // Nearest-neighbor heuristic. For production-grade optimization use Directions API or VRP solver.
   const remaining = tasks.filter((task) => hasRouteGeo(task.address)).sort(stableTaskCompare);
   if (!remaining.length) {
@@ -187,15 +212,29 @@ export function orderStopsByProximity(tasks: LogisticsRouteTaskInput[]) {
   }
 
   const ordered: LogisticsRouteTaskInput[] = [];
-  let current = routeStartPoint(remaining);
+  let current = options?.startPoint || routeStartPoint(remaining);
 
   while (remaining.length) {
     let nextIndex = 0;
     let nextDistance = Number.POSITIVE_INFINITY;
+    const earliestWindow = Date.parse(
+      remaining[0]?.windowStartAt || remaining[0]?.scheduledAt || "",
+    );
 
     for (let index = 0; index < remaining.length; index += 1) {
       const point = pointForTask(remaining[index]);
       if (!point) {
+        continue;
+      }
+
+      const candidateWindow = Date.parse(
+        remaining[index].windowStartAt || remaining[index].scheduledAt || "",
+      );
+      const outsideEarliestWindow =
+        Number.isFinite(earliestWindow) &&
+        Number.isFinite(candidateWindow) &&
+        candidateWindow - earliestWindow > 30 * 60 * 1000;
+      if (outsideEarliestWindow) {
         continue;
       }
 
@@ -219,6 +258,7 @@ export function suggestLogisticsRoutes(
   options: SuggestLogisticsRoutesOptions,
 ) {
   const minimumStops = Math.max(options.minimumStops || 1, 1);
+  const capacity = parseVehicleCargoCapacity(options.vehicleCargoCapacity);
   const groups = new Map<string, LogisticsRouteTaskInput[]>();
 
   for (const task of tasks) {
@@ -240,7 +280,9 @@ export function suggestLogisticsRoutes(
   return Array.from(groups.entries())
     .map(([groupKey, groupTasks]) => {
       const [routeDate, warehouseKey] = groupKey.split("|");
-      const stops = orderStopsByProximity(groupTasks);
+      const stops = orderStopsByProximity(groupTasks, {
+        startPoint: options.startPoint,
+      });
       const first = stops[0];
       const zoneKey = first ? logisticsZoneKey(first.address) : NO_CITY_ZONE;
       const zoneLabel = first ? logisticsZoneLabel(first.address) : "Sin zona";
@@ -259,11 +301,26 @@ export function suggestLogisticsRoutes(
       } satisfies LogisticsRouteSuggestion;
     })
     .filter((suggestion) => suggestion.stopCount >= minimumStops)
-    .filter((suggestion) =>
-      options.vehicleCargoCapacity
-        ? routeStopsWithinVehicleCapacity(suggestion.stopCount, options.vehicleCargoCapacity)
-        : true,
-    )
+    .flatMap((suggestion) => {
+      if (!capacity || routeStopsWithinVehicleCapacity(suggestion.stopCount, options.vehicleCargoCapacity)) {
+        return [suggestion];
+      }
+
+      return Array.from(
+        { length: Math.ceil(suggestion.stopCount / capacity) },
+        (_, index) => {
+          const stops = suggestion.stops.slice(index * capacity, (index + 1) * capacity);
+          return {
+            ...suggestion,
+            id: `${suggestion.id}|${index + 1}`,
+            name: `${suggestion.zoneLabel} ${index + 1} · ${stops.length} paradas`,
+            taskIds: stops.map((task) => task.taskId),
+            stopCount: stops.length,
+            stops,
+          } satisfies LogisticsRouteSuggestion;
+        },
+      );
+    })
     .sort(
       (a, b) =>
         a.routeDate.localeCompare(b.routeDate) ||

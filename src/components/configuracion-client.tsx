@@ -37,10 +37,10 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { CompanySettingsPanel } from "@/components/config/company-settings-panel";
+import { AppearanceSettingsPanel } from "@/components/config/appearance-settings-panel";
 import { PlanSettingsPanel } from "@/components/config/plan-settings-panel";
-import { InventoryConfigSection as InventoryCategoriesPanel } from "@/components/config/inventory-config-section";
-import { WarehousesSettingsPanel } from "@/components/config/warehouses-settings-panel";
 import { PageLoading } from "@/components/page-loading";
+import { useSetShellConfig } from "@/components/app-frame";
 import { useContextNav } from "@/hooks/use-context-nav";
 import { useNotify } from "@/hooks/use-notify";
 import { usePricingBackend } from "@/hooks/use-pricing-backend";
@@ -48,15 +48,19 @@ import { inputClass, iconWellEmerald, Panel, primaryButtonClass } from "@/compon
 import { AppTabs, type AppTabDefinition } from "@/components/app-tabs";
 import { flowToolbarCreateButtonClass } from "@/components/flow-form-styles";
 import { InlineSearchCombobox, InlineSearchPicker } from "@/components/inline-search-picker";
+import { TimePickerInput } from "@/components/time-picker-input";
 import { CountryFlag, CountryName } from "@/components/country-flag";
 import {
   COUNTRY_OPTIONS,
   compareCountriesByCatalogOrder,
+  configPricesCountryHref,
   findCountryByNormalizedName,
   isCountryAlreadyConfigured,
   resolveCountryCode,
   type CountryOption,
 } from "@/lib/country-options";
+import { inventarioHrefWithReturn } from "@/lib/inventario-return";
+import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 import { countryCatalogPickerOptions } from "@/lib/country-picker-options";
 import {
   addProductToCountry,
@@ -76,6 +80,7 @@ import {
 } from "@/lib/pricing-promotions";
 import { moneyInputDisplayValue, parseMoneyValue } from "@/lib/logistics-fees";
 import { CONFIG_MENU_GROUPS } from "@/lib/config-menu-groups";
+import type { TimeClockDashboardSnapshot } from "@/lib/time-clock-data";
 
 const ComboBuilder = dynamic(
   () => import("@/components/config/combo-builder").then((mod) => mod.ComboBuilder),
@@ -87,6 +92,12 @@ const UsersSettingsPanel = dynamic(
   { loading: () => <PageLoading inline /> },
 );
 
+const TimeClockAdminClient = dynamic(
+  () =>
+    import("@/components/time-clock/time-clock-admin-client").then((mod) => mod.TimeClockAdminClient),
+  { loading: () => <PageLoading inline /> },
+);
+
 const ROUTE_LEAD_TIME_OPTIONS = [
   { value: "1 dia", label: "1 dia" },
   { value: "2 dias", label: "2 dias" },
@@ -94,8 +105,7 @@ const ROUTE_LEAD_TIME_OPTIONS = [
   { value: "1 semana", label: "1 semana" },
 ];
 
-type Section = "menu" | "plan" | "prices" | "distributors" | "inventory" | "deliveries" | "appearance" | "company" | "users";
-type InventoryConfigSection = "menu" | "categories" | "warehouses";
+type Section = "menu" | "plan" | "prices" | "distributors" | "deliveries" | "appearance" | "company" | "users" | "timeclock";
 
 const sections = [
   {
@@ -115,12 +125,6 @@ const sections = [
     title: "Distribuidores",
     text: "Proveedores y costos por país.",
     icon: Truck,
-  },
-  {
-    id: "inventory" as Section,
-    title: "Inventario",
-    text: "Catálogo de categorías, ítems y bodegas.",
-    icon: Box,
   },
   {
     id: "deliveries" as Section,
@@ -145,6 +149,12 @@ const sections = [
     title: "Usuarios",
     text: "Dueño, equipo y permisos.",
     icon: Users,
+  },
+  {
+    id: "timeclock" as Section,
+    title: "Control de horario",
+    text: "Empleados, marcaciones y reportes.",
+    icon: Clock,
   },
 ];
 
@@ -181,15 +191,21 @@ function ConfigNavCard({
   text,
   icon: Icon,
   badge,
+  onboardingTarget,
 }: {
   href: string;
   title: string;
   text: string;
   icon: LucideIcon;
   badge?: string;
+  onboardingTarget?: string;
 }) {
   return (
-    <Link href={href} className={configNavCardClass}>
+    <Link
+      href={href}
+      className={configNavCardClass}
+      data-onboarding-target={onboardingTarget}
+    >
       <span className={`h-11 w-11 shrink-0 ${iconWellEmerald}`}>
         <Icon className="h-6 w-6" />
       </span>
@@ -214,18 +230,17 @@ const emptyDistributor = {
   phone: "",
 };
 
-const weekDays = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
 
 const configSections: Section[] = [
   "menu",
   "plan",
   "prices",
   "distributors",
-  "inventory",
   "deliveries",
   "appearance",
   "company",
   "users",
+  "timeclock",
 ];
 
 function countryOptionKey(country: Pick<CountryOption, "code" | "name">) {
@@ -233,28 +248,10 @@ function countryOptionKey(country: Pick<CountryOption, "code" | "name">) {
 }
 
 function parseConfigUrl(params: URLSearchParams) {
-  const open = params.get("open");
   const view = params.get("view");
-
-  if (open === "inventory") {
-    const inventory = params.get("inventory");
-    return {
-      section: "inventory" as Section,
-      inventorySection:
-        inventory === "warehouses"
-          ? ("warehouses" as InventoryConfigSection)
-          : ("categories" as InventoryConfigSection),
-    };
-  }
 
   return {
     section: configSections.includes(view as Section) ? (view as Section) : ("menu" as Section),
-    inventorySection:
-      params.get("inventory") === "categories"
-        ? ("categories" as InventoryConfigSection)
-        : params.get("inventory") === "warehouses"
-          ? ("warehouses" as InventoryConfigSection)
-          : ("menu" as InventoryConfigSection),
   };
 }
 
@@ -591,18 +588,19 @@ type CountryPriceTab = "items" | "promotions" | "delivery";
 
 export function ConfiguracionClient({
   initialPricing,
+  timeClockInitialSnapshot,
+  canManageTimeClock = false,
 }: {
   initialPricing?: PricingConfigPayload;
+  timeClockInitialSnapshot?: TimeClockDashboardSnapshot;
+  canManageTimeClock?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const setShellConfig = useSetShellConfig();
   const notify = useNotify();
   const cleanedFromRef = useRef(false);
-  const openedInventoryHashRef = useRef(false);
-  const { section, inventorySection: inventoryConfigSection } = useMemo(
-    () => parseConfigUrl(searchParams),
-    [searchParams],
-  );
+  const section = useMemo(() => parseConfigUrl(searchParams).section, [searchParams]);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [countryQuery, setCountryQuery] = useState("");
   const [pendingCountryToAdd, setPendingCountryToAdd] = useState<CountryOption | null>(null);
@@ -647,6 +645,13 @@ export function ConfiguracionClient({
     return option?.name ?? null;
   }, [countryFromUrl, countries, pricingLoaded]);
   const activeCountry = selectedCountry ?? impliedCountryFromUrl;
+  const inventarioReturnHref = useMemo(() => {
+    const returnTo = activeCountry
+      ? configPricesCountryHref(activeCountry)
+      : "/configuracion?view=prices";
+
+    return inventarioHrefWithReturn(returnTo);
+  }, [activeCountry]);
   const pendingCountryFromUrl = Boolean(
     section === "prices" && countryFromUrl?.trim() && !pricingLoaded,
   );
@@ -656,7 +661,6 @@ export function ConfiguracionClient({
   const [newDistributor, setNewDistributor] = useState(emptyDistributor);
   const [promotionEditor, setPromotionEditor] = useState<PromotionEditorState | null>(null);
   const [countryPriceTab, setCountryPriceTab] = useState<CountryPriceTab>("items");
-  const [returnToInventory, setReturnToInventory] = useState(false);
   const [newDeliveryRange, setNewDeliveryRange] = useState({ start: "", end: "" });
   const [newPickupRange, setNewPickupRange] = useState({ start: "", end: "" });
   const countryOptions = COUNTRY_OPTIONS;
@@ -986,9 +990,20 @@ export function ConfiguracionClient({
     router.replace(`/configuracion?view=${nextSection}`, { scroll: false });
   }, [router]);
 
-  const openInventoryConfigSection = useCallback((nextSection: InventoryConfigSection) => {
-    router.replace(`/configuracion?view=inventory&inventory=${nextSection}`, { scroll: false });
-  }, [router]);
+  useEffect(() => {
+    const view = searchParams.get("view");
+    const open = searchParams.get("open");
+
+    if (view !== "inventory" && open !== "inventory") {
+      return;
+    }
+
+    const inventorySub = searchParams.get("inventory");
+
+    router.replace(
+      inventorySub === "warehouses" ? "/inventario?bodegas=1" : "/inventario",
+    );
+  }, [router, searchParams]);
 
   useEffect(() => {
     if (cleanedFromRef.current) {
@@ -1001,42 +1016,10 @@ export function ConfiguracionClient({
     }
 
     cleanedFromRef.current = true;
-    queueMicrotask(() => {
-      setReturnToInventory(true);
-    });
-    window.sessionStorage.setItem("return-to-inventory", "1");
 
     params.delete("from");
     const query = params.toString();
     router.replace(query ? `/configuracion?${query}` : "/configuracion", { scroll: false });
-  }, [router]);
-
-  useEffect(() => {
-    if (openedInventoryHashRef.current) {
-      return;
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    const open = params.get("open");
-
-    if (open === "inventory") {
-      openedInventoryHashRef.current = true;
-      queueMicrotask(() => {
-        setReturnToInventory(window.sessionStorage.getItem("return-to-inventory") === "1");
-      });
-      router.replace("/configuracion?view=inventory&inventory=categories", { scroll: false });
-      return;
-    }
-
-    if (window.location.hash !== "#inventory") {
-      return;
-    }
-
-    openedInventoryHashRef.current = true;
-    queueMicrotask(() => {
-      setReturnToInventory(window.sessionStorage.getItem("return-to-inventory") === "1");
-    });
-    router.replace("/configuracion?view=inventory&inventory=categories", { scroll: false });
   }, [router]);
 
   function openCountryContextMenu(
@@ -1442,17 +1425,6 @@ export function ConfiguracionClient({
   }
 
   const goBack = useCallback(() => {
-    if (returnToInventory && section === "inventory") {
-      window.sessionStorage.removeItem("return-to-inventory");
-      router.push("/inventario");
-      return;
-    }
-
-    if (section === "inventory" && inventoryConfigSection !== "menu") {
-      openInventoryConfigSection("menu");
-      return;
-    }
-
     if (selectedDistributorCountry) {
       setSelectedDistributorCountry(null);
       return;
@@ -1476,12 +1448,8 @@ export function ConfiguracionClient({
   }, [
     activeCountry,
     countryFromUrl,
-    inventoryConfigSection,
     openConfigSection,
-    openInventoryConfigSection,
-    returnToInventory,
     router,
-    section,
     selectedDistributor,
     selectedDistributorCountry,
   ]);
@@ -1493,18 +1461,6 @@ export function ConfiguracionClient({
 
     if (section === "plan") {
       return "Plan";
-    }
-
-    if (section === "inventory") {
-      if (inventoryConfigSection === "warehouses") {
-        return "Bodegas";
-      }
-
-      if (inventoryConfigSection === "categories") {
-        return "Categorías e ítems";
-      }
-
-      return "Inventario";
     }
 
     if (section === "prices") {
@@ -1543,10 +1499,13 @@ export function ConfiguracionClient({
       return "Usuarios";
     }
 
+    if (section === "timeclock") {
+      return "Control de horario";
+    }
+
     return "Configuración";
   }, [
     activeCountry,
-    inventoryConfigSection,
     section,
     selectedDistributor,
     selectedDistributorCountry,
@@ -1558,6 +1517,13 @@ export function ConfiguracionClient({
     onBack: goBack,
     enabled: Boolean(configNavTitle),
   });
+
+  useEffect(() => {
+    if (section === "timeclock") {
+      setShellConfig({ surfaceContextId: "timeclock.admin" });
+      return () => setShellConfig({ surfaceContextId: undefined });
+    }
+  }, [section, setShellConfig]);
 
   const showSidebarNav = section !== "menu";
   const nestedPanelShell = showSidebarNav
@@ -1593,19 +1559,6 @@ export function ConfiguracionClient({
       return syncLinkedRouteSchedules({
         ...current,
         linkedRouteSchedules,
-      });
-    });
-  }
-
-  function toggleRouteDay(key: "deliveryDays" | "pickupDays", day: string) {
-    setRouteConfig((current) => {
-      const active = current[key].includes(day);
-
-      return syncLinkedRouteSchedules({
-        ...current,
-        [key]: active
-          ? current[key].filter((currentDay) => currentDay !== day)
-          : [...current[key], day],
       });
     });
   }
@@ -1663,6 +1616,11 @@ export function ConfiguracionClient({
                     title={item.title}
                     text={item.text}
                     icon={item.icon}
+                    onboardingTarget={
+                      item.id === "prices"
+                        ? ONBOARDING_TARGETS.CONFIG_PRICES_CARD
+                        : undefined
+                    }
                   />
                 );
               })}
@@ -1703,6 +1661,7 @@ export function ConfiguracionClient({
                   type="button"
                   onClick={() => setShowCountryPicker(true)}
                   className={flowToolbarCreateButtonClass}
+                  data-onboarding-target={ONBOARDING_TARGETS.CONFIG_ADD_COUNTRY}
                 >
                   <Plus className="h-4 w-4" />
                   Agregar país
@@ -1798,7 +1757,10 @@ export function ConfiguracionClient({
                       <p className="text-xs font-black uppercase text-slate-400">Agregar país</p>
                     ) : null}
                     {filteredCountryOptions.length > 0 ? (
-                      <div className="grid auto-rows-min grid-cols-2 items-start gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                      <div
+                        className="grid auto-rows-min grid-cols-2 items-start gap-3 sm:grid-cols-3 lg:grid-cols-4"
+                        data-onboarding-target={ONBOARDING_TARGETS.CONFIG_COUNTRY_PICKER}
+                      >
                         {filteredCountryOptions.map((country) => {
                           const isPending =
                             pendingCountryToAdd !== null &&
@@ -1964,7 +1926,7 @@ export function ConfiguracionClient({
                 ) : catalogProducts.length === 0 ? (
                   <p className="text-sm font-bold text-slate-400">
                     No hay productos en el catálogo. Créalos en{" "}
-                    <Link href="/inventario" className="text-emerald-400 hover:underline">
+                    <Link href={inventarioReturnHref} className="text-emerald-400 hover:underline">
                       Inventario
                     </Link>
                     .
@@ -1981,6 +1943,7 @@ export function ConfiguracionClient({
                       disabled={!hasAddableCatalogProducts}
                       className={`${primaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
                       aria-expanded={countryProductPickerOpen}
+                      data-onboarding-target={ONBOARDING_TARGETS.CONFIG_ADD_COUNTRY_PRODUCTS}
                     >
                       <Plus className="h-4 w-4" />
                       Agregar ítems a {activeCountry}
@@ -2022,7 +1985,7 @@ export function ConfiguracionClient({
           {(selectedCountryData?.boxes || []).length > 0 ? (
             <>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-3">
-                {(selectedCountryData?.boxes || []).map((box) => {
+                {(selectedCountryData?.boxes || []).map((box, boxIndex) => {
                   const boxKey = box.catalogKey || box.size;
                   const catalogProduct = box.catalogKey
                     ? catalogProductsByKey.get(box.catalogKey)
@@ -2067,6 +2030,11 @@ export function ConfiguracionClient({
                               inputMode="decimal"
                               placeholder="0"
                               aria-label={`Precio de ${box.size}`}
+                              data-onboarding-target={
+                                boxIndex === 0
+                                  ? ONBOARDING_TARGETS.CONFIG_COUNTRY_PRICE
+                                  : undefined
+                              }
                             />
                           </span>
                         </label>
@@ -2106,18 +2074,58 @@ export function ConfiguracionClient({
               </div>
             </>
           ) : (
-            <section className="mt-2 rounded-xl border border-dashed border-slate-600/60 p-5">
+            <section className="mt-2 rounded-xl border border-dashed border-slate-600/60 p-8">
               <div className="mx-auto flex max-w-xl flex-col items-center text-center">
-                <span className={`h-12 w-12 ${iconWellEmerald}`}>
-                  <Package2 className="h-5 w-5" />
-                </span>
-                <h3 className="mt-4 text-lg font-black text-[#f8fafc]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (catalogProducts.length === 0) {
+                      router.push(inventarioReturnHref);
+                      return;
+                    }
+
+                    setCountryProductPickerOpen(true);
+                  }}
+                  className="flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-emerald-400/70 bg-emerald-400/15 text-emerald-300 shadow-[0_12px_28px_rgba(16,185,129,0.18)] transition hover:scale-[1.02] hover:bg-emerald-400/25"
+                  aria-label={
+                    catalogProducts.length === 0
+                      ? "Ir a Inventario"
+                      : `Agregar ítems a ${activeCountry}`
+                  }
+                >
+                  <Plus className="h-10 w-10" strokeWidth={2.5} />
+                </button>
+                <h3 className="mt-5 text-lg font-black text-[#f8fafc]">
                   Aún no hay items para{" "}
                   <CountryName name={activeCountry || ""} size="sm" labelClassName="font-black" />.
                 </h3>
                 <p className="mt-2 text-sm font-bold text-slate-400">
-                  Usa el botón de arriba para agregar productos del catálogo.
+                  {catalogProducts.length === 0
+                    ? "Primero crea productos en Inventario y luego asígnalos a este país."
+                    : `Selecciona productos del catálogo para vender envíos a ${activeCountry}.`}
                 </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  {catalogProducts.length === 0 ? (
+                    <Link
+                      href={inventarioReturnHref}
+                      className={primaryButtonClass}
+                      data-onboarding-target={ONBOARDING_TARGETS.CONFIG_GO_INVENTARIO}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Ir a Inventario
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCountryProductPickerOpen(true)}
+                      disabled={!hasAddableCatalogProducts}
+                      className={`${primaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Agregar ítems a {activeCountry}
+                    </button>
+                  )}
+                </div>
               </div>
             </section>
           )}
@@ -2475,42 +2483,6 @@ export function ConfiguracionClient({
         </Panel>
       ) : null}
 
-      {section === "inventory" ? (
-        <Panel
-          hideHeader={showSidebarNav}
-          {...nestedPanelShell}
-          title={
-            inventoryConfigSection === "menu"
-              ? "Inventario"
-              : inventoryConfigSection === "warehouses"
-                ? "Bodegas"
-                : "Categorías e ítems"
-          }
-        >
-          {inventoryConfigSection === "menu" ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
-              <ConfigNavCard
-                href="/configuracion?view=inventory&inventory=categories"
-                title="Categorías e ítems"
-                text="Categorías, subcategorías e ítems del catálogo compartido."
-                icon={Box}
-                badge="Catálogo compartido"
-              />
-              <ConfigNavCard
-                href="/configuracion?view=inventory&inventory=warehouses"
-                title="Bodegas"
-                text="Crear bodegas, copiar catálogo y desactivar sucursales."
-                icon={Building2}
-              />
-            </div>
-          ) : null}
-
-          {inventoryConfigSection === "categories" ? <InventoryCategoriesPanel /> : null}
-
-          {inventoryConfigSection === "warehouses" ? <WarehousesSettingsPanel /> : null}
-        </Panel>
-      ) : null}
-
       {section === "deliveries" ? (
         <Panel title="Logística" hideHeader={showSidebarNav} {...nestedPanelShell}>
           <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
@@ -2637,30 +2609,17 @@ export function ConfiguracionClient({
                 </div>
 
                 <div className="grid gap-4">
-                  <div>
-                    <p className="mb-2 text-xs font-black uppercase text-slate-400">
-                      Días de ruta
+                  <div className="rounded-lg border border-black bg-surface-inset px-3 py-2.5">
+                    <p className="text-sm font-black text-[#f8fafc]">Días de servicio</p>
+                    <p className="mt-0.5 text-xs font-bold text-slate-500">
+                      Se gestionan junto con las rutas semanales.
                     </p>
-                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-                      {weekDays.map((day) => {
-                        const active = routeConfig[route.daysKey].includes(day);
-
-                        return (
-                          <button
-                            key={day}
-                            type="button"
-                            onClick={() => toggleRouteDay(route.daysKey, day)}
-                            className={`h-10 rounded-lg border text-sm font-black ${
-                              active
-                                ? "border-black bg-emerald-400 text-slate-950"
-                                : "border-black bg-surface-panel text-[#f8fafc] hover:border-black"
-                            }`}
-                          >
-                            {day}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <Link
+                      href="/logistica?view=rutas"
+                      className="mt-2 inline-flex text-xs font-black text-emerald-300 underline underline-offset-4"
+                    >
+                      Gestionar rutas
+                    </Link>
                   </div>
 
                   <div>
@@ -2682,25 +2641,25 @@ export function ConfiguracionClient({
                       ))}
                     </div>
                     <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                      <input
-                        className={inputClass}
-                        type="time"
+                      <TimePickerInput
                         value={route.newRange.start}
-                        onChange={(event) =>
+                        ariaLabel="Hora inicio de rango"
+                        shellClassName="!h-11"
+                        onChange={(start) =>
                           route.setNewRange((current) => ({
                             ...current,
-                            start: event.target.value,
+                            start,
                           }))
                         }
                       />
-                      <input
-                        className={inputClass}
-                        type="time"
+                      <TimePickerInput
                         value={route.newRange.end}
-                        onChange={(event) =>
+                        ariaLabel="Hora fin de rango"
+                        shellClassName="!h-11"
+                        onChange={(end) =>
                           route.setNewRange((current) => ({
                             ...current,
-                            end: event.target.value,
+                            end,
                           }))
                         }
                       />
@@ -2792,12 +2751,7 @@ export function ConfiguracionClient({
 
       {section === "appearance" ? (
         <Panel title="Apariencia" hideHeader={showSidebarNav} {...nestedPanelShell}>
-          <div className="rounded-xl border border-black bg-surface-card p-5 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
-            <p className="text-xl font-black">Tema único</p>
-            <p className="mt-2 font-bold text-slate-400">
-              Una sola paleta activa para toda la aplicación.
-            </p>
-          </div>
+          <AppearanceSettingsPanel />
         </Panel>
       ) : null}
 
@@ -2808,6 +2762,13 @@ export function ConfiguracionClient({
       ) : null}
 
       {section === "users" ? <UsersSettingsPanel /> : null}
+
+      {section === "timeclock" ? (
+        <TimeClockAdminClient
+          initialSnapshot={timeClockInitialSnapshot}
+          canManage={canManageTimeClock}
+        />
+      ) : null}
 
       {countryProductContextMenu ? (
         <div

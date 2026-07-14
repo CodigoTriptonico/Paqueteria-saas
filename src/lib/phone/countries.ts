@@ -96,7 +96,7 @@ export function coerceNationalPhoneInput(dialCode: string, raw: string) {
   return formatNationalPhoneDigits(dialCode, raw);
 }
 
-export function normalizePhoneCountrySearch(value: string) {
+function normalizePhoneCountrySearch(value: string) {
   return value
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")

@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronDown, ClipboardList, PackagePlus, Truck, Users } from "lucide-react";
-import { listConductorDriverTasksAction } from "@/app/actions/conductor-tasks";
+import {
+  getConductorHomeVehicleStatusAction,
+  getConductorTruckInventoryAction,
+  listConductorDriverTasksAction,
+  type ConductorHomeVehicleStatus,
+} from "@/app/actions/conductor-tasks";
 import { ConductorHomePanel } from "@/components/conductor/conductor-home-panel";
 import { DashboardSummary } from "@/components/dashboard-summary";
 import { BigAction, cardClass, labelMutedClass, Panel, textMutedClass } from "@/components/ui-blocks";
@@ -9,6 +14,7 @@ import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
 import { getAppSession } from "@/lib/auth/session";
 import { summarizeConductorTasks } from "@/lib/conductor-dashboard";
+import type { ConductorTruckInventorySummary } from "@/lib/conductor-truck-inventory";
 import { isConductorRole } from "@/lib/conductor-tareas-view";
 import { loadDashboardSummaryForSession } from "@/lib/dashboard/summary";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -40,7 +46,7 @@ const actions = [
     text: "Envíos activos en curso.",
     icon: ClipboardList,
     color: "bg-emerald-400",
-    href: "/envios",
+    href: "/seguimiento",
   },
 ];
 
@@ -56,11 +62,19 @@ export default async function Home() {
   const supabaseReady = isSupabaseConfigured() && Boolean(session);
   let initialSummary = null;
   let conductorSummary = summarizeConductorTasks([]);
+  let conductorVehicleStatus: ConductorHomeVehicleStatus | null = null;
+  let conductorTruckSummary: ConductorTruckInventorySummary | null = null;
 
   if (supabaseReady && session) {
     if (isConductor) {
-      const tasksResult = await listConductorDriverTasksAction(session.userId);
+      const [tasksResult, vehicleStatusResult, truckResult] = await Promise.all([
+        listConductorDriverTasksAction(session.userId),
+        getConductorHomeVehicleStatusAction(session.userId),
+        getConductorTruckInventoryAction(session.userId),
+      ]);
       conductorSummary = summarizeConductorTasks(tasksResult.ok ? tasksResult.data : []);
+      conductorVehicleStatus = vehicleStatusResult.ok ? vehicleStatusResult.data : null;
+      conductorTruckSummary = truckResult.ok ? truckResult.data.summary : null;
     } else {
       try {
         initialSummary = await loadDashboardSummaryForSession(session);
@@ -75,6 +89,8 @@ export default async function Home() {
       <ConductorHomePanel
         driverLabel={session?.fullName || session?.email || "Conductor"}
         summary={conductorSummary}
+        truckSummary={conductorTruckSummary}
+        vehicleStatus={conductorVehicleStatus}
       />
     );
   }

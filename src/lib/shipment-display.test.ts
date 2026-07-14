@@ -22,6 +22,8 @@ import {
   shipmentOperationalDetailLabel,
   shipmentOperationalDriverLabel,
   shipmentOperationalStatusLabel,
+  classifyEnviosReadinessBucket,
+  matchesEnviosReadinessFilter,
   shipmentPaymentProgress,
   orderShipmentsByStableIds,
   reconcileShipmentDisplayOrderIds,
@@ -31,6 +33,10 @@ import {
   balanceDueFromShipment,
   formatBoxQuantityLabel,
   quoteFromShipment,
+  readShipmentBoxLines,
+  shipmentBoxLinesDetailLabel,
+  shipmentBoxLinesTriggerLabel,
+  shipmentBoxLineTotal,
 } from "./shipment-display";
 
 function baseShipment(overrides: Partial<ShipmentRow> = {}): ShipmentRow {
@@ -648,6 +654,119 @@ describe("envios status filter buckets", () => {
   });
 });
 
+describe("envios readiness filter buckets", () => {
+  it("marks home logistics shipments as listos when dejar or recoger is already ordered", () => {
+    const row = baseShipment({
+      logistics_plan: {
+        emptyBox: {
+          mode: "Programar entrega de caja vacia",
+          driverTaskOrdered: true,
+        },
+        fullBox: {
+          mode: "Programar recoleccion caja llena",
+        },
+      },
+      logisticsTasks: [
+        {
+          id: "task-1",
+          shipmentId: "shipment-1",
+          taskType: "deliver_empty_box",
+          status: "scheduled",
+          assignedTo: "driver-1",
+          scheduledAt: "2026-07-10T17:00:00.000Z",
+          warehouseId: null,
+          notes: "",
+          stockDeductedAt: null,
+          completedAt: null,
+          orderedAt: null,
+          assignedAt: null,
+          loadedAt: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+
+    assert.equal(classifyEnviosReadinessBucket(row), "listos");
+    assert.equal(matchesEnviosReadinessFilter(row, "listos"), true);
+    assert.equal(matchesEnviosReadinessFilter(row, "pendientes"), false);
+    assert.equal(matchesEnviosReadinessFilter(row, "all"), true);
+  });
+
+  it("keeps ordered home logistics shipments in listos even without route or driver", () => {
+    const row = baseShipment({
+      logistics_plan: {
+        emptyBox: {
+          mode: "Programar entrega de caja vacia",
+          driverTaskOrdered: true,
+        },
+        fullBox: {
+          mode: "Programar recoleccion caja llena",
+        },
+      },
+      logisticsTasks: [
+        {
+          id: "task-1",
+          shipmentId: "shipment-1",
+          taskType: "deliver_empty_box",
+          status: "pending",
+          assignedTo: null,
+          scheduledAt: null,
+          warehouseId: null,
+          notes: "",
+          stockDeductedAt: null,
+          completedAt: null,
+          orderedAt: null,
+          assignedAt: null,
+          loadedAt: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+
+    assert.equal(classifyEnviosReadinessBucket(row), "listos");
+    assert.equal(matchesEnviosReadinessFilter(row, "listos"), true);
+    assert.equal(matchesEnviosReadinessFilter(row, "pendientes"), false);
+  });
+
+  it("marks home logistics shipments as pendientes until dejar or recoger is ordered", () => {
+    const row = baseShipment({
+      logistics_plan: {
+        emptyBox: {
+          mode: "Programar entrega de caja vacia",
+          driverTaskOrdered: false,
+        },
+        fullBox: {
+          mode: "Programar recoleccion caja llena",
+        },
+      },
+    });
+
+    assert.equal(classifyEnviosReadinessBucket(row), "pendientes");
+    assert.equal(matchesEnviosReadinessFilter(row, "pendientes"), true);
+    assert.equal(matchesEnviosReadinessFilter(row, "listos"), false);
+  });
+
+  it("ignores shipments outside active home logistics legs", () => {
+    const row = baseShipment({
+      status: PENDING_EMPTY_BOX_STATUS,
+      logistics_plan: {
+        emptyBox: {
+          mode: "Cliente recoge caja vacia en oficina",
+          handingNow: true,
+        },
+        fullBox: {
+          mode: "Cliente trae caja llena a oficina",
+        },
+      },
+    });
+
+    assert.equal(classifyEnviosReadinessBucket(row), null);
+    assert.equal(matchesEnviosReadinessFilter(row, "listos"), false);
+    assert.equal(matchesEnviosReadinessFilter(row, "pendientes"), false);
+    assert.equal(matchesEnviosReadinessFilter(row, "all"), true);
+  });
+});
+
 describe("envios tracking vs history", () => {
   const activeRow = baseShipment({ id: "active-1", status: "Enviado" });
   const deliveredRow = baseShipment({ id: "delivered-1", status: "Entregado" });
@@ -1249,6 +1368,42 @@ describe("formatBoxQuantityLabel", () => {
   it("shows quantity before the box size", () => {
     assert.equal(formatBoxQuantityLabel("14x14x14", 1), "(1) 14x14x14");
     assert.equal(formatBoxQuantityLabel("12x12x12", 3), "(3) 12x12x12");
+  });
+});
+
+describe("shipment box lines", () => {
+  it("reads box lines from logistics plan", () => {
+    const lines = readShipmentBoxLines(
+      baseShipment({
+        logistics_plan: {
+          boxLines: [
+            { label: "14x14x14", paid: "$35", cost: "$22", quantity: 1 },
+            { label: "16x16x16", paid: "$50", cost: "$31", quantity: 1 },
+          ],
+        },
+      }),
+    );
+
+    assert.equal(lines.length, 2);
+    assert.equal(shipmentBoxLinesTriggerLabel(lines), "Cajas");
+    assert.equal(
+      shipmentBoxLinesDetailLabel(lines),
+      "(1) 14x14x14 + (1) 16x16x16",
+    );
+    assert.equal(shipmentBoxLineTotal(lines[0]), "$35");
+  });
+
+  it("keeps single-box trigger label compact", () => {
+    const lines = readShipmentBoxLines(
+      baseShipment({
+        logistics_plan: {
+          box: { label: "14x14x14", paid: "$35", cost: "$22" },
+          boxCount: 1,
+        },
+      }),
+    );
+
+    assert.equal(shipmentBoxLinesTriggerLabel(lines), "(1) 14x14x14");
   });
 });
 

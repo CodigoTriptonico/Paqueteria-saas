@@ -8,7 +8,7 @@ import { inputClass } from "@/components/ui-blocks";
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
 import type { ItemContextMenu, MovementDraft } from "@/lib/inventory-structure-utils";
 
-export const INVENTORY_ITEM_CONTEXT_MENU_ATTR = "data-inventory-item-context-menu";
+const INVENTORY_ITEM_CONTEXT_MENU_ATTR = "data-inventory-item-context-menu";
 
 export type InventoryItemContextMenuProps = {
   itemContextMenu: ItemContextMenu | null;
@@ -123,10 +123,7 @@ export function InventoryItemContextMenu({
               {itemContextMenu.treeItem.name}
             </p>
             <p className="text-xs font-bold text-slate-400">
-              Bodega {itemContextMenu.stockItem.stock}
-              {itemContextMenu.stockItem.assigned
-                ? ` · Asignado ${itemContextMenu.stockItem.assigned}`
-                : ""}
+              Stock {itemContextMenu.stockItem.stock}
             </p>
           </div>
           <button

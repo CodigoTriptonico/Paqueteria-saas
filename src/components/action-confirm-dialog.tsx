@@ -21,6 +21,7 @@ type ActionConfirmDialogProps = {
   tone?: ActionConfirmTone;
   confirming?: boolean;
   dialogId?: string;
+  overlayClassName?: string;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -34,6 +35,7 @@ export function ActionConfirmDialog({
   tone = "warning",
   confirming = false,
   dialogId = "action-confirm-dialog",
+  overlayClassName = "z-[140]",
   onCancel,
   onConfirm,
 }: ActionConfirmDialogProps) {
@@ -42,7 +44,7 @@ export function ActionConfirmDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/70 p-4">
+    <div className={`fixed inset-0 flex items-center justify-center bg-black/70 p-4 ${overlayClassName}`}>
       <button
         type="button"
         aria-label="Cerrar confirmación"

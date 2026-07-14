@@ -31,7 +31,7 @@ export type SellerOwnerRow = {
   label: string;
 };
 
-export type SellerMetricsRow = {
+type SellerMetricsRow = {
   rank: number;
   salesOwnerId: string;
   salesOwnerName: string;
@@ -46,7 +46,7 @@ export type SellerMetricsRow = {
   sharePercent: number;
 };
 
-export type PeriodBreakdownRow = {
+type PeriodBreakdownRow = {
   dayKey: string;
   label: string;
   saleCount: number;

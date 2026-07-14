@@ -4,6 +4,7 @@ import {
   activeLogisticsRouteTaskIds,
   buildLogisticaShipmentDeepLink,
   buildDriverPickerOptions,
+  buildTaskRoutePickerOptions,
   driverChangeDialogCopy,
   driverLabel,
   formatLogisticsTaskStatusLabel,
@@ -186,10 +187,10 @@ describe("logistics view", () => {
       "logistics-priority-awaiting-driver",
     );
     assert.equal(logisticsPriorityAwaitingDriverClass(true, "driver-1", true), "");
-    assert.match(logisticsPriorityCardClass(true, null, true), /border-amber-600/);
-    assert.equal(logisticsPriorityCardClass(true, "driver-1", true), "border-amber-600");
-    assert.equal(logisticsPriorityHeaderClass(true, null, true), "bg-amber-950/45");
-    assert.equal(logisticsPriorityHeaderClass(true, "driver-1", true), "bg-amber-950/45");
+    assert.match(logisticsPriorityCardClass(true), /border-amber-600/);
+    assert.equal(logisticsPriorityCardClass(true), "border-amber-600");
+    assert.equal(logisticsPriorityHeaderClass(true), "bg-amber-950/45");
+    assert.equal(logisticsPriorityHeaderClass(true), "bg-amber-950/45");
   });
 
   it("builds logistica deep links from shipment codes", () => {
@@ -380,6 +381,63 @@ describe("logistics view", () => {
     assert.equal(options[0]?.label, "Sin asignar");
     assert.equal(options[1]?.label, "Conductor 1");
     assert.equal(options[2]?.searchText, "Conductor 2");
+  });
+
+  it("builds searchable route picker options for the task date", () => {
+    const options = buildTaskRoutePickerOptions({
+      routes: [
+        {
+          id: "route-1",
+          name: "Ruta Norte",
+          routeDate: "2026-07-06",
+          routeTemplateId: "template-1",
+          assignedTo: "driver-1",
+          status: "draft",
+        },
+        { id: "route-2", name: "Ruta Sur", routeDate: "2026-07-12", assignedTo: null },
+      ],
+      templates: [
+        { id: "template-1", name: "Ruta del lunes", weekday: 0 },
+        { id: "template-2", name: "Ruta del sabado", weekday: 5 },
+      ],
+      enabledWeekdays: ["Lun", "Sab"],
+      taskDate: "2026-07-06",
+      driverLabelById: new Map([["driver-1", "Conductor 1"]]),
+    });
+
+    assert.equal(options.length, 3);
+    assert.equal(options[0]?.value, "");
+    assert.equal(options[0]?.label, "Sin ruta");
+    assert.equal(options[1]?.value, "route:route-1");
+    assert.match(options[1]?.searchText || "", /Conductor 1/);
+    assert.equal(options[2]?.value, "template:template-2");
+    assert.equal(options[2]?.label, "Ruta del sabado (Sab)");
+  });
+
+  it("shows weekly templates when no operational route exists yet", () => {
+    const options = buildTaskRoutePickerOptions({
+      routes: [],
+      templates: [{ id: "template-1", name: "Ruta del lunes", weekday: 0 }],
+      enabledWeekdays: ["Lun"],
+      taskDate: "2026-07-06",
+    });
+
+    assert.equal(options.length, 2);
+    assert.equal(options[1]?.value, "template:template-1");
+    assert.equal(options[1]?.label, "Ruta del lunes (Lun)");
+  });
+
+  it("shows monday template on saturday task when only monday is enabled", () => {
+    const options = buildTaskRoutePickerOptions({
+      routes: [],
+      templates: [{ id: "template-1", name: "Ruta del lunes", weekday: 0 }],
+      enabledWeekdays: ["Lun"],
+      taskDate: "2026-07-11",
+    });
+
+    assert.equal(options.length, 2);
+    assert.equal(options[1]?.value, "template:template-1");
+    assert.equal(options[1]?.label, "Ruta del lunes (Lun)");
   });
 
   it("builds waiting copy from when the logistics task was ordered", () => {

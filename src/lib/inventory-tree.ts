@@ -40,14 +40,6 @@ export const countCategoryLeafItems = (category: CategoryConfig): number => {
   }, 0);
 };
 
-export const countInventoryTreeItems = (items: InventoryTreeItem[]): number =>
-  items.reduce((sum, item) => {
-    if (isInventoryGroup(item)) {
-      return sum + countInventoryTreeItems(item.children || []);
-    }
-
-    return sum + 1;
-  }, 0);
 
 export function addInventoryTreeChild(
   items: InventoryTreeItem[],

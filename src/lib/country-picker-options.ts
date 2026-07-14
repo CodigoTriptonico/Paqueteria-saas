@@ -2,7 +2,7 @@ import type { InlineSearchPickerOption } from "@/components/inline-search-picker
 import { countryFlagIcon } from "@/components/country-flag";
 import type { CountryOption } from "@/lib/country-options";
 
-export function countryNamePickerOption(
+function countryNamePickerOption(
   name: string,
   value: string = name,
 ): InlineSearchPickerOption {
@@ -13,7 +13,7 @@ export function countryNamePickerOption(
   };
 }
 
-export function countryCatalogPickerOption(country: CountryOption): InlineSearchPickerOption {
+function countryCatalogPickerOption(country: CountryOption): InlineSearchPickerOption {
   return {
     value: country.code || country.name,
     label: country.name,

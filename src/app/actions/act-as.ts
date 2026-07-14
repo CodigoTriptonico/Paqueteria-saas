@@ -40,24 +40,24 @@ export async function enterClientOrganizationAction(
 ): Promise<ActionResult<{ redirectTo: string }>> {
   try {
     await requirePlatformAdmin();
+
+    const validation = await validateClientOrganization(organizationId);
+    if (!validation.ok) {
+      return fail(validation.error);
+    }
+
+    const cookieStore = await cookies();
+    cookieStore.set(ACT_AS_ORG_COOKIE, organizationId, {
+      httpOnly: true,
+      path: "/",
+      sameSite: "lax",
+      maxAge: ACT_AS_ORG_COOKIE_MAX_AGE,
+    });
+
+    return ok({ redirectTo: "/" });
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
-
-  const validation = await validateClientOrganization(organizationId);
-  if (!validation.ok) {
-    return validation;
-  }
-
-  const cookieStore = await cookies();
-  cookieStore.set(ACT_AS_ORG_COOKIE, organizationId, {
-    httpOnly: true,
-    path: "/",
-    sameSite: "lax",
-    maxAge: ACT_AS_ORG_COOKIE_MAX_AGE,
-  });
-
-  return ok({ redirectTo: "/" });
 }
 
 export async function exitClientOrganizationAction(): Promise<void> {
@@ -67,15 +67,4 @@ export async function exitClientOrganizationAction(): Promise<void> {
   cookieStore.delete(ACT_AS_ORG_COOKIE);
 
   redirect("/platform");
-}
-
-export async function clearActAsOrganizationCookieAction(): Promise<ActionResult<null>> {
-  try {
-    await requirePlatformAdmin();
-    const cookieStore = await cookies();
-    cookieStore.delete(ACT_AS_ORG_COOKIE);
-    return ok(null);
-  } catch (error) {
-    return fail(actionErrorMessage(error));
-  }
 }

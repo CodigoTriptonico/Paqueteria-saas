@@ -1,7 +1,7 @@
-import { formatScheduleAtDisplay } from "@/components/sale/schedule-time";
+import { formatScheduleAtDisplay } from "@/lib/sale/schedule-time";
 import { formatScheduleDateInput } from "@/lib/schedule-date";
 
-export function scheduleDatePart(scheduleAt: string) {
+function scheduleDatePart(scheduleAt: string) {
   return scheduleAt.split("T")[0] || "";
 }
 
@@ -16,7 +16,7 @@ export function calendarDaysBetween(fromDate: string, toDate: string) {
   return Math.round((to - from) / 86_400_000);
 }
 
-export function daysFromToday(scheduleAt: string, reference = new Date()) {
+function daysFromToday(scheduleAt: string, reference = new Date()) {
   const today = formatScheduleDateInput(reference);
   return calendarDaysBetween(today, scheduleDatePart(scheduleAt));
 }

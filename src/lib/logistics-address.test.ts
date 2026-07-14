@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildLogisticsGeoAddressPatch,
   routeAddressForLogisticsTask,
   routeAddressFromCustomer,
 } from "@/lib/logistics-address";
@@ -58,5 +59,27 @@ describe("logistics-address", () => {
 
     assert.equal(customer?.lat, 1);
     assert.equal(customer?.lng, 2);
+  });
+
+  it("keeps the corrected geo address aligned in the stop and recipient snapshot", () => {
+    const patch = buildLogisticsGeoAddressPatch({
+      customerId: "cust-1",
+      customerName: "Ana Lopez",
+      recipientSnapshot: { firstName: "Ana", lastName: "Lopez", phone: "555" },
+      street: "Oak",
+      houseNumber: "12",
+      city: "LA",
+      state: "CA",
+      postalCode: "90001",
+      country: "USA",
+      formattedAddress: "12 Oak, LA",
+      placeId: "place-2",
+      lat: 34.05,
+      lng: -118.25,
+    });
+
+    assert.equal(patch.addressSnapshot.formattedAddress, "12 Oak, LA");
+    assert.equal(patch.addressSnapshot.lat, 34.05);
+    assert.equal(patch.recipientSnapshot?.placeId, "place-2");
   });
 });

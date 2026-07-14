@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { generateTemporaryPassword } from "@/lib/auth/temporary-password";
 import {
   createLogisticsDriverAction,
   createLogisticsVehicleAction,
@@ -37,6 +38,7 @@ import { PageLoading } from "@/components/page-loading";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import {
   cardClass,
+  insetShellClass,
   inputClass,
   Panel,
   primaryButtonClass,
@@ -44,6 +46,7 @@ import {
 } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { settingsFieldLabelClass as fieldLabelClass } from "@/components/config/settings-panel-styles";
 
 type FleetView = "drivers" | "vehicles";
 
@@ -78,19 +81,7 @@ const emptyVehicleForm: VehicleForm = {
   assignedDriverId: null,
 };
 
-const fieldLabelClass = "grid gap-1.5 text-[11px] font-black uppercase text-slate-400";
 const compactInputClass = `${inputClass} h-10`;
-
-function temporaryPassword() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-  let password = "";
-
-  for (let index = 0; index < 10; index += 1) {
-    password += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-
-  return password;
-}
 
 function driverName(driver: LogisticsDriverRow) {
   return driver.fullName || driver.email;
@@ -202,7 +193,7 @@ export function LogisticsFleetAdminClient({
   );
 
   function openCreateDriver() {
-    setDriverForm({ ...emptyDriverForm, password: temporaryPassword() });
+    setDriverForm({ ...emptyDriverForm, password: generateTemporaryPassword() });
   }
 
   function openEditDriver(driver: LogisticsDriverRow) {
@@ -398,7 +389,7 @@ export function LogisticsFleetAdminClient({
               {activeCount} activos
             </span>
 
-            <label className="flex h-9 min-w-[14rem] flex-[1_1_18rem] items-center gap-2 rounded-lg border border-black bg-surface-inset px-3">
+            <label className={`${insetShellClass} flex h-9 min-w-[14rem] flex-[1_1_18rem] items-center gap-2 rounded-lg border border-black bg-surface-inset px-3`}>
               <Search className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
               <input
                 className="min-w-0 flex-1 bg-transparent text-sm font-bold text-[#f8fafc] outline-none placeholder:text-slate-500"
@@ -470,7 +461,7 @@ export function LogisticsFleetAdminClient({
                           setResetDriver({
                             id: driver.id,
                             label: driverName(driver),
-                            password: temporaryPassword(),
+                            password: generateTemporaryPassword(),
                           })
                         }
                       >
@@ -512,6 +503,8 @@ export function LogisticsFleetAdminClient({
                 <article key={vehicle.id} className={`${cardClass} overflow-hidden`}>
                   <div className="aspect-[16/8] border-b border-black bg-surface-inset">
                     {vehicle.photoUrl ? (
+                      // Supabase vehicle photos use signed, short-lived URLs outside Next's static remote host list.
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={vehicle.photoUrl}
                         alt={vehicle.name}
@@ -654,7 +647,7 @@ export function LogisticsFleetAdminClient({
                       type="button"
                       className={`${secondaryButtonClass} h-10`}
                       onClick={() =>
-                        setDriverForm((current) => current && { ...current, password: temporaryPassword() })
+                        setDriverForm((current) => current && { ...current, password: generateTemporaryPassword() })
                       }
                     >
                       Nueva
@@ -711,7 +704,7 @@ export function LogisticsFleetAdminClient({
                     className={`${secondaryButtonClass} h-10`}
                     onClick={() =>
                       setResetDriver((current) =>
-                        current ? { ...current, password: temporaryPassword() } : current,
+                        current ? { ...current, password: generateTemporaryPassword() } : current,
                       )
                     }
                   >
@@ -756,6 +749,8 @@ export function LogisticsFleetAdminClient({
               <div className="grid gap-3">
                 <div className="aspect-[4/3] overflow-hidden rounded-xl border border-black bg-surface-inset">
                   {vehicleForm.photoUrl ? (
+                    // Local previews and signed Supabase URLs must render before a permanent remote URL exists.
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={vehicleForm.photoUrl} alt="Vehiculo" className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full items-center justify-center">

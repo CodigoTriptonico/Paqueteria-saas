@@ -29,6 +29,6 @@ describe("logistics ops eval", () => {
     assert.match(logisticaSource, /Board actualizado/);
     assert.match(conductorActionsSource, /pickup_full_box/);
     assert.match(conductorActionsSource, /hasPickupReturnEventForTaskLine/);
-    assert.match(conductorActionsSource, /type: "entrada"/);
+    assert.match(conductorActionsSource, /insertFullBoxCollectionEvent/);
   });
 });

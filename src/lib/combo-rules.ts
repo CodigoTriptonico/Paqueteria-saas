@@ -2,7 +2,7 @@ import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
 
 export const ANY_PRODUCT = "*";
 
-export type ComboRuleMode = "reward" | "bundle_price";
+type ComboRuleMode = "reward" | "bundle_price";
 export type ComboBenefitKind = "percent_off" | "fixed_unit_price" | "set_total";
 
 export type ComboBuyLine = {
@@ -113,7 +113,7 @@ export function ensureComboRuleLineIds(rule: ComboRule): ComboRule {
   };
 }
 
-export function createBlankComboRule(): ComboRule {
+function createBlankComboRule(): ComboRule {
   return {
     mode: "reward",
     buy: [],
@@ -363,7 +363,7 @@ function buyIncludesProduct(buy: ComboBuyLine[], catalogKey: string) {
   return buy.some((line) => normalizeKey(line.catalogKey) === key);
 }
 
-export function uniqueBuyProductCount(buy: ComboBuyLine[]) {
+function uniqueBuyProductCount(buy: ComboBuyLine[]) {
   return new Set(buy.map((line) => normalizeKey(line.catalogKey))).size;
 }
 

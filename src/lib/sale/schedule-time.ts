@@ -44,7 +44,7 @@ export function formatTime12Hour(value: string) {
   return `${displayHour}:${minuteValue} ${period}`;
 }
 
-export function formatScheduleTimeLabel(timePart: string) {
+function formatScheduleTimeLabel(timePart: string) {
   const parsed = parseScheduleTime(timePart);
 
   if (parsed.kind === "from") {

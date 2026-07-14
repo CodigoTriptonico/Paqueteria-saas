@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Route, Truck, Users } from "lucide-react";
+import { ClipboardList, Route, Truck, Users } from "lucide-react";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 
-export type LogisticsSection = "routes" | "drivers" | "vehicles";
+export type LogisticsSection = "tasks" | "routes" | "drivers" | "vehicles";
 
 type LogisticsSectionNavProps = {
   active: LogisticsSection;
@@ -22,11 +22,15 @@ export function LogisticsSectionNav({
   active,
   className = "",
   routesOnClick,
-  routesHref = "/logistica",
+  routesHref = "/logistica?view=rutas",
   extraActions,
 }: LogisticsSectionNavProps) {
   return (
     <div className={`flex shrink-0 flex-wrap items-center gap-1.5 ${className}`.trim()}>
+      <Link href="/logistica" className={sectionButtonClass(active, "tasks")}>
+        <ClipboardList className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        Tareas
+      </Link>
       <Link href="/logistica/conductores" className={sectionButtonClass(active, "drivers")}>
         <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
         Conductores

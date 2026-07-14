@@ -160,3 +160,72 @@ export function routeAddressForLogisticsTask(
 
   return snapshotAddress;
 }
+
+export function buildLogisticsGeoAddressPatch(input: {
+  customerId?: string | null;
+  customerName: string;
+  customerPhone?: string | null;
+  recipientSnapshot?: Record<string, unknown> | null;
+  street?: string | null;
+  houseNumber?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  formattedAddress?: string | null;
+  placeId?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+}) {
+  const street = clean(input.street);
+  const houseNumber = clean(input.houseNumber);
+  const neighborhood = clean(input.neighborhood);
+  const city = clean(input.city);
+  const state = clean(input.state);
+  const postalCode = clean(input.postalCode);
+  const country = clean(input.country || input.recipientSnapshot?.country);
+  const formattedAddress = clean(input.formattedAddress) || formattedAddressFromParts({ street, houseNumber, neighborhood, city, state, postalCode, country });
+  const placeId = clean(input.placeId);
+  const lat = readNumber(input.lat);
+  const lng = readNumber(input.lng);
+  const snapshot: Record<string, unknown> | null = input.recipientSnapshot
+    ? {
+        ...input.recipientSnapshot,
+        street,
+        houseNumber,
+        neighborhood,
+        city,
+        state,
+        postalCode,
+        country,
+        formattedAddress,
+        placeId,
+        lat,
+        lng,
+      }
+    : null;
+  const recipientName = snapshot
+    ? [clean(snapshot.firstName), clean(snapshot.lastName)].filter(Boolean).join(" ")
+    : "";
+
+  return {
+    recipientSnapshot: snapshot,
+    addressSnapshot: {
+      source: input.customerId ? "customer" as const : snapshot ? "recipient_snapshot" as const : "unknown" as const,
+      name: recipientName || clean(input.customerName),
+      phone: clean(snapshot?.phone || input.customerPhone),
+      street,
+      houseNumber,
+      neighborhood,
+      city,
+      state,
+      postalCode,
+      country,
+      formattedAddress,
+      placeId,
+      lat,
+      lng,
+    },
+  };
+}

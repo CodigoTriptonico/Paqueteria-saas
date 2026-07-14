@@ -1,3 +1,5 @@
+import { PICKER_PANEL_SELECTOR } from "@/lib/date-picker";
+
 type NativePickerTarget = {
   showPicker: () => void;
 };
@@ -42,6 +44,15 @@ export function isNativeDateTimeInput(
   );
 }
 
+function isDomElement(value: unknown): value is Element {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "closest" in value &&
+    typeof (value as Element).closest === "function"
+  );
+}
+
 /**
  * Returns true when a pointerdown outside `container` should not dismiss overlays,
  * because the user is clicking the browser's native date/time picker popup.
@@ -60,6 +71,10 @@ export function shouldSuppressDismissForNativePicker(
 
   if (container?.contains(target)) {
     return false;
+  }
+
+  if (isDomElement(target) && target.closest(PICKER_PANEL_SELECTOR)) {
+    return true;
   }
 
   return isNativeDateTimeInput(activeElement);

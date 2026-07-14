@@ -4,33 +4,37 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+const auditoriaClientSource = readFileSync(
+  join(root, "components/auditoria-client.tsx"),
+  "utf8",
+);
+
 const estadisticasSource = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../components/estadisticas-client.tsx"),
+  join(root, "components/estadisticas-client.tsx"),
   "utf8",
 );
 
-const enviosSource = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../components/envios-client.tsx"),
-  "utf8",
-);
+const enviosSource = readFileSync(join(root, "components/envios-client.tsx"), "utf8");
 
-const auditSource = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../lib/shipment-audit.ts"),
-  "utf8",
-);
+const auditSource = readFileSync(join(root, "lib/shipment-audit.ts"), "utf8");
 
-describe("estadisticas auditoria eval", () => {
-  it("registers auditoria section and shipment deep link", () => {
-    assert.match(estadisticasSource, /id: "auditoria"/);
-    assert.match(estadisticasSource, /EstadisticasAuditoriaPanel/);
-    assert.match(estadisticasSource, /searchParams\.get\("shipment"\)/);
+describe("auditoria route eval", () => {
+  it("registers dedicated auditoria page with shipment deep link", () => {
+    assert.match(auditoriaClientSource, /EstadisticasAuditoriaPanel/);
+    assert.match(auditoriaClientSource, /searchParams\.get\("shipment"\)/);
+    assert.equal(estadisticasSource.includes('id: "auditoria"'), false);
+    assert.equal(estadisticasSource.includes('id: "inventario"'), false);
+    assert.match(estadisticasSource, /router\.replace\(shipment \? `\/auditoria\?shipment=\$\{shipment\}` : "\/auditoria"\)/);
+    assert.match(estadisticasSource, /router\.replace\("\/inventario"\)/);
   });
 });
 
-describe("estadisticas auditoria panel eval", () => {
+describe("auditoria panel eval", () => {
   it("passes activity rows into AuditHistoryLine", () => {
     const panelSource = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "../components/estadisticas/auditoria-panel.tsx"),
+      join(root, "components/estadisticas/auditoria-panel.tsx"),
       "utf8",
     );
     assert.equal(panelSource.includes("<AuditHistoryEntry entry={entry} />"), true);
@@ -41,10 +45,10 @@ describe("estadisticas auditoria panel eval", () => {
 });
 
 describe("envios auditoria menu eval", () => {
-  it("opens estadisticas auditoria from shipment context menu", () => {
+  it("opens dedicated auditoria route from shipment context menu", () => {
     assert.match(enviosSource, /EnviosShipmentContextMenu/);
     assert.match(enviosSource, /handleShipmentContextMenu/);
-    assert.match(enviosSource, /\/estadisticas\?view=auditoria&shipment=/);
+    assert.match(enviosSource, /\/auditoria\?shipment=/);
     assert.equal(enviosSource.includes("ShipmentAuditPanel"), false);
   });
 });

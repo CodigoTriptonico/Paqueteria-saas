@@ -1,12 +1,14 @@
 import {
   loadWarehouseInventoryCoreAction,
 } from "@/app/actions/inventory";
+import { listConductorTruckBalancesAction } from "@/app/actions/conductor-tasks";
 import { listWarehousesAction } from "@/app/actions/warehouses";
 import { InventarioClient } from "@/components/inventario-client";
 import { requirePathAccess } from "@/lib/auth/require";
 import { sessionHasPermission } from "@/lib/auth/permissions";
 import { loadPricingConfigForSession } from "@/lib/pricing/load-config";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import type { ConductorTruckBalance } from "@/lib/conductor-truck-inventory";
 
 export default async function InventarioPage() {
   const session = await requirePathAccess("/inventario");
@@ -16,6 +18,10 @@ export default async function InventarioPage() {
   }
 
   const warehousesResult = await listWarehousesAction();
+  const truckBalancesResult = await listConductorTruckBalancesAction();
+  const truckBalances: ConductorTruckBalance[] = truckBalancesResult.ok
+    ? truckBalancesResult.data
+    : [];
   const warehouses = warehousesResult.ok
     ? warehousesResult.data.filter((warehouse) => warehouse.is_active)
     : [];
@@ -36,6 +42,7 @@ export default async function InventarioPage() {
   if (!defaultWarehouse) {
     return (
       <InventarioClient
+        initialTruckBalances={truckBalances}
         initialPricing={initialPricing}
         initialData={{
           warehouses,
@@ -55,6 +62,7 @@ export default async function InventarioPage() {
 
   return (
     <InventarioClient
+      initialTruckBalances={truckBalances}
       initialPricing={initialPricing}
       initialData={{
         warehouses,

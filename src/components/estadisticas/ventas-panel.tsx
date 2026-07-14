@@ -7,7 +7,8 @@ import { getSellerMetricsAction, type SellerMetricsReport } from "@/app/actions/
 import { SellerSalesDetailPanel } from "@/components/estadisticas/seller-sales-detail-panel";
 import { PeriodRangeToolbar } from "@/components/estadisticas/period-range-toolbar";
 import { useNotify } from "@/components/notifications/notification-provider";
-import { Panel, StatCard, textMutedClass } from "@/components/ui-blocks";
+import { Panel, StatCard, listCardShellClass, listRowBaseClass, listRowHoverClass, textMutedClass } from "@/components/ui-blocks";
+import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provider";
 import { formatMoneyValue } from "@/lib/logistics-fees";
 import type { PeriodGranularity } from "@/lib/seller-metrics/period-buckets";
 import { anchorDateKey, defaultRangeKeys, shiftAnchor } from "@/lib/seller-metrics/period-buckets";
@@ -62,6 +63,7 @@ export function EstadisticasVentasPanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const notify = useNotify();
+  const { layout: viewLayout } = usePageViewLayout("stats.sales");
   const sellerId = searchParams.get("seller");
   const sellerName = searchParams.get("sellerName") || "";
   const urlGranularity = searchParams.get("granularity");
@@ -82,6 +84,7 @@ export function EstadisticasVentasPanel({
   const [rangeTo, setRangeTo] = useState(urlRangeTo || initialReport?.rangeTo || initialRange.to);
   const [error, setError] = useState(initialError || "");
   const [isPending, startTransition] = useTransition();
+
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -401,6 +404,7 @@ export function EstadisticasVentasPanel({
                 Actualizando
               </span>
             ) : null}
+
           </div>
         </div>
 
@@ -450,67 +454,111 @@ export function EstadisticasVentasPanel({
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="border-b border-black bg-surface-inset text-[10px] font-black uppercase text-slate-500">
-                      <tr>
-                        <th className="px-3 py-2">#</th>
-                        <th className="px-3 py-2">Vendedor</th>
-                        <th className="px-3 py-2 text-right">Ventas</th>
-                        <th className="px-3 py-2 text-right">Abiertas</th>
-                        <th className="px-3 py-2 text-right">Cobrado</th>
-                        <th className="px-3 py-2 text-right">Utilidad</th>
-                        <th className="px-3 py-2 text-right">Promedio</th>
-                        <th className="px-3 py-2 text-right">Participación</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.sellers.map((row) => (
-                        <tr
-                          key={row.salesOwnerId}
-                          className="cursor-pointer border-b border-black/70 transition last:border-b-0 hover:bg-surface-card-hover"
-                          onClick={() => openSellerDetail(row.salesOwnerId, row.salesOwnerName)}
-                        >
-                          <td className={`px-3 py-3 font-black ${rankTone(row.rank, report.sellers.length)}`}>
-                            {row.rank}
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="flex items-center gap-2">
-                              {row.rank === 1 && row.saleCount > 0 ? (
-                                <Crown className="h-4 w-4 shrink-0 text-emerald-300" />
-                              ) : null}
-                              <div className="min-w-0">
-                                <p className="truncate font-black text-[#f8fafc]">
-                                  {row.salesOwnerName}
-                                </p>
-                                <p className="text-[10px] font-bold text-slate-500">
-                                  {row.closedCount} cerradas · {row.openCount} abiertas ·{" "}
-                                  {row.fullSales} completas · {row.depositSales} depósitos
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-3 py-3 text-right font-black text-[#f8fafc]">
-                            {row.saleCount}
-                          </td>
-                          <td className="px-3 py-3 text-right font-black text-amber-300">
-                            {row.openCount}
-                          </td>
-                          <td className="px-3 py-3 text-right font-black text-emerald-300">
-                            {formatMoneyValue(row.totalPaid)}
-                          </td>
-                          <td className="px-3 py-3 text-right font-black text-rose-300">
-                            {formatMoneyValue(row.totalProfit)}
-                          </td>
-                          <td className="px-3 py-3 text-right font-black text-slate-300">
-                            {formatMoneyValue(row.averageTicket)}
-                          </td>
-                          <td className="px-3 py-3 text-right font-black text-sky-300">
-                            {formatPercent(row.sharePercent)}
-                          </td>
+                  {viewLayout === "rows" ? (
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="border-b border-black bg-surface-inset text-[10px] font-black uppercase text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2">#</th>
+                          <th className="px-3 py-2">Vendedor</th>
+                          <th className="px-3 py-2 text-right">Ventas</th>
+                          <th className="px-3 py-2 text-right">Abiertas</th>
+                          <th className="px-3 py-2 text-right">Cobrado</th>
+                          <th className="px-3 py-2 text-right">Utilidad</th>
+                          <th className="px-3 py-2 text-right">Promedio</th>
+                          <th className="px-3 py-2 text-right">Participación</th>
                         </tr>
+                      </thead>
+                      <tbody>
+                        {report.sellers.map((row) => (
+                          <tr
+                            key={row.salesOwnerId}
+                            className={`cursor-pointer border-b border-black/70 transition last:border-b-0 ${listRowHoverClass} bg-surface-list-row`}
+                            onClick={() => openSellerDetail(row.salesOwnerId, row.salesOwnerName)}
+                          >
+                            <td className={`px-3 py-3 font-black ${rankTone(row.rank, report.sellers.length)}`}>
+                              {row.rank}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center gap-2">
+                                {row.rank === 1 && row.saleCount > 0 ? (
+                                  <Crown className="h-4 w-4 shrink-0 text-emerald-300" />
+                                ) : null}
+                                <div className="min-w-0">
+                                  <p className="truncate font-black text-[#f8fafc]">
+                                    {row.salesOwnerName}
+                                  </p>
+                                  <p className="text-[10px] font-bold text-slate-500">
+                                    {row.closedCount} cerradas · {row.openCount} abiertas ·{" "}
+                                    {row.fullSales} completas · {row.depositSales} depósitos
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-right font-black text-[#f8fafc]">
+                              {row.saleCount}
+                            </td>
+                            <td className="px-3 py-3 text-right font-black text-amber-300">
+                              {row.openCount}
+                            </td>
+                            <td className="px-3 py-3 text-right font-black text-emerald-300">
+                              {formatMoneyValue(row.totalPaid)}
+                            </td>
+                            <td className="px-3 py-3 text-right font-black text-rose-300">
+                              {formatMoneyValue(row.totalProfit)}
+                            </td>
+                            <td className="px-3 py-3 text-right font-black text-slate-300">
+                              {formatMoneyValue(row.averageTicket)}
+                            </td>
+                            <td className="px-3 py-3 text-right font-black text-sky-300">
+                              {formatPercent(row.sharePercent)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {report.sellers.map((row) => (
+                        <button
+                          key={row.salesOwnerId}
+                          type="button"
+                          onClick={() => openSellerDetail(row.salesOwnerId, row.salesOwnerName)}
+                          className={`${listRowBaseClass} p-3 text-left ${listRowHoverClass}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className={`text-lg font-black ${rankTone(row.rank, report.sellers.length)}`}>
+                              #{row.rank}
+                            </span>
+                            {row.rank === 1 && row.saleCount > 0 ? (
+                              <Crown className="h-4 w-4 shrink-0 text-emerald-300" />
+                            ) : null}
+                          </div>
+                          <p className="mt-1 truncate font-black text-[#f8fafc]">{row.salesOwnerName}</p>
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-black">
+                            <div>
+                              <p className="text-slate-500">Ventas</p>
+                              <p className="text-[#f8fafc]">{row.saleCount}</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500">Abiertas</p>
+                              <p className="text-amber-300">{row.openCount}</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500">Cobrado</p>
+                              <p className="text-emerald-300">{formatMoneyValue(row.totalPaid)}</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500">Utilidad</p>
+                              <p className="text-rose-300">{formatMoneyValue(row.totalProfit)}</p>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-[10px] font-bold text-sky-300">
+                            {formatPercent(row.sharePercent)} participación
+                          </p>
+                        </button>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -567,35 +615,65 @@ export function EstadisticasVentasPanel({
                     Ventas registradas por día en el periodo seleccionado.
                   </p>
                 </div>
-                <div className="divide-y divide-black/70">
-                  {report.dailyBreakdown.map((row) => {
-                    const width =
-                      maxDailyPaid > 0 ? Math.max((row.totalPaid / maxDailyPaid) * 100, 0) : 0;
+                {viewLayout === "rows" ? (
+                  <div className="flex flex-col gap-2 p-2">
+                    {report.dailyBreakdown.map((row) => {
+                      const width =
+                        maxDailyPaid > 0 ? Math.max((row.totalPaid / maxDailyPaid) * 100, 0) : 0;
 
-                    return (
-                      <div
-                        key={row.dayKey}
-                        className="grid gap-3 px-4 py-3 sm:grid-cols-[8rem_minmax(0,1fr)_5rem] sm:items-center"
-                      >
-                        <p className="text-xs font-black uppercase text-slate-500">{row.label}</p>
-                        <div className="h-3 overflow-hidden rounded-full border border-black bg-surface-inset">
-                          <div
-                            className="h-full rounded-full bg-emerald-400"
-                            style={{ width: `${width}%` }}
-                          />
+                      return (
+                        <div
+                          key={row.dayKey}
+                          className={`${listRowBaseClass} grid gap-3 px-4 py-3 sm:grid-cols-[8rem_minmax(0,1fr)_5rem] sm:items-center`}
+                        >
+                          <p className="text-xs font-black uppercase text-slate-500">{row.label}</p>
+                          <div className="h-3 overflow-hidden rounded-full border border-black bg-surface-inset">
+                            <div
+                              className="h-full rounded-full bg-emerald-400"
+                              style={{ width: `${width}%` }}
+                            />
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-black text-emerald-300">
+                              {formatMoneyValue(row.totalPaid)}
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-500">
+                              {row.saleCount} ventas · {row.openCount} abiertas
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-black text-emerald-300">
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {report.dailyBreakdown.map((row) => {
+                      const width =
+                        maxDailyPaid > 0 ? Math.max((row.totalPaid / maxDailyPaid) * 100, 0) : 0;
+
+                      return (
+                        <div
+                          key={row.dayKey}
+                          className={`${listCardShellClass} p-3`}
+                        >
+                          <p className="text-xs font-black uppercase text-slate-500">{row.label}</p>
+                          <div className="mt-2 h-3 overflow-hidden rounded-full border border-black bg-surface-card">
+                            <div
+                              className="h-full rounded-full bg-emerald-400"
+                              style={{ width: `${width}%` }}
+                            />
+                          </div>
+                          <p className="mt-2 text-sm font-black text-emerald-300">
                             {formatMoneyValue(row.totalPaid)}
                           </p>
                           <p className="text-[10px] font-bold text-slate-500">
                             {row.saleCount} ventas · {row.openCount} abiertas
                           </p>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             ) : null}
           </>

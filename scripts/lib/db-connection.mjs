@@ -77,7 +77,7 @@ export function resolvePgConnectionConfig() {
   }
 
   const host = process.env.SUPABASE_DB_HOST || "127.0.0.1";
-  const port = process.env.SUPABASE_DB_PORT || "54322";
+  const port = process.env.SUPABASE_DB_PORT || "55022";
   const password = process.env.SUPABASE_DB_PASSWORD || "postgres";
 
   return {

@@ -7,12 +7,12 @@ import {
   type OrganizationPlanUsage,
 } from "@/app/actions/organization";
 import { PageLoading } from "@/components/page-loading";
+import {
+  settingsIconBoxClass as iconBoxClass,
+  settingsSectionClass as sectionClass,
+} from "@/components/config/settings-panel-styles";
 
-const sectionClass =
-  "overflow-hidden rounded-xl border border-black bg-surface-card shadow-[0_8px_22px_rgba(0,0,0,0.18)]";
 const sectionHeaderClass = "border-b border-black bg-surface-card-header px-4 py-3";
-const iconBoxClass =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black bg-emerald-400 text-slate-950";
 
 function usageTone(used: number, max: number | null) {
   if (max === null) {

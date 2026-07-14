@@ -10,7 +10,7 @@ import {
 type ViewLayoutToggleProps = {
   layout: ViewLayout;
   onToggle: () => void;
-  variant?: "default" | "inline";
+  variant?: "default" | "inline" | "sidebar" | "rail";
   className?: string;
 };
 
@@ -23,7 +23,9 @@ export function ViewLayoutToggle({
   const variantClass =
     variant === "inline"
       ? "inline-flex h-10 w-10 shrink-0 items-center justify-center border-l border-black/55 bg-transparent text-slate-400 transition hover:bg-[#243029] hover:text-slate-200"
-      : "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-400 transition hover:bg-surface-card hover:text-slate-200";
+      : variant === "sidebar" || variant === "rail"
+        ? "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card text-slate-400 transition hover:bg-[#2f3834] hover:text-slate-200 active:scale-[0.98]"
+        : "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-400 transition hover:bg-surface-card hover:text-slate-200";
 
   return (
     <button

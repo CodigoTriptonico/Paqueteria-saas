@@ -22,7 +22,7 @@ function auditCategoryTone(action: string) {
     return categoryToneClass.sale;
   }
 
-  if (action.startsWith("shipment.logistics") || action === "shipment.status_updated" || action === "shipment.schedule_updated") {
+  if (action.startsWith("shipment.logistics") || action === "shipment.status_updated") {
     return categoryToneClass.logistics;
   }
 
@@ -49,8 +49,6 @@ export function AuditHistoryEntry({ entry, className = "" }: AuditHistoryEntryPr
   const headerLabel = formatAuditHistoryHeaderLabel(entry, actionLabel);
   const timestamp = stepHistoryTimestamp(entry);
   const showInvoice = headerLabel && headerLabel !== actionLabel;
-  const evidenceUrl =
-    typeof entry.metadata?.evidenceUrl === "string" ? entry.metadata.evidenceUrl : "";
 
   return (
     <article className={`rounded-lg border border-black/70 bg-surface-card px-3 py-2.5 ${className}`}>
@@ -74,20 +72,6 @@ export function AuditHistoryEntry({ entry, className = "" }: AuditHistoryEntryPr
           </time>
         ) : null}
       </div>
-      {evidenceUrl ? (
-        <a
-          href={evidenceUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-2 block overflow-hidden rounded-lg border border-black bg-surface-inset"
-        >
-          <img
-            src={evidenceUrl}
-            alt="Evidencia"
-            className="h-28 w-full object-cover"
-          />
-        </a>
-      ) : null}
     </article>
   );
 }

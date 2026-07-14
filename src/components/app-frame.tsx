@@ -1,11 +1,16 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, Suspense, useCallback, useContext, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { OnboardingCoachProvider } from "@/components/onboarding/onboarding-coach-context";
+import { OnboardingCoachOverlay } from "@/components/onboarding/onboarding-coach-overlay";
 import { NotificationProvider } from "@/components/notifications/notification-provider";
+import { UiSurfacePreferencesProvider } from "@/components/ui/ui-surface-preferences-provider";
 import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
 import { conductorTasksNavLabel } from "@/lib/conductor-tareas-view";
+import type { UiSurfaceContextId } from "@/lib/ui-surface-context";
+import { resolveSurfaceContextFromPathname } from "@/lib/ui-surface-route-context";
 import type { AppSession } from "@/lib/auth/types";
 
 type ShellConfig = {
@@ -18,6 +23,8 @@ type ShellConfig = {
   contextNavLabel?: string;
   onContextNavBack?: () => void;
   contentEdgeToEdge?: boolean;
+  /** Override del contexto de paleta (p. ej. remitente vs destinatario en venta). */
+  surfaceContextId?: UiSurfaceContextId | null;
 };
 
 type ShellConfigPatch = (patch: ShellConfig) => void;
@@ -33,11 +40,11 @@ function activeFromPath(pathname: string, session: AppSession | null) {
     return "Inventario";
   }
 
-  if (pathname.startsWith("/envios/historial")) {
+  if (pathname.startsWith("/seguimiento/historial") || pathname.startsWith("/envios/historial")) {
     return "Historial envíos";
   }
 
-  if (pathname.startsWith("/envios")) {
+  if (pathname.startsWith("/seguimiento") || pathname.startsWith("/envios")) {
     return "Seguimiento";
   }
 
@@ -51,6 +58,10 @@ function activeFromPath(pathname: string, session: AppSession | null) {
 
   if (pathname.startsWith("/logistica")) {
     return "Logistica";
+  }
+
+  if (pathname.startsWith("/auditoria")) {
+    return "Auditoria";
   }
 
   if (pathname.startsWith("/estadisticas") || pathname.startsWith("/vendedores")) {
@@ -100,6 +111,10 @@ export function AppFrame({
   const contextNavLabel = config.contextNavLabel ?? defaultContextNav?.contextNavLabel;
   const onContextNavBack =
     config.onContextNavBack ?? defaultContextNav?.onContextNavBack;
+  const surfaceContextId =
+    config.surfaceContextId !== undefined
+      ? config.surfaceContextId
+      : resolveSurfaceContextFromPathname(pathname);
 
   if (pathname.startsWith("/login")) {
     return (
@@ -109,26 +124,38 @@ export function AppFrame({
     );
   }
 
+  if (pathname.startsWith("/reloj")) {
+    return <NotificationProvider>{children}</NotificationProvider>;
+  }
+
   return (
     <NotificationProvider>
+      <UiSurfacePreferencesProvider>
       <ShellConfigContext.Provider value={mergeShellConfig}>
-      <AppShell
-        session={session}
-        active={active}
-        title={active}
-        compactContent={config.compactContent}
-        compactNavLabel={config.compactNavLabel}
-        compactNavFocusKey={config.compactNavFocusKey}
-        onCompactNavClick={config.onCompactNavClick}
-        hideCompactNavHeader={config.hideCompactNavHeader}
-        compactNavSettingsHref={config.compactNavSettingsHref}
-        contextNavLabel={contextNavLabel}
-        onContextNavBack={onContextNavBack}
-        contentEdgeToEdge={config.contentEdgeToEdge}
-      >
-        {children}
-      </AppShell>
+      <Suspense fallback={null}>
+        <OnboardingCoachProvider organizationId={session?.organizationId ?? null}>
+          <AppShell
+            session={session}
+            active={active}
+            title={active}
+            compactContent={config.compactContent}
+            compactNavLabel={config.compactNavLabel}
+            compactNavFocusKey={config.compactNavFocusKey}
+            onCompactNavClick={config.onCompactNavClick}
+            hideCompactNavHeader={config.hideCompactNavHeader}
+            compactNavSettingsHref={config.compactNavSettingsHref}
+            contextNavLabel={contextNavLabel}
+            onContextNavBack={onContextNavBack}
+            contentEdgeToEdge={config.contentEdgeToEdge}
+            surfaceContextId={surfaceContextId}
+          >
+            {children}
+          </AppShell>
+          <OnboardingCoachOverlay />
+        </OnboardingCoachProvider>
+      </Suspense>
     </ShellConfigContext.Provider>
+      </UiSurfacePreferencesProvider>
     </NotificationProvider>
   );
 }

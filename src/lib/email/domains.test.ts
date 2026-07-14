@@ -1,6 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { getEmailDomainSuggestions } from "./domains";
+import {
+  appendAtToEmailLocalPart,
+  emailDomainSuggestionsShouldOpen,
+  getEmailDomainSuggestions,
+  normalizeEmailInputValue,
+  shouldShowEmailAtSuggestion,
+} from "./domains";
 
 describe("getEmailDomainSuggestions", () => {
   it("no sugiere sin arroba o sin parte local", () => {
@@ -19,9 +25,34 @@ describe("getEmailDomainSuggestions", () => {
     const suggestions = getEmailDomainSuggestions("a@gm");
     assert.deepEqual(suggestions, ["a@gmail.com"]);
   });
+});
 
-  it("no sugiere si el correo ya está completo", () => {
-    assert.deepEqual(getEmailDomainSuggestions("asd@hotmail.com"), []);
-    assert.deepEqual(getEmailDomainSuggestions("  Felipe@gmail.com  "), []);
+describe("normalizeEmailInputValue", () => {
+  it("elimina @ duplicados despues del primero", () => {
+    assert.equal(normalizeEmailInputValue("a@@b@@c.com"), "a@bc.com");
+    assert.equal(normalizeEmailInputValue("felipe"), "felipe");
+  });
+});
+
+describe("shouldShowEmailAtSuggestion", () => {
+  it("muestra @ fantasma solo con parte local", () => {
+    assert.equal(shouldShowEmailAtSuggestion("felipe"), true);
+    assert.equal(shouldShowEmailAtSuggestion("  felipe  "), true);
+    assert.equal(shouldShowEmailAtSuggestion(""), false);
+    assert.equal(shouldShowEmailAtSuggestion("felipe@gmail.com"), false);
+  });
+});
+
+describe("appendAtToEmailLocalPart", () => {
+  it("recorta espacios y agrega @", () => {
+    assert.equal(appendAtToEmailLocalPart("felipe "), "felipe@");
+    assert.equal(appendAtToEmailLocalPart("  ana  "), "ana@");
+  });
+});
+
+describe("emailDomainSuggestionsShouldOpen", () => {
+  it("abre lista cuando hay sugerencias de dominio", () => {
+    assert.equal(emailDomainSuggestionsShouldOpen("felipe@"), true);
+    assert.equal(emailDomainSuggestionsShouldOpen("felipe"), false);
   });
 });

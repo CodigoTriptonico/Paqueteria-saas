@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, LogOut, Settings, User, X } from "lucide-react";
+import { ChevronDown, LogOut, User, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { exitClientOrganizationAction } from "@/app/actions/act-as";
 import { signOutAction } from "@/app/actions/auth";
@@ -182,27 +182,6 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
               >
                 <User className="h-4 w-4 shrink-0 text-slate-400" />
                 Mi perfil
-              </Link>
-            )}
-            {settingsLocked ? (
-              <span
-                role="menuitem"
-                title={settingsLockedHint}
-                className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-slate-500 opacity-60"
-                aria-disabled="true"
-              >
-                <Settings className="h-4 w-4 shrink-0 text-slate-500" />
-                Configuracion
-              </span>
-            ) : (
-              <Link
-                href="/configuracion"
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-surface-card"
-              >
-                <Settings className="h-4 w-4 shrink-0 text-slate-400" />
-                Configuracion
               </Link>
             )}
             {session.isPlatformAdmin && !session.isActingAsClient ? (

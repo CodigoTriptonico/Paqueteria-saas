@@ -5,6 +5,8 @@ import {
   inventoryItemsForLeaf,
   leafStockMetrics,
   mergeTreeIntoInventoryItems,
+  mergeOrphanItemsIntoCategoryConfigs,
+  countInventoryArticles,
   resolveCategoryStockItems,
   resolveSubcategoryStockItems,
   stockBucketCounts,
@@ -142,5 +144,27 @@ describe("inventory-stock", () => {
     ]);
 
     assert.deepEqual(buckets, { ok: 1, low: 1, empty: 1 });
+  });
+
+  it("merges orphan stock items back into the category tree", () => {
+    const merged = mergeOrphanItemsIntoCategoryConfigs(
+      [
+        {
+          name: "Cajas",
+          items: [{ id: "1", name: "14x14x14" }],
+        },
+      ],
+      [
+        stockItem({ id: "db-1", kind: "14x14x14" }),
+        stockItem({ id: "db-2", kind: "25x25x14" }),
+      ],
+    );
+
+    assert.equal(merged[0]?.items?.length, 2);
+    assert.ok(merged[0]?.items?.some((item) => item.name === "25x25x14"));
+  });
+
+  it("counts inventory articles from the visible tree", () => {
+    assert.equal(countInventoryArticles(sampleTree), 2);
   });
 });

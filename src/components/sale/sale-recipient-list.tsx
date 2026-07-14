@@ -22,6 +22,7 @@ import {
   recipientIdentityKey,
 } from "@/components/sale/venta-parts";
 import type { ViewLayout } from "@/lib/view-layout";
+import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 
 type SaleRecipientListProps = {
   recipients: Recipient[];
@@ -116,7 +117,11 @@ export function SaleRecipientList({
                     />
                   );
                 })}
-                <SalePersonAddRow label="Nuevo destinatario" onClick={onNewRecipient} />
+                <SalePersonAddRow
+                  label="Nuevo destinatario"
+                  onClick={onNewRecipient}
+                  onboardingTarget={ONBOARDING_TARGETS.VENTA_NEW_RECIPIENT}
+                />
               </div>
             ) : showSearchEmpty ? (
               <div className={`${salePersonRowEmptyClass} flex min-h-0 flex-1 items-center justify-center`}>
@@ -127,7 +132,11 @@ export function SaleRecipientList({
                 <div className={`${salePersonRowEmptyClass} flex min-h-[8rem] items-center justify-center`}>
                   Este remitente no tiene destinatarios registrados
                 </div>
-                <SalePersonAddRow label="Nuevo destinatario" onClick={onNewRecipient} />
+                <SalePersonAddRow
+                  label="Nuevo destinatario"
+                  onClick={onNewRecipient}
+                  onboardingTarget={ONBOARDING_TARGETS.VENTA_NEW_RECIPIENT}
+                />
               </div>
             ) : null}
           </div>
@@ -142,6 +151,7 @@ export function SaleRecipientList({
               return (
                 <SalePersonCard
                   key={recipientIdentityKey(recipient)}
+                  pageSurfaceTint
                   name={personFullName(recipient)}
                   phone={recipient.phone}
                   address={{
@@ -184,10 +194,18 @@ export function SaleRecipientList({
                 <div className={salePersonCardEmptyClass}>
                   Este remitente no tiene destinatarios registrados
                 </div>
-                <SalePersonAddCard label="Nuevo destinatario" onClick={onNewRecipient} />
+                <SalePersonAddCard
+                  label="Nuevo destinatario"
+                  onClick={onNewRecipient}
+                  onboardingTarget={ONBOARDING_TARGETS.VENTA_NEW_RECIPIENT}
+                />
               </>
             ) : !showSearchEmpty ? (
-              <SalePersonAddCard label="Nuevo destinatario" onClick={onNewRecipient} />
+              <SalePersonAddCard
+                label="Nuevo destinatario"
+                onClick={onNewRecipient}
+                onboardingTarget={ONBOARDING_TARGETS.VENTA_NEW_RECIPIENT}
+              />
             ) : null}
           </div>
         </div>

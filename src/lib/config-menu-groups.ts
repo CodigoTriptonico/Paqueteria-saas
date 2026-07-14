@@ -2,11 +2,11 @@ export type ConfigMenuSectionId =
   | "plan"
   | "prices"
   | "distributors"
-  | "inventory"
   | "deliveries"
   | "appearance"
   | "company"
-  | "users";
+  | "users"
+  | "timeclock";
 
 export type ConfigMenuGroup = {
   id: string;
@@ -20,13 +20,13 @@ export const CONFIG_MENU_GROUPS: ConfigMenuGroup[] = [
     id: "operation",
     title: "Operación",
     description: "Precios, catálogo, proveedores y logística del día a día.",
-    sectionIds: ["prices", "distributors", "inventory", "deliveries"],
+    sectionIds: ["prices", "distributors", "deliveries"],
   },
   {
     id: "administration",
     title: "Administración",
     description: "Plan, empresa, equipo y apariencia del sistema.",
-    sectionIds: ["plan", "company", "users", "appearance"],
+    sectionIds: ["plan", "company", "users", "timeclock", "appearance"],
   },
 ];
 

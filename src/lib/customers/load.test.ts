@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   groupRecipientsByCustomerId,
   mapCustomerRow,
+  mapRecipientRow,
   mergeCustomersWithRecipients,
 } from "@/lib/customers/load";
 
@@ -15,6 +16,7 @@ describe("mergeCustomersWithRecipients", () => {
         first_name: "Ana",
         last_name: "Lopez",
         phone: "+1",
+        email: "",
         country: "Mexico",
         street: "A",
         house_number: "1",
@@ -30,6 +32,7 @@ describe("mergeCustomersWithRecipients", () => {
         first_name: "Luis",
         last_name: "Perez",
         phone: "+2",
+        email: "",
         country: "Mexico",
         street: "B",
         house_number: "2",
@@ -73,6 +76,8 @@ describe("mergeCustomersWithRecipients", () => {
           first_name: "Pedro",
           last_name: "Ruiz",
           phone: "+52",
+          email: "ana@correo.com",
+          emails: ["ana@correo.com", "ana2@correo.com"],
           country: "Mexico",
           street: "Reforma",
           house_number: "20",
@@ -88,6 +93,45 @@ describe("mergeCustomersWithRecipients", () => {
     assert.equal(merged.length, 1);
     assert.equal(merged[0]?.recipients.length, 1);
     assert.equal(merged[0]?.recipients[0]?.firstName, "Pedro");
+    assert.deepEqual(
+      mapRecipientRow({
+        id: "r-3",
+        first_name: "Ana",
+        last_name: "Lopez",
+        phone: "+52",
+        email: "ana@correo.com",
+        emails: ["ana@correo.com", "ana2@correo.com"],
+        country: "Mexico",
+        street: "A",
+        house_number: "1",
+        neighborhood: "Centro",
+        city: "CDMX",
+        state: "CDMX",
+        postal_code: "01000",
+        card_style: "amber-warm",
+      }),
+      {
+        id: "r-3",
+        firstName: "Ana",
+        lastName: "Lopez",
+        phone: "+52",
+        email: "ana@correo.com",
+        emails: ["ana@correo.com", "ana2@correo.com"],
+        country: "Mexico",
+        street: "A",
+        houseNumber: "1",
+        neighborhood: "Centro",
+        city: "CDMX",
+        state: "CDMX",
+        postalCode: "01000",
+        cardStyle: "amber-warm",
+        placeId: "",
+        formattedAddress: "",
+        addressVerified: false,
+        lat: null,
+        lng: null,
+      },
+    );
     assert.equal(
       mapCustomerRow({
         id: "c-2",

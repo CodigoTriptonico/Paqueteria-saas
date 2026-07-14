@@ -45,6 +45,9 @@ type InventoryMovementsDrawerProps = {
   warehouseName?: string;
   iconOnly?: boolean;
   onMovementsChange?: (next: InventoryMovement[]) => void;
+  controlledOpen?: boolean;
+  onControlledOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 };
 
 const typeLabels: Record<InventoryMovementType, string> = {
@@ -97,7 +100,7 @@ function MovementTypeIcon({ type }: { type: InventoryMovementType }) {
   return <SlidersHorizontal className="h-4 w-4" aria-hidden />;
 }
 
-export function MovementList({
+function MovementList({
   movements,
   warehouseName,
   emptyHint,
@@ -463,7 +466,6 @@ export function InventoryMovementsSidePanel({
                 Desde
                 <DateInput
                   compact={false}
-                  className="w-full"
                   value={dateFrom}
                   ariaLabel="Fecha desde"
                   onChange={setDateFrom}
@@ -473,7 +475,6 @@ export function InventoryMovementsSidePanel({
                 Hasta
                 <DateInput
                   compact={false}
-                  className="w-full"
                   value={dateTo}
                   ariaLabel="Fecha hasta"
                   onChange={setDateTo}
@@ -517,13 +518,27 @@ export function InventoryMovementsDrawer({
   warehouseName,
   iconOnly = false,
   onMovementsChange,
+  controlledOpen,
+  onControlledOpenChange,
+  hideTrigger = false,
 }: InventoryMovementsDrawerProps) {
   const [open, setOpen] = useState(false);
+  const drawerOpen = controlledOpen ?? open;
+  const setDrawerOpen = useCallback(
+    (next: boolean) => {
+      if (controlledOpen === undefined) {
+        setOpen(next);
+      }
+
+      onControlledOpenChange?.(next);
+    },
+    [controlledOpen, onControlledOpenChange],
+  );
   const [mounted, setMounted] = useState(false);
 
   const close = useCallback(() => {
-    setOpen(false);
-  }, []);
+    setDrawerOpen(false);
+  }, [setDrawerOpen]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -533,7 +548,7 @@ export function InventoryMovementsDrawer({
 
   const drawer = mounted ? (
     <InventoryMovementsSidePanel
-      open={open}
+      open={drawerOpen}
       onClose={close}
       warehouseId={warehouseId}
       movements={movements}
@@ -545,22 +560,22 @@ export function InventoryMovementsDrawer({
 
   return (
     <>
-      {iconOnly ? (
+      {hideTrigger ? null : iconOnly ? (
         <InventoryToolbarIconButton
           icon={History}
           label="Historial de movimientos"
           badge={movements.length || undefined}
-          onClick={() => setOpen(true)}
+          onClick={() => setDrawerOpen(true)}
           ariaHaspopup="dialog"
-          ariaExpanded={open}
+          ariaExpanded={drawerOpen}
         />
       ) : (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => setDrawerOpen(true)}
           className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-black bg-[#1a2320] px-3 text-xs font-black text-slate-300 transition hover:bg-[#243029] hover:text-[#f8fafc]"
           aria-haspopup="dialog"
-          aria-expanded={open}
+          aria-expanded={drawerOpen}
           title="Historial de movimientos"
           aria-label="Historial de movimientos"
         >

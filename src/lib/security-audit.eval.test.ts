@@ -14,6 +14,10 @@ const signInRouteSource = readFileSync(
   join(root, "src", "app", "api", "auth", "sign-in", "route.ts"),
   "utf8",
 );
+const loginFormSource = readFileSync(
+  join(root, "src", "app", "login", "login-form.tsx"),
+  "utf8",
+);
 const usersSource = readFileSync(join(root, "src", "app", "actions", "users.ts"), "utf8");
 const inventorySource = readFileSync(join(root, "src", "app", "actions", "inventory.ts"), "utf8");
 const shipmentsSource = readFileSync(join(root, "src", "app", "actions", "shipments.ts"), "utf8");
@@ -45,8 +49,7 @@ describe("production security wiring", () => {
   it("login uses generic credentials message and rate limit", () => {
     assert.match(signInRouteSource, /Credenciales invalidas/);
     assert.match(signInRouteSource, /enforceLoginRateLimit/);
-    assert.match(authSource, /Credenciales invalidas/);
-    assert.match(authSource, /enforceLoginRateLimit/);
+    assert.match(loginFormSource, /\/api\/auth\/sign-in/);
   });
 
   it("invite user rolls back auth user on profile failure", () => {

@@ -16,14 +16,6 @@ export function isSupabaseConfigured() {
 }
 
 /** Supabase CLI en Docker (127.0.0.1). */
-export function isLocalSupabase() {
-  if (!isSupabaseConfigured()) {
-    return false;
-  }
-
-  const url = supabaseUrl();
-  return url.includes("127.0.0.1") || url.includes("localhost");
-}
 
 export function getSupabaseUrl() {
   const url = supabaseUrl();

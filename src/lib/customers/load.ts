@@ -12,6 +12,8 @@ export type CustomerRecipientRow = {
   firstName: string;
   lastName: string;
   phone: string;
+  email: string;
+  emails: string[];
   country: string;
   street: string;
   houseNumber: string;
@@ -22,6 +24,7 @@ export type CustomerRecipientRow = {
   cardStyle: string;
   placeId: string;
   formattedAddress: string;
+  addressVerified: boolean;
   lat: number | null;
   lng: number | null;
 };
@@ -33,6 +36,7 @@ export type CustomerWithRecipientsRow = {
   lastName: string;
   phones: string[];
   email: string;
+  emails: string[];
   street: string;
   houseNumber: string;
   neighborhood: string;
@@ -43,6 +47,7 @@ export type CustomerWithRecipientsRow = {
   cardStyle: string;
   placeId: string;
   formattedAddress: string;
+  addressVerified: boolean;
   lat: number | null;
   lng: number | null;
   recipients: CustomerRecipientRow[];
@@ -55,6 +60,7 @@ type CustomerDbRow = {
   last_name: string;
   phones: string[] | null;
   email: string;
+  emails?: string[] | null;
   street: string;
   house_number: string;
   neighborhood: string;
@@ -65,6 +71,7 @@ type CustomerDbRow = {
   card_style: string | null;
   place_id?: string | null;
   formatted_address?: string | null;
+  address_verified?: boolean | null;
   lat?: number | string | null;
   lng?: number | string | null;
   customer_recipients: RecipientDbRow[] | null;
@@ -76,6 +83,8 @@ type RecipientDbRow = {
   first_name: string;
   last_name: string;
   phone: string;
+  email: string;
+  emails?: string[] | null;
   country: string;
   street: string;
   house_number: string;
@@ -86,6 +95,7 @@ type RecipientDbRow = {
   card_style: string | null;
   place_id?: string | null;
   formatted_address?: string | null;
+  address_verified?: boolean | null;
   lat?: number | string | null;
   lng?: number | string | null;
 };
@@ -96,6 +106,8 @@ const RECIPIENT_SELECT_FIELDS = `
   first_name,
   last_name,
   phone,
+  email,
+  emails,
   country,
   street,
   house_number,
@@ -106,6 +118,7 @@ const RECIPIENT_SELECT_FIELDS = `
   card_style,
   place_id,
   formatted_address,
+  address_verified,
   lat,
   lng
 `;
@@ -117,6 +130,7 @@ const CUSTOMER_SELECT_FIELDS = `
   last_name,
   phones,
   email,
+  emails,
   street,
   house_number,
   neighborhood,
@@ -127,6 +141,7 @@ const CUSTOMER_SELECT_FIELDS = `
   card_style,
   place_id,
   formatted_address,
+  address_verified,
   lat,
   lng
 `;
@@ -221,11 +236,16 @@ export function canAccessCustomersSession(session: AppSession) {
 }
 
 export function mapRecipientRow(row: RecipientDbRow): CustomerRecipientRow {
+  const emails = row.emails?.length ? row.emails : row.email ? [row.email] : [];
+  const primaryEmail = emails[0] || row.email || "";
+
   return {
     id: row.id,
     firstName: row.first_name,
     lastName: row.last_name,
     phone: row.phone,
+    email: primaryEmail,
+    emails,
     country: row.country,
     street: row.street,
     houseNumber: row.house_number,
@@ -236,6 +256,7 @@ export function mapRecipientRow(row: RecipientDbRow): CustomerRecipientRow {
     cardStyle: row.card_style || "amber-warm",
     placeId: row.place_id || "",
     formattedAddress: row.formatted_address || "",
+    addressVerified: Boolean(row.address_verified),
     lat: mapGeoNumber(row.lat),
     lng: mapGeoNumber(row.lng),
   };
@@ -245,6 +266,8 @@ export function mapCustomerRow(row: CustomerDbRow): CustomerWithRecipientsRow {
   const recipients = (row.customer_recipients || [])
     .filter((recipient) => recipient)
     .map(mapRecipientRow);
+  const emails = row.emails?.length ? row.emails : row.email ? [row.email] : [];
+  const primaryEmail = emails[0] || row.email || "";
 
   return {
     id: row.id,
@@ -252,7 +275,8 @@ export function mapCustomerRow(row: CustomerDbRow): CustomerWithRecipientsRow {
     firstName: row.first_name,
     lastName: row.last_name,
     phones: row.phones?.length ? row.phones : [""],
-    email: row.email,
+    email: primaryEmail,
+    emails,
     street: row.street,
     houseNumber: row.house_number,
     neighborhood: row.neighborhood,
@@ -263,6 +287,7 @@ export function mapCustomerRow(row: CustomerDbRow): CustomerWithRecipientsRow {
     cardStyle: row.card_style || "amber-warm",
     placeId: row.place_id || "",
     formattedAddress: row.formatted_address || "",
+    addressVerified: Boolean(row.address_verified),
     lat: mapGeoNumber(row.lat),
     lng: mapGeoNumber(row.lng),
     recipients,

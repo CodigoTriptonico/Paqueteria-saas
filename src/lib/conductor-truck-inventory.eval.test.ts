@@ -15,6 +15,10 @@ const idempotencyMigrationSource = readFileSync(
   join(process.cwd(), "supabase/migrations/049_conductor_delivery_idempotency.sql"),
   "utf8",
 );
+const collectionMigrationSource = readFileSync(
+  join(process.cwd(), "supabase/migrations/054_conductor_deposit_collection_audit.sql"),
+  "utf8",
+);
 const tareasViewSource = readFileSync(
   join(process.cwd(), "src/lib/conductor-tareas-view.ts"),
   "utf8",
@@ -25,6 +29,14 @@ const tareasClientSource = readFileSync(
 );
 const inventarioClientSource = readFileSync(
   join(process.cwd(), "src/components/conductor/conductor-truck-inventory-client.tsx"),
+  "utf8",
+);
+const inventoryTabSource = readFileSync(
+  join(process.cwd(), "src/components/inventory-structure-editor.tsx"),
+  "utf8",
+);
+const inventoryTruckPanelSource = readFileSync(
+  join(process.cwd(), "src/components/inventory/inventory-truck-panel.tsx"),
   "utf8",
 );
 
@@ -44,19 +56,21 @@ describe("conductor route eval", () => {
     assert.match(actionsSource, /recordActivityHistory/);
   });
 
-  it("filters conductor task history by source and driver", () => {
-    assert.match(actionsSource, /listConductorTaskActivityHistoryAction/);
-    assert.match(actionsSource, /source: "conductor\.tareas"/);
-    assert.match(actionsSource, /driverId: cleanDriverId/);
-    assert.match(actionsSource, /shipment\.logistics_task_failed/);
-    assert.match(actionsSource, /shipment\.logistics_task_updated/);
-  });
-
   it("keeps payments and route ownership guarded", () => {
     assert.match(actionsSource, /collect_shipment_invoice_payment/);
     assert.match(actionsSource, /canWriteDriverTask/);
     assert.match(actionsSource, /resolveConductorActionDriverId/);
     assert.match(actionsSource, /session\.userId !== cleanDriverId/);
+  });
+
+  it("records explicit conductor collection outcomes with an atomic invoice update", () => {
+    assert.match(actionsSource, /paymentExpectedAmount/);
+    assert.match(actionsSource, /paymentOutcome/);
+    assert.match(tareasClientSource, /No recibí dinero/);
+    assert.match(collectionMigrationSource, /payment_expected_amount/);
+    assert.match(collectionMigrationSource, /payment_outcome/);
+    assert.match(collectionMigrationSource, /for update/);
+    assert.match(collectionMigrationSource, /Total de invoice inconsistente/);
   });
 
   it("re-reads task status from db before deliver", () => {
@@ -90,13 +104,72 @@ describe("conductor route eval", () => {
 
   it("keeps tareas blocked by missing truck boxes", () => {
     assert.match(tareasClientSource, /routeBlocked/);
-    assert.match(tareasClientSource, /Inventario camion/);
+    assert.match(tareasClientSource, /ver inventario/);
+    assert.match(tareasClientSource, /href="\/conductor\/inventario-camion"/);
     assert.match(tareasClientSource, /Foto requerida/);
   });
 
-  it("shows delivered and remaining truck metrics in inventario ui", () => {
-    assert.match(inventarioClientSource, /deliveredTotal/);
-    assert.match(inventarioClientSource, /Entregadas/);
-    assert.match(inventarioClientSource, /Restantes/);
+  it("separates empty delivery boxes from boxes collected in the truck", () => {
+    assert.match(inventarioClientSource, /Cajas de ruta \(por dejar\)/);
+    assert.match(inventarioClientSource, /Cajas extra en camión/);
+    assert.match(inventarioClientSource, /Cajas recogidas/);
+    assert.match(inventarioClientSource, /buildRouteDeliveryBoard/);
+    assert.match(inventarioClientSource, /buildExtraBoxesOnTruck/);
+    assert.match(inventarioClientSource, /returnConductorTruckLineAction/);
+    assert.match(inventarioClientSource, /CONDUCTOR_TRUCK_RETURN_REASONS/);
+    assert.doesNotMatch(inventarioClientSource, /Cajas vacías/);
+    assert.match(inventarioClientSource, /fullBoxInventory/);
+    assert.match(actionsSource, /cargo: buildConductorFullBoxCargo/);
+    assert.doesNotMatch(inventarioClientSource, /SmallMetric/);
+  });
+
+  it("gives drivers inline truck loading in the route delivery board", () => {
+    assert.match(inventarioClientSource, /RouteDeliverySection/);
+    assert.match(inventarioClientSource, /buildRouteDeliveryBoard/);
+    assert.match(inventarioClientSource, /route-delivery-board/);
+    assert.match(inventarioClientSource, /TruckLoadInline/);
+    assert.match(inventarioClientSource, /loadQuantities/);
+    assert.match(inventarioClientSource, /type="range"/);
+    assert.match(inventarioClientSource, /quedan/);
+    assert.match(inventarioClientSource, /cajas a subir/);
+    assert.match(inventarioClientSource, /Subir al camión/);
+    assert.doesNotMatch(inventarioClientSource, /Por subir al camión/);
+    assert.doesNotMatch(inventarioClientSource, /de \{line\.shortageQty\}/);
+    assert.match(inventarioClientSource, /loadConductorTruckLineAction/);
+    assert.doesNotMatch(inventarioClientSource, /loadChecklistOpen/);
+    assert.doesNotMatch(inventarioClientSource, /Ver lista/);
+  });
+
+  it("keeps the truck loading controls compact and route start left-aligned", () => {
+    assert.match(inventarioClientSource, /group mb-3 w-fit max-w-full/);
+    assert.match(inventarioClientSource, /mt-3 flex flex-wrap items-center gap-2/);
+    assert.match(inventarioClientSource, /searchParams\.get\("subir"\)/);
+    assert.match(inventarioClientSource, /route-delivery-board/);
+  });
+
+  it("records truck unload reasons for audit", () => {
+    assert.match(actionsSource, /returnConductorTruckLineAction/);
+    assert.match(actionsSource, /validateConductorTruckReturnInput/);
+    assert.match(actionsSource, /logistics\.truck_inventory_returned/);
+    assert.match(actionsSource, /Motivo:/);
+    assert.match(actionsSource, /transferVehicles/);
+    assert.match(actionsSource, /targetVehicleId/);
+    assert.match(inventarioClientSource, /¿A qué vehículo van las cajas\?/);
+    assert.match(inventarioClientSource, /isConductorTruckVehicleChangeReason/);
+  });
+
+  it("keeps the extra truck loading control separate from the inventory counts", () => {
+    assert.match(inventarioClientSource, /Cajas extra/);
+    assert.match(inventarioClientSource, /Llevar extra/);
+    assert.match(actionsSource, /loadConductorTruckExtraAction/);
+    assert.match(actionsSource, /includePersistentEvents: true/);
+  });
+
+  it("exposes the En camiones inventory tab and per-vehicle balances", () => {
+    assert.match(inventoryTabSource, /En camiones/);
+    assert.match(inventoryTruckPanelSource, /Cajas en camiones/);
+    assert.match(actionsSource, /listConductorTruckBalancesAction/);
+    assert.match(actionsSource, /buildConductorTruckBalance/);
+    assert.match(actionsSource, /vehicle_id/);
   });
 });

@@ -1,16 +1,14 @@
 "use client";
 
-import { Clock } from "lucide-react";
-import { useRef, useState } from "react";
-import { inputClass } from "@/components/sale/venta-parts";
-import { openNativePicker } from "@/lib/native-picker";
+import { useState } from "react";
+import { TimePickerInput } from "@/components/time-picker-input";
 import {
   applyScheduleTimePreset,
   formatScheduleTimePart,
   parseScheduleTime,
   scheduleTimePresetMatches,
   type ScheduleTimeKind,
-} from "@/components/sale/schedule-time";
+} from "@/lib/sale/schedule-time";
 
 const TIME_PRESETS = [
   ["10 AM", "10:00"],
@@ -32,8 +30,6 @@ type ScheduleTimeFieldProps = {
 
 export function ScheduleTimeField({ value, onChange }: ScheduleTimeFieldProps) {
   const parsed = parseScheduleTime(value);
-  const startRef = useRef<HTMLInputElement | null>(null);
-  const endRef = useRef<HTMLInputElement | null>(null);
   const [rangeTarget, setRangeTarget] = useState<"start" | "end">("start");
 
   function update(next: Partial<typeof parsed>) {
@@ -56,10 +52,6 @@ export function ScheduleTimeField({ value, onChange }: ScheduleTimeFieldProps) {
 
   function presetTarget() {
     return parsed.kind === "range" ? rangeTarget : "start";
-  }
-
-  function timeInputClass(active: boolean) {
-    return `${inputClass} w-full min-w-0 pl-10${active ? " ring-2 ring-emerald-500/70" : ""}`;
   }
 
   return (
@@ -112,17 +104,11 @@ export function ScheduleTimeField({ value, onChange }: ScheduleTimeFieldProps) {
       {parsed.kind === "exact" ? (
         <label className="grid gap-1.5">
           <span className="text-[11px] font-black uppercase text-slate-500">Hora exacta</span>
-          <span className="relative block">
-            <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              ref={startRef}
-              className={`${inputClass} w-full pl-10`}
-              type="time"
-              value={parsed.start}
-              onClick={() => openNativePicker(startRef.current)}
-              onChange={(event) => update({ start: event.target.value })}
-            />
-          </span>
+          <TimePickerInput
+            value={parsed.start}
+            ariaLabel="Hora exacta de entrega"
+            onChange={(nextValue) => update({ start: nextValue })}
+          />
         </label>
       ) : null}
 
@@ -130,33 +116,23 @@ export function ScheduleTimeField({ value, onChange }: ScheduleTimeFieldProps) {
         <div className="grid min-w-0 grid-cols-1 gap-2">
           <label className="grid min-w-0 gap-1.5">
             <span className="text-[11px] font-black uppercase text-slate-500">Desde</span>
-            <span className="relative block min-w-0">
-              <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                ref={startRef}
-                className={timeInputClass(rangeTarget === "start")}
-                type="time"
-                value={parsed.start}
-                onFocus={() => setRangeTarget("start")}
-                onClick={() => openNativePicker(startRef.current)}
-                onChange={(event) => update({ start: event.target.value })}
-              />
-            </span>
+            <TimePickerInput
+              value={parsed.start}
+              ariaLabel="Hora desde"
+              active={rangeTarget === "start"}
+              onFocus={() => setRangeTarget("start")}
+              onChange={(nextValue) => update({ start: nextValue })}
+            />
           </label>
           <label className="grid min-w-0 gap-1.5">
             <span className="text-[11px] font-black uppercase text-slate-500">Hasta</span>
-            <span className="relative block min-w-0">
-              <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                ref={endRef}
-                className={timeInputClass(rangeTarget === "end")}
-                type="time"
-                value={parsed.end || ""}
-                onFocus={() => setRangeTarget("end")}
-                onClick={() => openNativePicker(endRef.current)}
-                onChange={(event) => update({ end: event.target.value })}
-              />
-            </span>
+            <TimePickerInput
+              value={parsed.end || ""}
+              ariaLabel="Hora hasta"
+              active={rangeTarget === "end"}
+              onFocus={() => setRangeTarget("end")}
+              onChange={(nextValue) => update({ end: nextValue })}
+            />
           </label>
         </div>
       ) : null}
@@ -164,17 +140,11 @@ export function ScheduleTimeField({ value, onChange }: ScheduleTimeFieldProps) {
       {parsed.kind === "from" ? (
         <label className="grid gap-1.5">
           <span className="text-[11px] font-black uppercase text-slate-500">Desde (en adelante)</span>
-          <span className="relative block">
-            <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              ref={startRef}
-              className={`${inputClass} w-full pl-10`}
-              type="time"
-              value={parsed.start}
-              onClick={() => openNativePicker(startRef.current)}
-              onChange={(event) => update({ start: event.target.value })}
-            />
-          </span>
+          <TimePickerInput
+            value={parsed.start}
+            ariaLabel="Hora desde en adelante"
+            onChange={(nextValue) => update({ start: nextValue })}
+          />
         </label>
       ) : null}
     </div>

@@ -1,6 +1,4 @@
-export type OrganizationKind = "platform" | "client";
 
-export const PLATFORM_ORG_NAME = "Boxario";
 
 export function isClientOrganization(kind: string | null | undefined): boolean {
   return kind !== "platform";

@@ -147,11 +147,9 @@ async function main() {
   console.log("  Panel: http://localhost:3000/platform");
 
   if (!existing) {
-    console.log("\nContraseña asignada al crear usuario:");
-    console.log(password);
+    console.log("\nContraseña local configurada al crear usuario.");
   } else if (resetPassword) {
-    console.log("\nContraseña actualizada:");
-    console.log(password);
+    console.log("\nContraseña local actualizada.");
   } else {
     console.log(`\nContraseña: sin cambios. Canónica local: ${LOCAL_CANONICAL_PASSWORD}`);
     console.log("  (npm run db:restore-owner -- --reset-password para forzar)");

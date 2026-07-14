@@ -6,7 +6,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { recordActivityHistory } from "@/lib/activity-history";
-import { scheduleAtToTimestamp } from "@/lib/sale/schedule-time";
+import { logisticsScheduleWindowPatch } from "@/lib/logistics-schedule-window";
 import { readBillingFromPlan } from "@/lib/invoice-billing";
 import { formatMoneyValue } from "@/lib/logistics-fees";
 import {
@@ -23,10 +23,8 @@ import {
 } from "@/lib/shipment-visibility";
 import {
   shipmentContactLogAuditDescription,
-  summarizeShipmentContactChannelOthers,
   validateShipmentContactLogInput,
   type ShipmentContactChannel,
-  type ShipmentContactChannelOtherSummary,
   type ShipmentContactLogInput,
   type ShipmentContactLogRow,
   type ShipmentContactOutcome,
@@ -74,6 +72,7 @@ import {
   validateLogisticsPlanUpdate,
   type UpdateShipmentLogisticsPlanInput,
 } from "@/lib/shipment-logistics-edit";
+import { FULL_BOX_OFFICE_MODE } from "@/components/sale/venta-parts";
 import {
   isLogisticsTaskReactivation,
   logisticsTaskAssignedPatch,
@@ -89,7 +88,6 @@ import {
   resolveInitialShipmentStatus,
   syncShipmentStatusPatch,
 } from "@/lib/shipment-display";
-import { buildDueSchedulePromotionInput } from "@/lib/shipment-schedule-due";
 import {
   assertSameOrgCustomerIds,
   assertSameOrgProfileIds,
@@ -121,9 +119,9 @@ export type LogisticsTaskStatus =
   | "completed"
   | "cancelled";
 
-export type ShipmentPaymentKind = "deposit" | "balance" | "full";
+type ShipmentPaymentKind = "deposit" | "balance" | "full";
 
-export type ShipmentPaymentRow = {
+type ShipmentPaymentRow = {
   id: string;
   shipmentId: string;
   amount: number;
@@ -141,6 +139,11 @@ export type ShipmentLogisticsTaskRow = {
   status: LogisticsTaskStatus;
   assignedTo: string | null;
   scheduledAt: string | null;
+  requestedScheduleAt?: string | null;
+  scheduleConfirmationStatus?: "pending" | "confirmed";
+  scheduleKind?: "exact" | "range" | "from" | null;
+  windowStartAt?: string | null;
+  windowEndAt?: string | null;
   warehouseId: string | null;
   notes: string;
   stockDeductedAt: string | null;
@@ -215,6 +218,11 @@ type LogisticsTaskDbRow = {
   status: LogisticsTaskStatus;
   assigned_to: string | null;
   scheduled_at: string | null;
+  requested_schedule_at?: string | null;
+  schedule_confirmation_status?: "pending" | "confirmed" | null;
+  schedule_kind: "exact" | "range" | "from" | null;
+  window_start_at: string | null;
+  window_end_at: string | null;
   warehouse_id: string | null;
   notes: string | null;
   stock_deducted_at: string | null;
@@ -262,6 +270,7 @@ type ShipmentDbRow = {
         last_name?: string | null;
         phones?: string[] | null;
         email?: string | null;
+        emails?: string[] | null;
         street?: string | null;
         house_number?: string | null;
         neighborhood?: string | null;
@@ -276,6 +285,7 @@ type ShipmentDbRow = {
         last_name?: string | null;
         phones?: string[] | null;
         email?: string | null;
+        emails?: string[] | null;
         street?: string | null;
         house_number?: string | null;
         neighborhood?: string | null;
@@ -329,13 +339,13 @@ type ShipmentQuote = {
 
 const SHIPMENT_SELECT = `
   id, code, customer_id, recipient_id, recipient_snapshot, customer_name, country, carrier, paid, profit, status, assigned_to,
-  customer:customers!shipments_customer_id_fkey(first_name, last_name, phones, email, street, house_number, neighborhood, city, state, postal_code, country, formatted_address),
+  customer:customers!shipments_customer_id_fkey(first_name, last_name, phones, email, emails, street, house_number, neighborhood, city, state, postal_code, country, formatted_address),
   created_by, sales_owner_id, sales_owner_profile:profiles!shipments_sales_owner_id_fkey(full_name, email),
   sale_kind, invoice_status, invoice_priority, accounting_status, created_at, finalized_at,
   empty_box_delivered_at, full_box_collected_at, office_received_at, departed_at, shipped_at, delivered_at,
   delivery_notes, logistics_plan,
   shipment_logistics_tasks (
-    id, shipment_id, task_type, status, assigned_to, scheduled_at, warehouse_id,
+    id, shipment_id, task_type, status, assigned_to, scheduled_at, requested_schedule_at, schedule_confirmation_status, schedule_kind, window_start_at, window_end_at, warehouse_id,
     notes, stock_deducted_at, completed_at, ordered_at, assigned_at, loaded_at, created_at
   ),
   shipment_payments (
@@ -454,6 +464,11 @@ function mapTask(row: LogisticsTaskDbRow): ShipmentLogisticsTaskRow {
     status: row.status,
     assignedTo: row.assigned_to,
     scheduledAt: row.scheduled_at,
+    requestedScheduleAt: row.requested_schedule_at || null,
+    scheduleConfirmationStatus: row.schedule_confirmation_status || "confirmed",
+    scheduleKind: row.schedule_kind || (row.scheduled_at ? "exact" : null),
+    windowStartAt: row.window_start_at || row.scheduled_at,
+    windowEndAt: row.window_end_at,
     warehouseId: row.warehouse_id,
     notes: row.notes || "",
     stockDeductedAt: row.stock_deducted_at,
@@ -517,6 +532,7 @@ function customerSearchText(row: ShipmentDbRow) {
     customer.last_name,
     ...(Array.isArray(customer.phones) ? customer.phones : []),
     customer.email,
+    ...(Array.isArray(customer.emails) ? customer.emails : []),
     customer.street,
     customer.house_number,
     customer.neighborhood,
@@ -769,7 +785,7 @@ async function persistShipmentLogisticsPlanUpdate(
           shipment_id: shipment.id,
           task_type: spec.taskType,
           status: spec.scheduleMode === "scheduled" && spec.scheduleAt ? "scheduled" : "pending",
-          scheduled_at: scheduleAtToTimestamp(spec.scheduleAt),
+          ...logisticsScheduleWindowPatch(spec.scheduleAt),
           notes: String(shipment.logistics_plan?.notes || ""),
           ...logisticsTaskOrderInsertPatch(orderedAt),
         });
@@ -822,7 +838,7 @@ async function persistShipmentLogisticsPlanUpdate(
       .from("shipment_logistics_tasks")
       .update({
         status: nextStatus,
-        scheduled_at: scheduleAtToTimestamp(spec.scheduleAt),
+        ...logisticsScheduleWindowPatch(spec.scheduleAt),
         updated_at: new Date().toISOString(),
         ...(reactivating ? logisticsTaskReactivatePatch(orderedAt as string) : {}),
       })
@@ -949,36 +965,11 @@ async function persistShipmentLogisticsPlanUpdate(
 }
 
 async function promoteDueScheduledLegsForListedShipments(
-  supabase: NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>,
-  session: AppSession,
+  _supabase: NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>,
+  _session: AppSession,
   shipments: ShipmentRow[],
-  reference = new Date(),
 ): Promise<ShipmentRow[]> {
-  const promoted: ShipmentRow[] = [];
-
-  for (const shipment of shipments) {
-    const input = buildDueSchedulePromotionInput(shipment, reference);
-
-    if (!input) {
-      promoted.push(shipment);
-      continue;
-    }
-
-    const validationError = validateLogisticsPlanUpdate(shipment, input);
-    if (validationError) {
-      promoted.push(shipment);
-      continue;
-    }
-
-    const result = await persistShipmentLogisticsPlanUpdate(supabase, session, shipment, input, {
-      interaction: "schedule_due",
-      source: "envios.list",
-    });
-
-    promoted.push(result.ok ? result.shipment : shipment);
-  }
-
-  return promoted;
+  return shipments;
 }
 
 export async function listShipmentsAction(options?: {
@@ -1302,7 +1293,7 @@ export async function createShipmentAction(input: {
           shipment_id: shipment.id,
           task_type: task.taskType,
           status: task.status || (task.scheduledAt ? "scheduled" : "pending"),
-          scheduled_at: scheduleAtToTimestamp(task.scheduledAt),
+          ...logisticsScheduleWindowPatch(task.scheduledAt),
           warehouse_id: task.warehouseId || null,
           notes: task.notes || "",
         })),
@@ -1514,43 +1505,6 @@ export async function createShipmentContactLogAction(
   }
 }
 
-export async function listShipmentContactChannelOthersAction(): Promise<
-  ActionResult<ShipmentContactChannelOtherSummary[]>
-> {
-  try {
-    const session = await requireAppSession();
-
-    if (!canManageAllShipments(session)) {
-      throw new Error("FORBIDDEN");
-    }
-
-    const supabase = await createScopedSupabase(session);
-    if (!supabase) {
-      return fail("Supabase no configurado");
-    }
-
-    const { data, error } = await supabase
-      .from("shipment_contact_logs")
-      .select("channel, channel_other")
-      .eq("organization_id", session.organizationId)
-      .eq("channel", "other");
-
-    if (error) {
-      return fail(error.message);
-    }
-
-    return ok(
-      summarizeShipmentContactChannelOthers(
-        (data || []).map((row) => ({
-          channel: row.channel as ShipmentContactChannel,
-          channelOther: row.channel_other || "",
-        })),
-      ),
-    );
-  } catch (error) {
-    return fail(actionErrorMessage(error));
-  }
-}
 
 export async function finalizeShipmentInvoiceAction(input: {
   shipmentId: string;
@@ -2109,7 +2063,7 @@ export async function updateLogisticsTaskAction(input: {
     }
 
     if (input.scheduledAt !== undefined) {
-      patch.scheduled_at = input.scheduledAt || null;
+      Object.assign(patch, logisticsScheduleWindowPatch(input.scheduledAt));
       if (input.scheduledAt && nextStatus === "pending") {
         patch.status = "scheduled";
       }
@@ -2387,7 +2341,7 @@ export async function reactivateLogisticsTaskAction(input: {
 
     const patch: Record<string, unknown> = {
       status: nextStatus,
-      scheduled_at: scheduledAt || null,
+      ...logisticsScheduleWindowPatch(scheduledAt),
       assigned_to: assignedTo || null,
       warehouse_id: warehouseId || null,
       notes,
@@ -2482,6 +2436,123 @@ export async function updateShipmentLogisticsPlanAction(
     );
 
     return persisted.ok ? ok(persisted.shipment) : fail(persisted.error);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function markFullBoxReceivedAtOfficeAction(input: {
+  shipmentId: string;
+  audit?: ShipmentAuditContext;
+}): Promise<ActionResult<ShipmentRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!sessionHasPermission(session, "sales.manage")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const shipment = await listShipmentById(supabase, session, input.shipmentId);
+    if (!shipment) {
+      return fail("Invoice no encontrado");
+    }
+
+    if (shipment.sale_kind === "empty_box_deposit") {
+      return fail("Este invoice es solo depósito de caja vacía.");
+    }
+
+    if (!shipment.empty_box_delivered_at) {
+      return fail("Primero registra la entrega de la caja vacía.");
+    }
+
+    if (shipment.full_box_collected_at) {
+      return ok(shipment);
+    }
+
+    const emptyBox = asRecord(shipment.logistics_plan.emptyBox);
+    const persisted = await persistShipmentLogisticsPlanUpdate(
+      supabase,
+      session,
+      shipment,
+      {
+        emptyBox: {
+          mode: String(emptyBox.mode || ""),
+          handingNow: emptyBox.handingNow === true,
+          scheduleMode: String(emptyBox.scheduleMode || "pending"),
+          scheduleAt: String(emptyBox.scheduleAt || "") || null,
+          driverTaskOrdered: emptyBox.driverTaskOrdered === true,
+        },
+        fullBox: {
+          mode: FULL_BOX_OFFICE_MODE,
+          scheduleMode: "pending",
+          scheduleAt: null,
+          driverTaskOrdered: false,
+        },
+      },
+      input.audit,
+    );
+
+    if (!persisted.ok) {
+      return fail(persisted.error);
+    }
+
+    const now = new Date().toISOString();
+    const beforeMilestones = readShipmentMilestones(persisted.shipment);
+    const milestonePatch = buildFirstMilestonePatch(beforeMilestones, [
+      { key: "full_box_collected_at", recordedAt: now },
+      { key: "office_received_at", recordedAt: now },
+    ]);
+    const { data, error } = await supabase
+      .from("shipments")
+      .update({ status: "En oficina", ...milestonePatch })
+      .eq("id", persisted.shipment.id)
+      .eq("organization_id", session.organizationId)
+      .select(SHIPMENT_SELECT)
+      .single();
+
+    if (error || !data) {
+      return fail(error?.message || "No se pudo registrar la caja en oficina");
+    }
+
+    const updated = mapShipment(data as unknown as ShipmentDbRow);
+    await recordActivityHistory(supabase, session, {
+      action: "shipment.status_updated",
+      entityType: "shipment",
+      entityId: updated.id,
+      title: `Caja llena recibida en oficina · ${updated.code}`,
+      description: "El cliente entregó la caja llena en oficina.",
+      metadata: {
+        shipmentCode: updated.code,
+        previousStatus: shipment.status,
+        nextStatus: "En oficina",
+        source: input.audit?.source || "envios.progress",
+        interaction: input.audit?.interaction || "context_menu",
+        stepTitle: input.audit?.stepTitle || null,
+        stepKind: input.audit?.stepKind || "full_box",
+        customerName: updated.customer_name,
+        country: updated.country,
+      },
+    });
+
+    await recordShipmentMilestoneAudits(
+      supabase,
+      session,
+      updated,
+      newlyRecordedMilestones(beforeMilestones, milestonePatch),
+      "status_update",
+      {
+        previousStatus: shipment.status,
+        nextStatus: "En oficina",
+        audit: input.audit,
+      },
+    );
+
+    return ok(updated);
   } catch (error) {
     return fail(actionErrorMessage(error));
   }

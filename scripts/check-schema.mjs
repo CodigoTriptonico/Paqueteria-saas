@@ -41,6 +41,11 @@ const requiredTables = [
   "logistics_route_stops",
   "shipment_contact_logs",
   "logistics_truck_inventory_events",
+  "time_clock_settings",
+  "time_clock_employees",
+  "time_clock_sessions",
+  "time_clock_events",
+  "time_clock_alerts",
 ];
 
 let failed = false;

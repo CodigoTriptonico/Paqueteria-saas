@@ -2,7 +2,7 @@
 
 import { SalePaymentMethodField } from "@/components/sale/sale-payment-method-field";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
-import type { SalePaymentChoice } from "@/lib/sale-payment-choice";
+import { isSalePaymentUnset, type SalePaymentSelection } from "@/lib/sale-payment-choice";
 
 type SaleInvoiceConfirmDialogProps = {
   open: boolean;
@@ -12,9 +12,10 @@ type SaleInvoiceConfirmDialogProps = {
   confirmLabel: string;
   confirmingLabel?: string;
   confirming?: boolean;
-  paymentMethod: SalePaymentChoice;
+  paymentMethod: SalePaymentSelection;
   paymentNote?: string;
-  onPaymentMethodChange: (method: SalePaymentChoice) => void;
+  pendingPaymentSource?: "driver" | "office";
+  onPaymentMethodChange: (method: SalePaymentSelection) => void;
   onPaymentNoteChange?: (note: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
@@ -30,6 +31,7 @@ export function SaleInvoiceConfirmDialog({
   confirming = false,
   paymentMethod,
   paymentNote = "",
+  pendingPaymentSource = "driver",
   onPaymentMethodChange,
   onPaymentNoteChange,
   onCancel,
@@ -38,6 +40,8 @@ export function SaleInvoiceConfirmDialog({
   if (!open) {
     return null;
   }
+
+  const paymentSelectionRequired = isSalePaymentUnset(paymentMethod);
 
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/70 p-4">
@@ -65,7 +69,10 @@ export function SaleInvoiceConfirmDialog({
           className="mt-4"
           value={paymentMethod}
           note={paymentNote}
+          pendingPaymentSource={pendingPaymentSource}
+          pendingPaymentAmount={lines.find((line) => line.label === "Depósito")?.value}
           disabled={confirming}
+          confirming={confirming}
           onChange={onPaymentMethodChange}
           onNoteChange={onPaymentNoteChange}
         />
@@ -82,10 +89,14 @@ export function SaleInvoiceConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={confirming}
+            disabled={confirming || paymentSelectionRequired}
             className={`${primaryButtonClass} h-11 text-sm font-black disabled:opacity-40`}
           >
-            {confirming ? confirmingLabel : confirmLabel}
+            {confirming
+              ? confirmingLabel
+              : paymentSelectionRequired
+                ? "Elige cómo cobrar"
+                : confirmLabel}
           </button>
         </div>
       </div>

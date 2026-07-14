@@ -2,7 +2,7 @@
 
 import { Check, Shield, Star, Warehouse } from "lucide-react";
 
-export type WarehouseAccessOption = {
+type WarehouseAccessOption = {
   id: string;
   name: string;
   is_default?: boolean;

@@ -74,7 +74,7 @@ function driverSession(): AppSession {
 
 describe("canAccessPath seller shipments", () => {
   it("lets sellers open envios", () => {
-    assert.equal(canAccessPath(sellerSession(), "/envios"), true);
+    assert.equal(canAccessPath(sellerSession(), "/seguimiento"), true);
   });
 
   it("keeps logistica admin-only", () => {
@@ -85,8 +85,19 @@ describe("canAccessPath seller shipments", () => {
     assert.equal(canAccessPath(sellerSession(), "/estadisticas"), false);
   });
 
+  it("keeps auditoria admin-only", () => {
+    assert.equal(canAccessPath(sellerSession(), "/auditoria"), false);
+    assert.equal(canAccessPath(adminSession(), "/auditoria"), true);
+  });
+
   it("keeps legacy vendedores redirect admin-only", () => {
     assert.equal(canAccessPath(sellerSession(), "/vendedores"), false);
+  });
+
+  it("lets administrators open warehouse operations", () => {
+    assert.equal(canAccessPath(adminSession(), "/ingreso-bodega"), true);
+    assert.equal(canAccessPath(adminSession(), "/bodega"), true);
+    assert.equal(canAccessPath(adminSession(), "/paletas"), true);
   });
 });
 
@@ -100,7 +111,7 @@ describe("canAccessPath conductor tasks", () => {
   });
 
   it("keeps conductors off envios", () => {
-    assert.equal(canAccessPath(driverSession(), "/envios"), false);
+    assert.equal(canAccessPath(driverSession(), "/seguimiento"), false);
   });
 
   it("lets admins preview tareas conductor", () => {

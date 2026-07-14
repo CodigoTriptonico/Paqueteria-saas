@@ -8,7 +8,7 @@ export const LOGIN_RATE_LIMIT = {
   maxAttempts: 8,
 } as const;
 
-export const VALIDATE_ADDRESS_RATE_LIMIT = {
+const VALIDATE_ADDRESS_RATE_LIMIT = {
   bucket: "validate_address",
   windowMs: 60 * 1000,
   maxAttempts: 60,
@@ -17,11 +17,11 @@ export const VALIDATE_ADDRESS_RATE_LIMIT = {
 export const VALIDATE_ADDRESS_MAX_BODY_BYTES = 8 * 1024;
 export const VALIDATE_ADDRESS_MAX_QUERY_LENGTH = 200;
 
-export function loginRateLimitKey(ip: string, email: string) {
+function loginRateLimitKey(ip: string, email: string) {
   return `ip:${ip}|email:${email.trim().toLowerCase()}`;
 }
 
-export function validateAddressRateLimitKey(ip: string, userId: string) {
+function validateAddressRateLimitKey(ip: string, userId: string) {
   return `ip:${ip}|user:${userId}`;
 }
 

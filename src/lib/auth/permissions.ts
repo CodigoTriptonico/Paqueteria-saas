@@ -1,18 +1,22 @@
 import type { AppSession, PermissionKey, RoleSlug } from "@/lib/auth/types";
 
 const ROLE_ROUTE_ACCESS: Partial<Record<RoleSlug, string[]>> = {
-  administrador: ["/", "/venta", "/inventario", "/envios", "/logistica", "/estadisticas", "/vendedores", "/configuracion", "/conductor"],
-  vendedor: ["/", "/venta", "/inventario", "/envios"],
+  administrador: ["/", "/venta", "/inventario", "/seguimiento", "/ingreso-bodega", "/bodega", "/paletas", "/logistica", "/estadisticas", "/auditoria", "/vendedores", "/configuracion", "/time-clock", "/conductor"],
+  vendedor: ["/", "/venta", "/inventario", "/seguimiento"],
   conductor: ["/", "/conductor"],
 };
 
 const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
-  "/configuracion": ["settings.manage", "users.manage", "warehouses.manage", "permissions.manage"],
+  "/configuracion": ["settings.manage", "users.manage", "warehouses.manage", "permissions.manage", "time_clock.view", "time_clock.manage"],
   "/inventario": ["inventory.view"],
   "/venta": ["sales.manage"],
-  "/envios": ["routes.view", "sales.manage"],
+  "/seguimiento": ["routes.view", "sales.manage"],
   "/logistica": ["routes.view", "routes.update_status"],
+  "/ingreso-bodega": ["warehouses.manage", "sales.manage"],
+  "/bodega": ["warehouses.manage", "sales.manage"],
+  "/paletas": ["warehouses.manage", "sales.manage"],
   "/conductor": ["routes.view"],
+  "/time-clock": ["time_clock.view", "time_clock.manage"],
 };
 
 function effectiveRoleSlug(session: AppSession): RoleSlug {
@@ -74,8 +78,16 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
     return false;
   }
 
+  if (base === "/auditoria" && effectiveRoleSlug(session) !== "administrador") {
+    return false;
+  }
+
   if (base === "/vendedores" && effectiveRoleSlug(session) !== "administrador") {
     return false;
+  }
+
+  if (base === "/time-clock" && effectiveRoleSlug(session) !== "administrador") {
+    return requiredTimeClockAccess(session);
   }
 
   if (
@@ -97,6 +109,13 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
   }
 
   return required.some((permission) => sessionHasPermission(session, permission));
+}
+
+function requiredTimeClockAccess(session: AppSession) {
+  return (
+    sessionHasPermission(session, "time_clock.view") ||
+    sessionHasPermission(session, "time_clock.manage")
+  );
 }
 
 export function canAccessWarehouse(session: AppSession | null, warehouseId: string) {

@@ -12,7 +12,7 @@ type StockBadgeProps = {
   title?: string;
 };
 
-export function StockBadge({ value, level, title }: StockBadgeProps) {
+function StockBadge({ value, level, title }: StockBadgeProps) {
   const tone = stockBadgeToneClass[level === "neutral" ? "empty" : level];
 
   return (
@@ -32,7 +32,7 @@ type StockBadgeGroupProps = {
 };
 
 /** Cajitas de color: una por estado (ok / bajo / vacío) cuando hay mezcla. */
-export function StockBadgeGroup({ items, title }: StockBadgeGroupProps) {
+function StockBadgeGroup({ items, title }: StockBadgeGroupProps) {
   const buckets = stockBucketCounts(items);
   const parts: Array<{ level: Exclude<StockLevel, "neutral">; count: number; label: string }> =
     [];

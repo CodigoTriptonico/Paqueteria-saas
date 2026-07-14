@@ -1,27 +1,16 @@
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, History, RefreshCw } from "lucide-react";
+import { Check } from "lucide-react";
 import { Fragment } from "react";
 import {
   flowStepBarPaddingClass,
   flowStepBarShellClass,
 } from "@/components/flow-form-styles";
-import { cardHoverClass, selectionActiveClass, selectionShellClass } from "@/components/ui-blocks";
+import { cardHoverClass, insetShellClass, selectionActiveClass, selectionShellClass } from "@/components/ui-blocks";
 import { CountryFlag } from "@/components/country-flag";
+import { InvoiceQrCode } from "@/components/sale/invoice-qr-code";
 import type { InvoiceBillingSnapshot } from "@/lib/invoice-billing";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
 import type { SaleRecipient, SaleSender } from "@/lib/customers/mappers";
-import { formatScheduleAtDisplay, scheduleTimeComplete } from "@/components/sale/schedule-time";
-
-export function saleStepButtonClass(isActive: boolean, isUnlocked: boolean) {
-  if (isActive) {
-    return "border-emerald-600 bg-emerald-400 text-slate-950";
-  }
-
-  if (isUnlocked) {
-    return "border-black bg-surface-card text-slate-300 hover:border-black hover:bg-surface-card-hover";
-  }
-
-  return "cursor-not-allowed border-black bg-surface-inset text-slate-500";
-}
+import { formatScheduleAtDisplay, scheduleTimeComplete } from "@/lib/sale/schedule-time";
 
 export function SaleBoxCartQtyBadge({ quantity }: { quantity: number }) {
   return (
@@ -35,7 +24,7 @@ export function SaleBoxCartQtyBadge({ quantity }: { quantity: number }) {
 }
 
 export { unselectedDimClass } from "@/components/ui-blocks";
-export const selectedBorderClass = `${selectionShellClass} ${selectionActiveClass}`;
+const selectedBorderClass = `${selectionShellClass} ${selectionActiveClass}`;
 
 export function deliveryModeCardClass(selected: boolean) {
   if (selected) {
@@ -198,7 +187,7 @@ export function saleLogisticsContinueHint(
   return "Elige cómo sale la caja vacía para continuar.";
 }
 
-export function scheduledModeComplete(scheduleMode: string, scheduleAt: string) {
+function scheduledModeComplete(scheduleMode: string, scheduleAt: string) {
   const routeDate = scheduleAt.split("T")[0] || "";
   const routeTime = scheduleAt.split("T")[1] || "";
 
@@ -250,6 +239,7 @@ export type AddressValidation = {
   message: string;
   formattedAddress?: string;
   placeId?: string;
+  needsUnit?: boolean;
   lat?: number | null;
   lng?: number | null;
 };
@@ -309,10 +299,6 @@ export function recipientIdentityKey(recipient: Recipient) {
   return `${recipient.firstName}|${recipient.lastName}|${recipient.country}`.toLowerCase();
 }
 
-export const RECIPIENTS_PER_PAGE = 8;
-export const SENDERS_PER_PAGE = 8;
-export const RECENT_SENDERS_PER_PAGE = 3;
-
 export function historyDateLabel(value: string) {
   return new Date(value).toLocaleString("es-MX", {
     day: "2-digit",
@@ -342,6 +328,25 @@ function invoiceBoxTitle(label: string) {
   return label.replace(/^Caja\s+/i, "").trim() || label;
 }
 
+function invoiceServiceLabel(deliveryLine: string) {
+  const normalized = deliveryLine
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const hasDelivery = /entrega|entregada|dejar|deja/.test(normalized);
+  const hasPickup = /recoleccion|recoger|recoge/.test(normalized);
+
+  if (hasPickup) {
+    return "Servicio de recoleccion";
+  }
+
+  if (hasDelivery) {
+    return "Servicio de entrega";
+  }
+
+  return "Servicio logistico";
+}
+
 function InvoicePartyCard({
   label,
   name,
@@ -356,16 +361,16 @@ function InvoicePartyCard({
   country?: string;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200/90 bg-slate-50/70 px-3.5 py-3">
-      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-1.5 text-sm font-bold leading-snug text-slate-900">{name}</p>
-      {phone ? <p className="mt-1 text-[11px] leading-snug text-slate-700">{phone}</p> : null}
+    <div className="relative overflow-hidden rounded-sm border border-zinc-300 bg-white px-4 py-3">
+      <p className="text-[8px] font-black uppercase tracking-[0.22em] text-zinc-500">{label}</p>
+      <p className="mt-1.5 text-[15px] font-black leading-snug text-zinc-950">{name}</p>
+      {phone ? <p className="mt-1 text-[11px] font-bold leading-snug text-zinc-700">{phone}</p> : null}
       {addressLines.map((line) => (
-        <p key={line} className="mt-0.5 text-[11px] leading-snug text-slate-600">
+        <p key={line} className="mt-0.5 text-[11px] leading-snug text-zinc-600">
           {line}
         </p>
       ))}
-      {country ? <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-700">{country}</p> : null}
+      {country ? <p className="mt-0.5 text-[11px] font-black leading-snug text-zinc-950">{country}</p> : null}
     </div>
   );
 }
@@ -375,6 +380,7 @@ export function SaleInvoicePaper({
   sender,
   recipient,
   box,
+  deliveryLine,
   className,
   lineAmount,
   totalLabel,
@@ -401,7 +407,9 @@ export function SaleInvoicePaper({
     ? payNowDraft ?? ""
     : payNowDraft || billing?.payNow.replace(/^\$/, "") || "";
   const invoiceAmountCellClass =
-    "flex min-w-[5.5rem] shrink-0 items-center justify-end font-serif text-xl font-black tabular-nums leading-none text-slate-900";
+    "min-w-[6rem] shrink-0 text-right font-serif text-xl font-black tabular-nums leading-none text-zinc-950";
+  const invoiceAmountInputClass =
+    "inline w-[4.5rem] bg-transparent p-0 text-right font-serif text-xl font-black tabular-nums leading-none text-zinc-950 outline-none";
   const chargeLines = billing
     ? [
         ...(billing.cartLines.length
@@ -444,24 +452,49 @@ export function SaleInvoicePaper({
 
   return (
     <article
-      className={`sale-invoice-paper mx-auto flex w-full max-w-[210mm] min-h-[297mm] flex-col overflow-hidden rounded-sm border border-slate-300/90 bg-[#fdfcf8] text-slate-900 shadow-[0_1px_0_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.12),0_24px_48px_rgba(0,0,0,0.08)] ${className ?? ""}`}
+      className={`sale-invoice-paper relative mx-auto flex w-full max-w-[210mm] min-h-[297mm] flex-col overflow-hidden rounded-sm bg-white text-zinc-950 shadow-[0_1px_0_rgba(255,255,255,0.25),0_18px_40px_rgba(0,0,0,0.18),0_44px_70px_rgba(0,0,0,0.12)] ${className ?? ""}`}
     >
       <div className="flex flex-1 flex-col px-8 py-7 sm:px-10 sm:py-9">
-        <header className="flex items-start justify-between gap-6 border-b border-slate-300 pb-5">
+        <div className="mb-5 grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b-2 border-zinc-950 pb-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-sm border-2 border-zinc-950 bg-white text-[14px] font-black tracking-[-0.04em] shadow-[3px_3px_0_#d4d4d8]">
+            Bx
+          </div>
           <div className="min-w-0">
-            <p className="font-serif text-[1.35rem] font-black leading-none tracking-tight text-slate-900">
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-700">
+              Paqueteria y envios internacionales
+            </p>
+            <div className="mt-1 h-px bg-zinc-300" />
+          </div>
+          <div className="text-right text-[8px] font-black uppercase tracking-[0.18em] text-zinc-600">
+            <span>USA</span>
+            <span className="mx-1.5">/</span>
+            <span>MX</span>
+          </div>
+        </div>
+        <header className="relative overflow-hidden border-b-2 border-zinc-950 pb-6">
+          <div className="absolute right-0 top-0 h-20 w-20 rounded-full border border-zinc-200" />
+          <div className="absolute right-8 top-8 h-24 w-24 rounded-full border border-zinc-200" />
+          <div className="relative flex items-start justify-between gap-6">
+          <div className="min-w-0">
+            <p className="font-serif text-[1.55rem] font-black leading-none tracking-tight text-zinc-950">
               Boxario
             </p>
-            <p className="mt-1.5 max-w-[12rem] text-[10px] font-medium leading-snug text-slate-600">
+            <p className="mt-2 max-w-[15rem] text-[10px] font-bold uppercase leading-snug tracking-[0.08em] text-zinc-600">
               Paquetería y envíos internacionales
             </p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-slate-500">Factura</p>
-            <p className="mt-0.5 font-serif text-lg font-black tabular-nums leading-tight text-slate-900">
+            <p className="text-[9px] font-black uppercase tracking-[0.28em] text-zinc-600">Factura</p>
+            <p className="mt-1 font-serif text-[1.65rem] font-black tabular-nums leading-tight text-zinc-950">
               {invoiceNumber}
             </p>
-            <p className="mt-1 text-[10px] text-slate-600">{issuedAt}</p>
+            <p className="mt-1 text-[10px] font-bold text-zinc-600">{issuedAt}</p>
+          </div>
+          </div>
+          <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-[8px] font-black uppercase tracking-[0.2em] text-zinc-600">
+            <span className="h-px bg-zinc-400" />
+            <span>{invoiceServiceLabel(deliveryLine)}</span>
+            <span className="h-px bg-zinc-400" />
           </div>
         </header>
 
@@ -484,16 +517,16 @@ export function SaleInvoicePaper({
         </section>
 
         <section className="mt-6 flex-1">
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+          <div className="rounded-sm border border-zinc-300 bg-white px-4 py-4">
             {(deliveryEta || (destinationCountry && !recipient)) ? (
-              <div className="mb-3 flex flex-wrap gap-2">
+              <div className="mb-4 flex flex-wrap gap-2 border-b border-zinc-300 pb-3">
                 {deliveryEta ? (
-                  <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700">
+                  <span className="inline-flex items-center rounded-sm border border-zinc-400 bg-zinc-100 px-2.5 py-1 text-[10px] font-black text-zinc-800">
                     Entrega estimada · {deliveryEta}
                   </span>
                 ) : null}
                 {destinationCountry && !recipient ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700">
+                  <span className="inline-flex items-center gap-1.5 rounded-sm border border-zinc-400 bg-zinc-100 px-2.5 py-1 text-[10px] font-black text-zinc-800">
                     <CountryFlag name={destinationCountry} size="sm" className="h-3.5 w-3.5" />
                     {destinationCountry}
                   </span>
@@ -502,25 +535,23 @@ export function SaleInvoicePaper({
             ) : null}
 
             {billing ? (
-              <div className="grid gap-3">
-                <div className="grid gap-2">
-                  {chargeLines.map((line) => (
-                    <div key={line.key} className="flex items-center justify-between gap-3 text-[12px]">
-                      <span className="font-semibold text-slate-900">{line.label}</span>
-                      <span className={invoiceAmountCellClass}>{line.amount}</span>
-                    </div>
-                  ))}
-                </div>
+              <div className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2">
+                {chargeLines.map((line) => (
+                  <div key={line.key} className="contents">
+                    <span className="text-[12px] font-bold text-zinc-900">{line.label}</span>
+                    <span className={invoiceAmountCellClass}>{line.amount}</span>
+                  </div>
+                ))}
                 {showPaymentSplit ? (
-                  <div className="grid gap-2 border-t border-slate-200 pt-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[11px] font-black text-slate-900">Depósito</p>
+                  <>
+                    <div className="col-span-2 my-1 border-t border-zinc-300" />
+                    <p className="text-[11px] font-black text-zinc-900">Depósito</p>
+                    <div className={invoiceAmountCellClass}>
                       {depositEditable ? (
                         <>
-                          <label className={`${invoiceAmountCellClass} gap-0.5 print:hidden`}>
-                            <span className="text-slate-400">$</span>
-                            <input
-                              className="w-12 bg-transparent text-center outline-none"
+                          <label className="print:hidden">
+                            $<input
+                              className={invoiceAmountInputClass}
                               value={payNowInputValue}
                               onChange={(event) =>
                                 onPayNowDraftChange?.(event.target.value.replace(/[^\d]/g, ""))
@@ -529,51 +560,46 @@ export function SaleInvoicePaper({
                               aria-label="Depósito"
                             />
                           </label>
-                          <span className={`${invoiceAmountCellClass} hidden print:flex`}>
-                            {billing?.payNow}
-                          </span>
+                          <span className="hidden print:inline">{billing?.payNow}</span>
                         </>
                       ) : (
-                        <span className={invoiceAmountCellClass}>{billing?.payNow}</span>
+                        billing?.payNow
                       )}
                     </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[11px] font-black text-slate-900">Pendiente</p>
-                      <span className={invoiceAmountCellClass}>{billing?.balanceDue}</span>
-                    </div>
-                  </div>
+                    <p className="text-[11px] font-black text-zinc-900">Pendiente</p>
+                    <span className={invoiceAmountCellClass}>{billing?.balanceDue}</span>
+                  </>
                 ) : (
-                  <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-3">
-                    <p className="text-[11px] font-black text-slate-900">Total pagado</p>
-                    <span className="font-serif text-xl font-black tabular-nums text-slate-900">
-                      {billing.quotedTotal}
-                    </span>
-                  </div>
+                  <>
+                    <div className="col-span-2 my-1 border-t border-zinc-300" />
+                    <p className="text-[11px] font-black text-zinc-900">Total pagado</p>
+                    <span className={invoiceAmountCellClass}>{billing.quotedTotal}</span>
+                  </>
                 )}
               </div>
             ) : (
               <div className="flex items-end justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Tu envío</p>
-                  <p className="mt-1 font-serif text-xl font-black leading-tight text-slate-900">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Tu envío</p>
+                  <p className="mt-1 font-serif text-xl font-black leading-tight text-zinc-950">
                     {shipmentLabel}
                   </p>
                   {isPendingAmount ? (
-                    <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                    <p className="mt-1 text-[11px] font-bold leading-snug text-zinc-600">
                       Se define al completar el envío
                     </p>
                   ) : null}
                 </div>
                 {isPendingAmount ? (
-                  <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                  <span className="shrink-0 rounded-sm border border-zinc-500 bg-zinc-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-zinc-900">
                     Abierto
                   </span>
                 ) : (
                   <div className="shrink-0 text-right">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600">
                       {totalLabel || "Total"}
                     </p>
-                    <span className="font-serif text-[1.65rem] font-black leading-none tabular-nums text-slate-900">
+                    <span className="font-serif text-[1.65rem] font-black leading-none tabular-nums text-zinc-950">
                       {totalAmount || box[1]}
                     </span>
                   </div>
@@ -582,6 +608,16 @@ export function SaleInvoicePaper({
             )}
           </div>
         </section>
+        <footer className="mt-6 grid grid-cols-[1fr_auto] items-end gap-5 border-t border-zinc-300 pt-4">
+          <p className="max-w-[23rem] text-[9px] font-bold uppercase leading-relaxed tracking-[0.12em] text-zinc-600">
+            Conserva esta factura para rastreo, cobros y movimientos logisticos.
+          </p>
+          <InvoiceQrCode
+            invoiceNumber={invoiceNumber}
+            size={56}
+            className="flex h-16 w-16 items-center justify-center rounded-sm border border-zinc-400 bg-white p-1"
+          />
+        </footer>
       </div>
     </article>
   );
@@ -612,19 +648,57 @@ export function applyAddressSuggestResult(
     return;
   }
 
-  setSuggestions(data.suggestions || []);
+  const suggestions = data.suggestions || [];
+  setSuggestions(suggestions);
+
+  if (!suggestions.length) {
+    setValidation({
+      status: "idle",
+      message: "Google no encontro coincidencias. Revisa la direccion o usala sin verificar.",
+    });
+  }
 }
 
 export const inputClass =
   "h-11 min-w-0 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-[#f8fafc] outline-none placeholder:font-semibold placeholder:text-slate-500 focus:border-black";
-export const clientFormControlShellClass =
+const clientFormControlShellClass =
   "rounded-md border-2 border-emerald-400/70 bg-surface-inset shadow-[0_0_0_1px_rgba(16,185,129,0.18),0_8px_18px_rgba(0,0,0,0.22)]";
+
+const clientFormInputPendingShellClass =
+  "rounded-md border-2 border-rose-500/85 bg-[#2a1a1f] shadow-[0_0_0_1px_rgba(244,63,94,0.24),0_8px_18px_rgba(0,0,0,0.22)]";
 
 export const clientFormInputClass =
   `client-form-field h-11 w-full px-3.5 text-[15px] font-black text-[#f8fafc] outline-none transition placeholder:font-bold placeholder:text-slate-500 focus:border-sky-300 focus:ring-4 focus:ring-sky-300/30 ${clientFormControlShellClass}`;
 
+export function clientFormAddressFieldClass(
+  value: string,
+  options?: { required?: boolean; enabled?: boolean },
+) {
+  const enabled = options?.enabled ?? true;
+  const isPending = enabled && !value.trim();
+  const shell = isPending ? clientFormInputPendingShellClass : clientFormControlShellClass;
+  const focus = isPending
+    ? "focus:border-rose-400 focus:ring-4 focus:ring-rose-400/25"
+    : "focus:border-sky-300 focus:ring-4 focus:ring-sky-300/30";
+
+  return `client-form-field h-11 w-full px-3.5 text-[15px] font-black text-[#f8fafc] outline-none transition placeholder:font-bold placeholder:text-slate-500 ${focus} ${shell}`;
+}
+
+export function clientFormAddressLabelClass(
+  value: string,
+  options?: { required?: boolean; enabled?: boolean },
+) {
+  const enabled = options?.enabled ?? true;
+
+  if (enabled && !value.trim()) {
+    return "text-[11px] font-black uppercase tracking-[0.08em] text-rose-300";
+  }
+
+  return clientFormLabelClass;
+}
+
 export const clientFormPickerShellClass =
-  `box-border inline-flex h-11 w-full min-w-0 items-center gap-2 px-3 text-sm font-black text-[#f8fafc] ${clientFormControlShellClass}`;
+  `${insetShellClass} box-border inline-flex h-11 w-full min-w-0 items-center gap-2 px-3 text-sm font-black text-[#f8fafc] ${clientFormControlShellClass}`;
 export const clientFormLabelClass =
   "text-[11px] font-black uppercase tracking-[0.08em] text-emerald-200";
 export const noBrowserAutocomplete = {
@@ -637,11 +711,11 @@ export const noBrowserAutocomplete = {
   "data-form-type": "other",
 } as const;
 
-export function cleanPhone(phone: string) {
+function cleanPhone(phone: string) {
   return phone.replace(/\D/g, "");
 }
 
-export function senderPrimaryPhone(sender: Pick<Sender, "phones">) {
+function senderPrimaryPhone(sender: Pick<Sender, "phones">) {
   return sender.phones[0]?.trim() || "";
 }
 
@@ -667,53 +741,19 @@ export function normalizePhoneList(phones: string[]) {
 }
 
 export {
-  formatScheduleDateInput,
   formatScheduleDateInput as formatDateInput,
   minScheduleDateInput,
-  minScheduleDatetimeInput,
   resolveScheduleDate,
-  resolveScheduleDatetime,
 } from "@/lib/schedule-date";
-
-export function CountryBadge({ country }: { country: string }) {
-  return (
-    <span className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-black bg-surface-card-header px-2.5 text-[13px] font-black text-[#f8fafc] shadow-[0_8px_18px_rgba(0,0,0,0.22)]">
-      <Flag country={country} />
-      <span className="leading-none">{country}</span>
-    </span>
-  );
-}
 
 export function Flag({ country }: { country: string }) {
   return <CountryFlag name={country} size="sm" />;
-}
-
-export function AddressTags({ items }: { items: [string, string][] }) {
-  return (
-    <div className="mt-3 grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
-      {items.map(([label, value]) => (
-        <div
-          key={`${label}-${value}`}
-          className="rounded-lg border border-black bg-surface-panel px-3 py-2 border-black bg-surface-card"
-        >
-          <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">
-            {label}
-          </p>
-          <p className="truncate text-sm font-black text-[#f8fafc]">
-            {value}
-          </p>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export const contextActiveClass = selectedBorderClass;
 export const selectedCardClass = selectedBorderClass;
 export const salePersonRowSelectedClass = "bg-emerald-400/10 hover:bg-emerald-400/15";
 export const salePersonRowContextActiveClass = "bg-emerald-400/20 hover:bg-emerald-400/25";
-export const senderCardClass = "w-full";
-export const recipientCardClass = senderCardClass;
 export const boxCardClass =
   "w-full border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.22)] transition-colors hover:bg-surface-card-hover";
 
@@ -732,6 +772,7 @@ export function saleStepCompactLabel(stepId: SaleStep) {
 export type SaleStepBarItem = {
   id: SaleStep;
   label: string;
+  compactLabel: string;
   value: string;
   subtitle?: string;
   detail?: string;
@@ -779,7 +820,7 @@ function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boole
           : "min-h-[5.1rem] sm:min-h-[5.35rem] lg:min-h-[5.6rem]"
       }`}
     >
-      <div className="flex min-h-[1.75rem] min-w-0 items-center justify-center gap-1 sm:min-h-[2rem] sm:gap-1.5 lg:min-h-[2.125rem]">
+      <div className="flex min-h-[1.75rem] min-w-0 flex-col items-center justify-center gap-0.5 sm:min-h-[2rem] sm:flex-row sm:gap-1.5 lg:min-h-[2.125rem]">
         <span
           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-black sm:h-7 sm:w-7 sm:text-[11px] lg:h-8 lg:w-8 lg:text-xs ${saleStepBarBadgeClass(
             step,
@@ -796,7 +837,8 @@ function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boole
             step.isActive ? "text-emerald-200" : ""
           }`}
         >
-          {step.label}
+          <span className="sm:hidden">{step.compactLabel}</span>
+          <span className="hidden sm:inline">{step.label}</span>
         </span>
       </div>
       <span
@@ -974,229 +1016,5 @@ export function SaleStepBar({
         </div>
       </div>
     </nav>
-  );
-}
-
-export function saleStepNumber(step: SaleStep) {
-  const index = saleSteps.findIndex((item) => item.id === step);
-  return index >= 0 ? index + 1 : undefined;
-}
-
-export type SaleFlowNavProps = {
-  activeStep: SaleStep;
-  activeStepIndex: number;
-  completedStepIndex: number;
-  maxUnlockedStepIndex: number;
-  canOpenStep: (step: SaleStep) => boolean;
-  openStep: (step: SaleStep) => void;
-  goStep: (direction: -1 | 1) => void;
-  onOpenHistory?: () => void;
-  variant?: "float" | "panel";
-};
-
-export type SaleHistoryNavProps = {
-  onBack: () => void;
-  onRefresh: () => void;
-  refreshing?: boolean;
-};
-
-export function SaleHistoryNav({ onBack, onRefresh, refreshing = false }: SaleHistoryNavProps) {
-  return (
-    <div className="rounded-xl border border-black bg-surface-panel p-3 shadow-[0_18px_45px_rgba(0,0,0,0.45)] ring-1 ring-black">
-      <div className="mb-3 border-b border-black pb-2">
-        <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">Historial</p>
-        <p className="text-[11px] font-black text-slate-500">Ventas y movimientos</p>
-      </div>
-      <div className="grid gap-2">
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex h-10 items-center justify-center gap-2 rounded-lg border border-black bg-surface-card text-sm font-black text-[#f8fafc] transition hover:bg-surface-card-hover"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Volver a venta
-        </button>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={refreshing}
-          className="flex h-10 items-center justify-center gap-2 rounded-lg border border-black bg-emerald-400 text-sm font-black text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden />
-          Actualizar
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export function SaleFlowNav({
-  activeStep,
-  activeStepIndex,
-  completedStepIndex,
-  maxUnlockedStepIndex,
-  canOpenStep,
-  openStep,
-  goStep,
-  onOpenHistory,
-  variant = "float",
-}: SaleFlowNavProps) {
-  const currentStep = saleSteps[activeStepIndex] ?? saleSteps[0];
-
-  const flowPanel = (
-    <div className="rounded-xl border border-black bg-surface-panel p-3 shadow-[0_18px_45px_rgba(0,0,0,0.45)] ring-1 ring-black">
-          <div className="mb-3 border-b border-black pb-2">
-            <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">
-              Flujo de venta
-            </p>
-            <p className="text-[11px] font-black text-slate-500">
-              Paso {activeStepIndex + 1} de {saleSteps.length}
-            </p>
-          </div>
-          <div className="grid gap-2">
-            {saleSteps.map((step, index) => {
-              const isActive = activeStep === step.id;
-              const isUnlocked = canOpenStep(step.id);
-              const isDone = index < completedStepIndex;
-
-              return (
-                <button
-                  key={step.id}
-                  type="button"
-                  disabled={!isUnlocked}
-                  onClick={() => openStep(step.id)}
-                  className={`relative flex min-h-12 items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${saleStepButtonClass(
-                    isActive,
-                    isUnlocked,
-                  )}`}
-                  title={step.label}
-                >
-                  <span
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-black ${
-                      isActive
-                        ? "bg-slate-950 text-emerald-300"
-                        : isDone
-                          ? "bg-emerald-400 text-slate-950"
-                          : "bg-surface-inset text-slate-400"
-                    }`}
-                  >
-                    {isDone ? <Check className="h-4 w-4" /> : index + 1}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-black">{step.label}</span>
-                    <span
-                      className={`block text-[10px] font-black uppercase ${
-                        isActive ? "text-slate-800" : "text-slate-500"
-                      }`}
-                    >
-                      {isActive ? "Actual" : isDone ? "Listo" : isUnlocked ? "Abierto" : "Bloqueado"}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => goStep(-1)}
-              disabled={activeStepIndex <= 0}
-              className="flex h-10 items-center justify-center rounded-lg border border-black bg-surface-card text-[#f8fafc] hover:border-black disabled:cursor-not-allowed disabled:opacity-30"
-              title="Paso anterior"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => goStep(1)}
-              disabled={activeStepIndex >= maxUnlockedStepIndex}
-              className="flex h-10 items-center justify-center rounded-lg border border-black bg-surface-card text-[#f8fafc] hover:border-black disabled:cursor-not-allowed disabled:opacity-30"
-              title="Paso siguiente"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-          {onOpenHistory ? (
-            <button
-              type="button"
-              onClick={onOpenHistory}
-              className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-black bg-surface-inset text-sm font-black text-slate-300 transition hover:bg-surface-card hover:text-[#f8fafc]"
-            >
-              <History className="h-4 w-4" aria-hidden />
-              Historial
-            </button>
-          ) : null}
-    </div>
-  );
-
-  if (variant === "panel") {
-    return flowPanel;
-  }
-
-  return (
-    <>
-      <aside className="sticky top-3 z-40 hidden md:block">
-        {flowPanel}
-      </aside>
-
-      <div className="fixed inset-x-3 bottom-3 z-50 md:hidden">
-        <div className="rounded-xl border border-black bg-surface-panel p-2 shadow-2xl shadow-black ring-1 ring-black">
-          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
-            <button
-              type="button"
-              onClick={() => goStep(-1)}
-              disabled={activeStepIndex <= 0}
-              className="flex h-11 w-11 items-center justify-center rounded-lg border border-black bg-surface-card text-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-30"
-              title="Paso anterior"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => openStep(currentStep.id)}
-              className="min-w-0 rounded-lg border border-emerald-600 bg-emerald-400 px-3 py-2 text-left text-slate-950"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="truncate text-base font-black text-[#f8fafc]">{currentStep.label}</span>
-                <span className="shrink-0 rounded-md bg-emerald-400 px-2 py-1 text-xs font-black text-slate-950">
-                  {activeStepIndex + 1}/5
-                </span>
-              </div>
-              <div className="mt-2 flex items-center gap-1">
-                {saleSteps.map((step, index) => {
-                  const isActive = activeStep === step.id;
-                  const isDone = index < completedStepIndex;
-                  const isUnlocked = canOpenStep(step.id);
-
-                  return (
-                    <span
-                      key={step.id}
-                      className={`h-1.5 flex-1 rounded-full ${
-                        isActive || isDone
-                          ? "bg-emerald-300"
-                          : isUnlocked
-                            ? "bg-surface-card"
-                            : "bg-[#1f2937]"
-                      }`}
-                    />
-                  );
-                })}
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => goStep(1)}
-              disabled={activeStepIndex >= maxUnlockedStepIndex}
-              className="flex h-11 w-11 items-center justify-center rounded-lg border border-black bg-surface-card text-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-30"
-              title="Paso siguiente"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
   );
 }

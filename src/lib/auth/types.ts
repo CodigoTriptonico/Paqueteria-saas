@@ -12,11 +12,13 @@ export type PermissionKey =
   | "inventory.assign"
   | "inventory.return"
   | "routes.view"
-  | "routes.update_status";
+  | "routes.update_status"
+  | "time_clock.view"
+  | "time_clock.manage";
 
 export type RoleSlug = "administrador" | "vendedor" | "conductor" | (string & {});
 
-export type OrganizationKind = "platform" | "client";
+type OrganizationKind = "platform" | "client";
 
 export type AppSession = {
   userId: string;

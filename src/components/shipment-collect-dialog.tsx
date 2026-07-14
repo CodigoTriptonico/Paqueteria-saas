@@ -8,7 +8,7 @@ import {
   secondaryButtonClass,
 } from "@/components/ui-blocks";
 import { formatMoneyValue, moneyInputDisplayValue, normalizeMoneyInput } from "@/lib/logistics-fees";
-import type { SalePaymentChoice } from "@/lib/sale-payment-choice";
+import type { SalePaymentSelection } from "@/lib/sale-payment-choice";
 import {
   shipmentCollectCopy,
   type ShipmentCollectMode,
@@ -23,12 +23,12 @@ type ShipmentCollectDialogProps = {
   balanceDue: number;
   mode: ShipmentCollectMode;
   partialAmount: string;
-  paymentMethod: SalePaymentChoice;
+  paymentMethod: SalePaymentSelection;
   paymentNote?: string;
   confirming?: boolean;
   onModeChange: (mode: ShipmentCollectMode) => void;
   onPartialAmountChange: (value: string) => void;
-  onPaymentMethodChange: (method: SalePaymentChoice) => void;
+  onPaymentMethodChange: (method: SalePaymentSelection) => void;
   onPaymentNoteChange?: (note: string) => void;
   onCancel: () => void;
   onConfirm: () => void;

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Box,
   ChevronRight,
   Package,
   Plus,
@@ -9,10 +8,13 @@ import {
   Search,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type MouseEvent, type RefObject, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   createCustomerAction,
   createRecipientAction,
+  deactivateCustomerAction,
+  deleteRecipientAction,
   listCustomersWithRecipientsAction,
   listRecipientsForCustomerAction,
   updateCustomerAction,
@@ -21,17 +23,21 @@ import {
   updateRecipientCardStyleAction,
 } from "@/app/actions/customers";
 import { listActivityHistoryAction, type ActivityHistoryRow } from "@/app/actions/history";
-import { allocateInvoiceNumberAction } from "@/app/actions/pricing";
+import { allocateInvoiceNumberAction, loadSaleCountryBoxesAction } from "@/app/actions/pricing";
 import type { VentaBootstrapData } from "@/app/actions/sale-bootstrap";
 import { listSaleShortcutsAction, type SaleShortcuts } from "@/app/actions/sale-shortcuts";
 import { createShipmentAction } from "@/app/actions/shipments";
 import { useContextNav } from "@/hooks/use-context-nav";
 import { useNotify } from "@/hooks/use-notify";
-import { useViewLayout } from "@/hooks/use-view-layout";
 import { useSetShellConfig } from "@/components/app-frame";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import { Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import {
+  useDefaultPersonCardPaletteId,
+  usePageViewLayout,
+} from "@/components/ui/ui-surface-preferences-provider";
 import { customerRowToSender, recipientRowToSaleRecipient } from "@/lib/customers/mappers";
+import type { UiSurfaceContextId } from "@/lib/ui-surface-context";
 import {
   flowCardGridClass,
   flowPageShellWideClass,
@@ -40,8 +46,10 @@ import {
   flowStepBodyClass,
   flowPersonListShellClass,
   flowPersonListSectionClass,
+  flowPersonFormSectionClass,
   flowPersonToolbarSearchShellClass,
 } from "@/components/flow-form-styles";
+import { ActionConfirmDialog } from "@/components/action-confirm-dialog";
 import { FlowPageHeader } from "@/components/flow-page-header";
 import { InlineSearchCombobox } from "@/components/inline-search-picker";
 import { SaleContextMenu } from "@/components/sale/sale-context-menu";
@@ -66,7 +74,10 @@ import { SaleRecipientList } from "@/components/sale/sale-recipient-list";
 import { SalePersonListToolbar } from "@/components/sale/sale-person-list-toolbar";
 import { SaleSenderList } from "@/components/sale/sale-sender-list";
 import { configPricesCountryHref } from "@/lib/country-options";
+import { inventarioHrefWithReturn } from "@/lib/inventario-return";
+import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 import { formatSalePersonListCount } from "@/lib/sale-person-list-count";
+import { saleContextTargetData } from "@/lib/sale-context-target";
 import { formatBoxQuantityLabel } from "@/lib/shipment-display";
 import {
   billingWithRecordedPayment,
@@ -88,7 +99,13 @@ import {
   readRecentSaleShortcuts,
   recordRecentSale,
 } from "@/lib/sale-recent-storage";
-import { resolveSalePaymentInput, type SalePaymentChoice } from "@/lib/sale-payment-choice";
+import {
+  isResolvedSalePaymentChoice,
+  resolveSalePaymentInput,
+  SALE_PAYMENT_UNSET,
+  type SalePaymentChoice,
+  type SalePaymentSelection,
+} from "@/lib/sale-payment-choice";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { ViewLayout } from "@/lib/view-layout";
 
@@ -198,7 +215,7 @@ type CreatedInvoiceSnapshot = {
 
 function billingForPaymentChoice(
   billing: InvoiceBillingSnapshot | null,
-  choice: SalePaymentChoice,
+  choice: SalePaymentSelection,
 ) {
   if (!billing) {
     return null;
@@ -232,7 +249,16 @@ function formatValidatedAddress(
   const unit = typedUnit.trim() || address.houseNumber?.trim() || "";
 
   if (!unit) {
-    return address.formattedAddress;
+    return (
+      address.formattedAddress ||
+      [
+        address.street,
+        [address.city, address.state, address.postalCode].filter(Boolean).join(" "),
+        address.country,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    );
   }
 
   const streetLine = [address.street, unit].filter(Boolean).join(" ");
@@ -346,9 +372,29 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const localIdCounterRef = useRef(0);
   const setShellConfig = useSetShellConfig();
   const notify = useNotify();
-  const { layout: viewLayout, toggleViewLayout } = useViewLayout();
+  const router = useRouter();
   const [mode, setMode] = useState<"sale" | "clients" | "history" | "new-client" | "new-recipient">("sale");
   const [activeStep, setActiveStep] = useState<SaleStep>("client");
+  const saleListPaletteContext = useMemo<UiSurfaceContextId>(
+    () =>
+      activeStep === "recipient" || mode === "new-recipient"
+        ? "sale.recipientCard"
+        : "sale.senderCard",
+    [activeStep, mode],
+  );
+  const { layout: viewLayout } = usePageViewLayout(saleListPaletteContext);
+  const defaultSenderCardStyle = useDefaultPersonCardPaletteId(
+    "sale.senderCard",
+  ) as SalePersonCardVariantId;
+  const defaultRecipientCardStyle = useDefaultPersonCardPaletteId(
+    "sale.recipientCard",
+  ) as SalePersonCardVariantId;
+
+  useEffect(() => {
+    setShellConfig({ surfaceContextId: saleListPaletteContext });
+    return () => setShellConfig({ surfaceContextId: undefined });
+  }, [saleListPaletteContext, setShellConfig]);
+
   const [senderList, setSenderList] = useState<Sender[]>(initialData?.senders ?? []);
   const [saleShortcuts, setSaleShortcuts] = useState<SaleShortcuts>(
     initialData?.shortcuts ?? {
@@ -362,7 +408,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [historyRows, setHistoryRows] = useState<ActivityHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
-  const [countryBoxes] = useState<Record<string, string[][]>>(
+  const [countryBoxes, setCountryBoxes] = useState<Record<string, string[][]>>(
     initialData?.countryBoxes ?? {},
   );
   const [countryPromotions] = useState<PricingPromotionConfig[]>(
@@ -376,10 +422,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [quickPayNowDraft, setQuickPayNowDraft] = useState("");
   const [quickPayNowDraftTouched, setQuickPayNowDraftTouched] = useState(false);
   const [invoicePaymentMethod, setInvoicePaymentMethod] =
-    useState<SalePaymentChoice>("pending");
+    useState<SalePaymentSelection>(SALE_PAYMENT_UNSET);
   const [invoicePaymentNote, setInvoicePaymentNote] = useState("");
   const [quickPaymentMethod, setQuickPaymentMethod] =
-    useState<SalePaymentChoice>("pending");
+    useState<SalePaymentSelection>(SALE_PAYMENT_UNSET);
   const [quickPaymentNote, setQuickPaymentNote] = useState("");
   const [createdInvoice, setCreatedInvoice] = useState<CreatedInvoiceSnapshot | null>(null);
   const [quickCheckoutCompleted, setQuickCheckoutCompleted] = useState(false);
@@ -415,7 +461,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [newClientFirstName, setNewClientFirstName] = useState("");
   const [newClientLastName, setNewClientLastName] = useState("");
   const [newClientPhones, setNewClientPhones] = useState<string[]>([""]);
-  const [newClientEmail, setNewClientEmail] = useState("");
+  const [newClientEmails, setNewClientEmails] = useState<string[]>([""]);
   const [newClientStreet, setNewClientStreet] = useState("");
   const [newClientHouse, setNewClientHouse] = useState("");
   const [newClientNeighborhood, setNewClientNeighborhood] = useState("");
@@ -425,9 +471,11 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [newClientReferredByCustomerId, setNewClientReferredByCustomerId] = useState("");
   const [clientAddressSearch, setClientAddressSearch] = useState("");
   const [clientAddressSuggestions, setClientAddressSuggestions] = useState<AddressSuggestion[]>([]);
+  const [clientAddressSearching, setClientAddressSearching] = useState(false);
   const [newRecipientFirstName, setNewRecipientFirstName] = useState("");
   const [newRecipientLastName, setNewRecipientLastName] = useState("");
   const [newRecipientPhone, setNewRecipientPhone] = useState("");
+  const [newRecipientEmails, setNewRecipientEmails] = useState<string[]>([""]);
   const [newRecipientCountry, setNewRecipientCountry] = useState("");
   const [newRecipientStreet, setNewRecipientStreet] = useState("");
   const [newRecipientHouse, setNewRecipientHouse] = useState("");
@@ -437,6 +485,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [newRecipientPostalCode, setNewRecipientPostalCode] = useState("");
   const [recipientAddressSearch, setRecipientAddressSearch] = useState("");
   const [recipientAddressSuggestions, setRecipientAddressSuggestions] = useState<AddressSuggestion[]>([]);
+  const [recipientAddressSearching, setRecipientAddressSearching] = useState(false);
   const [clientAddressValidation, setClientAddressValidation] = useState<AddressValidation>({
     status: "idle",
     message: "",
@@ -490,6 +539,13 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     ],
   );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    kind: "remitente" | "destinatario";
+    title: string;
+    customerId: string;
+    recipientId?: string;
+  } | null>(null);
+  const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [historyDrawer, setHistoryDrawer] = useState<{
     sender: Sender | null;
     recipientId?: string;
@@ -511,7 +567,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [creatingOpenInvoice, setCreatingOpenInvoice] = useState(false);
   const [creatingQuickInvoice, setCreatingQuickInvoice] = useState(false);
   const [invoiceSequence, setInvoiceSequence] = useState(1);
-  const countries = useMemo(() => Object.keys(countryBoxes), [countryBoxes]);
+  const countries = useMemo(
+    () => Object.keys(countryBoxes).sort((left, right) => left.localeCompare(right, "es")),
+    [countryBoxes],
+  );
   const [stockMessage, setStockMessage] = useState("");
   const [emptyBoxMode, setEmptyBoxMode] = useState("");
   const [emptyBoxScheduleMode, setEmptyBoxScheduleMode] = useState("");
@@ -707,6 +766,40 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setHistoryRows(result.data);
   }, []);
 
+  const reloadCountryBoxes = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      return;
+    }
+
+    const result = await loadSaleCountryBoxesAction();
+    if (result.ok) {
+      setCountryBoxes(result.data);
+    }
+  }, []);
+
+  useEffect(() => {
+    function refreshCountryBoxes() {
+      if (document.visibilityState === "visible") {
+        void reloadCountryBoxes();
+      }
+    }
+
+    window.addEventListener("focus", refreshCountryBoxes);
+    document.addEventListener("visibilitychange", refreshCountryBoxes);
+    return () => {
+      window.removeEventListener("focus", refreshCountryBoxes);
+      document.removeEventListener("visibilitychange", refreshCountryBoxes);
+    };
+  }, [reloadCountryBoxes]);
+
+  useEffect(() => {
+    if (mode === "new-recipient") {
+      queueMicrotask(() => {
+        void reloadCountryBoxes();
+      });
+    }
+  }, [mode, reloadCountryBoxes]);
+
   function canOpenStep(step: SaleStep) {
     return saleSteps.findIndex((currentStep) => currentStep.id === step) <= maxUnlockedStepIndex;
   }
@@ -772,6 +865,40 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     [],
   );
 
+  const openContextMenuForTarget = useCallback(
+    (target: HTMLElement, clientX: number, clientY: number, delay = 0) => {
+      const context = saleContextTargetData(target.dataset);
+
+      if (!context) {
+        return false;
+      }
+
+      const open = () =>
+        openContextMenuAt(
+          clientX,
+          clientY,
+          context.title,
+          context.type,
+          context.targetKey,
+          context.phones,
+          context.address,
+          context.firstName,
+          context.lastName,
+          context.customerId,
+          context.recipientId,
+        );
+
+      if (delay > 0) {
+        window.setTimeout(open, delay);
+      } else {
+        open();
+      }
+
+      return true;
+    },
+    [openContextMenuAt],
+  );
+
   useEffect(() => {
     setShellConfig({ contentEdgeToEdge: true });
     return () => setShellConfig({ contentEdgeToEdge: undefined });
@@ -791,42 +918,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         return;
       }
 
-      const type = target.dataset.saleContextType as ContextMenuState["type"] | undefined;
-      const title = target.dataset.saleContextTitle;
-      const targetKey = target.dataset.saleContextKey;
-      const firstName = target.dataset.saleContextFirstName || "";
-      const lastName = target.dataset.saleContextLastName || "";
-
-      if (!type || !title || !targetKey) {
+      if (!openContextMenuForTarget(target, event.clientX, event.clientY)) {
         return;
       }
 
       event.preventDefault();
       event.stopPropagation();
-
-      openContextMenuAt(
-        event.clientX,
-        event.clientY,
-        title,
-        type,
-        targetKey,
-        target.dataset.saleContextPhones
-          ? target.dataset.saleContextPhones.split("|").filter(Boolean)
-          : [],
-        {
-          street: target.dataset.saleContextStreet,
-          houseNumber: target.dataset.saleContextHouse,
-          neighborhood: target.dataset.saleContextNeighborhood,
-          city: target.dataset.saleContextCity,
-          state: target.dataset.saleContextState,
-          postalCode: target.dataset.saleContextPostalCode,
-          country: target.dataset.saleContextCountry,
-        },
-        firstName,
-        lastName,
-        target.dataset.saleContextCustomerId,
-        target.dataset.saleContextRecipientId,
-      );
     }
 
     document.addEventListener("pointerup", openSaleCardMenu, true);
@@ -838,7 +935,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       document.removeEventListener("mouseup", openSaleCardMenu, true);
       document.removeEventListener("contextmenu", openSaleCardMenu, true);
     };
-  }, [openContextMenuAt]);
+  }, [openContextMenuForTarget]);
 
   useEffect(() => {
     if (!contextMenu) {
@@ -870,6 +967,20 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const newClientPhoneList = useMemo(
     () => normalizePhoneList(newClientPhones),
     [newClientPhones],
+  );
+  const newClientEmailList = useMemo(
+    () =>
+      Array.from(
+        new Set(newClientEmails.map((email) => email.trim().toLowerCase()).filter(Boolean)),
+      ),
+    [newClientEmails],
+  );
+  const newRecipientEmailList = useMemo(
+    () =>
+      Array.from(
+        new Set(newRecipientEmails.map((email) => email.trim().toLowerCase()).filter(Boolean)),
+      ),
+    [newRecipientEmails],
   );
 
   const duplicateClient = useMemo(() => {
@@ -1056,47 +1167,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         return;
       }
 
-      const type = target.dataset.saleContextType as ContextMenuState["type"] | undefined;
-      const title = target.dataset.saleContextTitle;
-      const targetKey = target.dataset.saleContextKey;
-
-      if (!type || !title || !targetKey) {
+      if (!openContextMenuForTarget(target, event.clientX, event.clientY, 50)) {
         return;
       }
 
       event.preventDefault();
       event.stopPropagation();
-
-      const clientX = event.clientX;
-      const clientY = event.clientY;
-      const phones = target.dataset.saleContextPhones
-        ? target.dataset.saleContextPhones.split("|").filter(Boolean)
-        : [];
-      const address = {
-        street: target.dataset.saleContextStreet,
-        houseNumber: target.dataset.saleContextHouse,
-        neighborhood: target.dataset.saleContextNeighborhood,
-        city: target.dataset.saleContextCity,
-        state: target.dataset.saleContextState,
-        postalCode: target.dataset.saleContextPostalCode,
-        country: target.dataset.saleContextCountry,
-      };
-
-      window.setTimeout(() => {
-        openContextMenuAt(
-          clientX,
-          clientY,
-          title,
-          type,
-          targetKey,
-          phones,
-          address,
-          target.dataset.saleContextFirstName || "",
-          target.dataset.saleContextLastName || "",
-          target.dataset.saleContextCustomerId,
-          target.dataset.saleContextRecipientId,
-        );
-      }, 50);
     }
 
     elements.forEach((element) => {
@@ -1112,7 +1188,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         element.removeEventListener("contextmenu", openElementMenu, true);
       });
     };
-  }, [boxesForCountry, filteredSenders, openContextMenuAt, sortedFilteredRecipients]);
+  }, [
+    boxesForCountry,
+    filteredSenders,
+    openContextMenuForTarget,
+    sortedFilteredRecipients,
+  ]);
 
   const copyAddressItems = [
     {
@@ -1228,7 +1309,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setActiveStep("client");
     setPayNowDraft("");
     setPayNowDraftTouched(false);
-    setInvoicePaymentMethod("pending");
+    setInvoicePaymentMethod(SALE_PAYMENT_UNSET);
     setInvoicePaymentNote("");
     setSelectedPromotionId("");
     setStockMessage("");
@@ -1241,7 +1322,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setQuickInvoiceNumber("");
     setQuickPayNowDraft("");
     setQuickPayNowDraftTouched(false);
-    setQuickPaymentMethod("pending");
+    setQuickPaymentMethod(SALE_PAYMENT_UNSET);
     setQuickPaymentNote("");
     setQuickCheckoutCompleted(false);
     setQuickSelectedPromotionId("");
@@ -1344,7 +1425,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setNewClientFirstName("");
     setNewClientLastName("");
     setNewClientPhones([""]);
-    setNewClientEmail("");
+    setNewClientEmails([""]);
     setNewClientStreet("");
     setNewClientHouse("");
     setNewClientNeighborhood("");
@@ -1354,8 +1435,32 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setNewClientReferredByCustomerId("");
     setClientAddressSearch("");
     setClientAddressSuggestions([]);
+    setClientAddressSearching(false);
     setClientAddressValidation({ status: "idle", message: "" });
     setEditingCustomerId(null);
+  }
+
+  function finishClientSave(nextSender: Sender, isNew: boolean) {
+    resetNewClientForm();
+
+    if (isNew) {
+      setSelectedSender(nextSender);
+      setSelectedRecipient(null);
+      setSelectedBoxLines([]);
+      resetSaleLogistics();
+      setRecipientQuery("");
+      resetNewRecipientForm();
+      setActiveStep("recipient");
+      setMode("new-recipient");
+      return;
+    }
+
+    setSelectedSender(null);
+    setSelectedRecipient(null);
+    setSelectedBoxLines([]);
+    resetSaleLogistics();
+    setActiveStep("client");
+    setMode("sale");
   }
 
   const reloadCustomers = useCallback(async (query = "", options?: { showLoading?: boolean }) => {
@@ -1536,6 +1641,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setNewRecipientFirstName("");
     setNewRecipientLastName("");
     setNewRecipientPhone("");
+    setNewRecipientEmails([""]);
     setNewRecipientCountry("");
     setNewRecipientStreet("");
     setNewRecipientHouse("");
@@ -1545,6 +1651,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setNewRecipientPostalCode("");
     setRecipientAddressSearch("");
     setRecipientAddressSuggestions([]);
+    setRecipientAddressSearching(false);
     setRecipientAddressValidation({ status: "idle", message: "" });
     setEditingRecipientId(null);
   }
@@ -1558,6 +1665,11 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setValidation({ status: "checking", message: "Separando direccion..." });
     setSearch(suggestion.description);
     setSuggestions([]);
+    if (isClient) {
+      setClientAddressSearching(false);
+    } else {
+      setRecipientAddressSearching(false);
+    }
 
     try {
       const response = await fetch("/api/validate-address", {
@@ -1616,11 +1728,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
       setValidation({
         status: "valid",
-        message: needsUnit
-          ? "Validada - agrega unidad o apt en Casa si aplica"
-          : "Direccion valida",
+        message: "Direccion valida",
         formattedAddress: formatValidatedAddress(data.address, typedUnit),
         placeId: data.address.placeId || suggestion.placeId,
+        needsUnit,
         lat: data.address.lat ?? null,
         lng: data.address.lng ?? null,
       });
@@ -1645,18 +1756,21 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   useEffect(() => {
     const query = clientAddressQuery.trim();
 
-    if (clientAddressValidation.status === "valid") {
+    if (clientAddressValidation.status === "valid" || clientAddressValidation.status === "checking") {
       queueMicrotask(() => setClientAddressSuggestions([]));
+      queueMicrotask(() => setClientAddressSearching(false));
       return;
     }
 
     if (query.length < 3) {
       queueMicrotask(() => setClientAddressSuggestions([]));
+      queueMicrotask(() => setClientAddressSearching(false));
       return;
     }
 
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
+      setClientAddressSearching(true);
       void fetch("/api/validate-address", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1674,10 +1788,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             setClientAddressSuggestions,
             setClientAddressValidation,
           );
+          setClientAddressSearching(false);
         })
         .catch(() => {
           if (!controller.signal.aborted) {
             setClientAddressSuggestions([]);
+            setClientAddressSearching(false);
             setClientAddressValidation({
               status: "invalid",
               message: "No se pudo conectar con el servicio de direcciones",
@@ -1695,18 +1811,21 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   useEffect(() => {
     const query = recipientAddressQuery.trim();
 
-    if (recipientAddressValidation.status === "valid") {
+    if (recipientAddressValidation.status === "valid" || recipientAddressValidation.status === "checking") {
       queueMicrotask(() => setRecipientAddressSuggestions([]));
+      queueMicrotask(() => setRecipientAddressSearching(false));
       return;
     }
 
     if (query.length < 3 || !newRecipientCountry) {
       queueMicrotask(() => setRecipientAddressSuggestions([]));
+      queueMicrotask(() => setRecipientAddressSearching(false));
       return;
     }
 
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
+      setRecipientAddressSearching(true);
       void fetch("/api/validate-address", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1724,10 +1843,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             setRecipientAddressSuggestions,
             setRecipientAddressValidation,
           );
+          setRecipientAddressSearching(false);
         })
         .catch(() => {
           if (!controller.signal.aborted) {
             setRecipientAddressSuggestions([]);
+            setRecipientAddressSearching(false);
             setRecipientAddressValidation({
               status: "invalid",
               message: "No se pudo conectar con el servicio de direcciones",
@@ -1756,6 +1877,36 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setNewClientPhones((current) => (current.length <= 1 ? [""] : current.filter((_, i) => i !== index)));
   }
 
+  function updateClientEmail(index: number, value: string) {
+    setNewClientEmails((current) =>
+      current.map((email, emailIndex) => (emailIndex === index ? value : email)),
+    );
+  }
+
+  function addClientEmail() {
+    setNewClientEmails((current) => [...current, ""]);
+  }
+
+  function removeClientEmail(index: number) {
+    setNewClientEmails((current) => (current.length <= 1 ? [""] : current.filter((_, i) => i !== index)));
+  }
+
+  function updateRecipientEmail(index: number, value: string) {
+    setNewRecipientEmails((current) =>
+      current.map((email, emailIndex) => (emailIndex === index ? value : email)),
+    );
+  }
+
+  function addRecipientEmail() {
+    setNewRecipientEmails((current) => [...current, ""]);
+  }
+
+  function removeRecipientEmail(index: number) {
+    setNewRecipientEmails((current) =>
+      current.length <= 1 ? [""] : current.filter((_, i) => i !== index),
+    );
+  }
+
   function addReferralClient(sender: Sender) {
     resetNewClientForm();
     setNewClientReferredByCustomerId(sender.id);
@@ -1763,7 +1914,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setActiveStep("client");
   }
 
-  async function createClient() {
+  async function createClient(options?: { skipAddressVerification?: boolean }) {
     const phones = normalizePhoneList(newClientPhones);
 
     if (!phones.length) {
@@ -1791,7 +1942,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       return;
     }
 
-    if (clientAddressValidation.status !== "valid") {
+    if (!options?.skipAddressVerification && clientAddressValidation.status !== "valid") {
       setClientAddressValidation({
         status: "invalid",
         message: "Primero valida direccion en Google",
@@ -1799,11 +1950,24 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       return;
     }
 
+    const typedClientAddress = formatValidatedAddress(
+      {
+        street: newClientStreet.trim(),
+        houseNumber: newClientHouse.trim(),
+        city: newClientCity.trim(),
+        state: newClientState.trim(),
+        postalCode: newClientPostalCode.trim(),
+        country: "USA",
+      },
+      newClientHouse,
+    );
+
     const payload = {
       firstName: newClientFirstName.trim(),
       lastName: newClientLastName.trim(),
       phones,
-      email: newClientEmail.trim(),
+      email: newClientEmailList[0] || "",
+      emails: newClientEmailList,
       street: newClientStreet.trim(),
       houseNumber: newClientHouse.trim() || "-",
       neighborhood: newClientNeighborhood.trim() || "-",
@@ -1812,10 +1976,11 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       postalCode: newClientPostalCode.trim(),
       country: "USA",
       referredByCustomerId: editingCustomerId ? "" : newClientReferredByCustomerId,
-      placeId: clientAddressValidation.placeId || "",
-      formattedAddress: clientAddressValidation.formattedAddress || "",
-      lat: clientAddressValidation.lat ?? null,
-      lng: clientAddressValidation.lng ?? null,
+      placeId: options?.skipAddressVerification ? "" : clientAddressValidation.placeId || "",
+      formattedAddress: clientAddressValidation.formattedAddress || typedClientAddress || "",
+      addressVerified: !options?.skipAddressVerification && clientAddressValidation.status === "valid",
+      lat: options?.skipAddressVerification ? null : clientAddressValidation.lat ?? null,
+      lng: options?.skipAddressVerification ? null : clientAddressValidation.lng ?? null,
     };
 
     if (isSupabaseConfigured()) {
@@ -1829,6 +1994,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             lastName: payload.lastName,
             phones: payload.phones,
             email: payload.email,
+            emails: payload.emails,
             street: payload.street,
             houseNumber: payload.houseNumber,
             neighborhood: payload.neighborhood,
@@ -1838,6 +2004,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             country: payload.country,
             placeId: payload.placeId,
             formattedAddress: payload.formattedAddress,
+            addressVerified: payload.addressVerified,
             lat: payload.lat,
             lng: payload.lng,
           })
@@ -1857,13 +2024,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           : [nextSender, ...current],
       );
       void reloadHistory();
-      resetNewClientForm();
-      setSelectedSender(null);
-      setSelectedRecipient(null);
-      setSelectedBoxLines([]);
-      resetSaleLogistics();
-      setActiveStep("client");
-      setMode("sale");
+      finishClientSave(nextSender, !editingCustomerId);
       return;
     }
 
@@ -1874,7 +2035,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       cardStyle:
         (editingCustomerId
           ? senderList.find((sender) => sender.id === editingCustomerId)?.cardStyle
-          : undefined) || "amber-warm",
+          : undefined) || defaultSenderCardStyle,
       recipients: editingCustomerId
         ? senderList.find((sender) => sender.id === editingCustomerId)?.recipients || []
         : [],
@@ -1885,13 +2046,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         ? current.map((sender) => (sender.id === editingCustomerId ? nextSender : sender))
         : [nextSender, ...current],
     );
-    resetNewClientForm();
-    setSelectedSender(null);
-    setSelectedRecipient(null);
-    setSelectedBoxLines([]);
-    resetSaleLogistics();
-    setActiveStep("client");
-    setMode("sale");
+    finishClientSave(nextSender, !editingCustomerId);
   }
 
   async function createRecipient(options?: { skipAddressVerification?: boolean }) {
@@ -1923,6 +2078,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       firstName: newRecipientFirstName.trim(),
       lastName: newRecipientLastName.trim(),
       phone: newRecipientPhone.trim(),
+      email: newRecipientEmailList[0] || "",
+      emails: newRecipientEmailList,
       country: newRecipientCountry,
       street: newRecipientStreet.trim(),
       houseNumber: newRecipientHouse.trim(),
@@ -1930,10 +2087,25 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       city: newRecipientCity.trim(),
       state: newRecipientState.trim(),
       postalCode: newRecipientPostalCode.trim(),
-      placeId: recipientAddressValidation.placeId || "",
-      formattedAddress: recipientAddressValidation.formattedAddress || "",
-      lat: recipientAddressValidation.lat ?? null,
-      lng: recipientAddressValidation.lng ?? null,
+      placeId: options?.skipAddressVerification ? "" : recipientAddressValidation.placeId || "",
+      formattedAddress:
+        recipientAddressValidation.formattedAddress ||
+        formatValidatedAddress(
+          {
+            street: newRecipientStreet.trim(),
+            houseNumber: newRecipientHouse.trim(),
+            city: newRecipientCity.trim(),
+            state: newRecipientState.trim(),
+            postalCode: newRecipientPostalCode.trim(),
+            country: newRecipientCountry,
+          },
+          newRecipientHouse,
+        ) ||
+        "",
+      addressVerified:
+        !options?.skipAddressVerification && recipientAddressValidation.status === "valid",
+      lat: options?.skipAddressVerification ? null : recipientAddressValidation.lat ?? null,
+      lng: options?.skipAddressVerification ? null : recipientAddressValidation.lng ?? null,
     };
 
     let nextRecipient: Recipient;
@@ -1968,6 +2140,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         firstName: result.data.firstName,
         lastName: result.data.lastName,
         phone: result.data.phone,
+        email: result.data.email,
+        emails: result.data.emails,
         country: result.data.country,
         street: result.data.street,
         houseNumber: result.data.houseNumber,
@@ -1978,6 +2152,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         cardStyle: result.data.cardStyle,
         placeId: result.data.placeId,
         formattedAddress: result.data.formattedAddress,
+        addressVerified: result.data.addressVerified,
         lat: result.data.lat,
         lng: result.data.lng,
       };
@@ -1989,7 +2164,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           (editingRecipientId
             ? activeSender?.recipients.find((recipient) => recipient.id === editingRecipientId)
                 ?.cardStyle
-            : undefined) || "amber-warm",
+            : undefined) || defaultRecipientCardStyle,
       };
     }
 
@@ -2006,11 +2181,35 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setSenderList((current) =>
       current.map((sender) => (sender.id === selectedSender.id ? nextSender : sender)),
     );
-    setSelectedSender(nextSender);
-    chooseRecipient(nextRecipient);
+    finishRecipientSave(nextSender, nextRecipient, !editingRecipientId);
     void reloadHistory();
+  }
+
+  function finishRecipientSave(
+    nextSender: Sender,
+    nextRecipient: Recipient,
+    isNew: boolean,
+  ) {
     resetNewRecipientForm();
+    setSelectedSender(nextSender);
     setMode("sale");
+
+    if (!isNew) {
+      chooseRecipient(nextRecipient);
+      return;
+    }
+
+    const boxes = resolveCountryBoxes(countryBoxes, nextRecipient.country);
+    if (boxes.length === 0) {
+      setSelectedRecipient(nextRecipient);
+      setSelectedBoxLines([]);
+      resetSaleLogistics();
+      setActiveStep("box");
+      router.push(configPricesCountryHref(nextRecipient.country));
+      return;
+    }
+
+    chooseRecipient(nextRecipient);
   }
 
   function nextLocalId(prefix: string) {
@@ -2178,47 +2377,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       return;
     }
 
-    const type = target.dataset.saleContextType as ContextMenuState["type"] | undefined;
-    const title = target.dataset.saleContextTitle;
-    const targetKey = target.dataset.saleContextKey;
-
-    if (!type || !title || !targetKey) {
+    if (!openContextMenuForTarget(target, event.clientX, event.clientY, 50)) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
-
-    const clientX = event.clientX;
-    const clientY = event.clientY;
-    const phones = target.dataset.saleContextPhones
-      ? target.dataset.saleContextPhones.split("|").filter(Boolean)
-      : [];
-    const address = {
-      street: target.dataset.saleContextStreet,
-      houseNumber: target.dataset.saleContextHouse,
-      neighborhood: target.dataset.saleContextNeighborhood,
-      city: target.dataset.saleContextCity,
-      state: target.dataset.saleContextState,
-      postalCode: target.dataset.saleContextPostalCode,
-      country: target.dataset.saleContextCountry,
-    };
-
-    window.setTimeout(() => {
-      openContextMenuAt(
-        clientX,
-        clientY,
-        title,
-        type,
-        targetKey,
-        phones,
-        address,
-        target.dataset.saleContextFirstName || "",
-        target.dataset.saleContextLastName || "",
-        target.dataset.saleContextCustomerId,
-        target.dataset.saleContextRecipientId,
-      );
-    }, 50);
   }
 
   function contextCardClass(
@@ -2297,6 +2461,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         scheduleMode: emptyBoxScheduleMode || null,
         scheduleAt: emptyBoxScheduleAt || null,
         driverTaskNeeded: emptyBoxMode === EMPTY_BOX_DRIVER_MODE,
+        driverTaskOrdered: false,
         driverTaskType: emptyBoxMode === EMPTY_BOX_DRIVER_MODE ? "deliver_empty_box" : null,
       },
       fullBox: fullBoxMode
@@ -2306,6 +2471,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             scheduleMode: fullBoxScheduleMode || null,
             scheduleAt: fullBoxScheduleAt || null,
             driverTaskNeeded: fullBoxMode === FULL_BOX_DRIVER_MODE,
+            driverTaskOrdered: false,
             driverTaskType: fullBoxMode === FULL_BOX_DRIVER_MODE ? "pickup_full_box" : null,
           }
         : {
@@ -2343,6 +2509,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       !logisticsPlanReady ||
       !invoiceBilling ||
       invoiceBilling.promotionSelectionRequired ||
+      !isResolvedSalePaymentChoice(invoicePaymentMethod) ||
       creatingOpenInvoice
     ) {
       return;
@@ -2373,7 +2540,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       }
 
       const payment = resolveSalePaymentInput({
-        choice: invoicePaymentMethod,
+        choice: invoicePaymentMethod as SalePaymentChoice,
         payNow: invoiceBilling.payNow,
         paymentNote: invoicePaymentNote,
       });
@@ -2404,6 +2571,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           firstName: selectedRecipient.firstName,
           lastName: selectedRecipient.lastName,
           phone: selectedRecipient.phone,
+          email: selectedRecipient.email,
+          emails: selectedRecipient.emails,
           country: selectedRecipient.country,
           street: selectedRecipient.street,
           houseNumber: selectedRecipient.houseNumber,
@@ -2436,7 +2605,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         billing: recordedBilling,
       });
       setInvoiceConfirmOpen(false);
-      setInvoicePaymentMethod("pending");
+      setInvoicePaymentMethod(SALE_PAYMENT_UNSET);
       setInvoicePaymentNote("");
       notify.success(`Invoice ${invoice} creado.`);
     } finally {
@@ -2447,7 +2616,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   async function proceedQuickEmptyBox(draft: QuickEmptyBoxDraft) {
     setQuickSaleDraft(draft);
     setQuickSelectedPromotionId("");
-    setQuickPaymentMethod("pending");
+    setQuickPaymentMethod(SALE_PAYMENT_UNSET);
     setQuickPaymentNote("");
     setQuickSaleSender(null);
     setContextMenu(null);
@@ -2469,7 +2638,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   }
 
   async function confirmQuickEmptyBoxCharge(): Promise<boolean> {
-    if (!quickSaleDraft || !quickInvoiceBilling || quickInvoiceBilling.promotionSelectionRequired) {
+    if (
+      !quickSaleDraft ||
+      !quickInvoiceBilling ||
+      quickInvoiceBilling.promotionSelectionRequired ||
+      !isResolvedSalePaymentChoice(quickPaymentMethod)
+    ) {
       return false;
     }
 
@@ -2485,7 +2659,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
     try {
       const payment = resolveSalePaymentInput({
-        choice: quickPaymentMethod,
+        choice: quickPaymentMethod as SalePaymentChoice,
         payNow: quickInvoiceBilling.payNow,
         paymentNote: quickPaymentNote,
       });
@@ -2557,7 +2731,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       void reloadSaleShortcuts();
 
       setQuickCheckoutCompleted(true);
-      setQuickPaymentMethod("pending");
+      setQuickPaymentMethod(SALE_PAYMENT_UNSET);
       setQuickPaymentNote("");
       notify.success(`Invoice ${invoice} creado.`);
       return true;
@@ -2579,6 +2753,143 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
     const senderKey = contextMenu.targetKey.replace(/^sender:/, "");
     return senderList.find((item) => senderPhoneKey(item) === senderKey) || null;
+  }
+
+  function resolveContextRecipient() {
+    if (!contextMenu || contextMenu.type !== "destinatario" || !activeSender) {
+      return null;
+    }
+
+    if (contextMenu.recipientId) {
+      return (
+        activeSender.recipients.find((recipient) => recipient.id === contextMenu.recipientId) ||
+        null
+      );
+    }
+
+    const recipientKey = contextMenu.targetKey.replace(/^recipient:/, "");
+    return (
+      activeSender.recipients.find(
+        (recipient) => recipientIdentityKey(recipient) === recipientKey,
+      ) || null
+    );
+  }
+
+  function requestDeleteFromContextMenu() {
+    if (!contextMenu || contextMenu.type === "caja") {
+      return;
+    }
+
+    if (contextMenu.type === "remitente") {
+      const sender = resolveContextSender();
+      if (!sender?.id) {
+        return;
+      }
+
+      setDeleteConfirm({
+        kind: "remitente",
+        title: personFullName(sender) || contextMenu.title,
+        customerId: sender.id,
+      });
+      setContextMenu(null);
+      setActiveCopyGroup(null);
+      return;
+    }
+
+    const recipient = resolveContextRecipient();
+    if (!recipient?.id || !activeSender?.id) {
+      return;
+    }
+
+    setDeleteConfirm({
+      kind: "destinatario",
+      title: personFullName(recipient) || contextMenu.title,
+      customerId: activeSender.id,
+      recipientId: recipient.id,
+    });
+    setContextMenu(null);
+    setActiveCopyGroup(null);
+  }
+
+  async function confirmDeletePerson() {
+    if (!deleteConfirm) {
+      return;
+    }
+
+    setDeleteConfirming(true);
+
+    try {
+      if (deleteConfirm.kind === "remitente") {
+        if (isSupabaseConfigured() && !deleteConfirm.customerId.startsWith("local")) {
+          const result = await deactivateCustomerAction(deleteConfirm.customerId);
+          if (!result.ok) {
+            notify.error(result.error);
+            return;
+          }
+        }
+
+        setSenderList((current) =>
+          current.filter((sender) => sender.id !== deleteConfirm.customerId),
+        );
+
+        if (selectedSender?.id === deleteConfirm.customerId) {
+          setSelectedSender(null);
+          setSelectedRecipient(null);
+          setSelectedBoxLines([]);
+          resetSaleLogistics();
+          setActiveStep("client");
+          setMode("sale");
+        }
+
+        if (editingCustomerId === deleteConfirm.customerId) {
+          resetNewClientForm();
+          setMode("sale");
+        }
+
+        notify.success("Remitente eliminado");
+        void reloadCustomers(senderQuery);
+        void reloadHistory();
+        setDeleteConfirm(null);
+        return;
+      }
+
+      if (
+        isSupabaseConfigured() &&
+        deleteConfirm.recipientId &&
+        !deleteConfirm.recipientId.startsWith("local-r-")
+      ) {
+        const result = await deleteRecipientAction(deleteConfirm.recipientId);
+        if (!result.ok) {
+          notify.error(result.error);
+          return;
+        }
+      }
+
+      const sender = senderList.find((entry) => entry.id === deleteConfirm.customerId);
+      if (sender && deleteConfirm.recipientId) {
+        const nextRecipients = sender.recipients.filter(
+          (recipient) => recipient.id !== deleteConfirm.recipientId,
+        );
+        patchSenderRecipients(deleteConfirm.customerId, nextRecipients);
+      }
+
+      if (selectedRecipient?.id === deleteConfirm.recipientId) {
+        setSelectedRecipient(null);
+        setSelectedBoxLines([]);
+        resetSaleLogistics();
+      }
+
+      if (editingRecipientId === deleteConfirm.recipientId) {
+        resetNewRecipientForm();
+        setMode("sale");
+      }
+
+      notify.success("Destinatario eliminado");
+      void reloadHistory();
+      setDeleteConfirm(null);
+    } finally {
+      setDeleteConfirming(false);
+    }
   }
 
   function openCustomerHistoryFromMenu() {
@@ -2712,7 +3023,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setNewClientFirstName(sender.firstName);
     setNewClientLastName(sender.lastName);
     setNewClientPhones(sender.phones.length ? sender.phones : [""]);
-    setNewClientEmail(sender.email || "");
+    setNewClientEmails(sender.emails.length ? sender.emails : sender.email ? [sender.email] : [""]);
     setNewClientStreet(sender.street || "");
     setNewClientHouse(sender.houseNumber || "");
     setNewClientNeighborhood(sender.neighborhood || "");
@@ -2722,8 +3033,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setClientAddressSearch(senderAddressSummary(sender));
     setClientAddressSuggestions([]);
     setClientAddressValidation({
-      status: "valid",
-      message: "Direccion cargada",
+      status: sender.addressVerified ? "valid" : "idle",
+      message: sender.addressVerified ? "Direccion cargada" : "Direccion sin verificar",
       formattedAddress: sender.formattedAddress,
       placeId: sender.placeId,
       lat: sender.lat,
@@ -2740,6 +3051,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setNewRecipientFirstName(recipient.firstName);
     setNewRecipientLastName(recipient.lastName);
     setNewRecipientPhone(recipient.phone);
+    setNewRecipientEmails(
+      recipient.emails.length ? recipient.emails : recipient.email ? [recipient.email] : [""],
+    );
     setNewRecipientCountry(recipient.country);
     setNewRecipientStreet(recipient.street || "");
     setNewRecipientHouse(recipient.houseNumber || "");
@@ -2750,8 +3064,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setRecipientAddressSearch(recipientAddressSummary(recipient));
     setRecipientAddressSuggestions([]);
     setRecipientAddressValidation({
-      status: "valid",
-      message: "Direccion cargada",
+      status: recipient.addressVerified ? "valid" : "idle",
+      message: recipient.addressVerified ? "Direccion cargada" : "Direccion sin verificar",
       formattedAddress: recipient.formattedAddress,
       placeId: recipient.placeId,
       lat: recipient.lat,
@@ -2911,6 +3225,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       return {
         id: step.id,
         label: step.label,
+        compactLabel: step.compactLabel,
         value,
         subtitle: subtitle || undefined,
         detail: detail || undefined,
@@ -3032,7 +3347,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     lastName: newClientLastName,
                     phones: newClientPhones,
                     phoneList: newClientPhoneList,
-                    email: newClientEmail,
+                    emails: newClientEmails,
                     street: newClientStreet,
                     house: newClientHouse,
                     neighborhood: newClientNeighborhood,
@@ -3041,7 +3356,6 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     postalCode: newClientPostalCode,
                     setFirstName: setNewClientFirstName,
                     setLastName: setNewClientLastName,
-                    setEmail: setNewClientEmail,
                     setStreet: setNewClientStreet,
                     setHouse: setNewClientHouse,
                     setNeighborhood: setNewClientNeighborhood,
@@ -3052,6 +3366,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   address={{
                     search: clientAddressSearch,
                     suggestions: clientAddressSuggestions,
+                    searching: clientAddressSearching,
                     validation: clientAddressValidation,
                     setSearch: setClientAddressSearch,
                     setSuggestions: setClientAddressSuggestions,
@@ -3065,6 +3380,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                       setMode("sale");
                     },
                     onSubmit: createClient,
+                    onAddEmail: addClientEmail,
+                    onUpdateEmail: updateClientEmail,
+                    onRemoveEmail: removeClientEmail,
                     onAddPhone: addClientPhone,
                     onUpdatePhone: updateClientPhone,
                     onRemovePhone: removeClientPhone,
@@ -3091,7 +3409,6 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   searchActive={Boolean(senderQuery.trim())}
                   recentSenders={recentSenders}
                   viewLayout={viewLayout}
-                  onViewLayoutToggle={toggleViewLayout}
                   onQueryChange={setSenderQuery}
                   onNewClient={() => {
                     resetNewClientForm();
@@ -3154,16 +3471,20 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           ref={recipientsRef}
           className={
             activeStep === "recipient" || mode === "new-recipient"
-              ? flowPersonListShellClass
+              ? mode === "new-recipient"
+                ? `${flowPersonListShellClass} overflow-y-auto py-2 sm:py-2`
+                : flowPersonListShellClass
               : `${flowPersonListShellClass} border-t border-black/80`
           }
         >
           {activeStep === "recipient" || mode === "new-recipient" ? (
-          <div className={flowPersonListSectionClass}>
+          <div
+            className={
+              mode === "new-recipient" ? flowPersonFormSectionClass : flowPersonListSectionClass
+            }
+          >
             {mode !== "new-recipient" ? (
             <SalePersonListToolbar
-              viewLayout={viewLayout}
-              onViewLayoutToggle={toggleViewLayout}
               createIcon={<Plus className="h-4 w-4" />}
               createLabel="Nuevo destinatario"
               createShortLabel="Nuevo"
@@ -3184,6 +3505,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   leadingIcon={<Search className="h-4 w-4" aria-hidden />}
                   className="w-full"
                   minWidthClass="min-w-0 w-full"
+                  persistent
                   shellClassName={flowPersonToolbarSearchShellClass}
                   onSelectOption={(option) => {
                     if (!activeSender) {
@@ -3210,6 +3532,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   firstName: newRecipientFirstName,
                   lastName: newRecipientLastName,
                   phone: newRecipientPhone,
+                  emails: newRecipientEmails,
                   country: newRecipientCountry,
                   street: newRecipientStreet,
                   house: newRecipientHouse,
@@ -3231,6 +3554,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 address={{
                   search: recipientAddressSearch,
                   suggestions: recipientAddressSuggestions,
+                  searching: recipientAddressSearching,
                   validation: recipientAddressValidation,
                   setSearch: setRecipientAddressSearch,
                   setSuggestions: setRecipientAddressSuggestions,
@@ -3244,6 +3568,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     setMode("sale");
                   },
                   onSubmit: createRecipient,
+                  onAddEmail: addRecipientEmail,
+                  onUpdateEmail: updateRecipientEmail,
+                  onRemoveEmail: removeRecipientEmail,
                 }}
                 meta={{
                   countries,
@@ -3327,12 +3654,16 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   Selecciona un destinatario.
                 </p>
               ) : boxesForCountry.length === 0 ? (
-                <section className="rounded-xl border border-dashed border-slate-600/60 p-5">
+                <section className="rounded-xl border border-dashed border-slate-600/60 p-8">
                   <div className="mx-auto flex max-w-xl flex-col items-center text-center">
-                    <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-400">
-                      <Box className="h-7 w-7" />
-                    </span>
-                    <h3 className="mt-4 text-xl font-black text-[#f8fafc]">
+                    <Link
+                      href={configPricesCountryHref(selectedRecipient.country)}
+                      className="flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-emerald-400/70 bg-emerald-400/15 text-emerald-300 shadow-[0_12px_28px_rgba(16,185,129,0.18)] transition hover:scale-[1.02] hover:bg-emerald-400/25"
+                      aria-label={`Configurar productos para ${selectedRecipient.country}`}
+                    >
+                      <Plus className="h-10 w-10" strokeWidth={2.5} />
+                    </Link>
+                    <h3 className="mt-5 text-xl font-black text-[#f8fafc]">
                       Aún no hay productos para{" "}
                       <CountryName
                         name={selectedRecipient.country}
@@ -3342,7 +3673,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                       .
                     </h3>
                     <p className="mt-2 text-sm font-bold text-slate-400">
-                      Asigna productos del catálogo a este destino en Configuración.
+                      Configura ítems para este país o créalos primero en Inventario.
                     </p>
                     <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                       <Link
@@ -3350,9 +3681,14 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                         className={primaryButtonClass}
                       >
                         <Plus className="h-4 w-4" />
-                        Configurar productos
+                        Agregar ítems
                       </Link>
-                      <Link href="/inventario" className={secondaryButtonClass}>
+                      <Link
+                        href={inventarioHrefWithReturn(
+                          configPricesCountryHref(selectedRecipient.country),
+                        )}
+                        className={secondaryButtonClass}
+                      >
                         Ir a Inventario
                       </Link>
                     </div>
@@ -3360,7 +3696,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 </section>
               ) : (
                 <div className={flowCardGridClass}>
-                  {boxesForCountry.map((box) => {
+                  {boxesForCountry.map((box, boxIndex) => {
                     const cartLine = selectedBoxLines.find(
                       (line) => line.id === saleCartLineId(box),
                     );
@@ -3377,6 +3713,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                       key={box[0]}
                       type="button"
                       onClick={() => chooseBox(box)}
+                      data-onboarding-target={
+                        boxIndex === 0 ? ONBOARDING_TARGETS.VENTA_SELECT_PRODUCT : undefined
+                      }
                       onContextMenu={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
@@ -3558,10 +3897,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     Imprimir
                   </button>
                   <Link
-                    href="/envios"
+                    href="/seguimiento"
                     className={`${secondaryButtonClass} flex h-11 items-center justify-center text-sm font-black`}
                   >
-                    Ver en Envíos
+                    Ver en Seguimiento
                   </Link>
                   <button
                     type="button"
@@ -3600,7 +3939,11 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             <div className="no-print w-full max-w-[210mm]">
             <button
               type="button"
-              onClick={() => setInvoiceConfirmOpen(true)}
+              onClick={() => {
+                setInvoicePaymentMethod(SALE_PAYMENT_UNSET);
+                setInvoicePaymentNote("");
+                setInvoiceConfirmOpen(true);
+              }}
               disabled={creatingOpenInvoice || !invoiceBilling || invoiceBilling.promotionSelectionRequired}
               className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 text-sm font-black text-slate-950 disabled:opacity-40"
             >
@@ -3725,6 +4068,11 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
               : undefined
           }
           onViewHistory={openCustomerHistoryFromMenu}
+          onDelete={
+            contextMenu.type === "remitente" || contextMenu.type === "destinatario"
+              ? requestDeleteFromContextMenu
+              : undefined
+          }
           onQuickEmptyBox={
             contextMenu.type === "remitente"
               ? () => {
@@ -3739,6 +4087,37 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 }
               : undefined
           }
+        />
+      ) : null}
+
+      {deleteConfirm ? (
+        <ActionConfirmDialog
+          open
+          dialogId={
+            deleteConfirm.kind === "remitente"
+              ? "delete-sender-confirm"
+              : "delete-recipient-confirm"
+          }
+          title={
+            deleteConfirm.kind === "remitente"
+              ? "Eliminar remitente"
+              : "Eliminar destinatario"
+          }
+          message={
+            deleteConfirm.kind === "remitente"
+              ? `¿Eliminar a ${deleteConfirm.title}? Dejara de aparecer en ventas y el cambio quedara registrado en el historial.`
+              : `¿Eliminar a ${deleteConfirm.title}? El cambio quedara registrado en el historial.`
+          }
+          confirmLabel="Eliminar"
+          cancelLabel="Cancelar"
+          tone="danger"
+          confirming={deleteConfirming}
+          onCancel={() => {
+            if (!deleteConfirming) {
+              setDeleteConfirm(null);
+            }
+          }}
+          onConfirm={() => void confirmDeletePerson()}
         />
       ) : null}
 
@@ -3795,13 +4174,11 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         title="¿Crear este invoice?"
         invoiceLabel={`Factura ${nextInvoiceNumber}`}
         lines={
-          invoiceBillingForPayment && selectedSender && selectedRecipient
+          invoiceBilling
             ? [
-                { label: "Remitente", value: personFullName(selectedSender) },
-                { label: "Destinatario", value: personFullName(selectedRecipient) },
-                { label: "Total", value: invoiceBillingForPayment.quotedTotal },
-                { label: "Depósito", value: invoiceBillingForPayment.payNow },
-                { label: "Pendiente", value: invoiceBillingForPayment.balanceDue },
+                { label: "Total", value: invoiceBilling.quotedTotal },
+                { label: "Depósito", value: invoiceBilling.payNow },
+                { label: "Pendiente", value: invoiceBilling.balanceDue },
               ]
             : []
         }
@@ -3809,6 +4186,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         confirming={creatingOpenInvoice}
         paymentMethod={invoicePaymentMethod}
         paymentNote={invoicePaymentNote}
+        pendingPaymentSource={emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? "office" : "driver"}
         onPaymentMethodChange={setInvoicePaymentMethod}
         onPaymentNoteChange={setInvoicePaymentNote}
         onCancel={() => {
@@ -3824,7 +4202,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           x={cardStylePicker.x}
           y={cardStylePicker.y}
           currentStyle={
-            (cardStylePicker.cardStyle as SalePersonCardVariantId) || "amber-warm"
+            (cardStylePicker.cardStyle as SalePersonCardVariantId) ||
+            (cardStylePicker.kind === "sender"
+              ? defaultSenderCardStyle
+              : defaultRecipientCardStyle)
           }
           onSelect={(styleId) => {
             if (cardStylePicker.kind === "sender" && cardStylePicker.sender) {

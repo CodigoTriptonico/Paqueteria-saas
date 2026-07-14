@@ -12,13 +12,13 @@ describe("config menu groups eval", () => {
     const operation = CONFIG_MENU_GROUPS.find((group) => group.id === "operation");
     const administration = CONFIG_MENU_GROUPS.find((group) => group.id === "administration");
 
-    for (const sectionId of ["prices", "inventory", "deliveries"] as const) {
+    for (const sectionId of ["prices", "distributors", "deliveries"] as const) {
       assert.ok(operation?.sectionIds.includes(sectionId));
     }
-    for (const sectionId of ["plan", "company", "users", "appearance"] as const) {
+    for (const sectionId of ["plan", "company", "users", "timeclock", "appearance"] as const) {
       assert.ok(administration?.sectionIds.includes(sectionId));
     }
     assert.equal(operation?.sectionIds.includes("users"), false);
-    assert.equal(administration?.sectionIds.includes("inventory"), false);
+    assert.equal(administration?.sectionIds.includes("distributors"), false);
   });
 });

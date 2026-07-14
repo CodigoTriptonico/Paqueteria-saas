@@ -32,6 +32,14 @@ import type { PermissionRow, RoleRow, RoleSlug } from "@/lib/auth/types";
 import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { AppTabs, type AppTabDefinition } from "@/components/app-tabs";
 import { useNotify } from "@/hooks/use-notify";
+import { generateTemporaryPassword } from "@/lib/auth/temporary-password";
+import {
+  settingsFieldLabelClass as fieldLabelClass,
+  settingsIconBoxClass as iconBoxClass,
+  settingsSectionClass as sectionClass,
+  settingsSectionHeaderClass as sectionHeaderClass,
+  settingsSectionTitleClass as sectionTitleClass,
+} from "@/components/config/settings-panel-styles";
 
 type UsersTab = "team" | "roles";
 
@@ -40,26 +48,7 @@ const usersTabs: AppTabDefinition<UsersTab>[] = [
   { id: "roles", label: "Roles y permisos", icon: Shield },
 ];
 
-const fieldLabelClass = "grid gap-1.5 text-[11px] font-black uppercase text-slate-400";
-const sectionClass =
-  "overflow-hidden rounded-xl border border-black bg-surface-card shadow-[0_8px_22px_rgba(0,0,0,0.18)]";
-const sectionHeaderClass =
-  "flex flex-wrap items-center justify-between gap-3 border-b border-black bg-surface-card-header px-4 py-3";
-const sectionTitleClass = "flex items-center gap-2 text-base font-black text-[#f8fafc]";
-const iconBoxClass =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black bg-emerald-400 text-slate-950";
 const compactInputClass = `${inputClass} h-10`;
-
-function generateTemporaryPassword() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-  let password = "";
-
-  for (let index = 0; index < 10; index += 1) {
-    password += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-
-  return password;
-}
 
 function warehouseAccessHint(roleSlug: RoleSlug) {
   if (roleSlug === "administrador") {

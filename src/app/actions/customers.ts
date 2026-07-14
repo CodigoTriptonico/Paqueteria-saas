@@ -25,6 +25,7 @@ type RecipientDbRow = Parameters<typeof mapRecipientRow>[0];
 type GeoAddressInput = {
   placeId?: string;
   formattedAddress?: string;
+  addressVerified?: boolean;
   lat?: number | null;
   lng?: number | null;
 };
@@ -39,10 +40,17 @@ function geoAddressPatch(input: GeoAddressInput) {
   return {
     place_id: input.placeId?.trim() || null,
     formatted_address: input.formattedAddress?.trim() || null,
+    address_verified: Boolean(input.addressVerified),
     lat: hasGeo ? input.lat : null,
     lng: hasGeo ? input.lng : null,
     geo_updated_at: hasGeo ? new Date().toISOString() : null,
   };
+}
+
+function normalizeEmailList(input?: string[]) {
+  return Array.from(
+    new Set((input || []).map((email) => email.trim().toLowerCase()).filter(Boolean)),
+  );
 }
 
 export async function listCustomersWithRecipientsAction(
@@ -74,6 +82,7 @@ export async function createCustomerAction(input: {
   lastName: string;
   phones: string[];
   email?: string;
+  emails?: string[];
   street: string;
   houseNumber: string;
   neighborhood: string;
@@ -84,6 +93,7 @@ export async function createCustomerAction(input: {
   referredByCustomerId?: string;
   placeId?: string;
   formattedAddress?: string;
+  addressVerified?: boolean;
   lat?: number | null;
   lng?: number | null;
 }): Promise<ActionResult<CustomerWithRecipientsRow>> {
@@ -100,6 +110,7 @@ export async function createCustomerAction(input: {
     }
 
     const phones = input.phones.map((phone) => phone.trim()).filter(Boolean);
+    const emails = normalizeEmailList(input.emails?.length ? input.emails : [input.email || ""]);
     if (!phones.length) {
       return fail("Agrega al menos un telefono");
     }
@@ -115,7 +126,8 @@ export async function createCustomerAction(input: {
         first_name: input.firstName.trim(),
         last_name: input.lastName.trim(),
         phones,
-        email: input.email?.trim() || "",
+        email: emails[0] || "",
+        emails,
         street: input.street.trim(),
         house_number: input.houseNumber.trim(),
         neighborhood: input.neighborhood.trim(),
@@ -127,7 +139,7 @@ export async function createCustomerAction(input: {
         ...geoAddressPatch(input),
       })
       .select(
-        "id, referred_by_customer_id, first_name, last_name, phones, email, street, house_number, neighborhood, city, state, postal_code, country, card_style, place_id, formatted_address, lat, lng",
+        "id, referred_by_customer_id, first_name, last_name, phones, email, emails, street, house_number, neighborhood, city, state, postal_code, country, card_style, place_id, formatted_address, address_verified, lat, lng",
       )
       .single();
 
@@ -157,6 +169,7 @@ export async function updateCustomerAction(input: {
   lastName: string;
   phones: string[];
   email?: string;
+  emails?: string[];
   street: string;
   houseNumber: string;
   neighborhood: string;
@@ -166,6 +179,7 @@ export async function updateCustomerAction(input: {
   country?: string;
   placeId?: string;
   formattedAddress?: string;
+  addressVerified?: boolean;
   lat?: number | null;
   lng?: number | null;
 }): Promise<ActionResult<CustomerWithRecipientsRow>> {
@@ -182,6 +196,7 @@ export async function updateCustomerAction(input: {
     }
 
     const phones = input.phones.map((phone) => phone.trim()).filter(Boolean);
+    const emails = normalizeEmailList(input.emails?.length ? input.emails : [input.email || ""]);
     if (!phones.length) {
       return fail("Agrega al menos un telefono");
     }
@@ -192,7 +207,8 @@ export async function updateCustomerAction(input: {
         first_name: input.firstName.trim(),
         last_name: input.lastName.trim(),
         phones,
-        email: input.email?.trim() || "",
+        email: emails[0] || "",
+        emails,
         street: input.street.trim(),
         house_number: input.houseNumber.trim(),
         neighborhood: input.neighborhood.trim(),
@@ -213,6 +229,7 @@ export async function updateCustomerAction(input: {
         last_name,
         phones,
         email,
+        emails,
         street,
         house_number,
         neighborhood,
@@ -223,6 +240,7 @@ export async function updateCustomerAction(input: {
         card_style,
         place_id,
         formatted_address,
+        address_verified,
         lat,
         lng,
         customer_recipients (
@@ -230,6 +248,8 @@ export async function updateCustomerAction(input: {
           first_name,
           last_name,
           phone,
+          email,
+          emails,
           country,
           street,
           house_number,
@@ -240,6 +260,7 @@ export async function updateCustomerAction(input: {
           card_style,
           place_id,
           formatted_address,
+          address_verified,
           lat,
           lng
         )
@@ -391,6 +412,8 @@ export async function createRecipientAction(input: {
   firstName: string;
   lastName: string;
   phone: string;
+  email?: string;
+  emails?: string[];
   country: string;
   street: string;
   houseNumber: string;
@@ -400,6 +423,7 @@ export async function createRecipientAction(input: {
   postalCode: string;
   placeId?: string;
   formattedAddress?: string;
+  addressVerified?: boolean;
   lat?: number | null;
   lng?: number | null;
 }): Promise<ActionResult<CustomerRecipientRow>> {
@@ -417,6 +441,8 @@ export async function createRecipientAction(input: {
 
     await assertSameOrgCustomerIds(supabase, session.organizationId, [input.customerId]);
 
+    const emails = normalizeEmailList(input.emails?.length ? input.emails : [input.email || ""]);
+
     const { data, error } = await supabase
       .from("customer_recipients")
       .insert({
@@ -425,6 +451,8 @@ export async function createRecipientAction(input: {
         first_name: input.firstName.trim(),
         last_name: input.lastName.trim(),
         phone: input.phone.trim(),
+        email: emails[0] || "",
+        emails,
         country: input.country.trim(),
         street: input.street.trim(),
         house_number: input.houseNumber.trim(),
@@ -435,7 +463,7 @@ export async function createRecipientAction(input: {
         ...geoAddressPatch(input),
       })
       .select(
-        "id, first_name, last_name, phone, country, street, house_number, neighborhood, city, state, postal_code, card_style, place_id, formatted_address, lat, lng",
+        "id, first_name, last_name, phone, email, emails, country, street, house_number, neighborhood, city, state, postal_code, card_style, place_id, formatted_address, address_verified, lat, lng",
       )
       .single();
 
@@ -448,7 +476,7 @@ export async function createRecipientAction(input: {
       entityType: "recipient",
       entityId: data.id,
       title: `Destinatario creado: ${input.firstName.trim()} ${input.lastName.trim()}`.trim(),
-      description: `${input.country.trim()} · ${input.phone.trim()}`,
+      description: [input.country.trim(), input.phone.trim(), emails[0]].filter(Boolean).join(" · "),
       metadata: { customerId: input.customerId },
     });
 
@@ -463,6 +491,8 @@ export async function updateRecipientAction(input: {
   firstName: string;
   lastName: string;
   phone: string;
+  email?: string;
+  emails?: string[];
   country: string;
   street: string;
   houseNumber: string;
@@ -472,6 +502,7 @@ export async function updateRecipientAction(input: {
   postalCode: string;
   placeId?: string;
   formattedAddress?: string;
+  addressVerified?: boolean;
   lat?: number | null;
   lng?: number | null;
 }): Promise<ActionResult<CustomerRecipientRow>> {
@@ -487,12 +518,16 @@ export async function updateRecipientAction(input: {
       return fail("Supabase no configurado");
     }
 
+    const emails = normalizeEmailList(input.emails?.length ? input.emails : [input.email || ""]);
+
     const { data, error } = await supabase
       .from("customer_recipients")
       .update({
         first_name: input.firstName.trim(),
         last_name: input.lastName.trim(),
         phone: input.phone.trim(),
+        email: emails[0] || "",
+        emails,
         country: input.country.trim(),
         street: input.street.trim(),
         house_number: input.houseNumber.trim(),
@@ -506,7 +541,7 @@ export async function updateRecipientAction(input: {
       .eq("id", input.recipientId)
       .eq("organization_id", session.organizationId)
       .select(
-        "id, first_name, last_name, phone, country, street, house_number, neighborhood, city, state, postal_code, card_style, place_id, formatted_address, lat, lng",
+        "id, first_name, last_name, phone, email, emails, country, street, house_number, neighborhood, city, state, postal_code, card_style, place_id, formatted_address, address_verified, lat, lng",
       )
       .single();
 
@@ -519,7 +554,7 @@ export async function updateRecipientAction(input: {
       entityType: "recipient",
       entityId: data.id,
       title: `Destinatario editado: ${input.firstName.trim()} ${input.lastName.trim()}`.trim(),
-      description: `${input.country.trim()} · ${input.phone.trim()}`,
+      description: [input.country.trim(), input.phone.trim(), emails[0]].filter(Boolean).join(" · "),
     });
 
     return ok(mapRecipientRow(data as RecipientDbRow));

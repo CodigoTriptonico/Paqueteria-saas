@@ -72,6 +72,7 @@ type ShipmentProgressStepsProps = {
   singleLine?: boolean;
   onLogisticsPatch?: (patch: Partial<ShipmentLogisticsEditorState>, audit: ShipmentAuditContext) => void;
   onStatusChange?: (status: ShipmentStatus, audit: ShipmentAuditContext) => void;
+  onFullBoxReceivedAtOffice?: (audit: ShipmentAuditContext) => void;
   onLockedLeg?: (message: string) => void;
 };
 
@@ -161,7 +162,7 @@ function compactLogisticsLegUsesOutline(step: ShipmentProgressStep) {
   return !step.driverTaskOrdered;
 }
 
-export function compactStepClass(
+function compactStepClass(
   step: ShipmentProgressStep,
   isDetailOpen: boolean,
 ) {
@@ -254,6 +255,7 @@ export function ShipmentProgressSteps({
   singleLine = false,
   onLogisticsPatch,
   onStatusChange,
+  onFullBoxReceivedAtOffice,
   onLockedLeg,
 }: ShipmentProgressStepsProps) {
   const [menu, setMenu] = useState<ShipmentStepMenuState>(null);
@@ -486,6 +488,58 @@ export function ShipmentProgressSteps({
     };
   }, [detailStepId, syncDetailAnchors]);
 
+  const detailPanel =
+    row && detailStep ? (
+      <ShipmentStepDetailPanel
+        row={row}
+        step={detailStep}
+        stepNumber={detailStepNumber}
+        totalSteps={steps.length}
+        timings={timings}
+        anchorRect={detailAnchor}
+        stepAnchorRect={detailStepAnchor}
+        onClose={() => setDetailStepId(null)}
+      />
+    ) : null;
+
+  const contextMenuPanel =
+    row && menu ? (
+      <ShipmentStepContextMenu
+        menu={menu}
+        lockReason={menuLockReason(menu.kind)}
+        scheduleMode={menuScheduleMode}
+        scheduleAt={menuScheduleAt}
+        {...menuLegContext(menu.kind)}
+        currentStatus={row.status}
+        onClose={() => setMenu(null)}
+        onApply={(patch) => {
+          onLogisticsPatch?.(patch, {
+            interaction: "context_menu",
+            source: "envios.progress",
+            stepTitle: menu.title,
+            stepKind: menu.kind,
+          });
+          setMenu(null);
+        }}
+        onStatusChange={(status) => {
+          onStatusChange?.(status, {
+            interaction: "context_menu",
+            source: "envios.progress",
+            stepTitle: menu.title,
+            stepKind: menu.kind,
+          });
+        }}
+        onFullBoxReceivedAtOffice={() => {
+          onFullBoxReceivedAtOffice?.({
+            interaction: "context_menu",
+            source: "envios.progress",
+            stepTitle: menu.title,
+            stepKind: menu.kind,
+          });
+        }}
+      />
+    ) : null;
+
   if (compact) {
     const waiting = activeStep?.state === "active";
     const focusStep = waiting ? activeStep : steps.filter((step) => step.state === "done").at(-1) ?? activeStep;
@@ -515,7 +569,7 @@ export function ShipmentProgressSteps({
           ref={(element) => {
             stepButtonRefs.current[step.id] = element;
           }}
-          title={timings ? stepTimingTooltip(step, timings) : step.title}
+          title={timings ? stepTimingTooltip(step) : step.title}
           onClick={(event) => {
             event.stopPropagation();
             if (!stepIsReachable(step)) {
@@ -579,47 +633,9 @@ export function ShipmentProgressSteps({
             </div>
           </div>
 
-          {row && detailStep ? (
-            <ShipmentStepDetailPanel
-              row={row}
-              step={detailStep}
-              stepNumber={detailStepNumber}
-              totalSteps={steps.length}
-              timings={timings}
-              anchorRect={detailAnchor}
-              stepAnchorRect={detailStepAnchor}
-              onClose={() => setDetailStepId(null)}
-            />
-          ) : null}
+          {detailPanel}
 
-          {row && menu ? (
-            <ShipmentStepContextMenu
-              menu={menu}
-              lockReason={menuLockReason(menu.kind)}
-              scheduleMode={menuScheduleMode}
-              scheduleAt={menuScheduleAt}
-              {...menuLegContext(menu.kind)}
-              currentStatus={row.status}
-              onClose={() => setMenu(null)}
-              onApply={(patch) => {
-                onLogisticsPatch?.(patch, {
-                  interaction: "context_menu",
-                  source: "envios.progress",
-                  stepTitle: menu.title,
-                  stepKind: menu.kind,
-                });
-                setMenu(null);
-              }}
-              onStatusChange={(status) => {
-                onStatusChange?.(status, {
-                  interaction: "context_menu",
-                  source: "envios.progress",
-                  stepTitle: menu.title,
-                  stepKind: menu.kind,
-                });
-              }}
-            />
-          ) : null}
+          {contextMenuPanel}
         </>
       );
     }
@@ -663,47 +679,9 @@ export function ShipmentProgressSteps({
           </div>
         </div>
 
-        {row && detailStep ? (
-          <ShipmentStepDetailPanel
-            row={row}
-            step={detailStep}
-            stepNumber={detailStepNumber}
-            totalSteps={steps.length}
-            timings={timings}
-            anchorRect={detailAnchor}
-            stepAnchorRect={detailStepAnchor}
-            onClose={() => setDetailStepId(null)}
-          />
-        ) : null}
+        {detailPanel}
 
-        {row && menu ? (
-          <ShipmentStepContextMenu
-            menu={menu}
-            lockReason={menuLockReason(menu.kind)}
-            scheduleMode={menuScheduleMode}
-            scheduleAt={menuScheduleAt}
-            {...menuLegContext(menu.kind)}
-            currentStatus={row.status}
-            onClose={() => setMenu(null)}
-            onApply={(patch) => {
-              onLogisticsPatch?.(patch, {
-                interaction: "context_menu",
-                source: "envios.progress",
-                stepTitle: menu.title,
-                stepKind: menu.kind,
-              });
-              setMenu(null);
-            }}
-            onStatusChange={(status) => {
-              onStatusChange?.(status, {
-                interaction: "context_menu",
-                source: "envios.progress",
-                stepTitle: menu.title,
-                stepKind: menu.kind,
-              });
-            }}
-          />
-        ) : null}
+        {contextMenuPanel}
       </>
     );
   }
@@ -779,34 +757,7 @@ export function ShipmentProgressSteps({
         })}
       </ol>
 
-      {row && menu ? (
-        <ShipmentStepContextMenu
-          menu={menu}
-          lockReason={menuLockReason(menu.kind)}
-          scheduleMode={menuScheduleMode}
-          scheduleAt={menuScheduleAt}
-          {...menuLegContext(menu.kind)}
-          currentStatus={row.status}
-          onClose={() => setMenu(null)}
-          onApply={(patch) => {
-            onLogisticsPatch?.(patch, {
-              interaction: "context_menu",
-              source: "envios.progress",
-              stepTitle: menu.title,
-              stepKind: menu.kind,
-            });
-            setMenu(null);
-          }}
-          onStatusChange={(status) => {
-            onStatusChange?.(status, {
-              interaction: "context_menu",
-              source: "envios.progress",
-              stepTitle: menu.title,
-              stepKind: menu.kind,
-            });
-          }}
-        />
-      ) : null}
+      {contextMenuPanel}
     </>
   );
 }

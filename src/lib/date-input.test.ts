@@ -15,23 +15,17 @@ const consumerFiles = [
   "components/sale/sale-logistics-step.tsx",
   "components/sale/sale-quick-empty-box-modal.tsx",
   "components/shipment-step-context-menu.tsx",
+  "components/shipment-contact-log-dialog.tsx",
 ];
 
 describe("date input standard", () => {
-  it("uses a text-friendly native date field with click-to-open picker", () => {
-    assert.equal(dateInputSource.includes('type="date"'), true);
-    assert.equal(dateInputSource.includes("openDatePicker(inputRef.current)"), true);
-    assert.match(dateInputSource, /onChange=\{\(event\) => onChange\(event\.target\.value\)\}/);
-    assert.equal(
-      dateInputSource.includes("[&::-webkit-calendar-picker-indicator]:hidden"),
-      true,
-    );
-    const inputBlock = dateInputSource.slice(
-      dateInputSource.indexOf("<input"),
-      dateInputSource.indexOf("/>", dateInputSource.indexOf('type="date"')) + 2,
-    );
-    assert.equal(inputBlock.includes("onClick={() => openDatePicker(inputRef.current)}"), true);
-    assert.match(dateInputSource, /onClick=\{\(\) => openDatePicker\(inputRef\.current\)\}/);
+  it("uses a custom grid calendar with click-to-open picker", () => {
+    assert.equal(dateInputSource.includes('type="date"'), false);
+    assert.equal(dateInputSource.includes("DatePickerCalendar"), true);
+    assert.equal(dateInputSource.includes('className="fixed z-[160]"'), true);
+    assert.equal(dateInputSource.includes("formatDateInputDisplay(value)"), true);
+    assert.equal(dateInputSource.includes("aria-haspopup=\"dialog\""), true);
+    assert.match(dateInputSource, /onChange=\{pickDate\}/);
   });
 
   it("replaces raw date inputs across the app", () => {
@@ -43,9 +37,14 @@ describe("date input standard", () => {
         `${relativePath} still uses a raw date input`,
       );
       assert.equal(
-        source.includes("DateInput"),
+        source.includes('type="datetime-local"'),
+        false,
+        `${relativePath} still uses a raw datetime input`,
+      );
+      assert.equal(
+        source.includes("DateInput") || source.includes("DateTimeInput"),
         true,
-        `${relativePath} should import DateInput`,
+        `${relativePath} should import DateInput or DateTimeInput`,
       );
     }
   });

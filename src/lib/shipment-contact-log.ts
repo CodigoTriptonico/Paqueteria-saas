@@ -6,7 +6,7 @@ export const SHIPMENT_CONTACT_CHANNELS = [
   { value: "other", label: "Otro" },
 ] as const;
 
-export const SHIPMENT_CONTACT_OUTCOMES = [
+const SHIPMENT_CONTACT_OUTCOMES = [
   { value: "answered", label: "Contesto" },
   { value: "no_answer", label: "No contesto" },
   { value: "left_message", label: "Mensaje dejado" },
@@ -82,7 +82,7 @@ export function shipmentContactOutcomeLabel(value: ShipmentContactOutcome | stri
   return SHIPMENT_CONTACT_OUTCOMES.find((entry) => entry.value === value)?.label || "Otro";
 }
 
-export function cleanShipmentContactText(value: unknown, maxLength: number) {
+function cleanShipmentContactText(value: unknown, maxLength: number) {
   return String(value || "")
     .replace(/\r\n/g, "\n")
     .trim()

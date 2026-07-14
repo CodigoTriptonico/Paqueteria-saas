@@ -12,7 +12,6 @@ export type ShipmentLogisticsLegInput = {
   handingNow?: boolean;
   scheduleMode?: string;
   scheduleAt?: string | null;
-  /** When true, creates/syncs the driver logistics task in Envíos. Schedule-only updates leave this false. */
   driverTaskOrdered?: boolean;
 };
 
@@ -76,13 +75,11 @@ export function shipmentLogisticsEditorState(row: ShipmentRow): ShipmentLogistic
     emptyBoxHandingNow: empty.handingNow === true,
     emptyBoxScheduleMode: String(empty.scheduleMode || "pending"),
     emptyBoxScheduleAt: emptyScheduleAt,
-    emptyBoxDriverTaskOrdered:
-      empty.driverTaskOrdered === true || Boolean(activeTask(row, "deliver_empty_box")),
+    emptyBoxDriverTaskOrdered: empty.driverTaskOrdered === true,
     fullBoxMode: String(full.mode || ""),
     fullBoxScheduleMode: String(full.scheduleMode || "pending"),
     fullBoxScheduleAt: fullScheduleAt,
-    fullBoxDriverTaskOrdered:
-      full.driverTaskOrdered === true || Boolean(activeTask(row, "pickup_full_box")),
+    fullBoxDriverTaskOrdered: full.driverTaskOrdered === true,
   };
 }
 
@@ -150,26 +147,6 @@ export function fullBoxLegLockReason(row: ShipmentRow) {
   return "";
 }
 
-function resolveDriverTaskOrdered(
-  existing: Record<string, unknown> | null,
-  input: ShipmentLogisticsLegInput,
-  driverNeeded: boolean,
-) {
-  if (!driverNeeded) {
-    return false;
-  }
-
-  if (input.driverTaskOrdered === true) {
-    return true;
-  }
-
-  if (input.driverTaskOrdered === false) {
-    return false;
-  }
-
-  return existing?.driverTaskOrdered === true;
-}
-
 function buildLegPatch(
   existing: Record<string, unknown> | null,
   input: ShipmentLogisticsLegInput,
@@ -187,7 +164,7 @@ function buildLegPatch(
     scheduleMode: driverNeeded ? input.scheduleMode || "pending" : null,
     scheduleAt: driverNeeded ? input.scheduleAt || null : null,
     driverTaskNeeded: driverNeeded,
-    driverTaskOrdered: resolveDriverTaskOrdered(existing, input, driverNeeded),
+    driverTaskOrdered: driverNeeded && input.driverTaskOrdered === true,
     driverTaskType: driverNeeded ? driverTaskType : null,
   };
 }
@@ -223,27 +200,13 @@ function buildDeferredFullBoxLeg(existing: Record<string, unknown> | null) {
 }
 
 function legDriverTaskNeeded(
-  row: ShipmentRow,
-  taskType: "deliver_empty_box" | "pickup_full_box",
-  mode: string,
-  driverMode: string,
   input: ShipmentLogisticsLegInput,
-  legKey: "emptyBox" | "fullBox",
+  mode: typeof EMPTY_BOX_DRIVER_MODE | typeof FULL_BOX_DRIVER_MODE,
 ) {
-  if (mode !== driverMode) {
-    return false;
-  }
-
-  if (activeTask(row, taskType)) {
-    return true;
-  }
-
-  const existingLeg = planLeg(row.logistics_plan, legKey);
-
-  return input.driverTaskOrdered === true || existingLeg?.driverTaskOrdered === true;
+  return input.mode === mode && input.driverTaskOrdered === true;
 }
 
-export function emptyBoxDeliveryCanClear(row: ShipmentRow, input: UpdateShipmentLogisticsPlanInput) {
+function emptyBoxDeliveryCanClear(row: ShipmentRow, input: UpdateShipmentLogisticsPlanInput) {
   if (input.emptyBox.mode) {
     return false;
   }
@@ -257,7 +220,7 @@ export function emptyBoxDeliveryCanClear(row: ShipmentRow, input: UpdateShipment
   return !emptyBoxLegLocked(row);
 }
 
-export function fullBoxPickupCanClear(row: ShipmentRow, input: UpdateShipmentLogisticsPlanInput) {
+function fullBoxPickupCanClear(row: ShipmentRow, input: UpdateShipmentLogisticsPlanInput) {
   if (!input.fullBox || input.fullBox.mode) {
     return false;
   }
@@ -329,14 +292,7 @@ export function logisticsTaskSyncPlan(
   }> = [
     {
       taskType: "deliver_empty_box",
-      needed: legDriverTaskNeeded(
-        row,
-        "deliver_empty_box",
-        input.emptyBox.mode,
-        EMPTY_BOX_DRIVER_MODE,
-        input.emptyBox,
-        "emptyBox",
-      ),
+      needed: legDriverTaskNeeded(input.emptyBox, EMPTY_BOX_DRIVER_MODE),
       scheduleMode: input.emptyBox.scheduleMode || "pending",
       scheduleAt: input.emptyBox.scheduleAt || null,
     },
@@ -345,14 +301,7 @@ export function logisticsTaskSyncPlan(
   if (row.sale_kind !== "empty_box_deposit" && input.fullBox) {
     tasks.push({
       taskType: "pickup_full_box",
-      needed: legDriverTaskNeeded(
-        row,
-        "pickup_full_box",
-        input.fullBox.mode,
-        FULL_BOX_DRIVER_MODE,
-        input.fullBox,
-        "fullBox",
-      ),
+      needed: legDriverTaskNeeded(input.fullBox, FULL_BOX_DRIVER_MODE),
       scheduleMode: input.fullBox.scheduleMode || "pending",
       scheduleAt: input.fullBox.scheduleAt || null,
     });

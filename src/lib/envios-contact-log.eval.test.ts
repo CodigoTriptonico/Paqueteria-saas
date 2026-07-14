@@ -28,8 +28,7 @@ describe("envios contact log eval", () => {
     assert.equal(enviosSource.includes("onContactLogOpen(row.id)"), true);
     assert.equal(enviosSource.includes("Registrar seguimiento"), true);
     assert.equal(enviosSource.includes("<PhoneCall"), true);
-    assert.equal(enviosSource.includes("contactReminderFilter"), true);
-    assert.equal(enviosSource.includes("Hoy"), true);
+    assert.equal(enviosSource.includes("readinessFilter"), true);
   });
 
   it("keeps the dialog simple for non-technical sellers", () => {
@@ -67,7 +66,6 @@ describe("envios contact log eval", () => {
     assert.equal(actionsSource.includes("canWriteShipmentContactLog"), true);
     assert.equal(actionsSource.includes("shipment_contact_logs"), true);
     assert.equal(actionsSource.includes("channel_other"), true);
-    assert.equal(actionsSource.includes("listShipmentContactChannelOthersAction"), true);
     assert.equal(actionsSource.includes("shipment.contact_log_created"), true);
     assert.equal(actionsSource.includes("contactLogs"), true);
   });

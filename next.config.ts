@@ -16,6 +16,20 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: resolveDevTunnelOrigins({
     tunnelUrl: loadTunnelUrlFromFile(),
   }),
+  async redirects() {
+    return [
+      {
+        source: "/envios/historial",
+        destination: "/seguimiento/historial",
+        permanent: true,
+      },
+      {
+        source: "/envios",
+        destination: "/seguimiento",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -221,14 +221,20 @@ export function CloseAssignmentModal({
       return;
     }
 
+    const assignedQty = String(assignment.qtyAssigned);
+    let active = true;
     queueMicrotask(() => {
+      if (!active) return;
       setOutcome("returned_intact");
-      setQtyReturned(String(assignment.qtyAssigned));
+      setQtyReturned(assignedQty);
       setQtyConsumed("0");
       setQtyDamaged("0");
       setQtyLost("0");
       setNote("");
     });
+    return () => {
+      active = false;
+    };
   }, [assignment, open]);
 
   useEffect(() => {
@@ -236,29 +242,35 @@ export function CloseAssignmentModal({
       return;
     }
 
+    const assignedQty = String(assignment.qtyAssigned);
+    let active = true;
     queueMicrotask(() => {
+      if (!active) return;
       if (outcome === "returned_intact") {
-        setQtyReturned(String(assignment.qtyAssigned));
+        setQtyReturned(assignedQty);
         setQtyConsumed("0");
         setQtyDamaged("0");
         setQtyLost("0");
       } else if (outcome === "consumed") {
         setQtyReturned("0");
-        setQtyConsumed(String(assignment.qtyAssigned));
+        setQtyConsumed(assignedQty);
         setQtyDamaged("0");
         setQtyLost("0");
       } else if (outcome === "damaged") {
         setQtyReturned("0");
         setQtyConsumed("0");
-        setQtyDamaged(String(assignment.qtyAssigned));
+        setQtyDamaged(assignedQty);
         setQtyLost("0");
       } else if (outcome === "lost") {
         setQtyReturned("0");
         setQtyConsumed("0");
         setQtyDamaged("0");
-        setQtyLost(String(assignment.qtyAssigned));
+        setQtyLost(assignedQty);
       }
     });
+    return () => {
+      active = false;
+    };
   }, [assignment, outcome]);
 
   if (!open || !assignment) {

@@ -29,14 +29,13 @@ import { getCurrentSessionAction } from "@/app/actions/session";
 import { inputClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
 import { sessionHasPermission } from "@/lib/auth/permissions";
+import {
+  settingsIconBoxClass as iconBoxClass,
+  settingsSectionClass as sectionClass,
+  settingsSectionHeaderClass as sectionHeaderClass,
+  settingsSectionTitleClass as sectionTitleClass,
+} from "@/components/config/settings-panel-styles";
 
-const sectionClass =
-  "overflow-hidden rounded-xl border border-black bg-surface-card shadow-[0_8px_22px_rgba(0,0,0,0.18)]";
-const sectionHeaderClass =
-  "flex flex-wrap items-center justify-between gap-3 border-b border-black bg-surface-card-header px-4 py-3";
-const sectionTitleClass = "flex items-center gap-2 text-base font-black text-[#f8fafc]";
-const iconBoxClass =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-black bg-emerald-400 text-slate-950";
 const compactInputClass = `${inputClass} h-10`;
 const rowClass =
   "flex flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-surface-card-hover";

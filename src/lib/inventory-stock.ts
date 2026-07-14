@@ -1,8 +1,11 @@
 import {
   categoryItems,
+  countCategoryLeafItems,
   isInventoryGroup,
+  inventoryTreeItemExists,
   normalizeInventoryText,
   type CategoryConfig,
+  type InventoryTreeItem,
 } from "@/lib/inventory-tree";
 
 export type InventoryStockItem = {
@@ -45,12 +48,6 @@ export const stockValueToneClass: Record<StockLevel, string> = {
   neutral: "text-slate-200",
 };
 
-export const stockStatusLabel: Record<StockLevel, string> = {
-  ok: "En stock",
-  low: "Stock bajo",
-  empty: "Sin stock",
-  neutral: "Sin datos",
-};
 
 export function stockLevelForItem(
   item: Pick<InventoryStockItem, "stock" | "minStock">,
@@ -82,15 +79,15 @@ export function worstStockLevel(levels: StockLevel[]): StockLevel {
   return "neutral";
 }
 
-export function sumStock(items: InventoryStockItem[]) {
+function sumStock(items: InventoryStockItem[]) {
   return items.reduce((total, item) => total + item.stock, 0);
 }
 
-export function sumAssigned(items: InventoryStockItem[]) {
+function sumAssigned(items: InventoryStockItem[]) {
   return items.reduce((total, item) => total + (item.assigned ?? 0), 0);
 }
 
-export function sumUnavailable(items: InventoryStockItem[]) {
+function sumUnavailable(items: InventoryStockItem[]) {
   return items.reduce((total, item) => total + (item.unavailable ?? 0), 0);
 }
 
@@ -124,14 +121,14 @@ function sameCategory(item: InventoryStockItem, categoryName: string) {
   return normalizeInventoryText(item.category) === normalizeInventoryText(categoryName);
 }
 
-export function inventoryItemsForCategory(
+function inventoryItemsForCategory(
   items: InventoryStockItem[],
   categoryName: string,
 ) {
   return items.filter((item) => sameCategory(item, categoryName));
 }
 
-export function inventoryItemsForSubcategory(
+function inventoryItemsForSubcategory(
   items: InventoryStockItem[],
   categoryName: string,
   subcategoryName: string,
@@ -215,12 +212,158 @@ export function collectCategoryTreeLeaves(category: CategoryConfig): TreeLeafRef
   return leaves;
 }
 
-function inventoryItemKey(item: Pick<InventoryStockItem, "category" | "kind" | "subcategory">) {
+export function inventoryLeafKey(
+  item: Pick<InventoryStockItem, "category" | "kind" | "subcategory">,
+) {
   return [
     normalizeInventoryText(item.category),
     normalizeInventoryText(item.kind),
     normalizeInventoryText(item.subcategory || ""),
   ].join("|");
+}
+
+function inventoryItemKey(item: Pick<InventoryStockItem, "category" | "kind" | "subcategory">) {
+  return inventoryLeafKey(item);
+}
+
+function isPersistedInventoryItemId(id: string) {
+  return !id.startsWith("virtual-") && !id.startsWith("inv-");
+}
+
+function syncTreeItemId(categoryName: string, kind: string) {
+  const categorySlug = normalizeInventoryText(categoryName).replace(/[^a-z0-9]+/g, "-");
+  const kindSlug = normalizeInventoryText(kind).replace(/[^a-z0-9]+/g, "-");
+
+  return `${categorySlug}-sync-${kindSlug}`;
+}
+
+function appendOrphanLeafToCategory(
+  category: CategoryConfig & { items: InventoryTreeItem[] },
+  item: InventoryStockItem,
+): CategoryConfig & { items: InventoryTreeItem[] } {
+  const items = categoryItems(category);
+
+  if (item.subcategory) {
+    const subcategoryName = item.subcategory;
+    const groupIndex = items.findIndex(
+      (node) =>
+        isInventoryGroup(node) &&
+        normalizeInventoryText(node.name) === normalizeInventoryText(subcategoryName),
+    );
+    const child: InventoryTreeItem = {
+      id: syncTreeItemId(category.name, item.kind),
+      name: item.kind,
+    };
+
+    if (groupIndex >= 0) {
+      const group = items[groupIndex];
+
+      if (inventoryTreeItemExists(group.children || [], item.kind)) {
+        return category;
+      }
+
+      const nextItems = [...items];
+      nextItems[groupIndex] = {
+        ...group,
+        children: [...(group.children || []), child],
+      };
+
+      return { ...category, items: nextItems };
+    }
+
+    return {
+      ...category,
+      items: [
+        ...items,
+        {
+          id: `${syncTreeItemId(category.name, subcategoryName)}-group`,
+          name: subcategoryName,
+          children: [child],
+        },
+      ],
+    };
+  }
+
+  if (inventoryTreeItemExists(items, item.kind)) {
+    return category;
+  }
+
+  return {
+    ...category,
+    items: [
+      ...items,
+      {
+        id: syncTreeItemId(category.name, item.kind),
+        name: item.kind,
+      },
+    ],
+  };
+}
+
+export function mergeOrphanItemsIntoCategoryConfigs(
+  categoryConfigs: CategoryConfig[],
+  items: InventoryStockItem[],
+): CategoryConfig[] {
+  const configs: Array<CategoryConfig & { items: InventoryTreeItem[] }> = categoryConfigs.map((category) => ({
+    ...category,
+    items: [...categoryItems(category)],
+  }));
+  const configsByName = new Map(
+    configs.map((category) => [normalizeInventoryText(category.name), category]),
+  );
+  const treeKeys = new Set(
+    configs.flatMap((category) =>
+      collectCategoryTreeLeaves(category).map((leaf) => inventoryLeafKey(leaf)),
+    ),
+  );
+
+  let changed = false;
+
+  for (const item of items) {
+    if (!isPersistedInventoryItemId(item.id)) {
+      continue;
+    }
+
+    const key = inventoryLeafKey(item);
+
+    if (treeKeys.has(key)) {
+      continue;
+    }
+
+    const category = configsByName.get(normalizeInventoryText(item.category));
+
+    if (!category) {
+      continue;
+    }
+
+    const nextCategory = appendOrphanLeafToCategory(category, item);
+
+    if (nextCategory === category) {
+      continue;
+    }
+
+    configsByName.set(normalizeInventoryText(category.name), nextCategory);
+    changed = true;
+
+    for (const leaf of collectCategoryTreeLeaves(nextCategory)) {
+      treeKeys.add(inventoryLeafKey(leaf));
+    }
+  }
+
+  if (!changed) {
+    return categoryConfigs;
+  }
+
+  return configs.map(
+    (category) => configsByName.get(normalizeInventoryText(category.name)) || category,
+  );
+}
+
+export function countInventoryArticles(categoryConfigs: CategoryConfig[]) {
+  return categoryConfigs.reduce(
+    (total, category) => total + countCategoryLeafItems(category),
+    0,
+  );
 }
 
 export function mergeTreeIntoInventoryItems(

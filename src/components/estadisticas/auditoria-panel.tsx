@@ -10,6 +10,8 @@ import { listShipmentsAction, type ShipmentRow } from "@/app/actions/shipments";
 import { AuditHistoryEntry } from "@/components/audit-history-entry";
 import { PageLoading } from "@/components/page-loading";
 import { cardClass } from "@/components/ui-blocks";
+import { ViewLayoutToggle } from "@/components/view-layout-toggle";
+import { useViewLayout } from "@/hooks/use-view-layout";
 import {
   consolidateShipmentActivityHistory,
 } from "@/lib/shipment-step-history";
@@ -30,6 +32,7 @@ export function EstadisticasAuditoriaPanel({
   initialShipments = [],
   selectedShipmentId = null,
 }: EstadisticasAuditoriaPanelProps) {
+  const { layout: viewLayout, toggleViewLayout } = useViewLayout();
   const [shipments, setShipments] = useState(initialShipments);
   const [loadingShipments, setLoadingShipments] = useState(!initialShipments.length);
   const [query, setQuery] = useState("");
@@ -166,37 +169,63 @@ export function EstadisticasAuditoriaPanel({
   return (
     <div className="grid min-h-0 gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
       <section className={`${cardClass} flex min-h-0 flex-col p-3`}>
-        <label className="relative block">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar invoice o cliente"
-            className="h-9 w-full rounded-lg border border-black bg-surface-inset pl-8 pr-2 text-sm font-bold text-[#f8fafc] outline-none"
-          />
-        </label>
+        <div className="flex items-center gap-2">
+          <label className="relative block min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar invoice o cliente"
+              className="h-9 w-full rounded-lg border border-black bg-surface-inset pl-8 pr-2 text-sm font-bold text-[#f8fafc] outline-none"
+            />
+          </label>
+          <ViewLayoutToggle layout={viewLayout} onToggle={toggleViewLayout} />
+        </div>
 
         <div className="mt-2 min-h-0 flex-1 overflow-y-auto">
           {filteredShipments.length ? (
-            <ul className="grid gap-1">
-              {filteredShipments.map((row) => (
-                <li key={row.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(row.id)}
-                    className={`w-full rounded-lg border px-2.5 py-2 text-left transition ${
-                      selectedId === row.id
-                        ? "border-emerald-700/50 bg-emerald-950/30"
-                        : "border-black bg-surface-inset hover:bg-surface-card"
-                    }`}
-                  >
-                    <p className="truncate text-sm font-black text-[#f8fafc]">{row.code}</p>
-                    <p className="truncate text-[11px] font-bold text-slate-400">{row.customer_name}</p>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            viewLayout === "rows" ? (
+              <ul className="grid gap-1">
+                {filteredShipments.map((row) => (
+                  <li key={row.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(row.id)}
+                      className={`w-full rounded-lg border px-2.5 py-2 text-left transition ${
+                        selectedId === row.id
+                          ? "border-emerald-700/50 bg-emerald-950/30"
+                          : "border-black bg-surface-inset hover:bg-surface-card"
+                      }`}
+                    >
+                      <p className="truncate text-sm font-black text-[#f8fafc]">{row.code}</p>
+                      <p className="truncate text-[11px] font-bold text-slate-400">{row.customer_name}</p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <ul className="grid grid-cols-2 gap-1.5">
+                {filteredShipments.map((row) => (
+                  <li key={row.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(row.id)}
+                      className={`h-full w-full rounded-lg border px-2 py-2 text-left transition ${
+                        selectedId === row.id
+                          ? "border-emerald-700/50 bg-emerald-950/30"
+                          : "border-black bg-surface-inset hover:bg-surface-card"
+                      }`}
+                    >
+                      <p className="truncate text-xs font-black text-[#f8fafc]">{row.code}</p>
+                      <p className="mt-0.5 line-clamp-2 text-[10px] font-bold leading-snug text-slate-400">
+                        {row.customer_name}
+                      </p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )
           ) : (
             <p className="px-1 py-4 text-sm font-bold text-slate-500">Sin resultados</p>
           )}

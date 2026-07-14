@@ -19,13 +19,10 @@ function RangeDateField({
   disabled,
   onApply,
 }: RangeDateFieldProps) {
-  function commitValue(nextValue: string) {
-    if (!nextValue) {
-      return;
-    }
-
-    const nextFrom = field === "from" ? nextValue : otherValue;
-    const nextTo = field === "to" ? nextValue : otherValue;
+  function commitValue(next: string) {
+    if (!next) return;
+    const nextFrom = field === "from" ? next : otherValue;
+    const nextTo = field === "to" ? next : otherValue;
     onApply(nextFrom, nextTo);
   }
 
@@ -35,12 +32,12 @@ function RangeDateField({
         {label}
       </span>
       <DateInput
-        embedded
         value={value}
+        className="h-7 min-w-0 flex-1 border-0 bg-transparent px-0 text-xs"
         disabled={disabled}
-        ariaLabel={`Fecha ${label.toLowerCase()}`}
         onChange={commitValue}
-        onBlur={(nextValue) => commitValue(nextValue)}
+        ariaLabel={`Seleccionar fecha ${label.toLowerCase()}`}
+        embedded
       />
     </div>
   );
@@ -61,7 +58,7 @@ export function PeriodRangeToolbar({
 }: PeriodRangeToolbarProps) {
   return (
     <div
-      className="flex h-9 min-w-[15rem] flex-[1_1_16rem] items-stretch divide-x divide-black overflow-hidden rounded-lg border border-black bg-surface-inset sm:max-w-[20rem]"
+      className="flex h-9 min-w-[15rem] flex-[1_1_16rem] items-stretch divide-x divide-black overflow-visible rounded-lg border border-black bg-surface-inset sm:max-w-[20rem]"
       role="group"
       aria-label="Rango de fechas"
     >

@@ -8,10 +8,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const enviosSource = readFileSync(join(root, "components/envios-client.tsx"), "utf8");
 const displaySource = readFileSync(join(root, "lib/shipment-display.ts"), "utf8");
 const historialPageSource = readFileSync(
-  join(root, "app/envios/historial/page.tsx"),
+  join(root, "app/seguimiento/historial/page.tsx"),
   "utf8",
 );
-const trackingPageSource = readFileSync(join(root, "app/envios/page.tsx"), "utf8");
+const trackingPageSource = readFileSync(join(root, "app/seguimiento/page.tsx"), "utf8");
 
 describe("envios tracking vs history eval", () => {
   it("wires mode prop and partition helper in EnviosClient", () => {

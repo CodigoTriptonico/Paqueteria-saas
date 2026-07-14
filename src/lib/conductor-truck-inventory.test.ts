@@ -1,15 +1,25 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildConductorFullBoxCargo,
+  buildConductorTruckBalance,
   buildConductorTruckInventory,
   buildConductorTruckInventoryScope,
+  buildExtraBoxesOnTruck,
+  buildRouteBoxesOnTruck,
+  buildRouteDeliveryBoard,
   canConductorTruckLineLoad,
+  conductorTruckLoadTasks,
   conductorTruckLineKey,
   getConductorTruckLoadBlockReason,
   hasDeliverEventForTaskLine,
   isConductorTruckEventInScope,
+  isConductorTruckVehicleChangeReason,
   readConductorTruckBoxLinesFromPlan,
+  splitTruckLineOnTruckQty,
+  sumOnTruckLines,
   validateConductorTaskResultInput,
+  validateConductorTruckReturnInput,
   validateConductorTruckDeliver,
   validateConductorTruckLoad,
   type ConductorTruckBoxLine,
@@ -225,6 +235,70 @@ describe("buildConductorTruckInventory", () => {
       false,
     );
   });
+
+  it("keeps extra boxes in the truck across route dates when persistence is enabled", () => {
+    const summary = buildConductorTruckInventory({
+      tasks: [],
+      events: [
+        event("load", 5, {
+          routeId: "route-old",
+          createdAt: "2026-07-06T08:00:00.000Z",
+        }),
+        event("return", 2, {
+          routeId: "route-old",
+          createdAt: "2026-07-07T08:00:00.000Z",
+        }),
+      ],
+      stock: [stock({ stock: 20 })],
+      scope: { date: "2026-07-07", routeIds: [], taskIds: [] },
+      includePersistentEvents: true,
+    });
+
+    assert.equal(summary.lines[0]?.requiredQty, 0);
+    assert.equal(summary.lines[0]?.currentQty, 3);
+    assert.equal(summary.currentTotal, 3);
+  });
+
+  it("builds a per-driver balance from extra truck events", () => {
+    const balance = buildConductorTruckBalance({
+      vehicleId: "vehicle-1",
+      vehicleName: "Camion 1",
+      vehiclePlate: "ABC-123",
+      assignedDriverId: "driver-1",
+      assignedDriverName: "Ana",
+      events: [event("load", 4), event("deliver", 1)],
+      stock: [stock()],
+    });
+
+    assert.equal(balance.vehicleId, "vehicle-1");
+    assert.equal(balance.assignedDriverId, "driver-1");
+    assert.equal(balance.assignedDriverName, "Ana");
+    assert.equal(balance.totalQty, 3);
+    assert.equal(balance.lines[0]?.currentQty, 3);
+  });
+});
+
+describe("conductorTruckLoadTasks", () => {
+  it("includes a direct delivery even when the driver has no route", () => {
+    const directDelivery = { ...task({ id: "direct" }), routeId: null, routeName: null, routeDate: null };
+
+    assert.deepEqual(conductorTruckLoadTasks([directDelivery], null), [directDelivery]);
+  });
+
+  it("keeps direct deliveries alongside the selected route", () => {
+    const directDelivery = { ...task({ id: "direct" }), routeId: null, routeName: null, routeDate: null };
+    const selectedRouteTask = task({ id: "selected", routeId: "route-1" });
+    const otherRouteTask = task({ id: "other", routeId: "route-2" });
+    const pickupOnRoute = task({ id: "pickup", taskType: "pickup_full_box", routeId: "route-1" });
+
+    assert.deepEqual(
+      conductorTruckLoadTasks(
+        [directDelivery, selectedRouteTask, otherRouteTask, pickupOnRoute],
+        "route-1",
+      ).map((entry) => entry.id),
+      ["direct", "selected"],
+    );
+  });
 });
 
 describe("conductor truck validation", () => {
@@ -327,5 +401,154 @@ describe("conductor truck validation", () => {
 
     assert.equal(summary.currentTotal, 7);
     assert.equal(summary.deliveredTotal, 3);
+  });
+});
+
+describe("full box cargo", () => {
+  it("keeps collected boxes in the truck until warehouse unload", () => {
+    const summary = buildConductorFullBoxCargo([
+      event("collect_full_box", 2, {
+        taskId: "pickup-1",
+        shipmentId: "shipment-1",
+        routeId: "route-1",
+        itemLabel: "Caja grande",
+      }),
+      event("unload_full_box", 1, {
+        taskId: "pickup-1",
+        shipmentId: "shipment-1",
+        routeId: "route-1",
+        itemLabel: "Caja grande",
+      }),
+    ]);
+
+    assert.equal(summary.collectedTotal, 2);
+    assert.equal(summary.unloadedTotal, 1);
+    assert.equal(summary.pendingTotal, 1);
+  });
+});
+
+describe("truck on-truck split", () => {
+  it("splits route and extra quantities on the same line", () => {
+    assert.deepEqual(
+      splitTruckLineOnTruckQty({ requiredQty: 15, deliveredQty: 0, currentQty: 17 }),
+      { routeQty: 15, extraQty: 2 },
+    );
+    assert.deepEqual(
+      splitTruckLineOnTruckQty({ requiredQty: 0, deliveredQty: 0, currentQty: 4 }),
+      { routeQty: 0, extraQty: 4 },
+    );
+    assert.deepEqual(
+      splitTruckLineOnTruckQty({ requiredQty: 15, deliveredQty: 5, currentQty: 12 }),
+      { routeQty: 10, extraQty: 2 },
+    );
+  });
+
+  it("builds separate route and extra lists for the truck UI", () => {
+    const lines = [
+      {
+        key: "a",
+        catalogKey: "",
+        label: "14x14x14",
+        requiredQty: 9,
+        loadedQty: 9,
+        deliveredQty: 0,
+        returnedQty: 0,
+        currentQty: 9,
+        shortageQty: 0,
+        stockQty: 0,
+        itemId: "item-a",
+        itemName: "14x14x14",
+        warehouseId: "wh-1",
+        taskIds: [],
+        routeIds: [],
+      },
+      {
+        key: "b",
+        catalogKey: "",
+        label: "16x16x16",
+        requiredQty: 6,
+        loadedQty: 8,
+        deliveredQty: 0,
+        returnedQty: 0,
+        currentQty: 8,
+        shortageQty: 0,
+        stockQty: 0,
+        itemId: "item-b",
+        itemName: "16x16x16",
+        warehouseId: "wh-1",
+        taskIds: [],
+        routeIds: [],
+      },
+    ];
+
+    const routeLines = buildRouteBoxesOnTruck(lines);
+    const extraLines = buildExtraBoxesOnTruck(lines);
+
+    assert.equal(sumOnTruckLines(routeLines), 15);
+    assert.equal(sumOnTruckLines(extraLines), 2);
+    assert.equal(routeLines.find((line) => line.label === "16x16x16")?.qty, 6);
+    assert.equal(extraLines.find((line) => line.label === "16x16x16")?.qty, 2);
+  });
+
+  it("builds a route delivery board with loaded and pending quantities", () => {
+    const board = buildRouteDeliveryBoard([
+      {
+        key: "a",
+        catalogKey: "",
+        label: "14x14x14",
+        requiredQty: 9,
+        loadedQty: 0,
+        deliveredQty: 0,
+        returnedQty: 0,
+        currentQty: 0,
+        shortageQty: 9,
+        stockQty: 20,
+        itemId: "item-a",
+        itemName: "14x14x14",
+        warehouseId: "wh-1",
+        taskIds: [],
+        routeIds: [],
+      },
+      {
+        key: "b",
+        catalogKey: "",
+        label: "16x16x16",
+        requiredQty: 6,
+        loadedQty: 6,
+        deliveredQty: 0,
+        returnedQty: 0,
+        currentQty: 6,
+        shortageQty: 0,
+        stockQty: 10,
+        itemId: "item-b",
+        itemName: "16x16x16",
+        warehouseId: "wh-1",
+        taskIds: [],
+        routeIds: [],
+      },
+    ]);
+
+    assert.equal(board.length, 2);
+    assert.equal(board[0]?.pendingQty, 9);
+    assert.equal(board[0]?.onTruckQty, 0);
+    assert.equal(board[1]?.onTruckQty, 6);
+    assert.equal(board[1]?.pendingQty, 0);
+  });
+
+  it("requires a return reason for audit", () => {
+    assert.equal(validateConductorTruckReturnInput({ reason: "" }), "Selecciona un motivo");
+    assert.equal(validateConductorTruckReturnInput({ reason: "Sobro carga" }), "");
+    assert.equal(
+      validateConductorTruckReturnInput({ reason: "Cambio de vehiculo" }),
+      "Selecciona el vehículo destino",
+    );
+    assert.equal(
+      validateConductorTruckReturnInput({
+        reason: "Cambio de vehiculo",
+        targetVehicleId: "vehicle-2",
+      }),
+      "",
+    );
+    assert.equal(isConductorTruckVehicleChangeReason("Cambio de vehiculo"), true);
   });
 });

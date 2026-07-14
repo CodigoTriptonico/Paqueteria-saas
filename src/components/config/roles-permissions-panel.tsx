@@ -29,9 +29,8 @@ import {
 import type { PermissionKey, PermissionRow, RoleRow } from "@/lib/auth/types";
 import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
+import { settingsSectionClass as sectionClass } from "@/components/config/settings-panel-styles";
 
-const sectionClass =
-  "overflow-hidden rounded-xl border border-black bg-surface-card shadow-[0_8px_22px_rgba(0,0,0,0.18)]";
 const compactInputClass = `${inputClass} h-10`;
 
 const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
@@ -42,7 +41,7 @@ const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   },
   { title: "Rutas", keys: ["routes.view", "routes.update_status"] },
   {
-    title: "Administración",
+    title: "Administracion",
     keys: ["users.manage", "permissions.manage", "settings.manage"],
   },
 ];
@@ -135,11 +134,15 @@ export function RolesPermissionsPanel({
   const selectedRole = roles.find((role) => role.id === selectedRoleId) || null;
 
   useEffect(() => {
-    if (selectedRole) {
-      queueMicrotask(() => {
-        setEditRoleName(selectedRole.name);
-      });
-    }
+    if (!selectedRole) return;
+
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setEditRoleName(selectedRole.name);
+    });
+    return () => {
+      active = false;
+    };
   }, [selectedRole]);
   const allPermission = permissions.find((permission) => permission.key === "all") || null;
 
