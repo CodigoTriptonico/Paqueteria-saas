@@ -24,6 +24,6 @@ test("app shell lets mobile use document scroll", () => {
 test("app shell keeps desktop content scroll isolated", () => {
   assert.match(
     appShellSource,
-    /className="flex flex-col overflow-x-hidden pb-20 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-0"/,
+    /className="flex flex-col overflow-x-hidden pb-24 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-0"/,
   );
 });

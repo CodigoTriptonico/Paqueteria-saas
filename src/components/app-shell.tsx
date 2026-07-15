@@ -13,14 +13,13 @@ import {
   House,
   ListTodo,
   LucideIcon,
-  Menu,
+  MoreHorizontal,
   PackageCheck,
   Settings,
   Shield,
   Truck,
   Users,
   Layers3,
-  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { UserAccountMenu } from "@/components/user-account-menu";
@@ -205,6 +204,24 @@ function navGroupsForItems(items: NavItemDef[]) {
     .filter((section) => section.items.length > 0);
 }
 
+function mobilePrimaryNavItems(session: AppSession | null, items: NavItemDef[]) {
+  const byHref = new Map(items.map((item) => [item.href, item]));
+  const preferred =
+    session?.roleSlug === "conductor"
+      ? ["/conductor/tareas", "/conductor/inventario-camion"]
+      : session?.roleSlug === "distribuidor"
+        ? ["/distribuidor"]
+        : session?.roleSlug === "captador_distribuidores"
+          ? ["/mis-distribuidores"]
+          : ["/venta", "/seguimiento"];
+
+  return preferred.map((href) => byHref.get(href)).filter((item): item is NavItemDef => Boolean(item));
+}
+
+function isMobileHomeActive(active: string) {
+  return active === "Inicio";
+}
+
 function isNavSectionId(value: unknown): value is NavSectionId {
   return typeof value === "string" && navSections.some((section) => section.id === value);
 }
@@ -355,6 +372,39 @@ function ShellNavItem({ item, label, session, isActive, variant, onNavigate }: S
   );
 }
 
+function MobileBottomNav({
+  session,
+  items,
+  active,
+  moreOpen,
+  onMore,
+}: {
+  session: AppSession | null;
+  items: NavItemDef[];
+  active: string;
+  moreOpen: boolean;
+  onMore: () => void;
+}) {
+  const primary = mobilePrimaryNavItems(session, items);
+  const activeInPrimary = primary.some((item) => navItemLabel(item, session) === active);
+  const moreActive = !isMobileHomeActive(active) && !activeInPrimary;
+
+  return (
+    <nav aria-label="Navegación principal" className="fixed inset-x-0 bottom-0 z-[120] border-t border-black bg-[#17201d]/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_30px_rgba(0,0,0,0.32)] backdrop-blur lg:hidden">
+      <div className="mx-auto grid max-w-lg grid-cols-4 gap-1">
+        <Link href="/" className={`mobile-tab ${isMobileHomeActive(active) ? "mobile-tab-active" : ""}`} aria-current={isMobileHomeActive(active) ? "page" : undefined}><House className="h-5 w-5" /><span>Inicio</span></Link>
+        {primary.map((item) => {
+          const Icon = item.icon;
+          const selected = navItemLabel(item, session) === active;
+          return <Link key={item.href} href={item.href} className={`mobile-tab ${selected ? "mobile-tab-active" : ""}`} aria-current={selected ? "page" : undefined}><Icon className="h-5 w-5" /><span>{navItemLabel(item, session)}</span></Link>;
+        })}
+        {primary.length < 2 ? <span className="mobile-tab pointer-events-none opacity-0" aria-hidden /> : null}
+        <button type="button" onClick={onMore} className={`mobile-tab ${moreOpen || moreActive ? "mobile-tab-active" : ""}`} aria-expanded={moreOpen} aria-label={moreOpen ? "Cerrar más opciones" : "Abrir más opciones"}><MoreHorizontal className="h-5 w-5" /><span>Más</span></button>
+      </div>
+    </nav>
+  );
+}
+
 export function AppShell({
   session,
   active,
@@ -393,10 +443,13 @@ export function AppShell({
     sidebarNavItems[0] ??
     navItems[0];
   const mobileNavItems = useMemo(() => sidebarNavItems, [sidebarNavItems]);
-  const mobileNavGroups = useMemo(() => navGroupsForItems(mobileNavItems), [mobileNavItems]);
+  const mobileMoreNavGroups = useMemo(() => {
+    const primaryHrefs = new Set(mobilePrimaryNavItems(session, mobileNavItems).map((item) => item.href));
+    return navGroupsForItems(mobileNavItems.filter((item) => !primaryHrefs.has(item.href)));
+  }, [mobileNavItems, session]);
   const showCompactSidebar = hasCompactSidebarContent(compactContent);
   const showContextNav = Boolean(contextNavLabel && onContextNavBack);
-  const showMobileMainNav = !(navCollapsed && showCompactSidebar) && mobileNavItems.length > 0;
+  const showMobileMainNav = mobileNavItems.length > 0;
   const showDesktopRail = desktopSidebarCollapsed && !(navCollapsed && showCompactSidebar);
   const sidebarGroupsStorageKey = sidebarGroupsExpandedStorageKey(session);
 
@@ -742,32 +795,31 @@ export function AppShell({
             </div>
           ) : null}
 
-          <div className="flex flex-col overflow-x-hidden pb-20 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-0">
+          <div className="flex flex-col overflow-x-hidden pb-24 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-0">
             {children}
           </div>
 
           {showMobileMainNav ? (
             <>
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen((open) => !open)}
-                className="fixed bottom-5 right-5 z-[120] flex h-14 w-14 items-center justify-center rounded-full border border-black bg-emerald-400 text-slate-950 shadow-[0_10px_28px_rgba(0,0,0,0.45)] active:scale-[0.96] lg:hidden"
-                aria-label={mobileMenuOpen ? "Cerrar menu" : "Abrir menu"}
-                aria-expanded={mobileMenuOpen}
-              >
-                {mobileMenuOpen ? <X className="h-7 w-7" /> : <Menu className="h-7 w-7" />}
-              </button>
+              <MobileBottomNav
+                session={session}
+                items={mobileNavItems}
+                active={active}
+                moreOpen={mobileMenuOpen}
+                onMore={() => setMobileMenuOpen((open) => !open)}
+              />
 
               {mobileMenuOpen ? (
                 <div className="fixed inset-0 z-[110] lg:hidden">
                   <button
                     type="button"
-                    aria-label="Cerrar menu"
+                    aria-label="Cerrar más opciones"
                     className="absolute inset-0 bg-black/45"
                     onClick={() => setMobileMenuOpen(false)}
                   />
-                  <nav className="absolute inset-x-3 bottom-24 max-h-[62dvh] space-y-3 overflow-y-auto rounded-xl border border-black bg-surface-panel p-3 shadow-[0_18px_44px_rgba(0,0,0,0.55)]">
-                    {mobileNavGroups.map((section) => (
+                  <nav aria-label="Más opciones" className="absolute inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] max-h-[72dvh] space-y-3 overflow-y-auto rounded-t-[1.5rem] border border-black bg-surface-panel p-4 shadow-[0_-18px_44px_rgba(0,0,0,0.55)]">
+                    <div className="mx-auto mb-1 h-1.5 w-10 rounded-full bg-slate-600" />
+                    {mobileMoreNavGroups.map((section) => (
                       <div key={section.id} className="space-y-1.5">
                         <p className="px-2 text-[10px] font-black uppercase leading-none text-slate-500">
                           {section.label}

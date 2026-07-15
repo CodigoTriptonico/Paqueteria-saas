@@ -124,7 +124,7 @@ export function AppFrame({
       ? config.surfaceContextId
       : resolveSurfaceContextFromPathname(pathname);
 
-  if (pathname.startsWith("/login")) {
+  if (pathname.startsWith("/login") || pathname.startsWith("/rastrear")) {
     return (
       <NotificationProvider>
         {children}

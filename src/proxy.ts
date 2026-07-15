@@ -4,7 +4,7 @@ import { ACT_AS_ORG_COOKIE } from "@/lib/auth/act-as";
 import { clearAuthCookies } from "@/lib/auth/clear-auth-cookies";
 import { resolveAuthUser } from "@/lib/auth/resolve-auth-user";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/sign-in"];
+const PUBLIC_PATHS = ["/login", "/rastrear", "/api/auth/sign-in", "/api/public/tracking"];
 
 function redirectToLogin(
   request: NextRequest,

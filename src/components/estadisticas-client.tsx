@@ -24,10 +24,7 @@ export function EstadisticasClient({
   const sellerId = searchParams.get("seller");
   const sellerName = searchParams.get("sellerName");
   const [tab, setTab] = useState<"vendedores" | "distribuidores">(searchParams.get("tab") === "distribuidores" ? "distribuidores" : "vendedores");
-
-  useEffect(() => {
-    if (searchParams.get("seller")) setTab("vendedores");
-  }, [searchParams]);
+  const activeTab = sellerId ? "vendedores" : tab;
 
   useEffect(() => {
     const view = searchParams.get("view");
@@ -66,5 +63,5 @@ export function EstadisticasClient({
     enabled: Boolean(contextTitle),
   });
 
-  return <div className="space-y-3"><div className="flex w-fit overflow-hidden rounded-lg border border-black bg-surface-inset"><button onClick={() => setTab("vendedores")} className={`h-10 px-4 text-sm font-black ${tab === "vendedores" ? "bg-emerald-400 text-slate-950" : "text-slate-300 hover:bg-surface-card-hover"}`}>Vendedores</button><button onClick={() => setTab("distribuidores")} className={`h-10 border-l border-black px-4 text-sm font-black ${tab === "distribuidores" ? "bg-emerald-400 text-slate-950" : "text-slate-300 hover:bg-surface-card-hover"}`}>Distribuidores</button></div>{tab === "vendedores" ? <EstadisticasVentasPanel initialReport={initialVentasReport} initialError={initialVentasError} /> : <DistribuidoresPanel initialReport={initialDistributionReport} initialError={initialDistributionError} />}</div>;
+  return <div className="space-y-3"><div className="flex w-fit overflow-hidden rounded-lg border border-black bg-surface-inset"><button onClick={() => setTab("vendedores")} className={`h-10 px-4 text-sm font-black ${activeTab === "vendedores" ? "bg-emerald-400 text-slate-950" : "text-slate-300 hover:bg-surface-card-hover"}`}>Vendedores</button><button onClick={() => setTab("distribuidores")} className={`h-10 border-l border-black px-4 text-sm font-black ${activeTab === "distribuidores" ? "bg-emerald-400 text-slate-950" : "text-slate-300 hover:bg-surface-card-hover"}`}>Distribuidores</button></div>{activeTab === "vendedores" ? <EstadisticasVentasPanel initialReport={initialVentasReport} initialError={initialVentasError} /> : <DistribuidoresPanel initialReport={initialDistributionReport} initialError={initialDistributionError} />}</div>;
 }

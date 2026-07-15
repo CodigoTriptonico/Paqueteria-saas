@@ -52,9 +52,9 @@ describe("app shell sidebar eval", () => {
     assert.match(appShellSource, /\{ label: "Nueva venta", href: "\/venta", icon: CreditCard, section: "shipments"/);
   });
 
-  it("renders desktop and mobile nav from the same groups", () => {
+  it("renders desktop groups and derives the mobile more sheet from the same allowed items", () => {
     assert.match(appShellSource, /sidebarNavGroups\.map/);
-    assert.match(appShellSource, /mobileNavGroups\.map/);
+    assert.match(appShellSource, /mobileMoreNavGroups\.map/);
     assert.match(appShellSource, /navGroupsForItems/);
   });
 
@@ -170,9 +170,9 @@ describe("app shell sidebar eval", () => {
     assert.match(appShellSource, /sidebarNavGroups\.map/);
   });
 
-  it("keeps mobile nav on mobileNavGroups unchanged", () => {
-    assert.match(appShellSource, /mobileNavGroups\.map/);
-    assert.doesNotMatch(appShellSource, /mobileNavGroups\.map[\s\S]*showDesktopRail/);
+  it("keeps the mobile more sheet separate from desktop rail behavior", () => {
+    assert.match(appShellSource, /mobileMoreNavGroups\.map/);
+    assert.doesNotMatch(appShellSource, /mobileMoreNavGroups\.map[\s\S]*showDesktopRail/);
   });
 
   it("places desktop sidebar toggle in the grouped footer controls", () => {

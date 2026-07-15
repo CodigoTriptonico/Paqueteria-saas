@@ -35,7 +35,6 @@ export function buildDistributionMetricsReport(input: {
     balanceByPartner.set(row.partner_id, (balanceByPartner.get(row.partner_id) || 0) + Number(row.amount || 0));
     return row.kind === "payment" && inPeriod(row.created_at) ? sum + Math.abs(Number(row.amount || 0)) : sum;
   }, 0);
-  const partnerMap = new Map(input.partners.map((partner) => [partner.id, partner]));
   const sales = input.sales.filter((sale) => sale.invoice_status !== "void" && inPeriod(sale.created_at));
   const partnerSales = new Map<string, { saleCount: number; internalSales: number }>();
   const captorSales = new Map<string, { saleCount: number; internalSales: number }>();

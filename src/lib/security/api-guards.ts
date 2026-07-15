@@ -8,6 +8,12 @@ export const LOGIN_RATE_LIMIT = {
   maxAttempts: 8,
 } as const;
 
+export const PUBLIC_TRACKING_RATE_LIMIT = {
+  bucket: "public_tracking",
+  windowMs: 15 * 60 * 1000,
+  maxAttempts: 8,
+} as const;
+
 const VALIDATE_ADDRESS_RATE_LIMIT = {
   bucket: "validate_address",
   windowMs: 60 * 1000,
@@ -23,6 +29,10 @@ function loginRateLimitKey(ip: string, email: string) {
 
 function validateAddressRateLimitKey(ip: string, userId: string) {
   return `ip:${ip}|user:${userId}`;
+}
+
+function publicTrackingRateLimitKey(ip: string, code: string) {
+  return `ip:${ip}|code:${code}`;
 }
 
 export async function enforceLoginRateLimit(headers: Headers, email: string) {
@@ -54,6 +64,17 @@ export async function enforceValidateAddressRateLimit(headers: Headers, userId: 
     key: validateAddressRateLimitKey(ip, userId),
     windowMs: VALIDATE_ADDRESS_RATE_LIMIT.windowMs,
     maxAttempts: VALIDATE_ADDRESS_RATE_LIMIT.maxAttempts,
+  });
+}
+
+export async function enforcePublicTrackingRateLimit(headers: Headers, code: string) {
+  const admin = createSupabaseAdminClient();
+  if (!admin) return;
+  await assertRateLimit(admin, {
+    bucket: PUBLIC_TRACKING_RATE_LIMIT.bucket,
+    key: publicTrackingRateLimitKey(readClientIp(headers), code),
+    windowMs: PUBLIC_TRACKING_RATE_LIMIT.windowMs,
+    maxAttempts: PUBLIC_TRACKING_RATE_LIMIT.maxAttempts,
   });
 }
 

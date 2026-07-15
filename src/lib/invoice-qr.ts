@@ -6,7 +6,7 @@ export function invoiceQrValue(invoiceNumber: string, origin?: string) {
 
   const base = (origin || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
   if (base) {
-    return `${base}/seguimiento?q=${encodeURIComponent(trimmed)}`;
+    return `${base}/rastrear?codigo=${encodeURIComponent(trimmed)}`;
   }
 
   return trimmed;

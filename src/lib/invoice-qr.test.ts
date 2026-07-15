@@ -3,10 +3,10 @@ import { describe, it } from "node:test";
 import { invoiceQrValue } from "./invoice-qr";
 
 describe("invoiceQrValue", () => {
-  it("builds envios search url when origin is provided", () => {
+  it("builds public tracking url when origin is provided", () => {
     assert.equal(
       invoiceQrValue("INV-000042", "https://app.example.com"),
-      "https://app.example.com/seguimiento?q=INV-000042",
+      "https://app.example.com/rastrear?codigo=INV-000042",
     );
   });
 
