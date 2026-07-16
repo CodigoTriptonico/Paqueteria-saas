@@ -12,6 +12,7 @@ const criticalScripts = [
   "wipe-database.mjs",
   "seed-scgs-demo-catalog.mjs",
   "clear-sales-history.mjs",
+  "reset-operational-data-keep-catalog.mjs",
 ];
 
 for (const scriptName of criticalScripts) {
