@@ -60,6 +60,8 @@ export default async function ConductorTareasPage({
       previewDriverId={view.previewDriverId}
       effectiveDriverId={view.effectiveDriverId}
       effectiveDriverLabel={view.effectiveDriverLabel}
+      organizationId={session?.organizationId ?? ""}
+      userId={session?.userId ?? ""}
       initialTasks={initialTasks}
       initialCompletedTasks={initialCompletedTasks}
       initialTruckSummary={initialTruckSummary}

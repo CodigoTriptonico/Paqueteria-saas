@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Camera,
@@ -14,14 +14,13 @@ import {
   PackageCheck,
   Phone,
   RotateCcw,
+  RefreshCw,
+  WifiOff,
   X,
   XCircle,
 } from "lucide-react";
 import { ShipmentBoxLinesTrigger } from "@/components/shipment-box-lines-trigger";
-import {
-  submitConductorTaskResultAction,
-  reactivateConductorTaskAction,
-} from "@/app/actions/conductor-tasks";
+import { reactivateConductorTaskAction } from "@/app/actions/conductor-tasks";
 import { ActionConfirmDialog } from "@/components/action-confirm-dialog";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
 import {
@@ -58,6 +57,27 @@ import { buildMapsNavigationUrl } from "@/lib/logistics-navigation";
 import { estimateRouteStopEtaMinutes, formatEtaMinutes } from "@/lib/logistics-eta";
 import { buildLogisticaShipmentDeepLink } from "@/lib/logistics-view";
 import { formatScheduleAtDisplay } from "@/lib/sale/schedule-time";
+import {
+  CONDUCTOR_OFFLINE_CHANGED_EVENT,
+  cacheConductorOfflineShell,
+  enqueueConductorTaskResult,
+  flushConductorTaskResults,
+  pruneSyncedConductorOperations,
+  readConductorOfflineSnapshot,
+  removeConductorOperationsForTask,
+  requestConductorBackgroundSync,
+  requestPersistentConductorStorage,
+  retryConductorOfflineOperation,
+} from "@/lib/conductor-offline/queue";
+import {
+  conductorOfflineGlobalLabel,
+  conductorOfflineStatusLabel,
+  summarizeConductorOfflineOperations,
+} from "@/lib/conductor-offline/queue-core";
+import type {
+  ConductorOfflineOperation,
+  ConductorOfflineScope,
+} from "@/lib/conductor-offline/types";
 
 type ConductorTareasClientProps = {
   canPreview?: boolean;
@@ -65,6 +85,8 @@ type ConductorTareasClientProps = {
   previewDriverId?: string | null;
   effectiveDriverId?: string | null;
   effectiveDriverLabel: string;
+  organizationId: string;
+  userId: string;
   initialTasks?: ConductorDriverTask[];
   initialCompletedTasks?: ConductorDriverTask[];
   initialTruckSummary?: ConductorTruckInventorySummary | null;
@@ -82,9 +104,46 @@ type ConductorTaskItemProps = {
   isCompletedView: boolean;
   successDisabled: boolean;
   outcomeLabel: string;
+  syncOperation?: ConductorOfflineOperation;
   onOpenDialog: (task: ConductorDriverTask, result: "completed" | "failed") => void;
   onReactivate: (task: ConductorDriverTask) => void;
+  onRetrySync: (operationId: string) => void;
 };
+
+function ConductorTaskSyncBadge({
+  operation,
+  onRetry,
+}: {
+  operation: ConductorOfflineOperation;
+  onRetry: (operationId: string) => void;
+}) {
+  const needsAttention = operation.status === "needs_attention";
+  const tone = needsAttention
+    ? "border-rose-800/70 bg-rose-950/35 text-rose-200"
+    : operation.status === "synced"
+      ? "border-emerald-800/70 bg-emerald-950/35 text-emerald-200"
+      : "border-amber-800/70 bg-amber-950/30 text-amber-200";
+
+  if (needsAttention) {
+    return (
+      <button
+        type="button"
+        className={`inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 text-[11px] font-black ${tone}`}
+        title={operation.lastError || undefined}
+        onClick={() => onRetry(operation.id)}
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+        {conductorOfflineStatusLabel(operation)}
+      </button>
+    );
+  }
+
+  return (
+    <span className={`inline-flex min-h-8 items-center rounded-md border px-2 text-[11px] font-black ${tone}`}>
+      {conductorOfflineStatusLabel(operation)}
+    </span>
+  );
+}
 
 function CompactInfoDisclosure({
   ariaLabel,
@@ -220,8 +279,10 @@ function ConductorTaskCard({
   isCompletedView,
   successDisabled,
   outcomeLabel,
+  syncOperation,
   onOpenDialog,
   onReactivate,
+  onRetrySync,
 }: ConductorTaskItemProps) {
   return (
     <article className={`${listCardShellClass} flex flex-col overflow-hidden p-0`}>
@@ -312,6 +373,9 @@ function ConductorTaskCard({
 
         {isCompletedView ? (
           <>
+            {syncOperation ? (
+              <ConductorTaskSyncBadge operation={syncOperation} onRetry={onRetrySync} />
+            ) : null}
             <p
               className={`rounded-md border px-3 py-2 text-center text-sm font-black ${conductorTaskStatusClass(task.status)}`}
             >
@@ -323,7 +387,7 @@ function ConductorTaskCard({
             >
               Ver en logistica
             </Link>
-            {task.status === "cancelled" ? (
+            {task.status === "cancelled" && !syncOperation ? (
               <button
                 type="button"
                 className={`${secondaryButtonClass} h-11 text-sm`}
@@ -369,8 +433,10 @@ function ConductorTaskRow({
   isCompletedView,
   successDisabled,
   outcomeLabel,
+  syncOperation,
   onOpenDialog,
   onReactivate,
+  onRetrySync,
 }: ConductorTaskItemProps) {
   const mapsUrl = task.addressLine
     ? buildMapsNavigationUrl({ lat: task.lat, lng: task.lng, label: task.addressLine })
@@ -432,6 +498,9 @@ function ConductorTaskRow({
         ) : null}
         {isCompletedView ? (
           <>
+            {syncOperation ? (
+              <ConductorTaskSyncBadge operation={syncOperation} onRetry={onRetrySync} />
+            ) : null}
             <span
               className={`rounded-md border px-2 py-1 text-[11px] font-black ${conductorTaskStatusClass(task.status)}`}
             >
@@ -443,7 +512,7 @@ function ConductorTaskRow({
             >
               Logística
             </Link>
-            {task.status === "cancelled" ? (
+            {task.status === "cancelled" && !syncOperation ? (
               <button
                 type="button"
                 className={`${secondaryButtonClass} h-9 px-3 text-xs`}
@@ -492,6 +561,8 @@ export function ConductorTareasClient({
   previewDriverId = null,
   effectiveDriverId = null,
   effectiveDriverLabel,
+  organizationId,
+  userId,
   initialTasks = [],
   initialCompletedTasks = [],
   initialTruckSummary = null,
@@ -514,11 +585,24 @@ export function ConductorTareasClient({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [reactivateTask, setReactivateTask] = useState<ConductorDriverTask | null>(null);
   const [reactivating, setReactivating] = useState(false);
+  const [online, setOnline] = useState(true);
+  const [offlineSnapshot, setOfflineSnapshot] = useState(() => summarizeConductorOfflineOperations([]));
+  const submittingRef = useRef(false);
+  const refreshAfterSyncRef = useRef(false);
+
+  const offlineScope = useMemo<ConductorOfflineScope | null>(() => {
+    if (!organizationId || !userId || !effectiveDriverId) return null;
+    return { organizationId, userId, driverId: effectiveDriverId };
+  }, [effectiveDriverId, organizationId, userId]);
+  const offlineOperationByTaskId = useMemo(
+    () => new Map(offlineSnapshot.operations.map((operation) => [operation.taskId, operation])),
+    [offlineSnapshot.operations],
+  );
 
 
   const pendingTasks = useMemo(
-    () => initialTasks.filter((task) => !doneTaskIds.includes(task.id)),
-    [doneTaskIds, initialTasks],
+    () => initialTasks.filter((task) => !doneTaskIds.includes(task.id) && !offlineOperationByTaskId.has(task.id)),
+    [doneTaskIds, initialTasks, offlineOperationByTaskId],
   );
   const activeTasks = listMode === "pending" ? pendingTasks : completedTasks;
   const pendingSummary = useMemo(() => summarizeConductorTasks(pendingTasks), [pendingTasks]);
@@ -567,9 +651,14 @@ export function ConductorTareasClient({
 
   useEffect(() => {
     queueMicrotask(() => {
-      setCompletedTasks(initialCompletedTasks);
+      const localTasks = offlineSnapshot.operations.map((operation) => ({
+        ...operation.task,
+        status: operation.result === "completed" ? "completed" as const : "cancelled" as const,
+      }));
+      const merged = [...localTasks, ...initialCompletedTasks];
+      setCompletedTasks(merged.filter((task, index) => merged.findIndex((entry) => entry.id === task.id) === index));
     });
-  }, [initialCompletedTasks]);
+  }, [initialCompletedTasks, offlineSnapshot.operations]);
 
   const paymentExpectedAmount =
     dialog?.result === "completed" &&
@@ -581,21 +670,85 @@ export function ConductorTareasClient({
       : 0;
   const needsPaymentChoice = paymentExpectedAmount > 0;
 
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible") {
-        router.refresh();
-      }
-    };
+  const reloadOfflineSnapshot = useCallback(async () => {
+    if (!offlineScope) {
+      setOfflineSnapshot(summarizeConductorOfflineOperations([]));
+      return summarizeConductorOfflineOperations([]);
+    }
+    const snapshot = await readConductorOfflineSnapshot(offlineScope);
+    setOfflineSnapshot(snapshot);
+    return snapshot;
+  }, [offlineScope]);
 
-    const interval = window.setInterval(refresh, 30_000);
-    document.addEventListener("visibilitychange", refresh);
+  const syncOfflineResults = useCallback(async () => {
+    if (!offlineScope || !navigator.onLine) return;
+    const before = await readConductorOfflineSnapshot(offlineScope);
+    const after = await flushConductorTaskResults(offlineScope);
+    setOfflineSnapshot(after);
+    if (after.syncedCount > before.syncedCount && !refreshAfterSyncRef.current) {
+      refreshAfterSyncRef.current = true;
+      router.refresh();
+      window.setTimeout(() => {
+        refreshAfterSyncRef.current = false;
+      }, 2_000);
+    }
+  }, [offlineScope, router]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setDoneTaskIds([]);
+      setOnline(navigator.onLine);
+    });
+    void requestPersistentConductorStorage();
+    if (offlineScope && navigator.onLine) {
+      void cacheConductorOfflineShell(offlineScope);
+    }
+    queueMicrotask(() => {
+      void reloadOfflineSnapshot().then(() => syncOfflineResults());
+    });
+
+    const handleOnline = () => {
+      setOnline(true);
+      void syncOfflineResults();
+    };
+    const handleOffline = () => setOnline(false);
+    const handleChanged = () => void reloadOfflineSnapshot();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void syncOfflineResults();
+    };
+    const handleWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type === "BOXARIO_CONDUCTOR_QUEUE_CHANGED") handleChanged();
+    };
+    const channel = typeof BroadcastChannel !== "undefined"
+      ? new BroadcastChannel(CONDUCTOR_OFFLINE_CHANGED_EVENT)
+      : null;
+    if (channel) channel.onmessage = handleChanged;
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener(CONDUCTOR_OFFLINE_CHANGED_EVENT, handleChanged);
+    document.addEventListener("visibilitychange", handleVisibility);
+    navigator.serviceWorker?.addEventListener("message", handleWorkerMessage);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void syncOfflineResults();
+    }, 15_000);
 
     return () => {
       window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", refresh);
+      channel?.close();
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener(CONDUCTOR_OFFLINE_CHANGED_EVENT, handleChanged);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      navigator.serviceWorker?.removeEventListener("message", handleWorkerMessage);
     };
-  }, [router]);
+  }, [offlineScope, reloadOfflineSnapshot, syncOfflineResults]);
+
+  useEffect(() => {
+    if (!offlineScope) return;
+    const completedIds = new Set(initialCompletedTasks.map((task) => task.id));
+    void pruneSyncedConductorOperations(offlineScope, completedIds).then(reloadOfflineSnapshot);
+  }, [initialCompletedTasks, offlineScope, reloadOfflineSnapshot]);
 
   const handlePreviewDriverChange = useCallback(
     (nextDriverId: string) => {
@@ -634,7 +787,7 @@ export function ConductorTareasClient({
   }
 
   async function submitDialog() {
-    if (!dialog) {
+    if (!dialog || submittingRef.current) {
       return;
     }
 
@@ -655,32 +808,26 @@ export function ConductorTareasClient({
       return;
     }
 
+    if (!offlineScope) {
+      notify.error("No se pudo preparar el almacenamiento local");
+      return;
+    }
+
+    submittingRef.current = true;
     setSaving(true);
 
     try {
-      const formData = new FormData();
-      formData.set("taskId", dialog.task.id);
-      formData.set("result", dialog.result);
-      formData.set("failureReason", failureReason);
-      formData.set("note", note);
-      formData.set("paymentChoice", paymentChoice || "");
-      formData.set("paymentAmount", paymentAmount);
-      formData.set("paymentMethod", paymentMethod);
-
-      if (effectiveDriverId) {
-        formData.set("driverId", effectiveDriverId);
-      }
-
-      if (evidence) {
-        formData.set("evidence", evidence);
-      }
-
-      const result = await submitConductorTaskResultAction(formData);
-
-      if (!result.ok) {
-        notify.error(result.error);
-        return;
-      }
+      await enqueueConductorTaskResult({
+        scope: offlineScope,
+        task: dialog.task,
+        result: dialog.result,
+        failureReason,
+        note,
+        paymentChoice,
+        paymentAmount,
+        paymentMethod,
+        evidence,
+      });
 
       setDoneTaskIds((current) =>
         current.includes(dialog.task.id) ? current : [...current, dialog.task.id],
@@ -694,12 +841,33 @@ export function ConductorTareasClient({
         return [nextTask, ...current.filter((task) => task.id !== nextTask.id)];
       });
       setDialog(null);
-      notify.success(dialog.result === "completed" ? "Tarea completada" : "Visita cancelada");
-
-      router.refresh();
+      notify.success("Guardada en este teléfono");
+      await reloadOfflineSnapshot();
+      void requestConductorBackgroundSync();
+      void syncOfflineResults();
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : "No se pudo guardar en este teléfono");
     } finally {
+      submittingRef.current = false;
       setSaving(false);
     }
+  }
+
+  async function handleRetrySync(operationId: string) {
+    await retryConductorOfflineOperation(operationId);
+    await reloadOfflineSnapshot();
+    void requestConductorBackgroundSync();
+    void syncOfflineResults();
+  }
+
+  async function handleRetryAllSync() {
+    const operations = offlineSnapshot.operations.filter(
+      (operation) => operation.status === "needs_attention",
+    );
+    await Promise.all(operations.map((operation) => retryConductorOfflineOperation(operation.id)));
+    await reloadOfflineSnapshot();
+    void requestConductorBackgroundSync();
+    void syncOfflineResults();
   }
 
   async function confirmReactivateTask() {
@@ -722,6 +890,10 @@ export function ConductorTareasClient({
 
       setCompletedTasks((current) => current.filter((task) => task.id !== reactivateTask.id));
       setDoneTaskIds((current) => current.filter((taskId) => taskId !== reactivateTask.id));
+      if (offlineScope) {
+        await removeConductorOperationsForTask(offlineScope, reactivateTask.id);
+        await reloadOfflineSnapshot();
+      }
       setReactivateTask(null);
       setTaskFilter(reactivateTask.taskType);
       setListMode("pending");
@@ -760,6 +932,8 @@ export function ConductorTareasClient({
 
   const shortageTotal = initialTruckSummary?.shortageTotal ?? 0;
   const routeBlocked = !canPreview && listMode === "pending" && shortageTotal > 0;
+  const offlineGlobalLabel = conductorOfflineGlobalLabel(offlineSnapshot, online);
+  const hasSyncActivity = offlineSnapshot.pendingCount + offlineSnapshot.syncingCount > 0;
 
   return (
     <>
@@ -873,6 +1047,30 @@ export function ConductorTareasClient({
                 <span className="rounded-full border border-black bg-surface-inset px-1.5 py-0.5 text-xs font-black tabular-nums text-slate-300">{completedCount}</span>
               </button>
           </div>
+
+          <button
+            type="button"
+            className={`flex h-10 min-w-0 items-center gap-1.5 rounded-md border border-black px-2.5 text-xs font-black ${
+              offlineSnapshot.needsAttentionCount > 0
+                ? "bg-rose-950/35 text-rose-200"
+                : hasSyncActivity
+                  ? "bg-amber-950/30 text-amber-200"
+                  : "bg-emerald-950/25 text-emerald-200"
+            }`}
+            aria-live="polite"
+            disabled={offlineSnapshot.needsAttentionCount === 0}
+            title={offlineSnapshot.needsAttentionCount > 0 ? "Reintentar sincronización" : undefined}
+            onClick={() => void handleRetryAllSync()}
+          >
+            {!online ? (
+              <WifiOff className="h-4 w-4 shrink-0" />
+            ) : hasSyncActivity ? (
+              <RefreshCw className={`h-4 w-4 shrink-0 ${offlineSnapshot.syncingCount > 0 ? "animate-spin" : ""}`} />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+            )}
+            <span className="truncate">{offlineGlobalLabel}</span>
+          </button>
         </section>
 
         {routeBlocked ? (
@@ -910,8 +1108,10 @@ export function ConductorTareasClient({
                         isCompletedView={isCompletedView}
                         successDisabled={successDisabled}
                         outcomeLabel={conductorTaskOutcomeLabel(task.status)}
+                        syncOperation={offlineOperationByTaskId.get(task.id)}
                         onOpenDialog={openDialog}
                         onReactivate={setReactivateTask}
+                        onRetrySync={(operationId) => void handleRetrySync(operationId)}
                       />
                     );
                   })}
@@ -934,8 +1134,10 @@ export function ConductorTareasClient({
                       isCompletedView={isCompletedView}
                       successDisabled={successDisabled}
                       outcomeLabel={conductorTaskOutcomeLabel(task.status)}
+                      syncOperation={offlineOperationByTaskId.get(task.id)}
                       onOpenDialog={openDialog}
                       onReactivate={setReactivateTask}
+                      onRetrySync={(operationId) => void handleRetrySync(operationId)}
                     />
                   );
                 })}

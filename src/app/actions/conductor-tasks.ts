@@ -26,6 +26,7 @@ import {
   conductorTaskTypeLabel,
   isConductorClosedTaskInScope,
   isTaskAssignedToDriver,
+  scheduledAtScopeDate,
   type ConductorDriverTask,
 } from "@/lib/conductor-tasks";
 import {
@@ -404,6 +405,7 @@ async function loadTruckInventoryView(
   session: AppSession,
   driverId: string,
   routeId?: string | null,
+  scopeDate = conductorScopeDate(),
 ): Promise<ConductorTruckInventoryView> {
   const supabase = await createScopedSupabase(session);
   const admin = createSupabaseAdminClient();
@@ -412,7 +414,6 @@ async function loadTruckInventoryView(
     throw new Error("Supabase service role no configurado");
   }
 
-  const scopeDate = conductorScopeDate();
   const conductorData = await loadConductorData(driverId, scopeDate);
   const routes = conductorData.routes
     .filter(
@@ -609,7 +610,13 @@ async function insertFullBoxCollectionEvent(
   }
 }
 
-async function uploadEvidence(admin: Admin, session: AppSession, taskId: string, file: File | null) {
+async function uploadEvidence(
+  admin: Admin,
+  session: AppSession,
+  taskId: string,
+  clientOperationId: string,
+  file: File | null,
+) {
   if (!file || !file.name || file.size <= 0) {
     return "";
   }
@@ -623,13 +630,14 @@ async function uploadEvidence(admin: Admin, session: AppSession, taskId: string,
   }
 
   const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "webp";
-  const path = `${session.organizationId}/${taskId}/${randomUUID()}.${extension}`;
+  const safeOperationId = clientOperationId.replace(/[^a-zA-Z0-9-]/g, "");
+  const path = `${session.organizationId}/${taskId}/${safeOperationId}.${extension}`;
   const { error } = await admin.storage.from(LOGISTICS_TASK_EVIDENCE_BUCKET).upload(path, file, {
     contentType: file.type,
     upsert: false,
   });
 
-  if (error) {
+  if (error && !/already exists|duplicate/i.test(error.message)) {
     throw new Error(error.message);
   }
 
@@ -753,6 +761,8 @@ async function recordTaskAttempt(admin: Admin, session: AppSession, input: {
   paymentAmount: number;
   paymentMethod: PaymentMethod | "";
   paymentOutcome: ConductorPaymentOutcome;
+  clientOperationId: string;
+  capturedAt: string | null;
 }) {
   const audit = conductorActionAudit(session, input.driverId);
   const note = formatConductorAdminActionNote(input.note, audit);
@@ -774,10 +784,33 @@ async function recordTaskAttempt(admin: Admin, session: AppSession, input: {
     payment_outcome: input.paymentOutcome,
     payment_amount: input.paymentOutcome === "not_applicable" ? null : input.paymentAmount,
     payment_method: input.paymentMethod || null,
+    client_operation_id: input.clientOperationId,
+    captured_at: input.capturedAt,
     created_by: session.userId,
   });
 
   if (error) {
+    if (error.code === "23505" && input.clientOperationId) {
+      const { data: existingAttempt, error: lookupError } = await admin
+        .from("shipment_logistics_task_attempts")
+        .select("task_id, driver_id, result")
+        .eq("organization_id", session.organizationId)
+        .eq("client_operation_id", input.clientOperationId)
+        .maybeSingle();
+
+      if (lookupError) {
+        throw new Error(lookupError.message);
+      }
+
+      if (
+        existingAttempt?.task_id === input.task.id &&
+        existingAttempt.driver_id === input.driverId &&
+        existingAttempt.result === input.result
+      ) {
+        return;
+      }
+    }
+
     throw new Error(error.message);
   }
 }
@@ -837,7 +870,7 @@ async function completeTask(admin: Admin, session: AppSession, input: {
   const taskPatch: Record<string, string | null> = {
     status: "completed",
     completed_at: now,
-    notes: input.note || null,
+    notes: input.note,
     updated_at: now,
   };
 
@@ -1805,6 +1838,15 @@ export async function submitConductorTaskResultAction(
     const paymentChoiceValue = cleanText(formData.get("paymentChoice"), 20);
     const customPaymentAmount = Math.max(parseMoneyValue(cleanText(formData.get("paymentAmount"), 40)), 0);
     const paymentMethod = readPaymentMethod(formData.get("paymentMethod"));
+    const operationIdValue = cleanText(formData.get("operationId"), 80);
+    const clientOperationId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(operationIdValue)
+      ? operationIdValue
+      : randomUUID();
+    const capturedAtValue = cleanText(formData.get("capturedAt"), 80);
+    const capturedAtDate = capturedAtValue ? new Date(capturedAtValue) : null;
+    const capturedAt = capturedAtDate && !Number.isNaN(capturedAtDate.getTime())
+      ? capturedAtDate.toISOString()
+      : null;
     const evidence = formData.get("evidence");
     const evidenceFile = evidence instanceof File && evidence.name ? evidence : null;
 
@@ -1823,10 +1865,17 @@ export async function submitConductorTaskResultAction(
     }
 
     if (taskRow.status === "cancelled") {
-      return fail("Tarea cancelada");
+      const { data: repeatedAttempt } = await admin
+        .from("shipment_logistics_task_attempts")
+        .select("id")
+        .eq("organization_id", session.organizationId)
+        .eq("client_operation_id", clientOperationId)
+        .maybeSingle();
+      return repeatedAttempt ? ok({ taskId }) : fail("Tarea cancelada");
     }
 
-    const { tasks, shipments, routes } = await loadConductorData(driverId);
+    const taskScopeDate = scheduledAtScopeDate(taskRow.scheduled_at) || conductorScopeDate();
+    const { tasks, shipments, routes } = await loadConductorData(driverId, taskScopeDate);
     const routeByTaskId = buildRouteByTaskId(routes);
     const routeInfo = routeByTaskId.get(taskRow.id);
 
@@ -1895,7 +1944,7 @@ export async function submitConductorTaskResultAction(
       return fail("Invoice no encontrado");
     }
 
-    const evidenceUrl = await uploadEvidence(admin, session, task.id, evidenceFile);
+    const evidenceUrl = await uploadEvidence(admin, session, task.id, clientOperationId, evidenceFile);
 
     if (result === "completed" && task.taskType === "deliver_empty_box") {
       const supabase = await createScopedSupabase(session);
@@ -1904,7 +1953,7 @@ export async function submitConductorTaskResultAction(
         throw new Error("Supabase service role no configurado");
       }
 
-      const view = await loadTruckInventoryView(session, driverId, task.routeId);
+      const view = await loadTruckInventoryView(session, driverId, task.routeId, taskScopeDate);
       const vehicleId = requireTruckVehicleId(view);
       const existingEvents = await loadTruckEvents(supabase, session, vehicleId);
 
@@ -1951,7 +2000,7 @@ export async function submitConductorTaskResultAction(
         throw new Error("Supabase service role no configurado");
       }
 
-      const view = await loadTruckInventoryView(session, driverId, task.routeId);
+      const view = await loadTruckInventoryView(session, driverId, task.routeId, taskScopeDate);
       const vehicleId = requireTruckVehicleId(view);
       const existingEvents = await loadTruckEvents(supabase, session, vehicleId);
 
@@ -1991,6 +2040,8 @@ export async function submitConductorTaskResultAction(
       paymentAmount,
       paymentMethod: paymentOutcome === "collected" ? paymentMethod : "",
       paymentOutcome,
+      clientOperationId,
+      capturedAt,
     });
 
     if (result === "failed") {

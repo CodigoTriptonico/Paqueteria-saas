@@ -157,7 +157,7 @@ export function conductorScopeDate(reference = new Date()) {
   return formatScheduleDateInput(reference);
 }
 
-function scheduledAtScopeDate(scheduledAt: string | null) {
+export function scheduledAtScopeDate(scheduledAt: string | null) {
   if (!scheduledAt) {
     return null;
   }

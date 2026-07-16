@@ -16,6 +16,22 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: resolveDevTunnelOrigins({
     tunnelUrl: loadTunnelUrlFromFile(),
   }),
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+      {
+        source: "/api/conductor/task-results",
+        headers: [{ key: "Cache-Control", value: "private, no-store" }],
+      },
+    ];
+  },
   async redirects() {
     return [
       {

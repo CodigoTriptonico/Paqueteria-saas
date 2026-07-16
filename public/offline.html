@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#152019" />
+    <title>Boxario sin conexión</title>
+    <style>
+      :root { color-scheme: dark; font-family: Arial, sans-serif; background: #101713; color: #f8fafc; }
+      body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 20px; box-sizing: border-box; }
+      main { width: min(100%, 420px); border: 1px solid #000; border-radius: 16px; background: #1b2520; padding: 22px; box-shadow: 0 18px 50px #0008; }
+      img { width: 58px; height: 58px; }
+      h1 { margin: 14px 0 8px; font-size: 24px; }
+      p { margin: 0; color: #b8c3bd; font-weight: 700; line-height: 1.5; }
+      button { width: 100%; margin-top: 18px; min-height: 48px; border: 1px solid #000; border-radius: 10px; background: #34d399; color: #08110c; font-weight: 900; font-size: 16px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/app-icon.svg" alt="" />
+      <h1>Sin conexión</h1>
+      <p>Las entregas que ya guardaste siguen seguras en este teléfono. Abre de nuevo las tareas cuando regrese la señal.</p>
+      <button type="button" onclick="location.reload()">Intentar de nuevo</button>
+    </main>
+  </body>
+</html>

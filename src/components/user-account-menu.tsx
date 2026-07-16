@@ -9,6 +9,12 @@ import { actionConfirmButtonClass } from "@/components/action-confirm-dialog";
 import { secondaryButtonClass } from "@/components/ui-blocks";
 import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
 import type { AppSession } from "@/lib/auth/types";
+import { useNotify } from "@/hooks/use-notify";
+import {
+  clearConductorOfflineUserData,
+  clearConductorPrivateCache,
+  countUnconfirmedConductorOperations,
+} from "@/lib/conductor-offline/queue";
 
 function initialsFromSession(session: AppSession) {
   const source = session.fullName?.trim() || session.email;
@@ -25,6 +31,7 @@ type UserAccountMenuProps = {
 };
 
 export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuProps) {
+  const notify = useNotify();
   const [open, setOpen] = useState(false);
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -69,8 +76,27 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
   }, [open, signOutConfirmOpen]);
 
   async function handleSignOut() {
+    if (!session) return;
     setSigningOut(true);
-    await signOutAction();
+    try {
+      const pendingCount = await countUnconfirmedConductorOperations(
+        session.organizationId,
+        session.userId,
+      );
+      if (pendingCount > 0) {
+        notify.error(
+          `No puedes cerrar sesión: ${pendingCount} ${pendingCount === 1 ? "entrega sigue" : "entregas siguen"} pendiente de sincronizar`,
+        );
+        setSignOutConfirmOpen(false);
+        return;
+      }
+
+      await clearConductorPrivateCache();
+      await clearConductorOfflineUserData(session.organizationId, session.userId);
+      await signOutAction();
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   if (!session) {

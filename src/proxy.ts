@@ -34,6 +34,10 @@ export async function proxy(request: NextRequest) {
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
+    pathname === "/sw.js" ||
+    pathname === "/offline.html" ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/app-icon.svg" ||
     pathname.match(/\.(svg|png|jpg|jpeg|gif|webp)$/)
   ) {
     return NextResponse.next();
