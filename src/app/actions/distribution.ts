@@ -7,7 +7,7 @@ import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { availableDistributionCredit, distributionBalance, type DistributionLedgerEntry } from "@/lib/distribution/ledger";
 
-export type DistributionOffer = {
+type DistributionOffer = {
   id: string;
   countryName: string;
   catalogKey: string;
@@ -17,7 +17,7 @@ export type DistributionOffer = {
   isActive: boolean;
 };
 
-export type DistributionLedgerRow = DistributionLedgerEntry & {
+type DistributionLedgerRow = DistributionLedgerEntry & {
   id: string;
   shipmentCode: string | null;
   note: string;
@@ -42,7 +42,7 @@ export type DistributionPartner = {
   shipments: DistributionShipment[];
 };
 
-export type DistributionShipment = {
+type DistributionShipment = {
   id: string;
   code: string;
   status: string;

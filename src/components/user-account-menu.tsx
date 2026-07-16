@@ -87,7 +87,7 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
     ? "flex w-full items-center justify-center rounded-lg border border-black bg-surface-card p-2 transition-colors hover:bg-[#2f3834]"
     : isSidebar
       ? "flex w-full items-center gap-3 overflow-hidden rounded-lg border border-black bg-surface-card px-3 py-2.5 text-left transition-colors hover:bg-[#2f3834]"
-      : "flex items-center gap-2 overflow-hidden rounded-lg border border-black bg-surface-card px-2 py-1.5 pr-3 transition-colors hover:bg-[#2f3834] sm:gap-3 sm:px-3 sm:py-2";
+      : "flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-black bg-surface-card p-0 transition-colors hover:bg-[#2f3834] sm:h-auto sm:w-auto sm:gap-3 sm:px-3 sm:py-2";
 
   const menuPositionClass = isRail
     ? "left-full top-0 ml-2 w-72"
@@ -114,12 +114,12 @@ export function UserAccountMenu({ session, variant = "bar" }: UserAccountMenuPro
         </span>
         {isRail ? null : (
           <>
-            <span className="relative min-w-0 flex-1">
+            <span className="relative hidden min-w-0 flex-1 sm:block">
               <span className="block truncate text-sm font-black text-emerald-200">{primaryLine}</span>
               <span className="block truncate text-xs text-slate-400">{secondaryLine}</span>
             </span>
             <ChevronDown
-              className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+              className={`hidden h-4 w-4 shrink-0 text-slate-400 transition-transform sm:block ${open ? "rotate-180" : ""}`}
               aria-hidden
             />
           </>

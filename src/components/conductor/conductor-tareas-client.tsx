@@ -110,8 +110,8 @@ function CompactInfoDisclosure({
         !
       </summary>
       <div
-        className={`absolute top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-black bg-surface-panel px-3 py-2.5 text-sm font-bold leading-snug text-slate-200 shadow-xl ${
-          align === "right" ? "right-0" : "left-0"
+        className={`fixed inset-x-4 top-1/2 z-30 max-w-none -translate-y-1/2 rounded-lg border border-black bg-surface-panel px-3 py-2.5 text-sm font-bold leading-snug text-slate-200 shadow-xl sm:absolute sm:inset-x-auto sm:top-full sm:mt-2 sm:w-72 sm:max-w-[calc(100vw-2rem)] sm:translate-y-0 ${
+          align === "right" ? "sm:right-0" : "sm:left-0"
         }`}
       >
         {children}

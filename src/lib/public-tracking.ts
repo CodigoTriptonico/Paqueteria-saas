@@ -2,7 +2,7 @@ import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
 import { isPaymentMethod, paymentMethodLabel } from "@/lib/payment-methods";
 import { readBillingFromPlan } from "@/lib/invoice-billing";
 
-export type PublicTrackingMilestone = {
+type PublicTrackingMilestone = {
   id: "created" | "empty_box" | "full_box" | "office" | "departed" | "shipped" | "delivered";
   label: string;
   at: string | null;

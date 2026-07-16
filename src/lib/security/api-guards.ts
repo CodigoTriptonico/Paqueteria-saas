@@ -8,7 +8,7 @@ export const LOGIN_RATE_LIMIT = {
   maxAttempts: 8,
 } as const;
 
-export const PUBLIC_TRACKING_RATE_LIMIT = {
+const PUBLIC_TRACKING_RATE_LIMIT = {
   bucket: "public_tracking",
   windowMs: 15 * 60 * 1000,
   maxAttempts: 8,
