@@ -43,6 +43,8 @@ http://localhost:3000/login
 | `npm run db:check` | Revisar migraciones esperadas |
 | `npm run db:restore-owner` | Crear dueño de plataforma local |
 | `npm run db:inspect` | Inspeccionar tablas locales |
+| `npm run db:seed:demo-catalog` | Asegurar la semilla base de remitentes, destinatarios, países, ítems y precios |
+| `npm run db:reset:baseline` | Reiniciar la operación y volver a cargar la semilla base sin borrar el catálogo ni los usuarios |
 | `npm run db:list-users` | Listar usuarios locales |
 | `npm run db:delete-users` | Borrar todos los usuarios y orgs (dev) |
 | `npm run db:repair-plan-limits` | Reparar límites de plan (migración 015) |

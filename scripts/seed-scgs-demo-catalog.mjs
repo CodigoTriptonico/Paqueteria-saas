@@ -19,6 +19,8 @@ const BOX_SIZES = [
   { name: "18x18x18", price: "$65", cost: "$40" },
 ];
 
+const BASELINE_RECIPIENTS_PER_COUNTRY = 5;
+
 function normalizeLabel(value) {
   return value
     .normalize("NFD")
@@ -213,25 +215,26 @@ try {
   let recipientsInserted = 0;
   let recipientsSkipped = 0;
 
-  for (const [senderIndex, sender] of senders.rows.entries()) {
+  for (const [countryIndex, country] of COUNTRIES.entries()) {
     const existing = await client.query(
-      `SELECT country FROM public.customer_recipients
-       WHERE customer_id = $1 AND organization_id = $2`,
-      [sender.id, SCGS_ORG_ID],
+      `SELECT customer_id, country
+       FROM public.customer_recipients
+       WHERE organization_id = $1`,
+      [SCGS_ORG_ID],
     );
 
-    const existingCountries = existing.rows.map((row) => row.country);
+    const existingForCountry = existing.rows.filter((row) =>
+      isSameCountry(row.country, country.name),
+    );
+    const existingSenderIds = new Set(existingForCountry.map((row) => row.customer_id));
+    const sendersToSeed = senders.rows
+      .filter((sender) => !existingSenderIds.has(sender.id))
+      .slice(0, Math.max(0, BASELINE_RECIPIENTS_PER_COUNTRY - existingForCountry.length));
 
-    for (const [countryIndex, country] of COUNTRIES.entries()) {
-      const alreadyHasCountry = existingCountries.some((name) =>
-        isSameCountry(name, country.name),
-      );
+    recipientsSkipped += existingForCountry.length;
 
-      if (alreadyHasCountry) {
-        recipientsSkipped += 1;
-        continue;
-      }
-
+    for (const sender of sendersToSeed) {
+      const senderIndex = senders.rows.findIndex((candidate) => candidate.id === sender.id);
       const recipient = recipientForSenderIndexed(sender, country.name, senderIndex, countryIndex);
 
       await client.query(

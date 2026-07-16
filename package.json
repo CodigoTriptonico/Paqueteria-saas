@@ -38,6 +38,7 @@
     "db:seed:invoice-scenarios": "node scripts/seed-invoice-scenarios.mjs",
     "db:seed:envios-pending": "node scripts/seed-envios-pending.mjs",
     "db:reset:catalog": "node scripts/reset-scgs-catalog.mjs",
+    "db:reset:baseline": "node scripts/reset-app-to-baseline.mjs",
     "db:reset:scgs": "node scripts/reset-scgs-demo-data.mjs",
     "db:clear:sales": "node scripts/clear-sales-history.mjs",
     "db:local:reset": "npx supabase db reset",
