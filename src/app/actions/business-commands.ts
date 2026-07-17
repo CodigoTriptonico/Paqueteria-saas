@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
+import {
+  captorAgencyLimitMessage,
+  isCaptorAgencyLimitError,
+} from "@/lib/agency-captor-limit";
 import { sessionHasPermission } from "@/lib/auth/permissions";
 import { requireAppSession } from "@/lib/auth/session";
 import type { PermissionKey } from "@/lib/auth/types";
@@ -18,6 +22,12 @@ type RpcName =
   | "reconcile_driver_settlement"
   | "reverse_financial_event"
   | "authorize_international_release";
+
+function businessActionErrorMessage(error: unknown) {
+  const message = actionErrorMessage(error);
+
+  return isCaptorAgencyLimitError(message) ? captorAgencyLimitMessage() : message;
+}
 
 async function runBusinessRpc(
   name: RpcName,
@@ -47,7 +57,7 @@ async function runBusinessRpc(
 
     return ok(data as OperationResult);
   } catch (error) {
-    return fail(actionErrorMessage(error));
+    return fail(businessActionErrorMessage(error));
   }
 }
 

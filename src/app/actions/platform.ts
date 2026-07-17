@@ -159,6 +159,15 @@ export async function createOrganizationAction(input: {
       await deleteAuthUserSafely(admin, created.user.id);
       return fail(bootstrapError?.message || "No se pudo crear la empresa.");
     }
+    const { error: businessInitializationError } = await admin.rpc(
+      "initialize_business_matrix_organization",
+      { target_organization_id: organizationId as string },
+    );
+    if (businessInitializationError) {
+      return fail(
+        businessInitializationError.message || "No se pudo preparar la empresa para operar agencias.",
+      );
+    }
     const maxUsers = Math.max(
       1,
       Math.min(500, Math.trunc(input.settings?.maxUsers || 5)),
