@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   AlertCircle,
+  ArrowLeft,
   Building2,
   CheckCircle2,
   Ellipsis,
@@ -314,6 +315,7 @@ export function PlatformConsole() {
   return (
     <>
       <Panel
+        className={selectedOrg ? "hidden" : undefined}
         title={
           <span className="flex w-full min-w-0 items-center justify-between gap-3">
             <span className="truncate">Empresas</span>
@@ -339,10 +341,31 @@ export function PlatformConsole() {
           </p>
         ) : null}
         <div className="mb-5 grid grid-cols-2 gap-2 lg:grid-cols-5">
+          {FILTER_OPTIONS.map((filter) => {
+            const summary =
+              filter.value === "all"
+                ? { label: "Empresas", value: platformStats.total, tone: "text-slate-100" }
+                : filter.value === "active"
+                  ? { label: "Activas", value: platformStats.active, tone: "text-emerald-300" }
+                  : { label: "Inactivas", value: platformStats.inactive, tone: "text-rose-300" };
+            const selected = statusFilter === filter.value;
+
+            return (
+              <button
+                key={filter.value}
+                type="button"
+                onClick={() => setStatusFilter(filter.value)}
+                aria-pressed={selected}
+                className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${selected ? "border-emerald-600 bg-emerald-950/45" : "border-black bg-surface-card hover:bg-surface-card-hover"}`}
+              >
+                <p className={labelMutedClass}>{summary.label}</p>
+                <p className={`mt-1 text-2xl font-black tabular-nums ${summary.tone}`}>
+                  {summary.value}
+                </p>
+              </button>
+            );
+          })}
           {[
-            ["Empresas", platformStats.total, "text-slate-100"],
-            ["Activas", platformStats.active, "text-emerald-300"],
-            ["Inactivas", platformStats.inactive, "text-rose-300"],
             ["Usuarios", platformStats.users, "text-slate-100"],
             ["Bodegas", platformStats.warehouses, "text-slate-100"],
           ].map(([label, value, tone]) => (
@@ -357,20 +380,8 @@ export function PlatformConsole() {
             </div>
           ))}
         </div>
-        <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center">
-          <div className="flex shrink-0 gap-1 overflow-x-auto">
-            {FILTER_OPTIONS.map((filter) => (
-              <button
-                key={filter.value}
-                type="button"
-                onClick={() => setStatusFilter(filter.value)}
-                className={`h-10 shrink-0 rounded-md border px-3 text-xs font-black ${statusFilter === filter.value ? "border-emerald-600 bg-emerald-950/40 text-emerald-200" : "border-black bg-surface-inset text-slate-400 hover:bg-surface-card-hover"}`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-          <label className="relative min-w-0 flex-1">
+        <div className="mb-4">
+          <label className="relative block w-full max-w-xl">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input
               value={query}
@@ -379,9 +390,6 @@ export function PlatformConsole() {
               className={`${inputClass} h-10 w-full pl-9`}
             />
           </label>
-          <p className="hidden shrink-0 text-xs font-bold text-slate-500 xl:block">
-            Clic derecho para opciones
-          </p>
         </div>
         {filteredOrganizations.length ? (
           <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -431,12 +439,25 @@ export function PlatformConsole() {
       </Panel>
 
       {selectedOrg ? (
-        <Panel title={selectedOrg.name} className="mt-4">
+        <Panel title={selectedOrg.name} className="min-h-[calc(100dvh-7rem)]">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-black bg-surface-card-header px-3 py-2.5">
+            <button
+              type="button"
+              onClick={handlePlatformNavBack}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-slate-100 hover:bg-surface-card-hover"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Empresas
+            </button>
+            <p className="text-xs font-bold text-slate-500">
+              Detalle de empresa
+            </p>
+          </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black pb-4">
             <div>
-              <p className={labelMutedClass}>Administracion de empresa</p>
+              <p className={labelMutedClass}>Administración de empresa</p>
               <p className={`mt-1 text-sm ${textMutedClass}`}>
-                Usuarios y operacion se administran dentro de esta empresa.
+                Usuarios, bodegas y operación se administran dentro de esta empresa.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -459,27 +480,73 @@ export function PlatformConsole() {
               </button>
             </div>
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-black bg-surface-card p-3">
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-black bg-surface-card p-4">
               <p className={labelMutedClass}>Usuarios</p>
-              <p className="mt-1 text-xl font-black text-slate-100">
+              <p className="mt-1 text-3xl font-black tabular-nums text-slate-100">
                 {selectedOrg.user_count}
               </p>
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                Con acceso a esta empresa
+              </p>
             </div>
-            <div className="rounded-lg border border-black bg-surface-card p-3">
+            <div className="rounded-lg border border-black bg-surface-card p-4">
               <p className={labelMutedClass}>Bodegas</p>
-              <p className="mt-1 flex items-center gap-1 text-xl font-black text-slate-100">
+              <p className="mt-1 flex items-center gap-1 text-3xl font-black tabular-nums text-slate-100">
                 <Warehouse className="h-4 w-4 text-emerald-300" />
                 {selectedOrg.warehouse_count}
               </p>
-            </div>
-            <div className="rounded-lg border border-black bg-surface-card p-3">
-              <p className={labelMutedClass}>Limites</p>
-              <p className="mt-1 text-sm font-black text-slate-100">
-                {selectedOrg.max_users ?? "-"} usuarios,{" "}
-                {selectedOrg.max_warehouses ?? "-"} bodegas
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                Registradas en la operación
               </p>
             </div>
+            <div className="rounded-lg border border-black bg-surface-card p-4">
+              <p className={labelMutedClass}>Limites</p>
+              <p className="mt-1 text-sm font-black text-slate-100">
+                {selectedOrg.max_users ?? "-"} usuarios extra
+              </p>
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                {selectedOrg.max_warehouses ?? "-"} bodegas permitidas
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
+            <section className="rounded-lg border border-black bg-surface-card p-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-emerald-600 bg-emerald-950/50 text-emerald-300">
+                  <Building2 className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className={labelMutedClass}>Identidad de la empresa</p>
+                  <p className="text-base font-black text-slate-100">
+                    {selectedOrg.name}
+                  </p>
+                </div>
+              </div>
+              <dl className="mt-4 grid gap-3 border-t border-black pt-4 sm:grid-cols-2">
+                <div>
+                  <dt className={labelMutedClass}>Identificador</dt>
+                  <dd className="mt-1 font-mono text-sm font-black text-slate-200">
+                    {selectedOrg.slug}
+                  </dd>
+                </div>
+                <div>
+                  <dt className={labelMutedClass}>Tipo</dt>
+                  <dd className="mt-1 text-sm font-black text-slate-200">
+                    Paquetería
+                  </dd>
+                </div>
+              </dl>
+            </section>
+            <section className="rounded-lg border border-black bg-surface-inset p-4">
+              <p className={labelMutedClass}>Cuenta y operación</p>
+              <p className="mt-2 text-sm font-black text-slate-100">
+                Datos separados por empresa
+              </p>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                Usuarios, permisos y registros operativos quedan dentro de esta paquetería.
+              </p>
+            </section>
           </div>
           {showEditOrg ? (
             <form
