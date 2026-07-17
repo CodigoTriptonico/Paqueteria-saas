@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, ClipboardList, PackagePlus, Truck } from "lucide-react";
+import { Boxes, ChevronDown, PackagePlus, Truck } from "lucide-react";
 import {
   getConductorHomeVehicleStatusAction,
   getConductorTruckInventoryAction,
@@ -29,18 +29,18 @@ const actions = [
     href: HOME_ACTION_HREFS.newSale,
   },
   {
-    title: "Pickups",
-    text: "Recoger o entregar cajas.",
+    title: "Logística",
+    text: "Rutas, entregas y recolecciones.",
     icon: Truck,
     color: "bg-emerald-400",
-    href: HOME_ACTION_HREFS.pickups,
+    href: HOME_ACTION_HREFS.logistics,
   },
   {
-    title: "Seguimiento",
-    text: "Envíos activos en curso.",
-    icon: ClipboardList,
+    title: "Inventario",
+    text: "Cajas, stock y movimientos.",
+    icon: Boxes,
     color: "bg-emerald-400",
-    href: HOME_ACTION_HREFS.tracking,
+    href: HOME_ACTION_HREFS.inventory,
   },
 ];
 
