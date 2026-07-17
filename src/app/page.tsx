@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, ClipboardList, PackagePlus, Truck, Users } from "lucide-react";
+import { ChevronDown, ClipboardList, PackagePlus, Truck } from "lucide-react";
 import {
   getConductorHomeVehicleStatusAction,
   getConductorTruckInventoryAction,
@@ -17,6 +17,7 @@ import { summarizeConductorTasks } from "@/lib/conductor-dashboard";
 import type { ConductorTruckInventorySummary } from "@/lib/conductor-truck-inventory";
 import { isConductorRole } from "@/lib/conductor-tareas-view";
 import { loadDashboardSummaryForSession } from "@/lib/dashboard/summary";
+import { HOME_ACTION_HREFS } from "@/lib/dashboard/home-actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 const actions = [
@@ -25,28 +26,21 @@ const actions = [
     text: "Crear envio o vender caja.",
     icon: PackagePlus,
     color: "bg-emerald-400",
-    href: "/venta",
-  },
-  {
-    title: "Clientes",
-    text: "Remitentes y destinatarios.",
-    icon: Users,
-    color: "bg-emerald-400",
-    href: "/venta",
+    href: HOME_ACTION_HREFS.newSale,
   },
   {
     title: "Pickups",
     text: "Recoger o entregar cajas.",
     icon: Truck,
     color: "bg-emerald-400",
-    href: "/logistica",
+    href: HOME_ACTION_HREFS.pickups,
   },
   {
     title: "Seguimiento",
     text: "Envíos activos en curso.",
     icon: ClipboardList,
     color: "bg-emerald-400",
-    href: "/seguimiento",
+    href: HOME_ACTION_HREFS.tracking,
   },
 ];
 
