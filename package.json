@@ -51,6 +51,7 @@
     "test:gate": "node scripts/run-tests.mjs gate",
     "test:eval": "node scripts/run-tests.mjs eval",
     "test:platform-auth": "node scripts/test-platform-auth-flow.mjs",
+    "test:matrix-initialization": "node scripts/test-matrix-initialization.mjs",
     "test:business-db": "node scripts/test-business-model.mjs",
     "test:sms": "node scripts/test-sms-flow.mjs"
   },
