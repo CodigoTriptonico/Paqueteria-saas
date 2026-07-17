@@ -62,6 +62,8 @@ const configBoxClass =
 const dataColumnClass = "min-w-0 w-full space-y-5";
 const compactFieldClass = `${flowFormFieldClass} max-w-none`;
 const compactInputClass = `${inputClass} w-full border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20`;
+const passwordFieldsClass = `max-w-[34rem] space-y-3 ${compactFieldClass}`;
+const passwordGeneratorButtonClass = `${secondaryButtonClass} h-8 px-2.5 text-xs`;
 
 type PlatformCreateClientWizardProps = {
   onCancel: () => void;
@@ -555,41 +557,47 @@ export function PlatformCreateClientWizard({
                     Cualquiera de estos celulares sirve para recuperar contraseña por SMS.
                   </span>
                 </div>
-                <div className="grid gap-3 lg:grid-cols-2">
-                  <label className={`grid max-w-[34rem] gap-1 ${compactFieldClass}`}>
+                <div className={passwordFieldsClass}>
+                  <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2">
+                    <span className="text-xs font-bold text-slate-400">Acceso inicial</span>
+                    <button
+                      type="button"
+                      className={passwordGeneratorButtonClass}
+                      onClick={generatePassword}
+                      title="Generar una contraseña segura"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Generar segura
+                    </button>
+                  </div>
+                  <label className="grid gap-1">
                     <span className={flowFieldLabelClass}>Contraseña inicial</span>
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                      <div className="relative min-w-0">
-                        <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                        <input
-                          className={`${compactInputClass} pl-10 pr-10`}
-                          type={showPassword ? "text" : "password"}
-                          name="client_admin_password"
-                          aria-label="Contraseña inicial"
-                          value={form.adminPassword}
-                          onChange={(e) => {
-                            setForm((c) => ({ ...c, adminPassword: e.target.value }));
-                            setStepHint(null);
-                          }}
-                          placeholder="Mínimo 8 caracteres"
-                          autoComplete="new-password"
-                        />
-                        <button
-                          type="button"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-white/5 hover:text-slate-100"
-                          onClick={() => setShowPassword((value) => !value)}
-                          aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                        >
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                      <button type="button" className={secondaryButtonClass} onClick={generatePassword}>
-                        <RefreshCw className="h-4 w-4" />
-                        Generar segura
+                    <div className="relative min-w-0">
+                      <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <input
+                        className={`${compactInputClass} pl-10 pr-10`}
+                        type={showPassword ? "text" : "password"}
+                        name="client_admin_password"
+                        aria-label="Contraseña inicial"
+                        value={form.adminPassword}
+                        onChange={(e) => {
+                          setForm((c) => ({ ...c, adminPassword: e.target.value }));
+                          setStepHint(null);
+                        }}
+                        placeholder="Mínimo 8 caracteres"
+                        autoComplete="new-password"
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-white/5 hover:text-slate-100"
+                        onClick={() => setShowPassword((value) => !value)}
+                        aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
                   </label>
-                  <label className={`grid max-w-[34rem] gap-1 ${compactFieldClass}`}>
+                  <label className="grid gap-1">
                     <span className={flowFieldLabelClass}>Confirmar contraseña</span>
                     <div className="relative min-w-0">
                       <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />

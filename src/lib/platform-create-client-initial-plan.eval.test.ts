@@ -18,8 +18,10 @@ describe("platform client initial plan eval", () => {
     assert.match(source, /maxUsers: initialAdditionalUserLimit/);
   });
 
-  it("keeps both password inputs compact on wide screens", () => {
-    assert.match(source, /lg:grid-cols-2/);
-    assert.match(source, /max-w-\[34rem\]/);
+  it("stacks the compact password fields and keeps the generator outside them", () => {
+    assert.match(source, /const passwordFieldsClass = `max-w-\[34rem\] space-y-3/);
+    assert.match(source, /const passwordGeneratorButtonClass =/);
+    assert.match(source, /Acceso inicial/);
+    assert.doesNotMatch(source, /grid gap-3 lg:grid-cols-2/);
   });
 });
