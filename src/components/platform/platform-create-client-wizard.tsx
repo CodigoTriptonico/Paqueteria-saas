@@ -45,6 +45,7 @@ import {
 } from "@/components/platform/platform-create-org-flow-nav";
 import { inputClass, Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { generateTemporaryPassword, slugifyOrgName } from "@/lib/organizations/slug";
+import { passwordConfirmationMessage } from "@/lib/auth/password-confirmation";
 
 const createOrgPageShellClass = "flex w-full min-h-0 flex-1 flex-col space-y-5 pb-8";
 const createOrgPanelContentClass = "p-3 sm:p-4";
@@ -69,6 +70,7 @@ const emptyForm = {
   adminEmail: "",
   adminPhones: [""],
   adminPassword: "",
+  adminPasswordConfirmation: "",
 };
 
 const addContactRowButtonClass =
@@ -128,7 +130,7 @@ function getDataStepValidationMessage(form: typeof emptyForm): string | null {
   if (form.adminPassword.trim().length < 8) {
     return "La contraseña debe tener al menos 8 caracteres.";
   }
-  return null;
+  return passwordConfirmationMessage(form.adminPassword, form.adminPasswordConfirmation);
 }
 
 function resolveCompletedStep(created: boolean): CreateOrgStep {
@@ -238,9 +240,11 @@ export function PlatformCreateClientWizard({
   );
 
   function generatePassword() {
+    const password = generateTemporaryPassword();
     setForm((current) => ({
       ...current,
-      adminPassword: generateTemporaryPassword(),
+      adminPassword: password,
+      adminPasswordConfirmation: password,
     }));
     setShowPassword(true);
   }
@@ -381,6 +385,13 @@ export function PlatformCreateClientWizard({
   const continueButtonClass = `${primaryButtonClass} disabled:cursor-not-allowed disabled:opacity-40`;
   const showDoneSection = created;
   const dataCollapsed = activeStep !== "data";
+  const passwordConfirmationError = passwordConfirmationMessage(
+    form.adminPassword,
+    form.adminPasswordConfirmation,
+  );
+  const showPasswordConfirmationError = Boolean(
+    form.adminPasswordConfirmation && passwordConfirmationError,
+  );
 
   function renderCollapsedDataHint() {
     return (
@@ -547,6 +558,7 @@ export function PlatformCreateClientWizard({
                         className={`${compactInputClass} pl-10 pr-10`}
                         type={showPassword ? "text" : "password"}
                         name="client_admin_password"
+                        aria-label="Contraseña inicial"
                         value={form.adminPassword}
                         onChange={(e) => {
                           setForm((c) => ({ ...c, adminPassword: e.target.value }));
@@ -570,6 +582,31 @@ export function PlatformCreateClientWizard({
                     </button>
                   </div>
                 </label>
+                <label className={`grid gap-1 ${compactFieldClass}`}>
+                  <span className={flowFieldLabelClass}>Confirmar contraseña</span>
+                  <div className="relative min-w-0">
+                    <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                    <input
+                      className={`${compactInputClass} pl-10 ${
+                        showPasswordConfirmationError
+                          ? "border-rose-400 focus:border-rose-400 focus:ring-rose-400/20"
+                          : ""
+                      }`}
+                      type={showPassword ? "text" : "password"}
+                      name="client_admin_password_confirmation"
+                      value={form.adminPasswordConfirmation}
+                      onChange={(e) => {
+                        setForm((c) => ({ ...c, adminPasswordConfirmation: e.target.value }));
+                        setStepHint(null);
+                      }}
+                      placeholder="Escríbela otra vez"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  {showPasswordConfirmationError ? (
+                    <span className="text-xs font-bold text-rose-200">{passwordConfirmationError}</span>
+                  ) : null}
+                </label>
               </fieldset>
 
               {stepHint ? (
@@ -579,7 +616,11 @@ export function PlatformCreateClientWizard({
               ) : null}
 
               <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4">
-                <button type="submit" className={continueButtonClass} disabled={submitting}>
+                <button
+                  type="submit"
+                  className={continueButtonClass}
+                  disabled={submitting || showPasswordConfirmationError}
+                >
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Crear paquetería
                 </button>
