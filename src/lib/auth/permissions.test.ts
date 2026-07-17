@@ -195,6 +195,17 @@ describe("canAccessPath business scopes", () => {
     assert.equal(canAccessPath(logistics, "/solicitudes"), true);
   });
 
+  it("reserves the agency team page for its responsible administrator", () => {
+    const agencyAdmin = businessRoleSession("administrador_agencia", [
+      "agency.sales.view",
+      "agency.users.manage",
+    ]);
+    const agencySeller = businessRoleSession("vendedor_agencia", ["agency.sales.create"]);
+
+    assert.equal(canAccessPath(agencyAdmin, "/agencia/equipo"), true);
+    assert.equal(canAccessPath(agencySeller, "/agencia/equipo"), false);
+  });
+
   it("lets supervisors see the agency network without finance access", () => {
     const supervisor = businessRoleSession("supervisor_agencias", [
       "agency.view",

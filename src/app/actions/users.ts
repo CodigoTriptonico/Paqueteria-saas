@@ -9,6 +9,14 @@ import { parsePlanLimit } from "@/lib/organizations/settings";
 import { assertSameOrgWarehouseIds } from "@/lib/security/org-scope";
 import { deleteAuthUserSafely } from "@/lib/security/auth-cleanup";
 import type { RoleSlug } from "@/lib/auth/types";
+import { agencyDemoTeamErrorMessage } from "@/lib/agency-demo-team";
+
+function canManageOrganizationUsers(session: Awaited<ReturnType<typeof requireAppSession>>) {
+  return (
+    sessionHasPermission(session, "users.manage") ||
+    sessionHasPermission(session, "agency.users.manage")
+  );
+}
 
 export type OrgUserRow = {
   id: string;
@@ -28,7 +36,7 @@ export async function listOrgUsersAction(): Promise<ActionResult<OrgUserRow[]>> 
   try {
     const session = await requireAppSession();
 
-    if (!sessionHasPermission(session, "users.manage")) {
+    if (!canManageOrganizationUsers(session)) {
       throw new Error("FORBIDDEN");
     }
 
@@ -145,7 +153,7 @@ export async function inviteOrgUserAction(input: {
   try {
     const session = await requireAppSession();
 
-    if (!sessionHasPermission(session, "users.manage")) {
+    if (!canManageOrganizationUsers(session)) {
       throw new Error("FORBIDDEN");
     }
 
@@ -217,7 +225,7 @@ export async function inviteOrgUserAction(input: {
 
     if (profileError) {
       await deleteAuthUserSafely(admin, createdUserId);
-      return fail(profileError.message);
+      return fail(agencyDemoTeamErrorMessage(profileError.message));
     }
 
     if (input.warehouseIds.length) {
@@ -258,7 +266,7 @@ export async function inviteOrgUserAction(input: {
 
     return ok({ userId: created.user.id });
   } catch (error) {
-    return fail(actionErrorMessage(error));
+    return fail(agencyDemoTeamErrorMessage(actionErrorMessage(error)));
   }
 }
 
@@ -273,7 +281,7 @@ export async function updateOrgUserAction(input: {
   try {
     const session = await requireAppSession();
 
-    if (!sessionHasPermission(session, "users.manage")) {
+    if (!canManageOrganizationUsers(session)) {
       throw new Error("FORBIDDEN");
     }
 
@@ -332,7 +340,7 @@ export async function updateOrgUserAction(input: {
       const { error } = await supabase.from("profiles").update(updates).eq("id", input.userId);
 
       if (error) {
-        return fail(error.message);
+        return fail(agencyDemoTeamErrorMessage(error.message));
       }
     }
 
@@ -385,6 +393,6 @@ export async function updateOrgUserAction(input: {
 
     return ok(null);
   } catch (error) {
-    return fail(actionErrorMessage(error));
+    return fail(agencyDemoTeamErrorMessage(actionErrorMessage(error)));
   }
 }

@@ -23,7 +23,11 @@ export async function BusinessPage({ pathname, surface }: { pathname: string; su
           No se pudo cargar el modelo empresarial: {result.error}
         </div>
       ) : null}
-      <BusinessCommandCenter surface={surface} workspace={result?.ok ? result.data : fallback} />
+      <BusinessCommandCenter
+        surface={surface}
+        workspace={result?.ok ? result.data : fallback}
+        canManageAgencyTeam={session?.roleSlug === "administrador_agencia"}
+      />
     </>
   );
 }

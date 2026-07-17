@@ -121,6 +121,10 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
   const base = "/" + (pathname.split("/").filter(Boolean)[0] || "");
   const allowedPrefixes = ROLE_ROUTE_ACCESS[session.roleSlug];
 
+  if (pathname === "/agencia/equipo" && session.roleSlug !== "administrador_agencia") {
+    return false;
+  }
+
   if (
     base === "/logistica" &&
     !["administrador", "logistica"].includes(session.roleSlug)
