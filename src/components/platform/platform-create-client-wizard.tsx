@@ -45,6 +45,12 @@ import {
 } from "@/components/platform/platform-create-org-flow-nav";
 import { inputClass, Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { generateTemporaryPassword, slugifyOrgName } from "@/lib/organizations/slug";
+import {
+  formatInitialTeamPlan,
+  initialAdditionalUserLimit,
+  initialTeamPlan,
+  initialTeamUserLimit,
+} from "@/lib/organizations/initial-team-plan";
 import { passwordConfirmationMessage } from "@/lib/auth/password-confirmation";
 
 const createOrgPageShellClass = "flex w-full min-h-0 flex-1 flex-col space-y-5 pb-8";
@@ -162,7 +168,7 @@ export function PlatformCreateClientWizard({
     adminPassword: generateTemporaryPassword(),
   }));
   const [orgSettings, setOrgSettings] = useState({
-    maxUsers: 5,
+    maxUsers: initialAdditionalUserLimit,
     maxWarehouses: 5,
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -549,64 +555,66 @@ export function PlatformCreateClientWizard({
                     Cualquiera de estos celulares sirve para recuperar contraseña por SMS.
                   </span>
                 </div>
-                <label className={`grid gap-1 ${compactFieldClass}`}>
-                  <span className={flowFieldLabelClass}>Contraseña inicial</span>
-                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <label className={`grid max-w-[34rem] gap-1 ${compactFieldClass}`}>
+                    <span className={flowFieldLabelClass}>Contraseña inicial</span>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                      <div className="relative min-w-0">
+                        <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                        <input
+                          className={`${compactInputClass} pl-10 pr-10`}
+                          type={showPassword ? "text" : "password"}
+                          name="client_admin_password"
+                          aria-label="Contraseña inicial"
+                          value={form.adminPassword}
+                          onChange={(e) => {
+                            setForm((c) => ({ ...c, adminPassword: e.target.value }));
+                            setStepHint(null);
+                          }}
+                          placeholder="Mínimo 8 caracteres"
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-white/5 hover:text-slate-100"
+                          onClick={() => setShowPassword((value) => !value)}
+                          aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      <button type="button" className={secondaryButtonClass} onClick={generatePassword}>
+                        <RefreshCw className="h-4 w-4" />
+                        Generar segura
+                      </button>
+                    </div>
+                  </label>
+                  <label className={`grid max-w-[34rem] gap-1 ${compactFieldClass}`}>
+                    <span className={flowFieldLabelClass}>Confirmar contraseña</span>
                     <div className="relative min-w-0">
                       <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                       <input
-                        className={`${compactInputClass} pl-10 pr-10`}
+                        className={`${compactInputClass} pl-10 ${
+                          showPasswordConfirmationError
+                            ? "border-rose-400 focus:border-rose-400 focus:ring-rose-400/20"
+                            : ""
+                        }`}
                         type={showPassword ? "text" : "password"}
-                        name="client_admin_password"
-                        aria-label="Contraseña inicial"
-                        value={form.adminPassword}
+                        name="client_admin_password_confirmation"
+                        value={form.adminPasswordConfirmation}
                         onChange={(e) => {
-                          setForm((c) => ({ ...c, adminPassword: e.target.value }));
+                          setForm((c) => ({ ...c, adminPasswordConfirmation: e.target.value }));
                           setStepHint(null);
                         }}
-                        placeholder="Mínimo 8 caracteres"
+                        placeholder="Escríbela otra vez"
                         autoComplete="new-password"
                       />
-                      <button
-                        type="button"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-white/5 hover:text-slate-100"
-                        onClick={() => setShowPassword((value) => !value)}
-                        aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
                     </div>
-                    <button type="button" className={secondaryButtonClass} onClick={generatePassword}>
-                      <RefreshCw className="h-4 w-4" />
-                      Generar segura
-                    </button>
-                  </div>
-                </label>
-                <label className={`grid gap-1 ${compactFieldClass}`}>
-                  <span className={flowFieldLabelClass}>Confirmar contraseña</span>
-                  <div className="relative min-w-0">
-                    <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                    <input
-                      className={`${compactInputClass} pl-10 ${
-                        showPasswordConfirmationError
-                          ? "border-rose-400 focus:border-rose-400 focus:ring-rose-400/20"
-                          : ""
-                      }`}
-                      type={showPassword ? "text" : "password"}
-                      name="client_admin_password_confirmation"
-                      value={form.adminPasswordConfirmation}
-                      onChange={(e) => {
-                        setForm((c) => ({ ...c, adminPasswordConfirmation: e.target.value }));
-                        setStepHint(null);
-                      }}
-                      placeholder="Escríbela otra vez"
-                      autoComplete="new-password"
-                    />
-                  </div>
-                  {showPasswordConfirmationError ? (
-                    <span className="text-xs font-bold text-rose-200">{passwordConfirmationError}</span>
-                  ) : null}
-                </label>
+                    {showPasswordConfirmationError ? (
+                      <span className="text-xs font-bold text-rose-200">{passwordConfirmationError}</span>
+                    ) : null}
+                  </label>
+                </div>
               </fieldset>
 
               {stepHint ? (
@@ -633,28 +641,23 @@ export function PlatformCreateClientWizard({
               <aside className={configBoxClass}>
                 <p className="text-xs font-black uppercase text-emerald-300">Plan inicial</p>
                 <div className="mt-3 space-y-4">
-                  <label className="grid gap-1">
-                    <span className={flowFieldLabelClass}>Usuarios adicionales</span>
-                    <input
-                      className={compactInputClass}
-                      type="number"
-                      min={1}
-                      max={500}
-                      value={orgSettings.maxUsers}
-                      onChange={(event) =>
-                        setOrgSettings((current) => ({
-                          ...current,
-                          maxUsers: clampPlanLimit(
-                            event.target.value,
-                            1,
-                            500,
-                            current.maxUsers,
-                          ),
-                        }))
-                      }
-                    />
-                    <span className="text-xs font-bold text-slate-500">No cuenta el admin dueño.</span>
-                  </label>
+                  <section className="rounded-md border border-white/10 bg-[#26322e] p-3">
+                    <p className={flowFieldLabelClass}>Equipo incluido</p>
+                    <div className="mt-2 space-y-2">
+                      {initialTeamPlan.map((role) => (
+                        <div key={role.label} className="flex items-center justify-between gap-2 text-sm font-bold">
+                          <span className="text-slate-200">{role.label}</span>
+                          <span className="shrink-0 text-emerald-300">{role.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 border-t border-white/10 pt-3">
+                      <p className="text-sm font-black text-[#f8fafc]">{initialTeamUserLimit} usuarios en total</p>
+                      <p className="mt-0.5 text-xs font-bold text-slate-400">
+                        {initialAdditionalUserLimit} espacios además del dueño.
+                      </p>
+                    </div>
+                  </section>
                   <label className="grid gap-1">
                     <span className={flowFieldLabelClass}>Bodegas máximas</span>
                     <input
@@ -710,10 +713,9 @@ export function PlatformCreateClientWizard({
                   <div className={`${flowSummaryItemClass} sm:col-span-2`}>
                     <dt className="text-[11px] font-black uppercase text-slate-500">Plan</dt>
                     <dd className="mt-0.5 font-black text-[#f8fafc]">
-                      {createdCredentials.maxUsers}{" "}
-                      {createdCredentials.maxUsers === 1
-                        ? "usuario adicional"
-                        : "usuarios adicionales"}{" "}
+                      {createdCredentials.maxUsers === initialAdditionalUserLimit
+                        ? formatInitialTeamPlan()
+                        : `${createdCredentials.maxUsers} usuario${createdCredentials.maxUsers === 1 ? "" : "s"} adicional${createdCredentials.maxUsers === 1 ? "" : "es"}`}{" "}
                       · {createdCredentials.maxWarehouses}{" "}
                       {createdCredentials.maxWarehouses === 1
                         ? "bodega máxima"
