@@ -94,7 +94,9 @@ export function EmailDomainSuggestionsInput({
 
   function applySuggestion(next: string) {
     onChange(next);
-    setOpen(emailDomainSuggestionsShouldOpen(next));
+    // Elegir una opcion termina la interaccion. Aunque el correo elegido siga
+    // coincidiendo con un dominio conocido, la lista no debe tapar el siguiente campo.
+    setOpen(false);
     setHighlightIndex(-1);
   }
 

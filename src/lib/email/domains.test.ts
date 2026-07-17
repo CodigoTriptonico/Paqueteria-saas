@@ -55,4 +55,8 @@ describe("emailDomainSuggestionsShouldOpen", () => {
     assert.equal(emailDomainSuggestionsShouldOpen("felipe@"), true);
     assert.equal(emailDomainSuggestionsShouldOpen("felipe"), false);
   });
+
+  it("un correo completo puede seguir coincidiendo, por lo que la seleccion debe cerrarlo desde la UI", () => {
+    assert.equal(emailDomainSuggestionsShouldOpen("felipe@gmail.com"), true);
+  });
 });
