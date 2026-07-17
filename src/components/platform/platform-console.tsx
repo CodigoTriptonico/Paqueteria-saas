@@ -40,7 +40,6 @@ import {
   Panel,
   primaryButtonClass,
   secondaryButtonClass,
-  textMutedClass,
 } from "@/components/ui-blocks";
 import type { PlatformOrganizationRow } from "@/lib/auth/types";
 import { summarizePlatformOrganizations } from "@/lib/platform-console-summary";
@@ -447,49 +446,60 @@ export function PlatformConsole() {
       </Panel>
 
       {selectedOrg ? (
-        <Panel title={selectedOrg.name} className="min-h-[calc(100dvh-7rem)]">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-black bg-surface-card-header px-3 py-2.5">
-            <button
-              type="button"
-              onClick={handlePlatformNavBack}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-slate-100 hover:bg-surface-card-hover"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Empresas
-            </button>
-            <p className="text-xs font-bold text-slate-500">
-              Detalle de empresa
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black pb-4">
-            <div>
-              <p className={labelMutedClass}>Administración de empresa</p>
-              <p className={`mt-1 text-sm ${textMutedClass}`}>
-                Usuarios, bodegas y operación se administran dentro de esta empresa.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <StatusPill active={selectedOrg.is_active} />
+        <Panel
+          title={selectedOrg.name}
+          className="min-h-[calc(100dvh-7rem)]"
+          contentClassName="p-0"
+          hideHeader
+        >
+          <header className="rounded-xl border border-black bg-surface-card px-5 py-5 shadow-[0_12px_28px_rgba(0,0,0,0.18)] sm:px-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <button
                 type="button"
-                onClick={(event) => {
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  setContextMenu({
-                    organizationId: selectedOrg.id,
-                    x: Math.max(8, rect.right - 216),
-                    y: rect.bottom + 8,
-                  });
-                }}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300 hover:bg-surface-card-hover"
-                aria-label={`Abrir opciones de ${selectedOrg.name}`}
-                title="Opciones"
+                onClick={handlePlatformNavBack}
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-slate-100 transition-colors hover:bg-surface-card-hover"
               >
-                <Ellipsis className="h-5 w-5" />
+                <ArrowLeft className="h-4 w-4" />
+                Empresas
               </button>
+              <div className="flex items-center gap-2">
+                <StatusPill active={selectedOrg.is_active} />
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setContextMenu({
+                      organizationId: selectedOrg.id,
+                      x: Math.max(8, rect.right - 216),
+                      y: rect.bottom + 8,
+                    });
+                  }}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300 transition-colors hover:bg-surface-card-hover"
+                  aria-label={`Abrir opciones de ${selectedOrg.name}`}
+                  title="Opciones"
+                >
+                  <Ellipsis className="h-5 w-5" />
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-black bg-surface-card p-4">
+            <div className="mt-4 flex min-w-0 items-center gap-3">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-black bg-surface-inset text-emerald-300" aria-hidden>
+                <Building2 className="h-6 w-6" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-wide text-emerald-300">Administración de empresa</p>
+                <h1 className="mt-1 truncate text-3xl font-black tracking-tight text-slate-100 sm:text-4xl">
+                  {selectedOrg.name}
+                </h1>
+                <p className="mt-1 text-sm font-bold text-slate-400">
+                  Usuarios, bodegas y operación de esta empresa.
+                </p>
+              </div>
+            </div>
+          </header>
+          <div className="p-4 sm:p-5">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-black bg-surface-card p-4 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
               <p className={labelMutedClass}>Usuarios</p>
               <p className="mt-1 text-3xl font-black tabular-nums text-slate-100">
                 {selectedOrg.user_count}
@@ -498,7 +508,7 @@ export function PlatformConsole() {
                 Con acceso a esta empresa
               </p>
             </div>
-            <div className="rounded-lg border border-black bg-surface-card p-4">
+            <div className="rounded-xl border border-black bg-surface-card p-4 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
               <p className={labelMutedClass}>Bodegas</p>
               <p className="mt-1 flex items-center gap-1 text-3xl font-black tabular-nums text-slate-100">
                 <Warehouse className="h-4 w-4 text-emerald-300" />
@@ -508,7 +518,7 @@ export function PlatformConsole() {
                 Registradas en la operación
               </p>
             </div>
-            <div className="rounded-lg border border-black bg-surface-card p-4">
+            <div className="rounded-xl border border-black bg-surface-card p-4 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
               <p className={labelMutedClass}>Limites</p>
               <p className="mt-1 text-sm font-black text-slate-100">
                 {selectedOrg.max_users ?? "-"} usuarios extra
@@ -519,19 +529,19 @@ export function PlatformConsole() {
             </div>
           </div>
           <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            <section className="rounded-lg border border-black bg-surface-card p-4">
+            <section className="overflow-hidden rounded-xl border border-black bg-surface-card shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-emerald-600 bg-emerald-950/50 text-emerald-300">
+                <span className="ml-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-emerald-300">
                   <Building2 className="h-5 w-5" />
                 </span>
-                <div>
+                <div className="py-4">
                   <p className={labelMutedClass}>Identidad de la empresa</p>
                   <p className="text-base font-black text-slate-100">
                     {selectedOrg.name}
                   </p>
                 </div>
               </div>
-              <dl className="mt-4 grid gap-3 border-t border-black pt-4 sm:grid-cols-2">
+              <dl className="grid gap-3 border-t border-black bg-surface-inset/40 p-4 sm:grid-cols-2">
                 <div>
                   <dt className={labelMutedClass}>Identificador</dt>
                   <dd className="mt-1 font-mono text-sm font-black text-slate-200">
@@ -546,7 +556,7 @@ export function PlatformConsole() {
                 </div>
               </dl>
             </section>
-            <section className="rounded-lg border border-black bg-surface-inset p-4">
+            <section className="rounded-xl border border-black bg-surface-card p-4 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
               <p className={labelMutedClass}>Cuenta y operación</p>
               <p className="mt-2 text-sm font-black text-slate-100">
                 Datos separados por empresa
@@ -555,6 +565,7 @@ export function PlatformConsole() {
                 Usuarios, permisos y registros operativos quedan dentro de esta paquetería.
               </p>
             </section>
+          </div>
           </div>
           {showEditOrg ? (
             <form

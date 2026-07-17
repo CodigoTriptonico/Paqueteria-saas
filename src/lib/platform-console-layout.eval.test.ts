@@ -44,7 +44,8 @@ describe("platform companies layout eval", () => {
     assert.match(source, /role="menu"/);
     assert.match(source, /className=\{selectedOrg \? "hidden" : "min-h-\[calc\(100dvh-7rem\)\] border-0 bg-transparent"\}/);
     assert.match(source, /min-h-\[calc\(100dvh-7rem\)\]/);
-    assert.match(source, /Detalle de empresa/);
+    assert.match(source, /Administración de empresa/);
+    assert.match(source, /contentClassName="p-0"\s+hideHeader/);
     assert.match(source, /<ArrowLeft className="h-4 w-4" \/>/);
     assert.match(source, /Cerrar y archivar/);
   });
