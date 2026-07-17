@@ -44,6 +44,21 @@ const nextConfig: NextConfig = {
         destination: "/seguimiento",
         permanent: true,
       },
+      {
+        source: "/distribuidores",
+        destination: "/agencias",
+        permanent: true,
+      },
+      {
+        source: "/distribuidor",
+        destination: "/agencia",
+        permanent: true,
+      },
+      {
+        source: "/mis-distribuidores",
+        destination: "/captacion",
+        permanent: true,
+      },
     ];
   },
 };

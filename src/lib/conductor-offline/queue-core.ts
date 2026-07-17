@@ -5,7 +5,7 @@ import type {
 } from "@/lib/conductor-offline/types";
 
 const RETRY_DELAYS_MS = [0, 3_000, 10_000, 30_000, 60_000, 5 * 60_000] as const;
-export const CONDUCTOR_OFFLINE_MAX_AUTOMATIC_ATTEMPTS = 8;
+const CONDUCTOR_OFFLINE_MAX_AUTOMATIC_ATTEMPTS = 8;
 
 export function conductorOfflineScopeKey(scope: ConductorOfflineScope) {
   return `${scope.organizationId}:${scope.userId}:${scope.driverId}`;

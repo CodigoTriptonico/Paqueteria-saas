@@ -36,6 +36,26 @@ function activeFromPath(pathname: string, session: AppSession | null) {
     return "Nueva venta";
   }
 
+  if (pathname.startsWith("/captacion")) {
+    return "Mis agencias";
+  }
+
+  if (pathname.startsWith("/agencias")) {
+    return "Red de agencias";
+  }
+
+  if (pathname.startsWith("/agencia")) {
+    return "Mi agencia";
+  }
+
+  if (pathname.startsWith("/solicitudes")) {
+    return "Solicitudes";
+  }
+
+  if (pathname.startsWith("/contabilidad")) {
+    return "Contabilidad";
+  }
+
   if (pathname.startsWith("/mis-distribuidores")) {
     return "Mis distribuidores";
   }

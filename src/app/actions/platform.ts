@@ -2,10 +2,10 @@
 
 import { requirePlatformAdmin } from "@/lib/auth/platform";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import type { PlatformOrganizationRow, PlatformOrgUserRow, RoleSlug } from "@/lib/auth/types";
 import { canDeactivateOrganization, isClientOrganization } from "@/lib/organizations/kind";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { slugifyOrgName } from "@/lib/organizations/slug";
 import { isValidNationalPhone } from "@/lib/phone/countries";
 import { normalizePhoneDigits, normalizePhoneE164 } from "@/lib/phone/normalize";
@@ -492,36 +492,6 @@ export async function createOrgUserAsPlatformAdminAction(input: {
   }
 }
 
-async function clearProfileReferences(admin: SupabaseClient, profileId: string) {
-  const { error: shipmentsError } = await admin
-    .from("shipments")
-    .update({ assigned_to: null })
-    .eq("assigned_to", profileId);
-
-  if (shipmentsError) {
-    throw new Error(shipmentsError.message);
-  }
-
-  const { error: movementsError } = await admin
-    .from("inventory_movements")
-    .update({ created_by: null })
-    .eq("created_by", profileId);
-
-  if (movementsError) {
-    throw new Error(movementsError.message);
-  }
-}
-
-async function deleteAuthUser(admin: SupabaseClient, userId: string) {
-  await clearProfileReferences(admin, userId);
-
-  const { error } = await admin.auth.admin.deleteUser(userId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
 export async function deleteOrgUserAsPlatformAdminAction(input: {
   organizationId: string;
   userId: string;
@@ -549,7 +519,15 @@ export async function deleteOrgUserAsPlatformAdminAction(input: {
       return fail("Usuario no encontrado en esta paquetería");
     }
 
-    await deleteAuthUser(admin, input.userId);
+    const { error: archiveError } = await admin
+      .from("profiles")
+      .update({ is_active: false, archived_at: new Date().toISOString() })
+      .eq("id", input.userId)
+      .eq("organization_id", input.organizationId);
+
+    if (archiveError) {
+      return fail(archiveError.message);
+    }
 
     return ok(null);
   } catch (error) {
@@ -559,50 +537,23 @@ export async function deleteOrgUserAsPlatformAdminAction(input: {
 
 export async function deleteOrganizationAction(
   organizationId: string,
+  reason = "Archivada desde Plataforma",
 ): Promise<ActionResult<null>> {
   try {
     await requirePlatformAdmin();
 
-    const admin = createSupabaseAdminClient();
-    if (!admin) {
+    const db = await createSupabaseServerClient();
+    if (!db) {
       return fail("Supabase no configurado");
     }
 
-    const { data: org, error: orgLookupError } = await admin
-      .from("organizations")
-      .select("kind")
-      .eq("id", organizationId)
-      .single();
+    const { error } = await db.rpc("archive_business_organization", {
+      target_organization_id: organizationId,
+      archive_reason: reason.trim(),
+    });
 
-    if (orgLookupError || !org) {
-      return fail(orgLookupError?.message || "Empresa no encontrada");
-    }
-
-    if (!isClientOrganization(org.kind)) {
-      return fail("No se puede eliminar la organización de plataforma");
-    }
-
-    const { data: profiles, error: profilesError } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("organization_id", organizationId);
-
-    if (profilesError) {
-      return fail(profilesError.message);
-    }
-
-    for (const profile of profiles || []) {
-      await deleteAuthUser(admin, profile.id);
-    }
-
-    const { error: orgDeleteError } = await admin
-      .from("organizations")
-      .delete()
-      .eq("id", organizationId)
-      .eq("kind", "client");
-
-    if (orgDeleteError) {
-      return fail(orgDeleteError.message);
+    if (error) {
+      return fail(error.message);
     }
 
     return ok(null);

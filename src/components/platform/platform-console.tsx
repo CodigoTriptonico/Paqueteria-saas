@@ -554,7 +554,7 @@ export function PlatformConsole() {
         return;
       }
 
-      notify.success(`Paquetería «${selectedOrg.name}» eliminada.`);
+      notify.success(`Paquetería «${selectedOrg.name}» cerrada y archivada con su historial.`);
       setDeleteConfirmOrg(false);
       setSelectedOrgId(null);
       setUsers([]);
@@ -584,7 +584,7 @@ export function PlatformConsole() {
         return;
       }
 
-      notify.success("Empleado eliminado.");
+      notify.success("Acceso del empleado archivado; su historial se conservó.");
       setDeleteConfirmUserId(null);
       if (editingUserId === user.id) {
         setEditingUserId(null);
@@ -930,7 +930,7 @@ export function PlatformConsole() {
             onClick={() => confirmDeleteOrgFromMenu(orgContextMenu.org)}
           >
             <Trash2 className="h-4 w-4" />
-            Eliminar
+            Cerrar y archivar
           </button>
         </div>
       ) : null}
@@ -1001,7 +1001,7 @@ export function PlatformConsole() {
                     ) : (
                       <Check className="h-4 w-4" />
                     )}
-                    Confirmar
+                    Archivar empresa
                   </button>
                 </>
               ) : (
@@ -1014,7 +1014,7 @@ export function PlatformConsole() {
                   }}
                 >
                   <Trash2 className="h-4 w-4" />
-                  Eliminar
+                  Cerrar y archivar
                 </button>
               )}
             </div>
@@ -1307,7 +1307,7 @@ export function PlatformConsole() {
                                     ) : (
                                       <Check className="h-4 w-4" />
                                     )}
-                                    Confirmar
+                                    Archivar empleado
                                   </button>
                                 </>
                               ) : (
@@ -1320,7 +1320,7 @@ export function PlatformConsole() {
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4" />
-                                  Eliminar
+                                  Archivar acceso
                                 </button>
                               )}
                             </div>

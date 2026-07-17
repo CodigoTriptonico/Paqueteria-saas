@@ -2,6 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "scripts/**/*.{mjs,ts,ps1}",
+    "src/app/actions/business-commands.ts",
     "src/**/*.test.{ts,tsx}",
     "tests/**/*.test.mjs"
   ],

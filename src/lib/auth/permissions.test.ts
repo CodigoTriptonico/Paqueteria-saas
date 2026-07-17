@@ -92,6 +92,16 @@ function captorSession(): AppSession {
   };
 }
 
+function businessRoleSession(roleSlug: string, permissions: AppSession["permissions"]): AppSession {
+  return {
+    ...sellerSession(),
+    userId: `${roleSlug}-1`,
+    roleSlug,
+    roleName: roleSlug,
+    permissions,
+  };
+}
+
 describe("canAccessPath seller shipments", () => {
   it("lets sellers open envios", () => {
     assert.equal(canAccessPath(sellerSession(), "/seguimiento"), true);
@@ -154,5 +164,36 @@ describe("canAccessPath captor workspace", () => {
     assert.equal(canAccessPath(captorSession(), "/distribuidores"), false);
     assert.equal(canAccessPath(captorSession(), "/estadisticas"), false);
     assert.equal(canAccessPath(captorSession(), "/venta"), false);
+  });
+});
+
+describe("canAccessPath business scopes", () => {
+  it("separates agency, finance and logistics surfaces", () => {
+    const agencyAdmin = businessRoleSession("administrador_agencia", [
+      "agency.sales.view",
+      "agency.sales.create",
+      "agency.requests.view",
+      "agency.requests.create",
+    ]);
+    const finance = businessRoleSession("finanzas", ["accounting.view", "accounting.post"]);
+    const logistics = businessRoleSession("logistica", ["routes.view", "agency.requests.assign"]);
+
+    assert.equal(canAccessPath(agencyAdmin, "/agencia"), true);
+    assert.equal(canAccessPath(agencyAdmin, "/contabilidad"), false);
+    assert.equal(canAccessPath(finance, "/contabilidad"), true);
+    assert.equal(canAccessPath(finance, "/agencia"), false);
+    assert.equal(canAccessPath(logistics, "/logistica"), true);
+    assert.equal(canAccessPath(logistics, "/solicitudes"), true);
+  });
+
+  it("lets supervisors see the agency network without finance access", () => {
+    const supervisor = businessRoleSession("supervisor_agencias", [
+      "agency.view",
+      "agency.captor.assign",
+    ]);
+
+    assert.equal(canAccessPath(supervisor, "/agencias"), true);
+    assert.equal(canAccessPath(supervisor, "/captacion"), true);
+    assert.equal(canAccessPath(supervisor, "/contabilidad"), false);
   });
 });

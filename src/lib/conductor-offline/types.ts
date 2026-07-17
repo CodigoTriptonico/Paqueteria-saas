@@ -8,13 +8,13 @@ export type ConductorOfflineScope = {
   driverId: string;
 };
 
-export type ConductorOfflineStatus =
+type ConductorOfflineStatus =
   | "pending"
   | "syncing"
   | "needs_attention"
   | "synced";
 
-export type ConductorOfflineEvidence = {
+type ConductorOfflineEvidence = {
   blob: Blob;
   name: string;
   type: string;

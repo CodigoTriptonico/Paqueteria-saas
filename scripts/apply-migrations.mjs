@@ -140,6 +140,10 @@ async function main() {
       console.log("OK", file);
     } catch (error) {
       console.error("Failed", file, ":", error.message || error);
+      if (error.detail) console.error("Detail:", error.detail);
+      if (error.where) console.error("Where:", error.where);
+      if (error.position) console.error("Position:", error.position);
+      console.error("Database error fields:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
       process.exit(1);
     }
   }

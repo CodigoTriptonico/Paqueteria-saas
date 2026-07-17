@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   ArrowLeft,
   BarChart3,
+  Building2,
   Box,
   Boxes,
   ChevronDown,
@@ -20,6 +21,7 @@ import {
   Truck,
   Users,
   Layers3,
+  Landmark,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { UserAccountMenu } from "@/components/user-account-menu";
@@ -32,14 +34,16 @@ import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 import type { UiSurfaceContextId } from "@/lib/ui-surface-context";
 import type { AppSession } from "@/lib/auth/types";
 
-type NavSectionId = "main" | "shipments" | "stock" | "warehouse" | "operations" | "reports" | "admin";
+type NavSectionId = "main" | "shipments" | "agencies" | "stock" | "warehouse" | "operations" | "finance" | "reports" | "admin";
 
 const navSections: { id: NavSectionId; label: string }[] = [
   { id: "main", label: "Trabajo" },
   { id: "shipments", label: "Envíos" },
+  { id: "agencies", label: "Agencias" },
   { id: "stock", label: "Stock" },
   { id: "warehouse", label: "Flujo de bodega" },
   { id: "operations", label: "Operación" },
+  { id: "finance", label: "Dinero" },
   { id: "reports", label: "Reportes" },
   { id: "admin", label: "Admin" },
 ];
@@ -54,9 +58,10 @@ const navItems: {
   platformOnly?: boolean;
 }[] = [
   { label: "Nueva venta", href: "/venta", icon: CreditCard, section: "shipments", hasSubmenu: true },
-  { label: "Mi distribuidora", href: "/distribuidor", icon: CreditCard, section: "main" },
-  { label: "Mis distribuidores", href: "/mis-distribuidores", icon: Users, section: "main" },
-  { label: "Distribuidores", href: "/distribuidores", icon: Boxes, section: "admin" },
+  { label: "Mi agencia", href: "/agencia", icon: Building2, section: "main" },
+  { label: "Mis agencias", href: "/captacion", icon: Users, section: "agencies" },
+  { label: "Red de agencias", href: "/agencias", icon: Building2, section: "agencies" },
+  { label: "Solicitudes", href: "/solicitudes", icon: ClipboardList, section: "agencies" },
   { label: "Seguimiento", href: "/seguimiento", icon: ClipboardList, section: "shipments" },
   { label: "Historial envíos", href: "/seguimiento/historial", icon: History, section: "shipments" },
   { label: "Inventario", href: "/inventario", icon: Boxes, section: "stock", hasSubmenu: true },
@@ -66,6 +71,7 @@ const navItems: {
   { label: "Logistica", href: "/logistica", icon: Truck, section: "operations" },
   { label: "Tareas conductor", href: "/conductor/tareas", icon: ListTodo, section: "operations" },
   { label: "Inventario camion", href: "/conductor/inventario-camion", icon: Boxes, section: "operations" },
+  { label: "Contabilidad", href: "/contabilidad", icon: Landmark, section: "finance" },
   { label: "Estadisticas", href: "/estadisticas", icon: BarChart3, section: "reports" },
   { label: "Auditoria", href: "/auditoria", icon: History, section: "reports" },
   { label: "Configuracion", href: "/configuracion", icon: Settings, section: "admin" },
@@ -210,10 +216,14 @@ function mobilePrimaryNavItems(session: AppSession | null, items: NavItemDef[]) 
     session?.roleSlug === "conductor"
       ? ["/conductor/tareas", "/conductor/inventario-camion"]
       : session?.roleSlug === "distribuidor"
-        ? ["/distribuidor"]
-        : session?.roleSlug === "captador_distribuidores"
-          ? ["/mis-distribuidores"]
-          : ["/venta", "/seguimiento"];
+        ? ["/agencia", "/solicitudes"]
+        : ["administrador_agencia", "vendedor_agencia", "caja_agencia", "operador_agencia"].includes(session?.roleSlug || "")
+          ? ["/agencia", "/solicitudes"]
+          : ["captador_distribuidores", "captador_agencias", "supervisor_agencias"].includes(session?.roleSlug || "")
+            ? ["/captacion", "/agencias"]
+            : session?.roleSlug === "finanzas"
+              ? ["/contabilidad", "/agencias"]
+              : ["/venta", "/seguimiento"];
 
   return preferred.map((href) => byHref.get(href)).filter((item): item is NavItemDef => Boolean(item));
 }
@@ -232,12 +242,16 @@ function navSectionIcon(sectionId: NavSectionId): LucideIcon {
       return House;
     case "shipments":
       return ClipboardList;
+    case "agencies":
+      return Building2;
     case "stock":
       return Boxes;
     case "warehouse":
       return PackageCheck;
     case "operations":
       return Truck;
+    case "finance":
+      return Landmark;
     case "reports":
       return BarChart3;
     case "admin":

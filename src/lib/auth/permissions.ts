@@ -1,11 +1,21 @@
 import type { AppSession, PermissionKey, RoleSlug } from "@/lib/auth/types";
 
 const ROLE_ROUTE_ACCESS: Partial<Record<RoleSlug, string[]>> = {
-  administrador: ["/", "/venta", "/inventario", "/seguimiento", "/ingreso-bodega", "/bodega", "/paletas", "/logistica", "/estadisticas", "/auditoria", "/vendedores", "/configuracion", "/time-clock", "/distribuidores", "/conductor"],
+  administrador: ["/", "/venta", "/inventario", "/seguimiento", "/ingreso-bodega", "/bodega", "/paletas", "/logistica", "/estadisticas", "/auditoria", "/vendedores", "/configuracion", "/time-clock", "/agencias", "/contabilidad", "/solicitudes", "/distribuidores", "/conductor"],
   vendedor: ["/", "/venta", "/inventario", "/seguimiento"],
   conductor: ["/", "/conductor"],
-  distribuidor: ["/", "/distribuidor"],
-  captador_distribuidores: ["/", "/mis-distribuidores"],
+  distribuidor: ["/", "/agencia", "/solicitudes", "/distribuidor"],
+  administrador_agencia: ["/", "/agencia", "/venta", "/solicitudes"],
+  vendedor_agencia: ["/", "/agencia", "/venta"],
+  caja_agencia: ["/", "/agencia"],
+  operador_agencia: ["/", "/agencia", "/solicitudes"],
+  captador_distribuidores: ["/", "/captacion", "/mis-distribuidores"],
+  captador_agencias: ["/", "/captacion"],
+  supervisor_agencias: ["/", "/captacion", "/agencias"],
+  finanzas: ["/", "/contabilidad", "/agencias", "/seguimiento"],
+  logistica: ["/", "/logistica", "/solicitudes", "/seguimiento"],
+  bodega: ["/", "/inventario", "/ingreso-bodega", "/bodega", "/paletas"],
+  auditor: ["/", "/auditoria", "/estadisticas", "/contabilidad"],
 };
 
 const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
@@ -19,6 +29,12 @@ const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
   "/paletas": ["warehouses.manage", "sales.manage"],
   "/conductor": ["routes.view"],
   "/time-clock": ["time_clock.view", "time_clock.manage"],
+  "/agencias": ["agency.view", "agency.create", "agency.edit", "agency.status.transition", "agency.captor.assign", "agency.supervisor.assign", "agency.support", "distribution.manage", "distribution.acquire"],
+  "/agencia": ["agency.sales.view", "agency.sales.create", "agency.customers.manage", "agency.pricing.manage", "distribution.sell"],
+  "/captacion": ["agency.view", "agency.captor.assign", "agency.support", "distribution.acquire"],
+  "/solicitudes": ["agency.requests.view", "agency.requests.create", "agency.requests.assign", "agency.visits.confirm"],
+  "/contabilidad": ["agency.account.view", "agency.account.charge", "agency.account.payment", "agency.account.apply", "accounting.view", "accounting.post", "accounting.reconcile", "accounting.reverse", "financial_hold.view", "financial_hold.release"],
+  "/auditoria": ["audit.immutable.view", "settings.manage"],
 };
 
 function effectiveRoleSlug(session: AppSession): RoleSlug {
@@ -72,15 +88,11 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
   const base = "/" + (pathname.split("/").filter(Boolean)[0] || "");
   const allowedPrefixes = ROLE_ROUTE_ACCESS[effectiveRoleSlug(session)];
 
-  if (base === "/logistica" && effectiveRoleSlug(session) !== "administrador") {
+  if (base === "/logistica" && !["administrador", "logistica"].includes(effectiveRoleSlug(session))) {
     return false;
   }
 
-  if (base === "/estadisticas" && effectiveRoleSlug(session) !== "administrador") {
-    return false;
-  }
-
-  if (base === "/auditoria" && effectiveRoleSlug(session) !== "administrador") {
+  if (base === "/estadisticas" && !["administrador", "auditor"].includes(effectiveRoleSlug(session))) {
     return false;
   }
 

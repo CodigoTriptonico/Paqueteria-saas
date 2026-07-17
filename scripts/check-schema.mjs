@@ -50,6 +50,37 @@ const requiredTables = [
   "time_clock_sessions",
   "time_clock_events",
   "time_clock_alerts",
+  "business_tenants",
+  "organization_memberships",
+  "agencies",
+  "agency_status_history",
+  "agency_captor_assignments",
+  "captor_supervisor_assignments",
+  "agency_support_delegations",
+  "immutable_audit_events",
+  "idempotency_operations",
+  "sales",
+  "sale_lines",
+  "customer_invoices",
+  "customer_payments",
+  "customer_payment_applications",
+  "agency_charges",
+  "agency_payments",
+  "agency_payment_applications",
+  "gl_accounts",
+  "journal_entries",
+  "journal_lines",
+  "driver_cash_custody_events",
+  "driver_settlements",
+  "financial_holds",
+  "agency_service_requests",
+  "agency_service_request_lines",
+  "agency_visits",
+  "agency_visit_lines",
+  "agency_box_lots",
+  "agency_box_movements",
+  "agency_shipment_box_sources",
+  "agency_box_allocations",
 ];
 
 let failed = false;
@@ -94,6 +125,9 @@ if (!existsSync(join(root, ".env.local.template"))) {
 
 const requiredColumns = [
   { table: "logistics_routes", column: "vehicle_id" },
+  { table: "organizations", column: "tenant_id" },
+  { table: "organizations", column: "organization_type" },
+  { table: "organizations", column: "matrix_organization_id" },
 ];
 
 for (const { table, column } of requiredColumns) {

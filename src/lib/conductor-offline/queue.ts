@@ -15,10 +15,10 @@ import type {
   ConductorOfflineSnapshot,
 } from "@/lib/conductor-offline/types";
 
-export const CONDUCTOR_OFFLINE_DB_NAME = "boxario-conductor-offline-v1";
-export const CONDUCTOR_OFFLINE_STORE = "task-results";
-export const CONDUCTOR_OFFLINE_META_STORE = "metadata";
-export const CONDUCTOR_OFFLINE_SYNC_TAG = "boxario-conductor-task-results";
+const CONDUCTOR_OFFLINE_DB_NAME = "boxario-conductor-offline-v1";
+const CONDUCTOR_OFFLINE_STORE = "task-results";
+const CONDUCTOR_OFFLINE_META_STORE = "metadata";
+const CONDUCTOR_OFFLINE_SYNC_TAG = "boxario-conductor-task-results";
 export const CONDUCTOR_OFFLINE_CHANGED_EVENT = "boxario:conductor-offline-changed";
 
 const DB_VERSION = 2;
