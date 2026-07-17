@@ -11,6 +11,7 @@ export const CONDUCTOR_TASK_FAILURE_REASONS = [
   "Calle o acceso cerrado",
   "Cliente cancelo",
   "Caja no lista",
+  "Invoice no visible",
   "Problema de ruta",
   "Otra",
 ] as const;
@@ -844,6 +845,7 @@ export function validateConductorTaskResultInput(input: {
   taskType: "deliver_empty_box" | "pickup_full_box";
   failureReason?: string;
   evidenceFileName?: string;
+  invoiceVisible?: boolean;
   paymentAmount?: number;
 }) {
   if (input.result === "completed" && !String(input.evidenceFileName || "").trim()) {
@@ -855,6 +857,13 @@ export function validateConductorTaskResultInput(input: {
     if (!CONDUCTOR_TASK_FAILURE_REASONS.includes(reason as ConductorTaskFailureReason)) {
       return "Selecciona una razon";
     }
+    if (reason === "Invoice no visible" && !String(input.evidenceFileName || "").trim()) {
+      return "Toma una foto de la caja sin invoice para reportarlo";
+    }
+  }
+
+  if (input.result === "completed" && input.invoiceVisible !== true) {
+    return "Confirma que el invoice se ve escrito en la caja";
   }
 
   if (input.paymentAmount !== undefined && input.paymentAmount < 0) {

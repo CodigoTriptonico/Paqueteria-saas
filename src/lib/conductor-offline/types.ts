@@ -31,6 +31,7 @@ export type ConductorOfflineOperation = {
   taskId: string;
   task: ConductorDriverTask;
   result: "completed" | "failed";
+  invoiceVisible: boolean;
   failureReason: string;
   note: string;
   paymentChoice: ConductorPaymentChoice | "";
@@ -51,6 +52,7 @@ export type ConductorOfflineDraft = {
   scope: ConductorOfflineScope;
   task: ConductorDriverTask;
   result: "completed" | "failed";
+  invoiceVisible: boolean;
   failureReason: string;
   note: string;
   paymentChoice: ConductorPaymentChoice | null;

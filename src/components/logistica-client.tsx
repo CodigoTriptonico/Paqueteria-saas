@@ -329,6 +329,20 @@ function invoiceActionLabel(taskType: LogisticsTaskType) {
   return taskActionVerb[taskType];
 }
 
+function invoiceEvidenceLabel(shipment: ShipmentRow) {
+  const evidence = shipment.invoiceBoxEvidence;
+
+  if (evidence?.incidentBoxes) {
+    return { label: "Invoice no visible", tone: "border-rose-700/70 bg-rose-400/15 text-rose-100" };
+  }
+
+  if (evidence && evidence.markedBoxes === evidence.totalBoxes) {
+    return { label: "Invoice confirmado", tone: "border-emerald-700/70 bg-emerald-400/15 text-emerald-100" };
+  }
+
+  return { label: "Invoice por confirmar", tone: "border-amber-700/70 bg-amber-400/15 text-amber-100" };
+}
+
 const LOGISTICS_FIELD_BASE = "border-black bg-surface-inset";
 
 function invoiceActionFieldClass() {
@@ -1513,6 +1527,7 @@ export function LogisticaClient({
       task?.assignedTo,
       Boolean(task),
     );
+    const invoiceEvidence = invoiceEvidenceLabel(item.shipment);
 
     return (
       <article
@@ -1558,6 +1573,10 @@ export function LogisticaClient({
                   Falta geo
                 </span>
               ) : null}
+              <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-black ${invoiceEvidence.tone}`}>
+                <PackageCheck className="h-3 w-3" />
+                {invoiceEvidence.label}
+              </span>
             </div>
           </div>
         </div>
@@ -1707,6 +1726,7 @@ export function LogisticaClient({
       task?.assignedTo,
       Boolean(task),
     );
+    const invoiceEvidence = invoiceEvidenceLabel(item.shipment);
 
     return (
       <article
@@ -1753,6 +1773,10 @@ export function LogisticaClient({
                   Falta geo
                 </span>
               ) : null}
+              <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-black ${invoiceEvidence.tone}`}>
+                <PackageCheck className="h-3 w-3" />
+                {invoiceEvidence.label}
+              </span>
             </div>
             <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-bold leading-snug text-slate-400">
               <span className="line-clamp-1 min-w-0 flex-1">

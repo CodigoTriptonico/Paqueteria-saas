@@ -45,6 +45,13 @@ export type PhysicalPackage = {
   truckUnloadedAt: string | null;
   warehousePlacedAt: string | null;
   palletizedAt: string | null;
+  invoiceCode: string;
+  invoiceMarkedAt: string | null;
+  invoiceDeliveryEvidenceUrl: string;
+  invoicePickupConfirmedAt: string | null;
+  invoicePickupEvidenceUrl: string;
+  invoiceIncidentAt: string | null;
+  invoiceIncidentReason: string;
 };
 
 export const physicalPackageStatusLabel: Record<PhysicalPackageStatus, string> = {
@@ -85,4 +92,35 @@ export function validatePackageContents(value: unknown) {
 
 export function physicalPackageCode(invoiceCode: string, index: number) {
   return `${invoiceCode.trim()}-${String(index + 1).padStart(2, "0")}`;
+}
+
+export function physicalPackageCountFromPlan(plan: Record<string, unknown> | null | undefined) {
+  const safePlan = plan && typeof plan === "object" && !Array.isArray(plan) ? plan : {};
+  const boxLines = Array.isArray(safePlan.boxLines) ? safePlan.boxLines : [];
+  const lineCount = boxLines.reduce((total, entry) => {
+    const line = entry && typeof entry === "object" && !Array.isArray(entry)
+      ? (entry as Record<string, unknown>)
+      : null;
+    const label = String(line?.label || "").trim();
+    return label ? total + Math.max(Number(line?.quantity) || 1, 1) : total;
+  }, 0);
+
+  if (lineCount > 0) return lineCount;
+
+  const box = safePlan.box && typeof safePlan.box === "object" && !Array.isArray(safePlan.box)
+    ? (safePlan.box as Record<string, unknown>)
+    : null;
+  return String(box?.label || box?.name || "").trim()
+    ? Math.max(Number(safePlan.boxCount) || 1, 1)
+    : 1;
+}
+
+export function physicalPackageCodesForShipment(
+  invoiceCode: string,
+  logisticsPlan: Record<string, unknown> | null | undefined,
+) {
+  return Array.from(
+    { length: physicalPackageCountFromPlan(logisticsPlan) },
+    (_, index) => physicalPackageCode(invoiceCode, index),
+  );
 }

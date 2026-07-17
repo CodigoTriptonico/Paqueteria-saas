@@ -136,6 +136,7 @@ export async function enqueueConductorTaskResult(draft: ConductorOfflineDraft) {
     taskId: draft.task.id,
     task: draft.task,
     result: draft.result,
+    invoiceVisible: draft.invoiceVisible,
     failureReason: draft.failureReason,
     note: draft.note,
     paymentChoice: draft.paymentChoice || "",
@@ -248,6 +249,7 @@ function operationFormData(operation: ConductorOfflineOperation) {
   formData.set("taskId", operation.taskId);
   formData.set("driverId", operation.driverId);
   formData.set("result", operation.result);
+  formData.set("invoiceVisible", String(operation.invoiceVisible));
   formData.set("failureReason", operation.failureReason);
   formData.set("note", operation.note);
   formData.set("paymentChoice", operation.paymentChoice);

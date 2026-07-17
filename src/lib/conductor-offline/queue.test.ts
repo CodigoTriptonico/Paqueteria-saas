@@ -37,6 +37,7 @@ describe("conductor offline IndexedDB queue", () => {
       scope,
       task,
       result: "completed",
+      invoiceVisible: true,
       failureReason: "",
       note: "Puerta principal",
       paymentChoice: null,
@@ -51,6 +52,7 @@ describe("conductor offline IndexedDB queue", () => {
     assert.equal(snapshot.operations[0]?.note, "Puerta principal");
     assert.equal(snapshot.operations[0]?.evidence?.blob.size, 4);
     assert.equal(snapshot.operations[0]?.evidence?.name, "entrega.webp");
+    assert.equal(snapshot.operations[0]?.invoiceVisible, true);
   });
 
   it("deduplicates a double tap for the same scoped task", async () => {
@@ -58,6 +60,7 @@ describe("conductor offline IndexedDB queue", () => {
       scope,
       task,
       result: "failed" as const,
+      invoiceVisible: false,
       failureReason: "Cliente no contesto",
       note: "",
       paymentChoice: null,
@@ -78,6 +81,7 @@ describe("conductor offline IndexedDB queue", () => {
       scope,
       task,
       result: "failed",
+      invoiceVisible: false,
       failureReason: "Cliente no contesto",
       note: "",
       paymentChoice: null,

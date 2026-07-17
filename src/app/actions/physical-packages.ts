@@ -41,6 +41,13 @@ type PackageDbRow = Record<string, unknown> & {
   truck_unloaded_at: string | null;
   warehouse_placed_at: string | null;
   palletized_at: string | null;
+  invoice_code: string | null;
+  invoice_marked_at: string | null;
+  invoice_delivery_evidence_url: string | null;
+  invoice_pickup_confirmed_at: string | null;
+  invoice_pickup_evidence_url: string | null;
+  invoice_incident_at: string | null;
+  invoice_incident_reason: string | null;
   shipments?: {
     code?: string;
     customer_name?: string;
@@ -95,6 +102,13 @@ function mapPackage(row: unknown): PhysicalPackage {
     truckUnloadedAt: packageRow.truck_unloaded_at,
     warehousePlacedAt: packageRow.warehouse_placed_at,
     palletizedAt: packageRow.palletized_at,
+    invoiceCode: packageRow.invoice_code || String(packageRow.shipments?.code || ""),
+    invoiceMarkedAt: packageRow.invoice_marked_at,
+    invoiceDeliveryEvidenceUrl: packageRow.invoice_delivery_evidence_url || "",
+    invoicePickupConfirmedAt: packageRow.invoice_pickup_confirmed_at,
+    invoicePickupEvidenceUrl: packageRow.invoice_pickup_evidence_url || "",
+    invoiceIncidentAt: packageRow.invoice_incident_at,
+    invoiceIncidentReason: packageRow.invoice_incident_reason || "",
   };
 }
 
@@ -111,6 +125,8 @@ const PACKAGE_SELECT = `
   weight_difference_note, weight_difference_reviewed_at, contents, contents_validated_at, provider_name, provider_service,
   provider_confirmation_number, provider_tracking_number, provider_tracking_url, pallet_id,
   truck_route_id, truck_task_id, truck_arrived_at, truck_unloaded_at, warehouse_placed_at, palletized_at,
+  invoice_code, invoice_marked_at, invoice_delivery_evidence_url, invoice_pickup_confirmed_at, invoice_pickup_evidence_url,
+  invoice_incident_at, invoice_incident_reason,
   shipments(code, customer_name, recipient_snapshot), warehouse_pallets(code)
 `;
 

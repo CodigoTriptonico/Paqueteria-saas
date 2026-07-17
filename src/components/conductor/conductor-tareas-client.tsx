@@ -580,6 +580,7 @@ export function ConductorTareasClient({
   const [failureReason, setFailureReason] = useState<string>(CONDUCTOR_TASK_FAILURE_REASONS[0]);
   const [note, setNote] = useState("");
   const [evidence, setEvidence] = useState<File | null>(null);
+  const [invoiceVisible, setInvoiceVisible] = useState(false);
   const [paymentChoice, setPaymentChoice] = useState<ConductorPaymentChoice | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
@@ -669,6 +670,9 @@ export function ConductorTareasClient({
         : dialog.task.balanceDue
       : 0;
   const needsPaymentChoice = paymentExpectedAmount > 0;
+  const dialogNeedsPhoto = Boolean(
+    dialog && (dialog.result === "completed" || failureReason === "Invoice no visible"),
+  );
 
   const reloadOfflineSnapshot = useCallback(async () => {
     if (!offlineScope) {
@@ -773,6 +777,7 @@ export function ConductorTareasClient({
     setFailureReason(CONDUCTOR_TASK_FAILURE_REASONS[0]);
     setNote("");
     setEvidence(null);
+    setInvoiceVisible(false);
     setPaymentMethod("cash");
     setPaymentChoice(null);
     setPaymentAmount("");
@@ -791,10 +796,15 @@ export function ConductorTareasClient({
       return;
     }
 
-    const needsPhoto = dialog.result === "completed";
+    const needsPhoto = dialog.result === "completed" || failureReason === "Invoice no visible";
 
     if (needsPhoto && !evidence) {
       notify.error("Foto requerida");
+      return;
+    }
+
+    if (dialog.result === "completed" && !invoiceVisible) {
+      notify.error("Confirma que el invoice se ve escrito en la caja");
       return;
     }
 
@@ -821,6 +831,7 @@ export function ConductorTareasClient({
         scope: offlineScope,
         task: dialog.task,
         result: dialog.result,
+        invoiceVisible,
         failureReason,
         note,
         paymentChoice,
@@ -1210,8 +1221,28 @@ export function ConductorTareasClient({
                 </label>
               ) : null}
 
+              {dialog.result === "completed" ? (
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-3 text-sm font-black text-emerald-50">
+                  <input
+                    className="mt-0.5 h-5 w-5 accent-emerald-400"
+                    type="checkbox"
+                    checked={invoiceVisible}
+                    disabled={saving}
+                    onChange={(event) => setInvoiceVisible(event.target.checked)}
+                  />
+                  <span>
+                    Confirmo que el invoice <span className="font-mono text-emerald-300">{dialog.task.shipmentCode}</span> esta escrito con marcador y se ve claro en la caja.
+                  </span>
+                </label>
+              ) : null}
+
               <label className="grid gap-1.5 text-xs font-black text-slate-400">
-                Foto {dialog.result === "completed" ? "obligatoria" : "opcional"}
+                Foto {dialogNeedsPhoto ? "obligatoria" : "opcional"}
+                {dialog.result === "completed" ? (
+                  <span className="normal-case text-slate-300">La foto debe mostrar el invoice escrito en la caja.</span>
+                ) : failureReason === "Invoice no visible" ? (
+                  <span className="normal-case text-rose-300">Toma una foto para dejar evidencia de que falta el invoice.</span>
+                ) : null}
                 <span className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-black bg-surface-inset px-3 py-4 text-center text-sm font-black text-slate-300">
                   <Camera className="mb-2 h-6 w-6 text-slate-500" />
                   {evidence ? evidence.name : "Tomar o subir foto"}
@@ -1315,7 +1346,7 @@ export function ConductorTareasClient({
                 <button
                   type="button"
                   className={`${primaryButtonClass} h-11 text-sm disabled:cursor-not-allowed disabled:opacity-40`}
-                  disabled={saving || (dialog.result === "completed" && !evidence) || (needsPaymentChoice && !paymentChoice)}
+                  disabled={saving || (dialogNeedsPhoto && !evidence) || (dialog.result === "completed" && !invoiceVisible) || (needsPaymentChoice && !paymentChoice)}
                   onClick={() => void submitDialog()}
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

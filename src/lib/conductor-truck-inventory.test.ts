@@ -347,6 +347,34 @@ describe("conductor truck validation", () => {
       }),
       "",
     );
+
+    assert.equal(
+      validateConductorTaskResultInput({
+        result: "completed",
+        taskType: "pickup_full_box",
+        evidenceFileName: "caja.jpg",
+      }),
+      "Confirma que el invoice se ve escrito en la caja",
+    );
+
+    assert.equal(
+      validateConductorTaskResultInput({
+        result: "completed",
+        taskType: "pickup_full_box",
+        evidenceFileName: "caja.jpg",
+        invoiceVisible: true,
+      }),
+      "",
+    );
+
+    assert.equal(
+      validateConductorTaskResultInput({
+        result: "failed",
+        taskType: "pickup_full_box",
+        failureReason: "Invoice no visible",
+      }),
+      "Toma una foto de la caja sin invoice para reportarlo",
+    );
   });
 
   it("blocks delivery when truck stock is insufficient", () => {

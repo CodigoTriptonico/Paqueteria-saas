@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   parsePackageContents,
+  physicalPackageCodesForShipment,
+  physicalPackageCountFromPlan,
   physicalPackageCode,
   physicalPackageStatusLabel,
   validatePackageContents,
@@ -10,6 +12,18 @@ import {
 test("physical package code keeps one stable code per box", () => {
   assert.equal(physicalPackageCode("INV-001", 0), "INV-001-01");
   assert.equal(physicalPackageCode("INV-001", 11), "INV-001-12");
+});
+
+test("physical packages are created for every box sold and fall back to one box", () => {
+  assert.equal(
+    physicalPackageCountFromPlan({ boxLines: [{ label: "Caja chica", quantity: 2 }, { label: "Caja grande", quantity: 3 }] }),
+    5,
+  );
+  assert.deepEqual(physicalPackageCodesForShipment("INV-009", {}), ["INV-009-01"]);
+  assert.deepEqual(physicalPackageCodesForShipment("INV-009", { box: { label: "Caja chica" }, boxCount: 2 }), [
+    "INV-009-01",
+    "INV-009-02",
+  ]);
 });
 
 test("physical packages only retain valid content lines", () => {

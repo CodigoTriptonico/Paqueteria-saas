@@ -27,6 +27,7 @@ function operation(
     taskId: "task",
     task: {} as ConductorOfflineOperation["task"],
     result: "completed",
+    invoiceVisible: true,
     failureReason: "",
     note: "",
     paymentChoice: "",

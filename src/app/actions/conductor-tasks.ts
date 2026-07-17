@@ -81,6 +81,7 @@ import {
   type PaymentMethod,
 } from "@/lib/payment-methods";
 import { quoteFromShipment, syncShipmentStatusPatch } from "@/lib/shipment-display";
+import { physicalPackageCodesForShipment } from "@/lib/physical-packages";
 import {
   buildFirstMilestonePatch,
   milestoneKeyForLogisticsTask,
@@ -761,6 +762,7 @@ async function recordTaskAttempt(admin: Admin, session: AppSession, input: {
   paymentAmount: number;
   paymentMethod: PaymentMethod | "";
   paymentOutcome: ConductorPaymentOutcome;
+  invoiceVisible: boolean;
   clientOperationId: string;
   capturedAt: string | null;
 }) {
@@ -784,6 +786,7 @@ async function recordTaskAttempt(admin: Admin, session: AppSession, input: {
     payment_outcome: input.paymentOutcome,
     payment_amount: input.paymentOutcome === "not_applicable" ? null : input.paymentAmount,
     payment_method: input.paymentMethod || null,
+    invoice_visible: input.invoiceVisible,
     client_operation_id: input.clientOperationId,
     captured_at: input.capturedAt,
     created_by: session.userId,
@@ -813,6 +816,123 @@ async function recordTaskAttempt(admin: Admin, session: AppSession, input: {
 
     throw new Error(error.message);
   }
+}
+
+async function ensureShipmentPackages(
+  admin: Admin,
+  session: AppSession,
+  shipment: ShipmentRow,
+) {
+  const rows = physicalPackageCodesForShipment(shipment.code, shipment.logistics_plan).map((code) => ({
+    organization_id: session.organizationId,
+    shipment_id: shipment.id,
+    code,
+    country: shipment.country || "",
+    invoice_code: shipment.code,
+  }));
+
+  const { error } = await admin
+    .from("shipment_packages")
+    .upsert(rows, { onConflict: "organization_id,code", ignoreDuplicates: true });
+
+  if (error) throw new Error(error.message);
+}
+
+async function recordInvoiceEvidence(admin: Admin, session: AppSession, input: {
+  task: ConductorDriverTask;
+  shipment: ShipmentRow;
+  driverId: string;
+  evidenceUrl: string;
+}) {
+  await ensureShipmentPackages(admin, session, input.shipment);
+
+  const now = new Date().toISOString();
+  const commonPatch = {
+    invoice_code: input.shipment.code,
+    invoice_incident_at: null,
+    invoice_incident_reason: "",
+  };
+  const patch = input.task.taskType === "deliver_empty_box"
+    ? {
+        ...commonPatch,
+        invoice_marked_at: now,
+        invoice_marked_by: input.driverId,
+        invoice_delivery_evidence_url: input.evidenceUrl,
+      }
+    : {
+        ...commonPatch,
+        invoice_marked_at: now,
+        invoice_marked_by: input.driverId,
+        invoice_pickup_confirmed_at: now,
+        invoice_pickup_confirmed_by: input.driverId,
+        invoice_pickup_evidence_url: input.evidenceUrl,
+      };
+
+  const { error } = await admin
+    .from("shipment_packages")
+    .update(patch)
+    .eq("organization_id", session.organizationId)
+    .eq("shipment_id", input.shipment.id);
+
+  if (error) throw new Error(error.message);
+
+  await recordActivityHistory(admin, session, {
+    action: input.task.taskType === "deliver_empty_box"
+      ? "shipment.invoice_box_delivery_confirmed"
+      : "shipment.invoice_box_pickup_confirmed",
+    entityType: "shipment",
+    entityId: input.shipment.id,
+    title: input.task.taskType === "deliver_empty_box"
+      ? "Invoice escrito en caja confirmado"
+      : "Invoice en caja confirmado al recoger",
+    description: `${input.shipment.code}: foto de evidencia con invoice visible.`,
+    metadata: {
+      source: "conductor.tareas",
+      taskId: input.task.id,
+      taskType: input.task.taskType,
+      evidenceUrl: input.evidenceUrl,
+      invoiceCode: input.shipment.code,
+      ...conductorActionAuditMetadata(session, input.driverId),
+    },
+  });
+}
+
+async function recordInvoiceIncident(admin: Admin, session: AppSession, input: {
+  shipment: ShipmentRow;
+  driverId: string;
+  task: ConductorDriverTask;
+  evidenceUrl: string;
+}) {
+  await ensureShipmentPackages(admin, session, input.shipment);
+
+  const now = new Date().toISOString();
+  const { error } = await admin
+    .from("shipment_packages")
+    .update({
+      invoice_code: input.shipment.code,
+      invoice_incident_at: now,
+      invoice_incident_reason: "Invoice no visible",
+    })
+    .eq("organization_id", session.organizationId)
+    .eq("shipment_id", input.shipment.id);
+
+  if (error) throw new Error(error.message);
+
+  await recordActivityHistory(admin, session, {
+    action: "shipment.invoice_box_missing",
+    entityType: "shipment",
+    entityId: input.shipment.id,
+    title: "Incidente: invoice no visible en caja",
+    description: `${input.shipment.code}: la visita se canceló porque el invoice no se veía en la caja.`,
+    metadata: {
+      source: "conductor.tareas",
+      taskId: input.task.id,
+      taskType: input.task.taskType,
+      evidenceUrl: input.evidenceUrl,
+      invoiceCode: input.shipment.code,
+      ...conductorActionAuditMetadata(session, input.driverId),
+    },
+  });
 }
 
 async function completeTask(admin: Admin, session: AppSession, input: {
@@ -1849,6 +1969,7 @@ export async function submitConductorTaskResultAction(
       : null;
     const evidence = formData.get("evidence");
     const evidenceFile = evidence instanceof File && evidence.name ? evidence : null;
+    const invoiceVisible = cleanText(formData.get("invoiceVisible"), 10) === "true";
 
     if (!taskId) {
       return fail("Falta tarea");
@@ -1931,6 +2052,7 @@ export async function submitConductorTaskResultAction(
       taskType: task.taskType,
       failureReason,
       evidenceFileName: evidenceFile?.name,
+      invoiceVisible,
       paymentAmount,
     });
 
@@ -1945,6 +2067,22 @@ export async function submitConductorTaskResultAction(
     }
 
     const evidenceUrl = await uploadEvidence(admin, session, task.id, clientOperationId, evidenceFile);
+
+    if (result === "completed") {
+      await recordInvoiceEvidence(admin, session, {
+        task,
+        shipment,
+        driverId,
+        evidenceUrl,
+      });
+    } else if (failureReason === "Invoice no visible") {
+      await recordInvoiceIncident(admin, session, {
+        task,
+        shipment,
+        driverId,
+        evidenceUrl,
+      });
+    }
 
     if (result === "completed" && task.taskType === "deliver_empty_box") {
       const supabase = await createScopedSupabase(session);
@@ -2040,6 +2178,7 @@ export async function submitConductorTaskResultAction(
       paymentAmount,
       paymentMethod: paymentOutcome === "collected" ? paymentMethod : "",
       paymentOutcome,
+      invoiceVisible,
       clientOperationId,
       capturedAt,
     });

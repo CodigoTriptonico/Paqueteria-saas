@@ -88,6 +88,7 @@ import {
   resolveInitialShipmentStatus,
   syncShipmentStatusPatch,
 } from "@/lib/shipment-display";
+import { physicalPackageCodesForShipment } from "@/lib/physical-packages";
 import {
   assertSameOrgCustomerIds,
   assertSameOrgProfileIds,
@@ -186,6 +187,13 @@ export type ShipmentRow = {
   delivered_at: string | null;
   delivery_notes: string;
   logistics_plan: Record<string, unknown>;
+  invoiceBoxEvidence?: {
+    totalBoxes: number;
+    markedBoxes: number;
+    pickupConfirmedBoxes: number;
+    incidentBoxes: number;
+    incidentReason: string;
+  };
   logisticsTasks: ShipmentLogisticsTaskRow[];
   payments: ShipmentPaymentRow[];
   contactLogs?: ShipmentContactLogRow[];
@@ -323,6 +331,13 @@ type ShipmentDbRow = {
   shipment_logistics_tasks?: LogisticsTaskDbRow[] | null;
   shipment_payments?: ShipmentPaymentDbRow[] | null;
   shipment_contact_logs?: ShipmentContactLogDbRow[] | null;
+  shipment_packages?: Array<{
+    id: string;
+    invoice_marked_at?: string | null;
+    invoice_pickup_confirmed_at?: string | null;
+    invoice_incident_at?: string | null;
+    invoice_incident_reason?: string | null;
+  }> | null;
 };
 
 type ProfileLabelRow = {
@@ -354,6 +369,9 @@ const SHIPMENT_SELECT = `
   shipment_contact_logs (
     id, shipment_id, channel, channel_other, outcome, note, next_step, follow_up_at, created_by, created_at,
     created_by_profile:profiles!shipment_contact_logs_created_by_fkey(full_name, email)
+  ),
+  shipment_packages (
+    id, invoice_marked_at, invoice_pickup_confirmed_at, invoice_incident_at, invoice_incident_reason
   )
 `;
 
@@ -557,6 +575,16 @@ function mapShipment(row: ShipmentDbRow): ShipmentRow {
   const contactLogs = (row.shipment_contact_logs || [])
     .map(mapContactLog)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const invoicePackages = row.shipment_packages || [];
+  const invoiceBoxEvidence = invoicePackages.length
+    ? {
+        totalBoxes: invoicePackages.length,
+        markedBoxes: invoicePackages.filter((pkg) => Boolean(pkg.invoice_marked_at)).length,
+        pickupConfirmedBoxes: invoicePackages.filter((pkg) => Boolean(pkg.invoice_pickup_confirmed_at)).length,
+        incidentBoxes: invoicePackages.filter((pkg) => Boolean(pkg.invoice_incident_at)).length,
+        incidentReason: invoicePackages.find((pkg) => pkg.invoice_incident_reason)?.invoice_incident_reason || "",
+      }
+    : undefined;
 
   return {
     id: row.id,
@@ -592,6 +620,7 @@ function mapShipment(row: ShipmentDbRow): ShipmentRow {
     delivered_at: row.delivered_at || null,
     delivery_notes: row.delivery_notes || "",
     logistics_plan: row.logistics_plan || {},
+    invoiceBoxEvidence,
     logisticsTasks: tasks,
     payments,
     contactLogs,
@@ -1269,6 +1298,21 @@ export async function createShipmentAction(input: {
 
     let shipment = mapShipment(data as unknown as ShipmentDbRow);
     let shouldReloadShipment = false;
+
+    const { error: packageError } = await supabase.from("shipment_packages").insert(
+      physicalPackageCodesForShipment(shipment.code, logisticsPlan).map((code) => ({
+        organization_id: session.organizationId,
+        shipment_id: shipment.id,
+        code,
+        country: shipment.country || "",
+        invoice_code: shipment.code,
+      })),
+    );
+
+    if (packageError) {
+      await deleteShipmentWithTasks(supabase, session, shipment.id, shipment.code);
+      return fail(packageError.message);
+    }
 
     if (paid > 0) {
       try {
