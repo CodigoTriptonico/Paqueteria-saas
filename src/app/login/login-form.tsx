@@ -250,12 +250,17 @@ export function LoginForm({ allowSignup = false }: { allowSignup?: boolean }) {
                 />
               </label>
 
-              <label className="grid gap-2" style={fallbackStyles.label}>
-                <span className="text-sm font-black uppercase text-slate-400" style={fallbackStyles.labelText}>
+              <div className="grid gap-2" style={fallbackStyles.label}>
+                <label
+                  className="text-sm font-black uppercase text-slate-400"
+                  htmlFor="login-password"
+                  style={fallbackStyles.labelText}
+                >
                   Contrasena
-                </span>
+                </label>
                 <div className="relative">
                   <input
+                    id="login-password"
                     className={`${inputClass} pr-10`}
                     style={{ ...fallbackStyles.input, paddingRight: 40 }}
                     name="password"
@@ -274,7 +279,7 @@ export function LoginForm({ allowSignup = false }: { allowSignup?: boolean }) {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-              </label>
+              </div>
 
               {error ? (
                 <p className="rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
