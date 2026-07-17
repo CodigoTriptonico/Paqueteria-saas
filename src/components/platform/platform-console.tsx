@@ -20,6 +20,7 @@ import {
   Save,
   Search,
   Trash2,
+  Users,
   Warehouse,
   XCircle,
 } from "lucide-react";
@@ -319,27 +320,24 @@ export function PlatformConsole() {
         hideHeader
         title="Empresas"
       >
-        <header className="relative overflow-hidden rounded-[1.5rem] bg-linear-to-br from-emerald-300 via-teal-300 to-cyan-300 px-5 py-5 text-slate-950 shadow-[0_16px_32px_rgba(16,185,129,0.18)] sm:px-6">
-          <span className="pointer-events-none absolute -right-2 -top-7 text-8xl opacity-20 sm:text-9xl" aria-hidden>
-            🏢
-          </span>
+        <header className="rounded-xl border border-black bg-surface-card px-5 py-5 shadow-[0_12px_28px_rgba(0,0,0,0.18)] sm:px-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-wide text-emerald-950/65">Administración de plataforma</p>
-              <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
-                🏢 Empresas
+              <p className="text-xs font-black uppercase tracking-wide text-emerald-300">Administración de plataforma</p>
+              <h1 className="mt-1 flex items-center gap-2 text-3xl font-black tracking-tight text-slate-100 sm:text-4xl">
+                <Building2 className="h-7 w-7 text-emerald-300 sm:h-8 sm:w-8" aria-hidden />
+                Empresas
               </h1>
-              <p className="mt-1 max-w-2xl text-sm font-bold text-slate-950/75">
-                Usuarios, permisos y operación de cada empresa.
+              <p className="mt-1 max-w-2xl text-sm font-bold text-slate-400">
+                Cada empresa controla por su cuenta sus usuarios, permisos y datos operativos.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setShowCreateOrg(true)}
-              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-black text-white shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition hover:-translate-y-0.5 hover:bg-slate-800"
+              className={`${primaryButtonClass} h-11 shrink-0 px-4 shadow-[0_8px_18px_rgba(16,185,129,0.12)]`}
             >
               <Plus className="h-4 w-4" />
-              ✨
               Nueva empresa
             </button>
           </div>
@@ -383,8 +381,8 @@ export function PlatformConsole() {
           </span>
         </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs font-black uppercase tracking-wide text-sky-300">
-            ✨ {filteredOrganizations.length} {filteredOrganizations.length === 1 ? "empresa" : "empresas"}
+          <p className="text-xs font-black uppercase tracking-wide text-slate-400">
+            {filteredOrganizations.length} {filteredOrganizations.length === 1 ? "empresa" : "empresas"}
           </p>
           <label className="relative block w-full sm:max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -404,32 +402,34 @@ export function PlatformConsole() {
                 type="button"
                 onClick={() => selectOrganization(org.id)}
                 onContextMenu={(event) => openContextMenu(event, org.id)}
-                className="group grid w-full cursor-context-menu gap-4 rounded-[1.25rem] bg-linear-to-r from-emerald-400 via-teal-300 to-cyan-300 p-4 text-left text-slate-950 shadow-[0_12px_28px_rgba(16,185,129,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(16,185,129,0.28)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-5"
+                className="group grid w-full cursor-context-menu gap-4 rounded-xl border border-black bg-surface-card p-4 text-left shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition-colors hover:bg-surface-card-hover sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-5"
                 aria-label={`Abrir empresa ${org.name}. Clic derecho para más opciones.`}
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/55 text-2xl shadow-sm transition group-hover:rotate-3 group-hover:scale-105" aria-hidden>
-                      🏢
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-black bg-surface-inset text-emerald-300" aria-hidden>
+                      <Building2 className="h-6 w-6" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate text-lg font-black text-slate-950">
+                      <span className="block truncate text-lg font-black text-slate-100">
                         {org.name}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs font-bold text-slate-950/65">
+                      <span className="mt-0.5 block truncate text-xs font-bold text-slate-400">
                         {org.slug}
                       </span>
                     </span>
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-black text-slate-950 sm:justify-end">
-                  <span className="rounded-full bg-slate-950 px-3 py-1.5 text-emerald-200 shadow-sm">
-                    {org.is_active ? "🟢 Activa" : "💤 Inactiva"}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-black text-slate-300 sm:justify-end">
+                  <StatusPill active={org.is_active} />
+                  <span className="inline-flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5 text-slate-500" aria-hidden />
+                    {org.user_count} usuarios
                   </span>
-                  <span>👥 {org.user_count} usuarios</span>
                   <span className="flex items-center gap-1">
-                    <span>🏭 {org.warehouse_count} bodegas</span>
-                    <Ellipsis className="h-4 w-4 text-slate-950/55" aria-hidden />
+                    <Warehouse className="h-3.5 w-3.5 text-slate-500" aria-hidden />
+                    <span>{org.warehouse_count} bodegas</span>
+                    <Ellipsis className="h-4 w-4 text-slate-500" aria-hidden />
                   </span>
                 </div>
               </button>

@@ -26,13 +26,15 @@ describe("platform companies layout eval", () => {
     assert.doesNotMatch(source, /lg:grid-cols-5/);
   });
 
-  it("uses one colorful company surface instead of stacked rectangular panels", () => {
+  it("uses the app's dark operational surfaces instead of a turquoise marketing gradient", () => {
     assert.match(source, /className="group grid w-full cursor-context-menu/);
     assert.match(source, /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
-    assert.match(source, /platformStats\.users\}<\/b> usuarios/);
-    assert.match(source, /bg-linear-to-r from-emerald-400 via-teal-300 to-cyan-300/);
-    assert.match(source, /🏢/);
-    assert.match(source, /👥 \{org\.user_count\} usuarios/);
+    assert.match(source, /rounded-xl border border-black bg-surface-card/);
+    assert.match(source, /rounded-xl border border-black bg-surface-card px-5 py-5/);
+    assert.match(source, /<StatusPill active=\{org\.is_active\} \/>/);
+    assert.match(source, /<Users className="h-3\.5 w-3\.5 text-slate-500"/);
+    assert.doesNotMatch(source, /from-emerald-300 via-teal-300 to-cyan-300/);
+    assert.doesNotMatch(source, /from-emerald-400 via-teal-300 to-cyan-300/);
     assert.doesNotMatch(source, /border-t border-black pt-3 text-xs font-bold text-slate-400/);
   });
 
