@@ -6,6 +6,7 @@ export type ProfileSessionInput = {
   userId: string;
   email: string;
   fullName: string;
+  avatarUrl?: string | null;
   organizationId: string;
   defaultWarehouseId: string | null;
   roleSlug: RoleSlug;
@@ -40,6 +41,7 @@ export function buildAppSessionFromProfile(
     userId: home.userId,
     email: home.email,
     fullName: home.fullName,
+    avatarUrl: home.avatarUrl,
     organizationId: home.organizationId,
     organizationName: home.homeOrganizationName,
     multiWarehouseEnabled: Boolean(

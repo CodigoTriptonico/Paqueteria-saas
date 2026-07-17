@@ -131,6 +131,16 @@ describe("canAccessPath platform account", () => {
     assert.equal(canAccessPath(platform, "/venta"), false);
     assert.equal(canAccessPath(platform, "/seguimiento"), false);
     assert.equal(canAccessPath(platform, "/configuracion"), false);
+    assert.equal(canAccessPath(platform, "/perfil"), true);
+  });
+});
+
+describe("canAccessPath own profile", () => {
+  it("keeps personal account controls available across every operational role", () => {
+    assert.equal(canAccessPath(sellerSession(), "/perfil"), true);
+    assert.equal(canAccessPath(driverSession(), "/perfil"), true);
+    assert.equal(canAccessPath(distributorSession(), "/perfil"), true);
+    assert.equal(canAccessPath(captorSession(), "/perfil"), true);
   });
 });
 

@@ -115,7 +115,14 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
   }
 
   if (isPlatformOnlySession(session)) {
+    if (pathname === "/perfil" || pathname.startsWith("/perfil/")) {
+      return true;
+    }
     return false;
+  }
+
+  if (pathname === "/perfil" || pathname.startsWith("/perfil/")) {
+    return true;
   }
 
   const base = "/" + (pathname.split("/").filter(Boolean)[0] || "");

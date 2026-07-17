@@ -100,6 +100,10 @@ function activeFromPath(pathname: string, session: AppSession | null) {
     return "Configuracion";
   }
 
+  if (pathname.startsWith("/perfil")) {
+    return "Mi perfil";
+  }
+
   if (pathname.startsWith("/platform")) {
     return "Plataforma";
   }

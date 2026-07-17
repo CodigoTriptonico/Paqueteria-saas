@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { signOutAction } from "@/app/actions/auth";
 import { actionConfirmButtonClass } from "@/components/action-confirm-dialog";
 import { secondaryButtonClass } from "@/components/ui-blocks";
-import { isPlatformOnlySession } from "@/lib/auth/permissions";
 import type { AppSession } from "@/lib/auth/types";
 import { useNotify } from "@/hooks/use-notify";
 import {
@@ -94,7 +93,6 @@ export function UserAccountMenu({
 
   const isSidebar = variant === "sidebar";
   const isRail = variant === "rail";
-  const isPlatformOnly = isPlatformOnlySession(session);
   const triggerClass = isRail
     ? "flex w-full items-center justify-center rounded-lg border border-black bg-surface-card p-2 transition-colors hover:bg-[#2f3834]"
     : isSidebar
@@ -124,7 +122,13 @@ export function UserAccountMenu({
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black bg-emerald-600 text-sm font-black text-white"
           aria-hidden
         >
-          {initialsFromSession(session)}
+          {session.avatarUrl ? (
+            // Signed Supabase URLs cannot be covered by a static remote image allow list.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={session.avatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initialsFromSession(session)
+          )}
         </span>
         {isRail ? null : (
           <>
@@ -159,27 +163,15 @@ export function UserAccountMenu({
             </p>
           </div>
           <div className="grid gap-1 p-2">
-            {isPlatformOnly ? (
-              <span
-                role="menuitem"
-                title="La configuracion operativa se administra dentro de cada paqueteria."
-                className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-slate-500 opacity-60"
-                aria-disabled="true"
-              >
-                <User className="h-4 w-4 shrink-0 text-slate-500" />
-                Mi perfil
-              </span>
-            ) : (
-              <Link
-                href="/configuracion"
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-surface-card"
-              >
-                <User className="h-4 w-4 shrink-0 text-slate-400" />
-                Mi perfil
-              </Link>
-            )}
+            <Link
+              href="/perfil"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-surface-card"
+            >
+              <User className="h-4 w-4 shrink-0 text-slate-400" />
+              Mi perfil
+            </Link>
             {session.isPlatformAdmin ? (
               <Link
                 href="/platform"

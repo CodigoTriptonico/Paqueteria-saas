@@ -13,6 +13,8 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { OrganizationSettings } from "@/lib/organizations/settings";
 import { readMaxWarehouses } from "@/lib/organizations/settings";
 import type { AppSession, RoleSlug } from "@/lib/auth/types";
+import { PROFILE_AVATAR_BUCKET } from "@/lib/account/profile-validation";
+import { createStorageSignedUrl } from "@/lib/supabase/storage-url";
 
 async function loadIsPlatformAdmin(userId: string, reader?: SupabaseClient | null) {
   const db = reader ?? createSupabaseAdminClient();
@@ -63,7 +65,7 @@ async function getDevelopmentPlatformOwnerSession(): Promise<AppSession | null> 
   const { data: profile, error } = await admin
     .from("profiles")
     .select(
-      "id, email, full_name, organization_id, role_id, is_active, default_warehouse_id, roles(slug, name), organizations(name, settings, kind)",
+      "id, email, full_name, avatar_path, organization_id, role_id, is_active, default_warehouse_id, roles(slug, name), organizations(name, settings, kind)",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -80,11 +82,15 @@ async function getDevelopmentPlatformOwnerSession(): Promise<AppSession | null> 
     | null;
   const homeOrg = Array.isArray(orgRow) ? orgRow[0] : orgRow;
   const isPlatformAdmin = await loadIsPlatformAdmin(userId);
+  const avatarUrl = profile.avatar_path
+    ? await createStorageSignedUrl(admin, PROFILE_AVATAR_BUCKET, profile.avatar_path)
+    : null;
 
   return {
     userId,
     email: profile.email,
     fullName: profile.full_name,
+    avatarUrl,
     organizationId: profile.organization_id,
     organizationName: homeOrg?.name || "Empresa",
     multiWarehouseEnabled: Boolean(homeOrg?.settings?.multi_warehouse_enabled),
@@ -118,7 +124,7 @@ async function resolveAppSessionUncached(): Promise<AppSession | null> {
   const { data: profile, error } = await supabase
     .from("profiles")
     .select(
-      "id, email, full_name, organization_id, role_id, is_active, default_warehouse_id, roles(slug, name), organizations(name, settings, kind)",
+      "id, email, full_name, avatar_path, organization_id, role_id, is_active, default_warehouse_id, roles(slug, name), organizations(name, settings, kind)",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -135,7 +141,7 @@ async function resolveAppSessionUncached(): Promise<AppSession | null> {
     | null;
   const homeOrg = Array.isArray(orgRow) ? orgRow[0] : orgRow;
 
-  const [{ data: grantedPerms }, { data: warehouseLinks }, isPlatformAdmin] = await Promise.all([
+  const [{ data: grantedPerms }, { data: warehouseLinks }, isPlatformAdmin, avatarUrl] = await Promise.all([
     supabase
       .from("role_permissions")
       .select("permissions(key)")
@@ -143,12 +149,16 @@ async function resolveAppSessionUncached(): Promise<AppSession | null> {
       .eq("granted", true),
     supabase.from("profile_warehouses").select("warehouse_id").eq("profile_id", userId),
     loadIsPlatformAdmin(userId, supabase),
+    profile.avatar_path
+      ? createStorageSignedUrl(supabase, PROFILE_AVATAR_BUCKET, profile.avatar_path)
+      : Promise.resolve(null),
   ]);
 
   const homeInput: ProfileSessionInput = {
     userId,
     email: profile.email,
     fullName: profile.full_name,
+    avatarUrl,
     organizationId: profile.organization_id,
     defaultWarehouseId: (profile.default_warehouse_id as string | null) || null,
     roleSlug: role?.slug || "vendedor",

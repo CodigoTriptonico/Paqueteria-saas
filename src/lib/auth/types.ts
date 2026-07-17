@@ -62,6 +62,7 @@ export type AppSession = {
   userId: string;
   email: string;
   fullName: string | null;
+  avatarUrl?: string | null;
   /** Org usada para cargar datos (cliente si estás en vista plataforma). */
   organizationId: string;
   organizationName: string;
