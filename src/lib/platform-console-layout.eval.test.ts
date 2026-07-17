@@ -19,22 +19,28 @@ describe("platform companies layout eval", () => {
     assert.match(source, /aria-pressed=\{selected\}/);
     assert.match(source, /aria-label="Filtrar empresas por estado"/);
     assert.match(source, /bg-emerald-400 text-slate-950/);
+    assert.match(source, /emoji: "✨"/);
+    assert.match(source, /emoji: "🟢"/);
     assert.doesNotMatch(source, /Clic derecho para opciones/);
     assert.match(source, /sm:max-w-sm/);
     assert.doesNotMatch(source, /lg:grid-cols-5/);
   });
 
-  it("gives the company list the working surface instead of isolated metric cards", () => {
+  it("uses one colorful company surface instead of stacked rectangular panels", () => {
     assert.match(source, /className="group grid w-full cursor-context-menu/);
     assert.match(source, /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
     assert.match(source, /platformStats\.users\}<\/b> usuarios/);
+    assert.match(source, /bg-linear-to-r from-emerald-400 via-teal-300 to-cyan-300/);
+    assert.match(source, /🏢/);
+    assert.match(source, /👥 \{org\.user_count\} usuarios/);
+    assert.doesNotMatch(source, /border-t border-black pt-3 text-xs font-bold text-slate-400/);
   });
 
   it("opens company detail as its own view and retains the right-click menu", () => {
     assert.match(source, /onContextMenu=\{\(event\) => openContextMenu\(event, org\.id\)\}/);
     assert.match(source, /data-platform-company-context-menu/);
     assert.match(source, /role="menu"/);
-    assert.match(source, /className=\{selectedOrg \? "hidden" : "min-h-\[calc\(100dvh-7rem\)\]"\}/);
+    assert.match(source, /className=\{selectedOrg \? "hidden" : "min-h-\[calc\(100dvh-7rem\)\] border-0 bg-transparent"\}/);
     assert.match(source, /min-h-\[calc\(100dvh-7rem\)\]/);
     assert.match(source, /Detalle de empresa/);
     assert.match(source, /<ArrowLeft className="h-4 w-4" \/>/);

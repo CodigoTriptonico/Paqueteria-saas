@@ -46,10 +46,10 @@ import { summarizePlatformOrganizations } from "@/lib/platform-console-summary";
 
 type StatusFilter = "all" | "active" | "inactive";
 
-const FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "Todas" },
-  { value: "active", label: "Activas" },
-  { value: "inactive", label: "Inactivas" },
+const FILTER_OPTIONS: { value: StatusFilter; label: string; emoji: string }[] = [
+  { value: "all", label: "Todas", emoji: "✨" },
+  { value: "active", label: "Activas", emoji: "🟢" },
+  { value: "inactive", label: "Inactivas", emoji: "💤" },
 ];
 
 const dangerButtonClass =
@@ -314,28 +314,32 @@ export function PlatformConsole() {
   return (
     <>
       <Panel
-        className={selectedOrg ? "hidden" : "min-h-[calc(100dvh-7rem)]"}
+        className={selectedOrg ? "hidden" : "min-h-[calc(100dvh-7rem)] border-0 bg-transparent"}
         contentClassName="p-0"
         hideHeader
         title="Empresas"
       >
-        <header className="border-b border-black bg-surface-card-header px-4 py-4 sm:px-5">
+        <header className="relative overflow-hidden rounded-[1.5rem] bg-linear-to-br from-emerald-300 via-teal-300 to-cyan-300 px-5 py-5 text-slate-950 shadow-[0_16px_32px_rgba(16,185,129,0.18)] sm:px-6">
+          <span className="pointer-events-none absolute -right-2 -top-7 text-8xl opacity-20 sm:text-9xl" aria-hidden>
+            🏢
+          </span>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className={labelMutedClass}>Administración de plataforma</p>
-              <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-100 sm:text-3xl">
-                Empresas
+              <p className="text-xs font-black uppercase tracking-wide text-emerald-950/65">Administración de plataforma</p>
+              <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+                🏢 Empresas
               </h1>
-              <p className={`mt-1 max-w-2xl ${textMutedClass}`}>
+              <p className="mt-1 max-w-2xl text-sm font-bold text-slate-950/75">
                 Usuarios, permisos y operación de cada empresa.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setShowCreateOrg(true)}
-              className={`${primaryButtonClass} h-10 shrink-0 px-3 text-sm`}
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-black text-white shadow-[0_8px_18px_rgba(15,23,42,0.22)] transition hover:-translate-y-0.5 hover:bg-slate-800"
             >
               <Plus className="h-4 w-4" />
+              ✨
               Nueva empresa
             </button>
           </div>
@@ -347,10 +351,7 @@ export function PlatformConsole() {
             {error}
           </p>
         ) : null}
-        <div
-          className="mb-4 flex flex-wrap gap-1 rounded-lg border border-black bg-surface-inset p-1"
-          aria-label="Filtrar empresas por estado"
-        >
+        <div className="mb-5 flex flex-wrap items-center gap-2" aria-label="Filtrar empresas por estado">
           {FILTER_OPTIONS.map((filter) => {
             const summary =
               filter.value === "all"
@@ -366,8 +367,9 @@ export function PlatformConsole() {
                 type="button"
                 onClick={() => setStatusFilter(filter.value)}
                 aria-pressed={selected}
-                className={`flex h-8 items-center gap-2 rounded-md px-3 text-xs font-black transition-colors ${selected ? "bg-emerald-400 text-slate-950" : "text-slate-300 hover:bg-surface-card-hover"}`}
+                className={`flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-black shadow-sm transition ${selected ? "bg-emerald-400 text-slate-950 shadow-emerald-500/20" : filter.value === "active" ? "bg-emerald-400/15 text-emerald-200 hover:bg-emerald-400/25" : filter.value === "inactive" ? "bg-rose-400/15 text-rose-200 hover:bg-rose-400/25" : "bg-sky-400/15 text-sky-100 hover:bg-sky-400/25"}`}
               >
+                <span aria-hidden>{filter.emoji}</span>
                 <span>{summary.label}</span>
                 <span className={`tabular-nums ${selected ? "text-slate-950" : summary.tone}`}>
                   {summary.value}
@@ -375,14 +377,14 @@ export function PlatformConsole() {
               </button>
             );
           })}
-          <span className="ml-auto flex h-8 items-center gap-3 px-2 text-xs font-bold text-slate-500">
-            <span><b className="text-slate-100">{platformStats.users}</b> usuarios</span>
-            <span><b className="text-slate-100">{platformStats.warehouses}</b> bodegas</span>
+          <span className="ml-auto flex items-center gap-3 px-1 text-xs font-bold text-slate-400">
+            <span>👥 <b className="text-slate-100">{platformStats.users}</b> usuarios</span>
+            <span>🏭 <b className="text-slate-100">{platformStats.warehouses}</b> bodegas</span>
           </span>
         </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p className={labelMutedClass}>
-            {filteredOrganizations.length} {filteredOrganizations.length === 1 ? "empresa" : "empresas"}
+          <p className="text-xs font-black uppercase tracking-wide text-sky-300">
+            ✨ {filteredOrganizations.length} {filteredOrganizations.length === 1 ? "empresa" : "empresas"}
           </p>
           <label className="relative block w-full sm:max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -390,44 +392,44 @@ export function PlatformConsole() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar empresa"
-              className={`${inputClass} h-10 w-full pl-9`}
+              className={`${inputClass} inset-field h-11 w-full rounded-full border-0 bg-slate-950/70 pl-10 shadow-inner`}
             />
           </label>
         </div>
         {filteredOrganizations.length ? (
-          <div className="grid gap-2">
+          <div className="grid gap-3">
             {filteredOrganizations.map((org) => (
               <button
                 key={org.id}
                 type="button"
                 onClick={() => selectOrganization(org.id)}
                 onContextMenu={(event) => openContextMenu(event, org.id)}
-                className="group grid w-full cursor-context-menu gap-3 rounded-lg border border-black bg-surface-card p-3 text-left transition-colors hover:bg-surface-card-hover sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-4"
+                className="group grid w-full cursor-context-menu gap-4 rounded-[1.25rem] bg-linear-to-r from-emerald-400 via-teal-300 to-cyan-300 p-4 text-left text-slate-950 shadow-[0_12px_28px_rgba(16,185,129,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(16,185,129,0.28)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-5"
                 aria-label={`Abrir empresa ${org.name}. Clic derecho para más opciones.`}
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-emerald-300 transition-colors group-hover:bg-emerald-400 group-hover:text-slate-950">
-                      <Building2 className="h-5 w-5" />
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/55 text-2xl shadow-sm transition group-hover:rotate-3 group-hover:scale-105" aria-hidden>
+                      🏢
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate text-base font-black text-slate-100">
+                      <span className="block truncate text-lg font-black text-slate-950">
                         {org.name}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs font-bold text-slate-500">
+                      <span className="mt-0.5 block truncate text-xs font-bold text-slate-950/65">
                         {org.slug}
                       </span>
                     </span>
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-black pt-3 text-xs font-bold text-slate-400 sm:justify-end sm:gap-x-4 sm:border-t-0 sm:pt-0">
-                  <StatusPill active={org.is_active} />
-                  <span className="sm:border-l sm:border-black sm:pl-4">
-                    <b className="mr-1 text-slate-100">{org.user_count}</b> usuarios
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-black text-slate-950 sm:justify-end">
+                  <span className="rounded-full bg-slate-950 px-3 py-1.5 text-emerald-200 shadow-sm">
+                    {org.is_active ? "🟢 Activa" : "💤 Inactiva"}
                   </span>
-                  <span className="flex items-center gap-1 sm:border-l sm:border-black sm:pl-4">
-                    <span><b className="mr-1 text-slate-100">{org.warehouse_count}</b> bodegas</span>
-                    <Ellipsis className="h-4 w-4 text-slate-500" aria-hidden />
+                  <span>👥 {org.user_count} usuarios</span>
+                  <span className="flex items-center gap-1">
+                    <span>🏭 {org.warehouse_count} bodegas</span>
+                    <Ellipsis className="h-4 w-4 text-slate-950/55" aria-hidden />
                   </span>
                 </div>
               </button>
