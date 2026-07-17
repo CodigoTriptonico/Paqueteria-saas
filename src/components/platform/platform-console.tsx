@@ -1,10 +1,18 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   AlertCircle,
   Building2,
   CheckCircle2,
+  Ellipsis,
   Loader2,
   Pencil,
   Plus,
@@ -34,6 +42,7 @@ import {
   textMutedClass,
 } from "@/components/ui-blocks";
 import type { PlatformOrganizationRow } from "@/lib/auth/types";
+import { summarizePlatformOrganizations } from "@/lib/platform-console-summary";
 
 type StatusFilter = "all" | "active" | "inactive";
 
@@ -45,6 +54,12 @@ const FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
 
 const dangerButtonClass =
   "inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-black bg-[#3A1818] px-3 text-sm font-black text-rose-100 transition hover:bg-[#4A2020] disabled:cursor-not-allowed disabled:opacity-40";
+
+type OrganizationContextMenu = {
+  organizationId: string;
+  x: number;
+  y: number;
+};
 
 function StatusPill({ active }: { active: boolean }) {
   return (
@@ -83,9 +98,18 @@ export function PlatformConsole() {
   const [editOrgSlug, setEditOrgSlug] = useState("");
   const [editMaxUsers, setEditMaxUsers] = useState(5);
   const [editMaxWarehouses, setEditMaxWarehouses] = useState(5);
+  const [contextMenu, setContextMenu] =
+    useState<OrganizationContextMenu | null>(null);
 
   const selectedOrg =
     organizations.find((org) => org.id === selectedOrgId) || null;
+  const contextOrganization = contextMenu
+    ? organizations.find((org) => org.id === contextMenu.organizationId) || null
+    : null;
+  const platformStats = useMemo(
+    () => summarizePlatformOrganizations(organizations),
+    [organizations],
+  );
 
   const loadOrganizations = useCallback(async () => {
     setLoading(true);
@@ -116,6 +140,35 @@ export function PlatformConsole() {
     });
   }, [selectedOrg]);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+
+    const closeMenu = (event: Event) => {
+      if (event instanceof PointerEvent && event.button === 2) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-platform-company-context-menu]")
+      ) {
+        return;
+      }
+      setContextMenu(null);
+    };
+    const closeMenuOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
+    const closeMenuOnScroll = () => setContextMenu(null);
+
+    window.addEventListener("pointerdown", closeMenu);
+    window.addEventListener("keydown", closeMenuOnEscape);
+    window.addEventListener("scroll", closeMenuOnScroll, true);
+    return () => {
+      window.removeEventListener("pointerdown", closeMenu);
+      window.removeEventListener("keydown", closeMenuOnEscape);
+      window.removeEventListener("scroll", closeMenuOnScroll, true);
+    };
+  }, [contextMenu]);
+
   const filteredOrganizations = useMemo(() => {
     const search = query.trim().toLowerCase();
     return organizations.filter((org) => {
@@ -131,6 +184,25 @@ export function PlatformConsole() {
     });
   }, [organizations, query, statusFilter]);
 
+  const selectOrganization = useCallback((organizationId: string) => {
+    setSelectedOrgId(organizationId);
+    setShowEditOrg(false);
+    setShowArchiveConfirm(false);
+  }, []);
+
+  const openContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>, organizationId: string) => {
+      event.preventDefault();
+      selectOrganization(organizationId);
+      setContextMenu({
+        organizationId,
+        x: Math.min(event.clientX, window.innerWidth - 224),
+        y: Math.min(event.clientY, window.innerHeight - 196),
+      });
+    },
+    [selectOrganization],
+  );
+
   const platformNavTitle = showCreateOrg
     ? "Nueva paqueteria"
     : selectedOrg?.name || "Plataforma";
@@ -142,8 +214,20 @@ export function PlatformConsole() {
     setSelectedOrgId(null);
     setShowEditOrg(false);
     setShowArchiveConfirm(false);
+    setContextMenu(null);
   }, [showCreateOrg]);
   useContextNav({ title: platformNavTitle, onBack: handlePlatformNavBack });
+
+  function openEditOrganization(organization: PlatformOrganizationRow) {
+    selectOrganization(organization.id);
+    setEditOrgName(organization.name);
+    setEditOrgSlug(organization.slug);
+    setEditMaxUsers(organization.max_users ?? 5);
+    setEditMaxWarehouses(organization.max_warehouses ?? 5);
+    setShowArchiveConfirm(false);
+    setShowEditOrg(true);
+    setContextMenu(null);
+  }
 
   async function handleUpdateOrg(event: FormEvent) {
     event.preventDefault();
@@ -166,20 +250,21 @@ export function PlatformConsole() {
     await loadOrganizations();
   }
 
-  async function handleToggleActive() {
-    if (!selectedOrg) return;
+  async function handleToggleActive(organization = selectedOrg) {
+    if (!organization) return;
     setSaving(true);
-    const result = selectedOrg.is_active
-      ? await deactivateOrganizationAction(selectedOrg.id)
-      : await reactivateOrganizationAction(selectedOrg.id);
+    const result = organization.is_active
+      ? await deactivateOrganizationAction(organization.id)
+      : await reactivateOrganizationAction(organization.id);
     setSaving(false);
     if (!result.ok) {
       notify.error(result.error);
       return;
     }
     notify.success(
-      selectedOrg.is_active ? "Empresa desactivada." : "Empresa reactivada.",
+      organization.is_active ? "Empresa desactivada." : "Empresa reactivada.",
     );
+    setContextMenu(null);
     await loadOrganizations();
   }
 
@@ -253,17 +338,27 @@ export function PlatformConsole() {
             {error}
           </p>
         ) : null}
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row">
-          <label className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar empresa"
-              className={`${inputClass} h-10 w-full pl-9`}
-            />
-          </label>
-          <div className="flex gap-1 overflow-x-auto">
+        <div className="mb-5 grid grid-cols-2 gap-2 lg:grid-cols-5">
+          {[
+            ["Empresas", platformStats.total, "text-slate-100"],
+            ["Activas", platformStats.active, "text-emerald-300"],
+            ["Inactivas", platformStats.inactive, "text-rose-300"],
+            ["Usuarios", platformStats.users, "text-slate-100"],
+            ["Bodegas", platformStats.warehouses, "text-slate-100"],
+          ].map(([label, value, tone]) => (
+            <div
+              key={label as string}
+              className="rounded-lg border border-black bg-surface-card px-3 py-2.5"
+            >
+              <p className={labelMutedClass}>{label}</p>
+              <p className={`mt-1 text-2xl font-black tabular-nums ${tone}`}>
+                {value}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div className="flex shrink-0 gap-1 overflow-x-auto">
             {FILTER_OPTIONS.map((filter) => (
               <button
                 key={filter.value}
@@ -275,6 +370,18 @@ export function PlatformConsole() {
               </button>
             ))}
           </div>
+          <label className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar empresa"
+              className={`${inputClass} h-10 w-full pl-9`}
+            />
+          </label>
+          <p className="hidden shrink-0 text-xs font-bold text-slate-500 xl:block">
+            Clic derecho para opciones
+          </p>
         </div>
         {filteredOrganizations.length ? (
           <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -282,12 +389,10 @@ export function PlatformConsole() {
               <button
                 key={org.id}
                 type="button"
-                onClick={() => {
-                  setSelectedOrgId(org.id);
-                  setShowEditOrg(false);
-                  setShowArchiveConfirm(false);
-                }}
-                className={`${selectionSurfaceClass(selectedOrgId === org.id, selectedOrgId !== null && selectedOrgId !== org.id)} min-h-36 p-4 text-left`}
+                onClick={() => selectOrganization(org.id)}
+                onContextMenu={(event) => openContextMenu(event, org.id)}
+                className={`${selectionSurfaceClass(selectedOrgId === org.id, selectedOrgId !== null && selectedOrgId !== org.id)} min-h-36 cursor-context-menu p-4 text-left`}
+                aria-label={`Abrir empresa ${org.name}. Clic derecho para más opciones.`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-2">
@@ -307,8 +412,9 @@ export function PlatformConsole() {
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold text-slate-400">
                   <span>{org.user_count} usuarios</span>
-                  <span className="text-right">
+                  <span className="flex items-center justify-end gap-1 text-right">
                     {org.warehouse_count} bodegas
+                    <Ellipsis className="h-4 w-4 text-slate-500" aria-hidden />
                   </span>
                 </div>
               </button>
@@ -333,7 +439,25 @@ export function PlatformConsole() {
                 Usuarios y operacion se administran dentro de esta empresa.
               </p>
             </div>
-            <StatusPill active={selectedOrg.is_active} />
+            <div className="flex items-center gap-2">
+              <StatusPill active={selectedOrg.is_active} />
+              <button
+                type="button"
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setContextMenu({
+                    organizationId: selectedOrg.id,
+                    x: Math.max(8, rect.right - 216),
+                    y: rect.bottom + 8,
+                  });
+                }}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300 hover:bg-surface-card-hover"
+                aria-label={`Abrir opciones de ${selectedOrg.name}`}
+                title="Opciones"
+              >
+                <Ellipsis className="h-5 w-5" />
+              </button>
+            </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div className="rounded-lg border border-black bg-surface-card p-3">
@@ -356,32 +480,6 @@ export function PlatformConsole() {
                 {selectedOrg.max_warehouses ?? "-"} bodegas
               </p>
             </div>
-          </div>
-          <div className="mt-5 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setShowEditOrg((open) => !open)}
-              className={`${secondaryButtonClass} h-10 text-sm font-black`}
-            >
-              <Pencil className="h-4 w-4" />
-              Editar empresa
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleToggleActive()}
-              disabled={saving}
-              className={`${secondaryButtonClass} h-10 text-sm font-black disabled:opacity-40`}
-            >
-              {selectedOrg.is_active ? "Desactivar" : "Reactivar"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowArchiveConfirm(true)}
-              className={dangerButtonClass}
-            >
-              <Trash2 className="h-4 w-4" />
-          Cerrar y archivar
-            </button>
           </div>
           {showEditOrg ? (
             <form
@@ -479,6 +577,75 @@ export function PlatformConsole() {
             </div>
           ) : null}
         </Panel>
+      ) : null}
+      {contextMenu && contextOrganization ? (
+        <div
+          role="menu"
+          data-platform-company-context-menu
+          className="fixed z-50 w-52 overflow-hidden rounded-lg border border-black bg-surface-card shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onContextMenu={(event) => event.preventDefault()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="border-b border-black px-3 py-2">
+            <p className="truncate text-sm font-black text-[#f8fafc]">
+              {contextOrganization.name}
+            </p>
+            <p className="truncate text-xs font-bold text-slate-500">
+              {contextOrganization.slug}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-black text-[#f8fafc] hover:bg-surface-card-hover"
+            onClick={() => {
+              selectOrganization(contextOrganization.id);
+              setContextMenu(null);
+            }}
+          >
+            <Building2 className="h-4 w-4 text-emerald-300" />
+            Ver datos
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-black text-[#f8fafc] hover:bg-surface-card-hover"
+            onClick={() => openEditOrganization(contextOrganization)}
+          >
+            <Pencil className="h-4 w-4" />
+            Editar empresa
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={saving}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-black text-[#f8fafc] hover:bg-surface-card-hover disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => void handleToggleActive(contextOrganization)}
+          >
+            {contextOrganization.is_active ? (
+              <XCircle className="h-4 w-4 text-amber-300" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+            )}
+            {contextOrganization.is_active ? "Desactivar" : "Reactivar"}
+          </button>
+          <div className="border-t border-black" />
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-black text-rose-200 hover:bg-[#3A1818]"
+            onClick={() => {
+              selectOrganization(contextOrganization.id);
+              setShowEditOrg(false);
+              setShowArchiveConfirm(true);
+              setContextMenu(null);
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+            Cerrar y archivar
+          </button>
+        </div>
       ) : null}
     </>
   );
