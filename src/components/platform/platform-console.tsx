@@ -39,7 +39,6 @@ import {
   Panel,
   primaryButtonClass,
   secondaryButtonClass,
-  selectionSurfaceClass,
   textMutedClass,
 } from "@/components/ui-blocks";
 import type { PlatformOrganizationRow } from "@/lib/auth/types";
@@ -315,10 +314,22 @@ export function PlatformConsole() {
   return (
     <>
       <Panel
-        className={selectedOrg ? "hidden" : undefined}
-        title={
-          <span className="flex w-full min-w-0 items-center justify-between gap-3">
-            <span className="truncate">Empresas</span>
+        className={selectedOrg ? "hidden" : "min-h-[calc(100dvh-7rem)]"}
+        contentClassName="p-0"
+        hideHeader
+        title="Empresas"
+      >
+        <header className="border-b border-black bg-surface-card-header px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className={labelMutedClass}>Administración de plataforma</p>
+              <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-100 sm:text-3xl">
+                Empresas
+              </h1>
+              <p className={`mt-1 max-w-2xl ${textMutedClass}`}>
+                Usuarios, permisos y operación de cada empresa.
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => setShowCreateOrg(true)}
@@ -327,24 +338,23 @@ export function PlatformConsole() {
               <Plus className="h-4 w-4" />
               Nueva empresa
             </button>
-          </span>
-        }
-      >
-        <p className={`mb-4 max-w-2xl text-sm ${textMutedClass}`}>
-          Crea y administra empresas. Cada empresa controla por su cuenta sus
-          usuarios, permisos y datos operativos.
-        </p>
+          </div>
+        </header>
+        <div className="p-4 sm:p-5">
         {error ? (
           <p className="mb-4 flex items-start gap-2 rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
             {error}
           </p>
         ) : null}
-        <div className="mb-5 grid grid-cols-2 gap-2 lg:grid-cols-5">
+        <div
+          className="mb-4 flex flex-wrap gap-1 rounded-lg border border-black bg-surface-inset p-1"
+          aria-label="Filtrar empresas por estado"
+        >
           {FILTER_OPTIONS.map((filter) => {
             const summary =
               filter.value === "all"
-                ? { label: "Empresas", value: platformStats.total, tone: "text-slate-100" }
+                ? { label: "Todas", value: platformStats.total, tone: "text-slate-100" }
                 : filter.value === "active"
                   ? { label: "Activas", value: platformStats.active, tone: "text-emerald-300" }
                   : { label: "Inactivas", value: platformStats.inactive, tone: "text-rose-300" };
@@ -356,32 +366,25 @@ export function PlatformConsole() {
                 type="button"
                 onClick={() => setStatusFilter(filter.value)}
                 aria-pressed={selected}
-                className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${selected ? "border-emerald-600 bg-emerald-950/45" : "border-black bg-surface-card hover:bg-surface-card-hover"}`}
+                className={`flex h-8 items-center gap-2 rounded-md px-3 text-xs font-black transition-colors ${selected ? "bg-emerald-400 text-slate-950" : "text-slate-300 hover:bg-surface-card-hover"}`}
               >
-                <p className={labelMutedClass}>{summary.label}</p>
-                <p className={`mt-1 text-2xl font-black tabular-nums ${summary.tone}`}>
+                <span>{summary.label}</span>
+                <span className={`tabular-nums ${selected ? "text-slate-950" : summary.tone}`}>
                   {summary.value}
-                </p>
+                </span>
               </button>
             );
           })}
-          {[
-            ["Usuarios", platformStats.users, "text-slate-100"],
-            ["Bodegas", platformStats.warehouses, "text-slate-100"],
-          ].map(([label, value, tone]) => (
-            <div
-              key={label as string}
-              className="rounded-lg border border-black bg-surface-card px-3 py-2.5"
-            >
-              <p className={labelMutedClass}>{label}</p>
-              <p className={`mt-1 text-2xl font-black tabular-nums ${tone}`}>
-                {value}
-              </p>
-            </div>
-          ))}
+          <span className="ml-auto flex h-8 items-center gap-3 px-2 text-xs font-bold text-slate-500">
+            <span><b className="text-slate-100">{platformStats.users}</b> usuarios</span>
+            <span><b className="text-slate-100">{platformStats.warehouses}</b> bodegas</span>
+          </span>
         </div>
-        <div className="mb-4">
-          <label className="relative block w-full max-w-xl">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className={labelMutedClass}>
+            {filteredOrganizations.length} {filteredOrganizations.length === 1 ? "empresa" : "empresas"}
+          </p>
+          <label className="relative block w-full sm:max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input
               value={query}
@@ -392,36 +395,38 @@ export function PlatformConsole() {
           </label>
         </div>
         {filteredOrganizations.length ? (
-          <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-2">
             {filteredOrganizations.map((org) => (
               <button
                 key={org.id}
                 type="button"
                 onClick={() => selectOrganization(org.id)}
                 onContextMenu={(event) => openContextMenu(event, org.id)}
-                className={`${selectionSurfaceClass(selectedOrgId === org.id, selectedOrgId !== null && selectedOrgId !== org.id)} min-h-36 cursor-context-menu p-4 text-left`}
+                className="group grid w-full cursor-context-menu gap-3 rounded-lg border border-black bg-surface-card p-3 text-left transition-colors hover:bg-surface-card-hover sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-4"
                 aria-label={`Abrir empresa ${org.name}. Clic derecho para más opciones.`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-emerald-300">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-emerald-300 transition-colors group-hover:bg-emerald-400 group-hover:text-slate-950">
                       <Building2 className="h-5 w-5" />
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-base font-black text-slate-100">
                         {org.name}
                       </span>
-                      <span className="block truncate text-xs text-slate-500">
+                      <span className="mt-0.5 block truncate text-xs font-bold text-slate-500">
                         {org.slug}
                       </span>
                     </span>
                   </span>
-                  <StatusPill active={org.is_active} />
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold text-slate-400">
-                  <span>{org.user_count} usuarios</span>
-                  <span className="flex items-center justify-end gap-1 text-right">
-                    {org.warehouse_count} bodegas
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-black pt-3 text-xs font-bold text-slate-400 sm:justify-end sm:gap-x-4 sm:border-t-0 sm:pt-0">
+                  <StatusPill active={org.is_active} />
+                  <span className="sm:border-l sm:border-black sm:pl-4">
+                    <b className="mr-1 text-slate-100">{org.user_count}</b> usuarios
+                  </span>
+                  <span className="flex items-center gap-1 sm:border-l sm:border-black sm:pl-4">
+                    <span><b className="mr-1 text-slate-100">{org.warehouse_count}</b> bodegas</span>
                     <Ellipsis className="h-4 w-4 text-slate-500" aria-hidden />
                   </span>
                 </div>
@@ -436,6 +441,7 @@ export function PlatformConsole() {
             </p>
           </div>
         )}
+        </div>
       </Panel>
 
       {selectedOrg ? (
