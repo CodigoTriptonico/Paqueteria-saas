@@ -1,6 +1,7 @@
 import type { AppSession, PermissionKey, RoleSlug } from "@/lib/auth/types";
 
 const ROLE_ROUTE_ACCESS: Partial<Record<RoleSlug, string[]>> = {
+  // prettier-ignore
   administrador: ["/", "/venta", "/inventario", "/seguimiento", "/ingreso-bodega", "/bodega", "/paletas", "/logistica", "/estadisticas", "/auditoria", "/vendedores", "/configuracion", "/time-clock", "/agencias", "/contabilidad", "/solicitudes", "/distribuidores", "/conductor"],
   vendedor: ["/", "/venta", "/inventario", "/seguimiento"],
   conductor: ["/", "/conductor"],
@@ -19,7 +20,14 @@ const ROLE_ROUTE_ACCESS: Partial<Record<RoleSlug, string[]>> = {
 };
 
 const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
-  "/configuracion": ["settings.manage", "users.manage", "warehouses.manage", "permissions.manage", "time_clock.view", "time_clock.manage"],
+  "/configuracion": [
+    "settings.manage",
+    "users.manage",
+    "warehouses.manage",
+    "permissions.manage",
+    "time_clock.view",
+    "time_clock.manage",
+  ],
   "/inventario": ["inventory.view"],
   "/venta": ["sales.manage"],
   "/seguimiento": ["routes.view", "sales.manage"],
@@ -29,24 +37,54 @@ const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
   "/paletas": ["warehouses.manage", "sales.manage"],
   "/conductor": ["routes.view"],
   "/time-clock": ["time_clock.view", "time_clock.manage"],
-  "/agencias": ["agency.view", "agency.create", "agency.edit", "agency.status.transition", "agency.captor.assign", "agency.supervisor.assign", "agency.support", "distribution.manage", "distribution.acquire"],
-  "/agencia": ["agency.sales.view", "agency.sales.create", "agency.customers.manage", "agency.pricing.manage", "distribution.sell"],
-  "/captacion": ["agency.view", "agency.captor.assign", "agency.support", "distribution.acquire"],
-  "/solicitudes": ["agency.requests.view", "agency.requests.create", "agency.requests.assign", "agency.visits.confirm"],
-  "/contabilidad": ["agency.account.view", "agency.account.charge", "agency.account.payment", "agency.account.apply", "accounting.view", "accounting.post", "accounting.reconcile", "accounting.reverse", "financial_hold.view", "financial_hold.release"],
+  "/agencias": [
+    "agency.view",
+    "agency.create",
+    "agency.edit",
+    "agency.status.transition",
+    "agency.captor.assign",
+    "agency.supervisor.assign",
+    "agency.support",
+    "distribution.manage",
+    "distribution.acquire",
+  ],
+  "/agencia": [
+    "agency.sales.view",
+    "agency.sales.create",
+    "agency.customers.manage",
+    "agency.pricing.manage",
+    "distribution.sell",
+  ],
+  "/captacion": [
+    "agency.view",
+    "agency.captor.assign",
+    "agency.support",
+    "distribution.acquire",
+  ],
+  "/solicitudes": [
+    "agency.requests.view",
+    "agency.requests.create",
+    "agency.requests.assign",
+    "agency.visits.confirm",
+  ],
+  "/contabilidad": [
+    "agency.account.view",
+    "agency.account.charge",
+    "agency.account.payment",
+    "agency.account.apply",
+    "accounting.view",
+    "accounting.post",
+    "accounting.reconcile",
+    "accounting.reverse",
+    "financial_hold.view",
+    "financial_hold.release",
+  ],
   "/auditoria": ["audit.immutable.view", "settings.manage"],
 };
 
-function effectiveRoleSlug(session: AppSession): RoleSlug {
-  if (session.isActingAsClient && session.isPlatformAdmin) {
-    return "administrador";
-  }
-  return session.roleSlug;
-}
-
-/** Dueño de Boxario sin paquetería cliente seleccionada (vista operativa bloqueada). */
-export function platformAdminNeedsClientContext(session: AppSession | null): boolean {
-  return Boolean(session?.isPlatformAdmin && !session.isActingAsClient);
+/** A platform account can administer organizations, never client operations. */
+export function isPlatformOnlySession(session: AppSession | null): boolean {
+  return Boolean(session?.isPlatformAdmin);
 }
 
 export function sessionHasPermission(
@@ -58,14 +96,9 @@ export function sessionHasPermission(
   }
 
   if (
-    session.isActingAsClient &&
-    session.isPlatformAdmin &&
+    session.roleSlug === "administrador" ||
     session.permissions.includes("all")
   ) {
-    return true;
-  }
-
-  if (session.roleSlug === "administrador" || session.permissions.includes("all")) {
     return true;
   }
 
@@ -81,48 +114,60 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
     return session.isPlatformAdmin;
   }
 
-  if (platformAdminNeedsClientContext(session)) {
+  if (isPlatformOnlySession(session)) {
     return false;
   }
 
   const base = "/" + (pathname.split("/").filter(Boolean)[0] || "");
-  const allowedPrefixes = ROLE_ROUTE_ACCESS[effectiveRoleSlug(session)];
+  const allowedPrefixes = ROLE_ROUTE_ACCESS[session.roleSlug];
 
-  if (base === "/logistica" && !["administrador", "logistica"].includes(effectiveRoleSlug(session))) {
+  if (
+    base === "/logistica" &&
+    !["administrador", "logistica"].includes(session.roleSlug)
+  ) {
     return false;
   }
 
-  if (base === "/estadisticas" && !["administrador", "auditor"].includes(effectiveRoleSlug(session))) {
+  if (
+    base === "/estadisticas" &&
+    !["administrador", "auditor"].includes(session.roleSlug)
+  ) {
     return false;
   }
 
-  if (base === "/vendedores" && effectiveRoleSlug(session) !== "administrador") {
+  if (base === "/vendedores" && session.roleSlug !== "administrador") {
     return false;
   }
 
-  if (base === "/time-clock" && effectiveRoleSlug(session) !== "administrador") {
+  if (base === "/time-clock" && session.roleSlug !== "administrador") {
     return requiredTimeClockAccess(session);
   }
 
   if (
     base === "/conductor" &&
-    effectiveRoleSlug(session) !== "conductor" &&
-    effectiveRoleSlug(session) !== "administrador"
+    session.roleSlug !== "conductor" &&
+    session.roleSlug !== "administrador"
   ) {
     return false;
   }
 
-  if (allowedPrefixes && !allowedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+  if (
+    allowedPrefixes &&
+    !allowedPrefixes.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    )
+  ) {
     return false;
   }
 
   const required = PATH_PERMISSIONS[base];
-
   if (!required?.length) {
     return true;
   }
 
-  return required.some((permission) => sessionHasPermission(session, permission));
+  return required.some((permission) =>
+    sessionHasPermission(session, permission),
+  );
 }
 
 function requiredTimeClockAccess(session: AppSession) {
@@ -132,14 +177,16 @@ function requiredTimeClockAccess(session: AppSession) {
   );
 }
 
-export function canAccessWarehouse(session: AppSession | null, warehouseId: string) {
+export function canAccessWarehouse(
+  session: AppSession | null,
+  warehouseId: string,
+) {
   if (!session) {
     return false;
   }
 
-  if (session.isActingAsClient || effectiveRoleSlug(session) === "administrador") {
-    return true;
-  }
-
-  return session.warehouseIds.includes(warehouseId);
+  return (
+    session.roleSlug === "administrador" ||
+    session.warehouseIds.includes(warehouseId)
+  );
 }

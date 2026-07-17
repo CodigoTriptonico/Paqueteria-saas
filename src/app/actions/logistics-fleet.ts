@@ -65,7 +65,7 @@ type DriverLabelRow = {
 };
 
 function canManageFleet(session: AppSession) {
-  return session.roleSlug === "administrador" || (session.isPlatformAdmin && session.isActingAsClient);
+  return session.roleSlug === "administrador";
 }
 
 function roleSlug(row: { roles: RoleJoin }) {

@@ -14,7 +14,6 @@ export async function GET() {
       userId: session.userId,
       email: session.email,
       isPlatformAdmin: session.isPlatformAdmin,
-      isActingAsClient: session.isActingAsClient,
       roleSlug: session.roleSlug,
     },
   });

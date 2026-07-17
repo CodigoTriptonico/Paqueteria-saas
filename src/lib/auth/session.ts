@@ -1,20 +1,15 @@
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { cookies, headers } from "next/headers";
-import { ACT_AS_ORG_COOKIE } from "@/lib/auth/act-as";
 import { resolveAuthUser } from "@/lib/auth/resolve-auth-user";
 import {
   buildAppSessionFromProfile,
   extractPermissionKeys,
-  PLATFORM_VIEW_PERMISSIONS,
-  resolveActingContext,
   type ProfileSessionInput,
 } from "@/lib/auth/session-build";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isDevAuthBypassEnabled } from "@/lib/auth/dev-auth-bypass";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { isClientOrganization } from "@/lib/organizations/kind";
 import type { OrganizationSettings } from "@/lib/organizations/settings";
 import { readMaxWarehouses } from "@/lib/organizations/settings";
 import type { AppSession, RoleSlug } from "@/lib/auth/types";
@@ -32,25 +27,6 @@ async function loadIsPlatformAdmin(userId: string, reader?: SupabaseClient | nul
     .maybeSingle();
 
   return Boolean(data?.user_id);
-}
-
-async function loadActingOrganization(organizationId: string) {
-  const admin = createSupabaseAdminClient();
-  if (!admin) {
-    return null;
-  }
-
-  const { data } = await admin
-    .from("organizations")
-    .select("id, name, settings, kind, is_active")
-    .eq("id", organizationId)
-    .maybeSingle();
-
-  if (!data || !isClientOrganization(data.kind) || !data.is_active) {
-    return null;
-  }
-
-  return data;
 }
 
 async function loadDevelopmentPlatformOwnerId() {
@@ -111,16 +87,11 @@ async function getDevelopmentPlatformOwnerSession(): Promise<AppSession | null> 
     fullName: profile.full_name,
     organizationId: profile.organization_id,
     organizationName: homeOrg?.name || "Empresa",
-    homeOrganizationId: profile.organization_id,
-    homeOrganizationName: homeOrg?.name || "Empresa",
-    actingOrganizationId: null,
-    actingOrganizationName: null,
-    isActingAsClient: false,
     multiWarehouseEnabled: Boolean(homeOrg?.settings?.multi_warehouse_enabled),
     maxWarehouses: readMaxWarehouses(homeOrg?.settings),
     roleSlug: role?.slug || "administrador",
     roleName: role?.name || "Administrador",
-    permissions: PLATFORM_VIEW_PERMISSIONS,
+    permissions: ["all"],
     warehouseIds: [],
     preferredWarehouseId: (profile.default_warehouse_id as string | null) || null,
     isPlatformAdmin,
@@ -189,27 +160,7 @@ async function resolveAppSessionUncached(): Promise<AppSession | null> {
     isPlatformAdmin,
   };
 
-  const pathname = (await headers()).get("x-boxario-pathname") ?? "";
-  const onPlatformRoute = pathname.startsWith("/platform");
-  const cookieStore = await cookies();
-  const actAsId = cookieStore.get(ACT_AS_ORG_COOKIE)?.value?.trim() || null;
-  const actingOrg = actAsId ? await loadActingOrganization(actAsId) : null;
-
-  const acting = resolveActingContext({
-    isPlatformAdmin,
-    onPlatformRoute,
-    actAsOrganizationId: actAsId,
-    actingOrg: actingOrg
-      ? {
-          id: actingOrg.id,
-          name: actingOrg.name,
-          settings: actingOrg.settings as OrganizationSettings | null,
-        }
-      : null,
-    home: homeInput,
-  });
-
-  return buildAppSessionFromProfile(homeInput, acting);
+  return buildAppSessionFromProfile(homeInput);
 }
 
 export const getAppSession = cache(resolveAppSessionUncached);

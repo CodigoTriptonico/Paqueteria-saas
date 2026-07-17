@@ -1,6 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { ACT_AS_ORG_COOKIE } from "@/lib/auth/act-as";
 import { clearAuthCookies } from "@/lib/auth/clear-auth-cookies";
 import { resolveAuthUser } from "@/lib/auth/resolve-auth-user";
 
@@ -66,10 +65,6 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (pathname.startsWith("/platform")) {
-    request.cookies.delete(ACT_AS_ORG_COOKIE);
-  }
-
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-boxario-pathname", pathname);
 
@@ -124,10 +119,6 @@ export async function proxy(request: NextRequest) {
     }
 
     return redirectToLogin(request, { nextPath: pathname });
-  }
-
-  if (pathname.startsWith("/platform")) {
-    supabaseResponse.cookies.delete(ACT_AS_ORG_COOKIE);
   }
 
   return supabaseResponse;

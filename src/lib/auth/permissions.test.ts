@@ -10,11 +10,6 @@ function sellerSession(): AppSession {
     fullName: "Seller",
     organizationId: "org-1",
     organizationName: "Org",
-    homeOrganizationId: "org-1",
-    homeOrganizationName: "Org",
-    actingOrganizationId: null,
-    actingOrganizationName: null,
-    isActingAsClient: false,
     multiWarehouseEnabled: false,
     maxWarehouses: 1,
     roleSlug: "vendedor",
@@ -33,11 +28,6 @@ function adminSession(): AppSession {
     fullName: "Admin",
     organizationId: "org-1",
     organizationName: "Org",
-    homeOrganizationId: "org-1",
-    homeOrganizationName: "Org",
-    actingOrganizationId: null,
-    actingOrganizationName: null,
-    isActingAsClient: false,
     multiWarehouseEnabled: false,
     maxWarehouses: 1,
     roleSlug: "administrador",
@@ -56,11 +46,6 @@ function driverSession(): AppSession {
     fullName: "Conductor Test",
     organizationId: "org-1",
     organizationName: "Org",
-    homeOrganizationId: "org-1",
-    homeOrganizationName: "Org",
-    actingOrganizationId: null,
-    actingOrganizationName: null,
-    isActingAsClient: false,
     multiWarehouseEnabled: false,
     maxWarehouses: 1,
     roleSlug: "conductor",
@@ -92,7 +77,10 @@ function captorSession(): AppSession {
   };
 }
 
-function businessRoleSession(roleSlug: string, permissions: AppSession["permissions"]): AppSession {
+function businessRoleSession(
+  roleSlug: string,
+  permissions: AppSession["permissions"],
+): AppSession {
   return {
     ...sellerSession(),
     userId: `${roleSlug}-1`,
@@ -128,6 +116,21 @@ describe("canAccessPath seller shipments", () => {
     assert.equal(canAccessPath(adminSession(), "/ingreso-bodega"), true);
     assert.equal(canAccessPath(adminSession(), "/bodega"), true);
     assert.equal(canAccessPath(adminSession(), "/paletas"), true);
+  });
+});
+
+describe("canAccessPath platform account", () => {
+  it("only allows the platform console and never client operations", () => {
+    const platform = {
+      ...adminSession(),
+      isPlatformAdmin: true,
+      organizationId: "platform-org",
+    };
+
+    assert.equal(canAccessPath(platform, "/platform"), true);
+    assert.equal(canAccessPath(platform, "/venta"), false);
+    assert.equal(canAccessPath(platform, "/seguimiento"), false);
+    assert.equal(canAccessPath(platform, "/configuracion"), false);
   });
 });
 
@@ -175,8 +178,14 @@ describe("canAccessPath business scopes", () => {
       "agency.requests.view",
       "agency.requests.create",
     ]);
-    const finance = businessRoleSession("finanzas", ["accounting.view", "accounting.post"]);
-    const logistics = businessRoleSession("logistica", ["routes.view", "agency.requests.assign"]);
+    const finance = businessRoleSession("finanzas", [
+      "accounting.view",
+      "accounting.post",
+    ]);
+    const logistics = businessRoleSession("logistica", [
+      "routes.view",
+      "agency.requests.assign",
+    ]);
 
     assert.equal(canAccessPath(agencyAdmin, "/agencia"), true);
     assert.equal(canAccessPath(agencyAdmin, "/contabilidad"), false);

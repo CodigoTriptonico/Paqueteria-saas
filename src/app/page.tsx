@@ -11,7 +11,7 @@ import { ConductorHomePanel } from "@/components/conductor/conductor-home-panel"
 import { DashboardSummary } from "@/components/dashboard-summary";
 import { BigAction, cardClass, labelMutedClass, Panel, textMutedClass } from "@/components/ui-blocks";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
-import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
+import { isPlatformOnlySession } from "@/lib/auth/permissions";
 import { getAppSession } from "@/lib/auth/session";
 import { summarizeConductorTasks } from "@/lib/conductor-dashboard";
 import type { ConductorTruckInventorySummary } from "@/lib/conductor-truck-inventory";
@@ -54,7 +54,7 @@ const [primaryAction, ...secondaryActions] = actions;
 
 export default async function Home() {
   const session = await getAppSession();
-  if (session && platformAdminNeedsClientContext(session)) {
+  if (session && isPlatformOnlySession(session)) {
     redirect("/platform");
   }
 

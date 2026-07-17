@@ -65,13 +65,6 @@ export type AppSession = {
   /** Org usada para cargar datos (cliente si estás en vista plataforma). */
   organizationId: string;
   organizationName: string;
-  /** Org real del perfil (Boxario / platform). */
-  homeOrganizationId: string;
-  homeOrganizationName: string;
-  /** Cliente seleccionado en /platform, si aplica. */
-  actingOrganizationId: string | null;
-  actingOrganizationName: string | null;
-  isActingAsClient: boolean;
   multiWarehouseEnabled: boolean;
   maxWarehouses: number;
   roleSlug: RoleSlug;
@@ -93,14 +86,6 @@ export type PlatformOrganizationRow = {
   warehouse_count: number;
   max_users: number | null;
   max_warehouses: number | null;
-};
-
-export type PlatformOrgUserRow = {
-  id: string;
-  email: string;
-  full_name: string | null;
-  is_active: boolean;
-  role: { slug: RoleSlug; name: string };
 };
 
 export type WarehouseRow = {

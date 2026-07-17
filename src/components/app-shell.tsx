@@ -28,7 +28,7 @@ import { UserAccountMenu } from "@/components/user-account-menu";
 import { SidebarFooterControls, SidebarPageSurfaceControls } from "@/components/ui/sidebar-page-surface-controls";
 import { OnboardingCoachSidebarCountdown } from "@/components/onboarding/onboarding-coach-countdown";
 import { BoxarioBrandHeader, NotificationsCenter } from "@/components/notifications/notifications-center";
-import { canAccessPath, platformAdminNeedsClientContext } from "@/lib/auth/permissions";
+import { canAccessPath, isPlatformOnlySession } from "@/lib/auth/permissions";
 import { conductorTasksNavLabel } from "@/lib/conductor-tareas-view";
 import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 import type { UiSurfaceContextId } from "@/lib/ui-surface-context";
@@ -176,14 +176,14 @@ function navItemsForSession(session: AppSession | null) {
     return [];
   }
 
-  const needsClient = platformAdminNeedsClientContext(session);
+  const isPlatformOnly = isPlatformOnlySession(session);
 
   return navItems.filter((item) => {
-    if (item.platformOnly) {
-      return session.isPlatformAdmin;
+    if (isPlatformOnly) {
+      return Boolean(item.platformOnly);
     }
-    if (needsClient) {
-      return true;
+    if (item.platformOnly) {
+      return false;
     }
     return canAccessPath(session, item.href);
   });
@@ -263,15 +263,6 @@ function sidebarGroupsExpandedStorageKey(session: AppSession | null) {
   return `${SIDEBAR_GROUPS_EXPANDED_KEY_PREFIX}:${session?.userId ?? "anonymous"}`;
 }
 
-function isNavItemLocked(session: AppSession | null, item: NavItemDef) {
-  if (!session || item.platformOnly) {
-    return false;
-  }
-  return platformAdminNeedsClientContext(session);
-}
-
-const LOCKED_NAV_HINT = "Selecciona una paquetería en Plataforma y pulsa Operar";
-
 function navOnboardingTarget(href: string) {
   if (href === "/configuracion") {
     return ONBOARDING_TARGETS.NAV_CONFIGURACION;
@@ -291,36 +282,15 @@ function navOnboardingTarget(href: string) {
 type ShellNavItemProps = {
   item: NavItemDef;
   label: string;
-  session: AppSession | null;
+  session?: AppSession | null;
   isActive: boolean;
   variant: "sidebar" | "mobile" | "rail";
   onNavigate?: (isActive: boolean, hasSubmenu?: boolean) => void;
 };
 
-function ShellNavItem({ item, label, session, isActive, variant, onNavigate }: ShellNavItemProps) {
+function ShellNavItem({ item, label, isActive, variant, onNavigate }: ShellNavItemProps) {
   const Icon = item.icon;
-  const locked = isNavItemLocked(session, item);
   const onboardingTarget = navOnboardingTarget(item.href);
-
-  if (locked) {
-    const lockedClass =
-      variant === "sidebar"
-        ? "flex h-11 min-w-0 cursor-not-allowed items-center gap-3 rounded-lg border border-transparent px-3 text-left text-base font-black text-slate-600 opacity-50"
-        : variant === "rail"
-          ? "flex h-11 w-full cursor-not-allowed items-center justify-center rounded-lg border border-transparent text-slate-600 opacity-50"
-          : "flex h-12 min-w-0 cursor-not-allowed items-center gap-3 rounded-lg border border-black bg-surface-card px-3 text-sm font-black text-slate-600 opacity-50";
-
-    return (
-      <span key={item.href} className={lockedClass} title={LOCKED_NAV_HINT} aria-disabled="true">
-        <Icon className="h-5 w-5 shrink-0" />
-        {variant === "sidebar" ? (
-          <span className="min-w-0 flex-1 truncate">{label}</span>
-        ) : variant === "mobile" ? (
-          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-        ) : null}
-      </span>
-    );
-  }
 
   if (variant === "rail") {
     return (
@@ -439,7 +409,6 @@ export function AppShell({
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
   const [expandedSidebarGroups, setExpandedSidebarGroups] = useState<NavSectionId[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const needsClientSelection = platformAdminNeedsClientContext(session);
   const sidebarNavItems = useMemo(() => navItemsForSession(session), [session]);
   const sidebarNavGroups = useMemo(() => navGroupsForItems(sidebarNavItems), [sidebarNavItems]);
   const collapsibleSidebarGroupIds = useMemo(
@@ -629,13 +598,6 @@ export function AppShell({
               </div>
 
               <nav className="min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1">
-                {!showDesktopRail && needsClientSelection ? (
-                  <p className="mb-1 rounded-lg border border-amber-800/50 bg-amber-950/25 px-3 py-2 text-xs font-bold leading-snug text-amber-100">
-                    Elige una paquetería en <span className="text-amber-300">Plataforma</span> y pulsa{" "}
-                    <span className="text-amber-300">Operar</span>
-                    .
-                  </p>
-                ) : null}
                 {sidebarNavGroups.map((section) => {
                   const canCollapse = section.items.length > 0;
                   const sectionCollapsed =
@@ -728,7 +690,6 @@ export function AppShell({
                                   key={item.href}
                                   item={item}
                                   label={label}
-                                  session={session}
                                   isActive={label === active}
                                   variant={showDesktopRail ? "rail" : "sidebar"}
                                   onNavigate={handleNavClick}
@@ -777,22 +738,6 @@ export function AppShell({
             ) : null}
           </div>
 
-          {needsClientSelection ? (
-            <div className="mb-4 rounded-lg border border-amber-800/50 bg-amber-950/25 px-4 py-2 text-sm font-bold text-amber-100 lg:hidden">
-              Operación bloqueada hasta elegir una paquetería en Plataforma.
-            </div>
-          ) : null}
-
-          {session?.isActingAsClient ? (
-            <div className="mb-4 rounded-lg border border-emerald-700/60 bg-emerald-950/30 px-4 py-2 text-sm font-bold text-emerald-100">
-              Operando en{" "}
-              <span className="text-emerald-300">{session.actingOrganizationName}</span>
-              <span className="font-normal text-emerald-200/80">
-                {" "}
-                · datos de inventario, ventas y configuración de este cliente
-              </span>
-            </div>
-          ) : null}
 
           {navCollapsed && showCompactSidebar ? (
             <div className="sticky top-3 z-50 mb-4 grid gap-3 lg:hidden">

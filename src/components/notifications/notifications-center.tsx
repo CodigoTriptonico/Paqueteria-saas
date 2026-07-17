@@ -9,7 +9,7 @@ import { OnboardingPanel } from "@/components/onboarding/onboarding-panel";
 import { OnboardingStartPanel } from "@/components/onboarding/onboarding-start-panel";
 import { iconWellEmerald, labelMutedClass } from "@/components/ui-blocks";
 import { useOnboardingProgress } from "@/hooks/use-onboarding-progress";
-import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
+import { isPlatformOnlySession } from "@/lib/auth/permissions";
 import { setOnboardingNotificationsPanelOpen } from "@/lib/onboarding/notifications-panel";
 import type { AppSession } from "@/lib/auth/types";
 
@@ -94,7 +94,7 @@ export function BoxarioBrandHeader({
   const titleClass = `min-w-0 truncate font-black tracking-tight leading-none ${
     compact ? "text-lg" : "text-xl"
   }`;
-  const showNotifications = Boolean(session && !platformAdminNeedsClientContext(session));
+  const showNotifications = Boolean(session && !isPlatformOnlySession(session));
   const expandAllGroupsLabel = sidebarGroupsToggle?.allExpanded
     ? "Contraer todos los grupos del menú"
     : "Expandir todos los grupos del menú";
@@ -319,7 +319,7 @@ export function NotificationsCenter({
     return () => window.removeEventListener("mousedown", handlePointerDown);
   }, [close, open]);
 
-  if (!session || platformAdminNeedsClientContext(session)) {
+  if (!session || isPlatformOnlySession(session)) {
     return null;
   }
 

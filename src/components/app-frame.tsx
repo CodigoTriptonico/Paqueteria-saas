@@ -7,7 +7,7 @@ import { OnboardingCoachProvider } from "@/components/onboarding/onboarding-coac
 import { OnboardingCoachOverlay } from "@/components/onboarding/onboarding-coach-overlay";
 import { NotificationProvider } from "@/components/notifications/notification-provider";
 import { UiSurfacePreferencesProvider } from "@/components/ui/ui-surface-preferences-provider";
-import { platformAdminNeedsClientContext } from "@/lib/auth/permissions";
+import { isPlatformOnlySession } from "@/lib/auth/permissions";
 import { conductorTasksNavLabel } from "@/lib/conductor-tareas-view";
 import type { UiSurfaceContextId } from "@/lib/ui-surface-context";
 import { resolveSurfaceContextFromPathname } from "@/lib/ui-surface-route-context";
@@ -128,7 +128,7 @@ export function AppFrame({
     }
 
     const homeHref =
-      session && platformAdminNeedsClientContext(session) ? "/platform" : "/";
+      session && isPlatformOnlySession(session) ? "/platform" : "/";
 
     return {
       contextNavLabel: activeFromPath(pathname, session),
