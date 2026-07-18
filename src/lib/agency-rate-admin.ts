@@ -43,3 +43,11 @@ export function validateAgencyRateDraft(lines: readonly AgencyRateDraftLine[]): 
     seen.add(key);
   }
 }
+
+/** The agency margin is display-only: only its own public price can change it. */
+export function agencyBoxMarginCents(matrixRateCents: number, publicPriceCents: number): number {
+  if (!Number.isSafeInteger(matrixRateCents) || !Number.isSafeInteger(publicPriceCents)) {
+    throw new Error("Los precios deben ser montos enteros en centavos.");
+  }
+  return publicPriceCents - matrixRateCents;
+}

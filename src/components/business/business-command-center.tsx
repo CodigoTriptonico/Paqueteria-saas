@@ -150,6 +150,7 @@ function Agency({ workspace, canManageTeam, canRequest }: { workspace: BusinessW
       <Panel title="Trabajo de mi agencia" action={<WalletCards className="h-5 w-5 text-emerald-300" />}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Link className={primaryButtonClass} href="/venta">Crear venta</Link>
+          <Link className={secondaryButtonClass} href="/agencia/precios">Mis precios y ganancia</Link>
           <Link className={secondaryButtonClass} href="/solicitudes">Nueva solicitud</Link>
           {canManageTeam ? <Link className={secondaryButtonClass} href="/agencia/equipo">Equipo: 1 admin + 2 vendedores</Link> : <Link className={secondaryButtonClass} href="/agencia#clientes">Clientes y facturas</Link>}
           <Link className={secondaryButtonClass} href="/agencia#cuenta-matriz">Mi cuenta con la matriz</Link>

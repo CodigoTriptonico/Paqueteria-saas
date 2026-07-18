@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { agencyRateLineKey, formatUsdInput, parseUsdInputToCents, validateAgencyRateDraft } from "@/lib/agency-rate-admin";
+import { agencyBoxMarginCents, agencyRateLineKey, formatUsdInput, parseUsdInputToCents, validateAgencyRateDraft } from "@/lib/agency-rate-admin";
 
 test("las tarifas de agencia convierten USD a centavos sin redondeo flotante", () => {
   assert.equal(parseUsdInputToCents("12.5"), 1250);
@@ -18,4 +18,9 @@ test("la matriz de tarifas no acepta líneas duplicadas", () => {
     /repetido/,
   );
   assert.equal(agencyRateLineKey("mx", "MEDIANA"), "MX::MEDIANA");
+});
+
+test("el margen de la agencia separa su precio público de la tarifa de matriz", () => {
+  assert.equal(agencyBoxMarginCents(1800, 2500), 700);
+  assert.equal(agencyBoxMarginCents(1800, 1500), -300);
 });
