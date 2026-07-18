@@ -7,6 +7,7 @@ import { sessionHasPermission } from "@/lib/auth/permissions";
 import { requireAppSession } from "@/lib/auth/session";
 import type { PermissionKey } from "@/lib/auth/types";
 import type { CustodyHolderType, OperationalExceptionType } from "@/lib/controlled-operations";
+import type { PackageCustodyEventType } from "@/lib/package-custody";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 
 export type ControlledHandoff = {
@@ -27,6 +28,25 @@ export type ControlledException = {
   reason: string;
   reportedAt: string;
   blocksRelease: boolean;
+};
+
+export type ControlledCustodyEvent = {
+  id: string;
+  type: PackageCustodyEventType;
+  fromLabel: string;
+  toLabel: string;
+  occurredAt: string;
+  actorName: string;
+};
+
+export type ControlledPackageCustody = {
+  packageId: string;
+  packageCode: string;
+  holderLabel: string;
+  holderType: string;
+  status: string;
+  since: string;
+  history: ControlledCustodyEvent[];
 };
 
 export type AgencyDailyClose = {
@@ -54,6 +74,7 @@ function controlledError(error: unknown) {
 export async function loadControlledOperationsAction(packageId?: string): Promise<ActionResult<{
   handoffs: ControlledHandoff[];
   exceptions: ControlledException[];
+  custody: ControlledPackageCustody[];
 }>> {
   try {
     const session = await requireAppSession();
@@ -72,12 +93,61 @@ export async function loadControlledOperationsAction(packageId?: string): Promis
       .eq("organization_id", session.organizationId)
       .order("reported_at", { ascending: false })
       .limit(100);
+    let currentCustodyQuery = db
+      .from("package_custody_current")
+      .select("package_id, holder_type, holder_label, package_status, occurred_at, shipment_packages(code)")
+      .eq("organization_id", session.organizationId);
+    let custodyQuery = db
+      .from("package_custody_events")
+      .select("id, package_id, event_type, from_holder_label, to_holder_label, package_status, occurred_at, shipment_packages(code), actor:profiles!package_custody_events_actor_id_fkey(full_name, email)")
+      .eq("organization_id", session.organizationId)
+      .order("occurred_at", { ascending: false })
+      .order("created_at", { ascending: false });
     if (packageId) {
       handoffQuery = handoffQuery.eq("package_id", packageId);
       exceptionQuery = exceptionQuery.eq("package_id", packageId);
+      custodyQuery = custodyQuery.eq("package_id", packageId);
+      currentCustodyQuery = currentCustodyQuery.eq("package_id", packageId);
+    } else {
+      custodyQuery = custodyQuery.limit(500);
     }
-    const [{ data: handoffs, error: handoffError }, { data: exceptions, error: exceptionError }] = await Promise.all([handoffQuery, exceptionQuery]);
-    if (handoffError || exceptionError) throw new Error(handoffError?.message || exceptionError?.message);
+    const [{ data: handoffs, error: handoffError }, { data: exceptions, error: exceptionError }, { data: currentCustodyRows, error: currentCustodyError }, { data: custodyRows, error: custodyError }] = await Promise.all([handoffQuery, exceptionQuery, currentCustodyQuery, custodyQuery]);
+    if (handoffError || exceptionError || currentCustodyError || custodyError) throw new Error(handoffError?.message || exceptionError?.message || currentCustodyError?.message || custodyError?.message);
+    const custodyByPackage = new Map<string, ControlledPackageCustody>();
+    for (const row of currentCustodyRows || []) {
+      const packageRow = Array.isArray(row.shipment_packages) ? row.shipment_packages[0] : row.shipment_packages;
+      custodyByPackage.set(String(row.package_id), {
+        packageId: String(row.package_id),
+        packageCode: String((packageRow as { code?: string } | null)?.code || "Caja"),
+        holderLabel: String(row.holder_label || "Custodia sin identificar"),
+        holderType: String(row.holder_type || ""),
+        status: String(row.package_status || ""),
+        since: String(row.occurred_at),
+        history: [],
+      });
+    }
+    for (const row of custodyRows || []) {
+      const packageRow = Array.isArray(row.shipment_packages) ? row.shipment_packages[0] : row.shipment_packages;
+      const actor = Array.isArray(row.actor) ? row.actor[0] : row.actor;
+      const packageKey = String(row.package_id);
+      const event: ControlledCustodyEvent = {
+        id: String(row.id), type: row.event_type as PackageCustodyEventType,
+        fromLabel: String(row.from_holder_label || ""), toLabel: String(row.to_holder_label || ""),
+        occurredAt: String(row.occurred_at),
+        actorName: String((actor as { full_name?: string | null; email?: string | null } | null)?.full_name || (actor as { email?: string | null } | null)?.email || "Sistema"),
+      };
+      const current = custodyByPackage.get(packageKey);
+      if (current) { current.history.push(event); continue; }
+      custodyByPackage.set(packageKey, {
+        packageId: packageKey,
+        packageCode: String((packageRow as { code?: string } | null)?.code || "Caja"),
+        holderLabel: event.toLabel || "Custodia sin identificar",
+        holderType: "",
+        status: String(row.package_status || ""),
+        since: event.occurredAt,
+        history: [event],
+      });
+    }
     return ok({
       handoffs: (handoffs || []).map((row) => {
         const pkg = Array.isArray(row.shipment_packages) ? row.shipment_packages[0] : row.shipment_packages;
@@ -95,6 +165,7 @@ export async function loadControlledOperationsAction(packageId?: string): Promis
           reportedAt: String(row.reported_at), blocksRelease: Boolean(row.blocks_release),
         };
       }),
+      custody: [...custodyByPackage.values()],
     });
   } catch (error) { return fail(controlledError(error)); }
 }

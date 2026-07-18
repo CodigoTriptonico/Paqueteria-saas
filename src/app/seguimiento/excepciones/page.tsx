@@ -6,5 +6,5 @@ export default async function ControlledOperationsPage({ searchParams }: { searc
   await requirePathAccess("/seguimiento/excepciones");
   const { package: packageId } = await searchParams;
   const result = await loadControlledOperationsAction(packageId);
-  return <ControlledOperationsClient packageId={packageId} initialHandoffs={result.ok ? result.data.handoffs : []} initialExceptions={result.ok ? result.data.exceptions : []} />;
+  return <ControlledOperationsClient packageId={packageId} initialHandoffs={result.ok ? result.data.handoffs : []} initialExceptions={result.ok ? result.data.exceptions : []} initialCustody={result.ok ? result.data.custody : []} />;
 }

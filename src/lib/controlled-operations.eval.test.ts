@@ -9,6 +9,7 @@ const roleGrants = readFileSync(join(root, "supabase/migrations/088_controlled_o
 const closeGuards = readFileSync(join(root, "supabase/migrations/089_agency_daily_close_guards.sql"), "utf8");
 const idempotency = readFileSync(join(root, "supabase/migrations/090_controlled_operations_idempotency.sql"), "utf8");
 const evidence = readFileSync(join(root, "supabase/migrations/091_controlled_operations_evidence_required.sql"), "utf8");
+const actions = readFileSync(join(root, "src/app/actions/controlled-operations.ts"), "utf8");
 
 test("controlled operations are append-only and require a receiving party", () => {
   assert.match(migration, /package_custody_handoffs/);
@@ -35,4 +36,10 @@ test("a finalized agency date rejects backdated sales and payments", () => {
   assert.match(closeGuards, /before insert on public\.customer_payments/);
   assert.match(closeGuards, /before insert on public\.agency_payments/);
   assert.match(closeGuards, /received_at >= start_at/);
+});
+
+test("custody screen loads every current holder and full history for one box", () => {
+  assert.match(actions, /from\("package_custody_current"\)/);
+  assert.match(actions, /currentCustodyQuery = currentCustodyQuery\.eq\("package_id", packageId\)/);
+  assert.match(actions, /custodyQuery = custodyQuery\.limit\(500\)/);
 });
