@@ -76,6 +76,7 @@ import { SaleSenderList } from "@/components/sale/sale-sender-list";
 import { configPricesCountryHref } from "@/lib/country-options";
 import { inventarioHrefWithReturn } from "@/lib/inventario-return";
 import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
+import { recipientCountrySetupRequired } from "@/lib/recipient-country-gate";
 import { formatSalePersonListCount } from "@/lib/sale-person-list-count";
 import { saleContextTargetData } from "@/lib/sale-context-target";
 import { formatBoxQuantityLabel } from "@/lib/shipment-display";
@@ -449,6 +450,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [createdInvoice, setCreatedInvoice] = useState<CreatedInvoiceSnapshot | null>(null);
   const [quickCheckoutCompleted, setQuickCheckoutCompleted] = useState(false);
   const [invoiceConfirmOpen, setInvoiceConfirmOpen] = useState(false);
+  const [recipientCountryGateOpen, setRecipientCountryGateOpen] = useState(false);
   const [selectedPromotionId, setSelectedPromotionId] = useState("");
   const [boxCartOpen, setBoxCartOpen] = useState(false);
   const [quickSelectedPromotionId, setQuickSelectedPromotionId] = useState("");
@@ -590,6 +592,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     () => Object.keys(countryBoxes).sort((left, right) => left.localeCompare(right, "es")),
     [countryBoxes],
   );
+  const needsRecipientCountrySetup = recipientCountrySetupRequired(countries);
   const [stockMessage, setStockMessage] = useState("");
   const [emptyBoxMode, setEmptyBoxMode] = useState("");
   const [emptyBoxScheduleMode, setEmptyBoxScheduleMode] = useState("");
@@ -1673,6 +1676,17 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setRecipientAddressSearching(false);
     setRecipientAddressValidation({ status: "idle", message: "" });
     setEditingRecipientId(null);
+  }
+
+  function startRecipientCreation() {
+    if (needsRecipientCountrySetup) {
+      setRecipientCountryGateOpen(true);
+      return;
+    }
+
+    resetNewRecipientForm();
+    setMode("new-recipient");
+    setActiveStep("recipient");
   }
 
   async function selectAddressSuggestion(kind: AddressFormKind, suggestion: AddressSuggestion) {
@@ -3509,11 +3523,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
               createLabel="Nuevo destinatario"
               createShortLabel="Nuevo"
               countLabel={recipientCountLabel}
-              onCreate={() => {
-                resetNewRecipientForm();
-                setMode("new-recipient");
-                setActiveStep("recipient");
-              }}
+              onCreate={startRecipientCreation}
               search={
                 <InlineSearchCombobox
                   value={recipientQuery}
@@ -3615,9 +3625,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     });
                   }}
                   onNewRecipient={() => {
-                    resetNewRecipientForm();
-                    setMode("new-recipient");
-                    setActiveStep("recipient");
+                    startRecipientCreation();
                   }}
                   getCardClass={(recipient) =>
                     contextPersonClass(
@@ -4157,6 +4165,21 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           onConfirm={() => void confirmDeletePerson()}
         />
       ) : null}
+
+      <ActionConfirmDialog
+        open={recipientCountryGateOpen}
+        dialogId="recipient-country-required"
+        title="Primero configura un país"
+        message="Cada destinatario debe quedar vinculado a un país destino. Crea el primero antes de registrarlo."
+        confirmLabel="Crea un país primero"
+        cancelLabel="Volver"
+        tone="warning"
+        onCancel={() => setRecipientCountryGateOpen(false)}
+        onConfirm={() => {
+          setRecipientCountryGateOpen(false);
+          router.push(configPricesCountryHref());
+        }}
+      />
 
       {historyDrawer ? (
         <SaleCustomerHistoryDrawer

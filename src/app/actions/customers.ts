@@ -441,6 +441,22 @@ export async function createRecipientAction(input: {
 
     await assertSameOrgCustomerIds(supabase, session.organizationId, [input.customerId]);
 
+    const countryName = input.country.trim();
+    const { data: country, error: countryError } = await supabase
+      .from("pricing_countries")
+      .select("id")
+      .eq("organization_id", session.organizationId)
+      .eq("name", countryName)
+      .maybeSingle();
+
+    if (countryError) {
+      return fail(countryError.message);
+    }
+
+    if (!country) {
+      return fail("Crea primero el país destino del destinatario.");
+    }
+
     const emails = normalizeEmailList(input.emails?.length ? input.emails : [input.email || ""]);
 
     const { data, error } = await supabase
@@ -448,6 +464,7 @@ export async function createRecipientAction(input: {
       .insert({
         organization_id: session.organizationId,
         customer_id: input.customerId,
+        country_id: country.id,
         first_name: input.firstName.trim(),
         last_name: input.lastName.trim(),
         phone: input.phone.trim(),
@@ -518,6 +535,22 @@ export async function updateRecipientAction(input: {
       return fail("Supabase no configurado");
     }
 
+    const countryName = input.country.trim();
+    const { data: country, error: countryError } = await supabase
+      .from("pricing_countries")
+      .select("id")
+      .eq("organization_id", session.organizationId)
+      .eq("name", countryName)
+      .maybeSingle();
+
+    if (countryError) {
+      return fail(countryError.message);
+    }
+
+    if (!country) {
+      return fail("Crea primero el país destino del destinatario.");
+    }
+
     const emails = normalizeEmailList(input.emails?.length ? input.emails : [input.email || ""]);
 
     const { data, error } = await supabase
@@ -528,6 +561,7 @@ export async function updateRecipientAction(input: {
         phone: input.phone.trim(),
         email: emails[0] || "",
         emails,
+        country_id: country.id,
         country: input.country.trim(),
         street: input.street.trim(),
         house_number: input.houseNumber.trim(),
