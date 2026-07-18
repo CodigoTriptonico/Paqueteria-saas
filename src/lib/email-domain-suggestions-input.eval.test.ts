@@ -18,4 +18,15 @@ describe("email domain suggestion selection eval", () => {
     assert.doesNotMatch(applySuggestion, /emailDomainSuggestionsShouldOpen\(next\)/);
     assert.match(source, /onClick=\{\(\) => applySuggestion\(suggestion\)\}/);
   });
+
+  it("keeps the domain list open when the inline @ suggestion is accepted", () => {
+    const appendAt = source.match(
+      /function appendAtAndOpenDomainSuggestions\(\) \{([\s\S]*?)\n  \}/,
+    )?.[1] || "";
+
+    assert.match(appendAt, /appendAtToEmailLocalPart\(value\)/);
+    assert.match(appendAt, /setOpen\(emailDomainSuggestionsShouldOpen\(next\)\)/);
+    assert.doesNotMatch(appendAt, /setOpen\(false\)/);
+    assert.match(source, /onClick=\{appendAtAndOpenDomainSuggestions\}/);
+  });
 });

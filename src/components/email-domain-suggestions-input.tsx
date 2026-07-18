@@ -100,6 +100,13 @@ export function EmailDomainSuggestionsInput({
     setHighlightIndex(-1);
   }
 
+  function appendAtAndOpenDomainSuggestions() {
+    const next = appendAtToEmailLocalPart(value);
+    onChange(next);
+    setOpen(emailDomainSuggestionsShouldOpen(next));
+    setHighlightIndex(-1);
+  }
+
   function handleChange(next: string) {
     const normalized = normalizeEmailInputValue(next);
     onChange(normalized);
@@ -109,7 +116,7 @@ export function EmailDomainSuggestionsInput({
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (showAtSuggestion && event.key === " ") {
       event.preventDefault();
-      applySuggestion(appendAtToEmailLocalPart(value));
+      appendAtAndOpenDomainSuggestions();
       return;
     }
 
@@ -187,7 +194,7 @@ export function EmailDomainSuggestionsInput({
               tabIndex={-1}
               className="pointer-events-auto text-slate-400/70 hover:text-emerald-300"
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applySuggestion(appendAtToEmailLocalPart(value))}
+              onClick={appendAtAndOpenDomainSuggestions}
             >
               @
             </button>
