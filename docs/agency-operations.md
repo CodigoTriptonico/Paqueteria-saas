@@ -37,3 +37,17 @@ El saldo y la antigüedad son analíticos. No crean cargos, multas ni ajustes au
 - Una visita confirmada no puede confirmarse otra vez con otra clave.
 - Un usuario nunca aporta `tenant_id`; se deriva de su membresía activa.
 - RLS exige coincidencia de `tenant_id` y `organization_id` o autoridad de matriz dentro del mismo tenant.
+
+## Operación en ruta
+
+Logística mantiene dos vistas: domicilios y agencias. Son listas separadas para organizar el trabajo, pero una misma ruta puede llevar ambas clases de parada. Una solicitud de agencia se convierte en una visita y en una parada de ruta antes de que la vea el conductor.
+
+El conductor abre una sola tarjeta por agencia, confirma cada cantidad real, escribe el motivo cuando hay diferencia y puede cobrar cargos pendientes de esa agencia o dejar el saldo abierto. El efectivo crea custodia del conductor en la misma operación.
+
+## Ruta inicial de una agencia
+
+Al crear una agencia, captación debe elegir una ruta semanal existente o proponer una nueva. La propuesta queda pendiente hasta que logística la aprueba. Al aprobarla, logística puede crear la ruta propuesta y se guarda la asignación predeterminada con tenant, agencia, ruta y membresía responsable.
+
+## Catálogo de cajas
+
+La agencia pide varias líneas en una sola solicitud. Las cajas para entrega se seleccionan del inventario disponible de la matriz y la base valida que el artículo y la bodega pertenezcan a esa matriz. Las recolecciones usan el inventario confirmado de la propia agencia.

@@ -1,0 +1,60 @@
+"use client";
+
+import { useCallback, useEffect, useState, useTransition } from "react";
+import { Building2, Loader2, Route } from "lucide-react";
+import { assignAgencyRequestToRouteAction, listLogisticsAgencyRequestsAction, type LogisticsAgencyRequest } from "@/app/actions/agency-operations";
+import { listAgencyRouteProposalsAction, reviewAgencyRouteProposalAction, type AgencyRouteProposal } from "@/app/actions/agencies";
+import { listLogisticsRoutesAction } from "@/app/actions/logistics-routes";
+import type { LogisticsRouteRow } from "@/lib/logistics-routing";
+import { useNotify } from "@/hooks/use-notify";
+import { Panel, primaryButtonClass } from "@/components/ui-blocks";
+
+export function AgencyLogisticsPanel() {
+  const notify = useNotify();
+  const [requests, setRequests] = useState<LogisticsAgencyRequest[]>([]);
+  const [routes, setRoutes] = useState<LogisticsRouteRow[]>([]);
+  const [proposals, setProposals] = useState<AgencyRouteProposal[]>([]);
+  const [routeByRequest, setRouteByRequest] = useState<Record<string, string>>({});
+  const [pending, startTransition] = useTransition();
+
+  const reload = useCallback(async () => {
+    const [requestResult, routeResult, proposalResult] = await Promise.all([listLogisticsAgencyRequestsAction(), listLogisticsRoutesAction(), listAgencyRouteProposalsAction()]);
+    if (requestResult.ok) setRequests(requestResult.data);
+    if (routeResult.ok) setRoutes(routeResult.data.filter((route) => !["cancelled", "completed"].includes(route.status)));
+    if (proposalResult.ok) setProposals(proposalResult.data);
+  }, []);
+  useEffect(() => {
+    const reloadTimer = window.setTimeout(() => { void reload(); }, 0);
+    return () => window.clearTimeout(reloadTimer);
+  }, [reload]);
+
+  function assign(request: LogisticsAgencyRequest) {
+    const routeId = routeByRequest[request.id];
+    if (!routeId) return notify.error("Selecciona una ruta para la visita.");
+    startTransition(async () => {
+      const result = await assignAgencyRequestToRouteAction({ requestId: request.id, routeId });
+      if (!result.ok) return notify.error(result.error);
+      notify.success(`Visita de ${request.agencyName} asignada a la ruta.`);
+      await reload();
+    });
+  }
+
+  function reviewProposal(proposal: AgencyRouteProposal, decision: "approved" | "rejected") {
+    startTransition(async () => {
+      const result = await reviewAgencyRouteProposalAction({ proposalId: proposal.id, decision });
+      if (!result.ok) return notify.error(result.error);
+      notify.success(decision === "approved" ? `Ruta de ${proposal.agencyName} aprobada.` : "Propuesta rechazada.");
+      await reload();
+    });
+  }
+
+  return (
+    <Panel title="Agencias" action={<Building2 className="h-5 w-5 text-emerald-300" />}>
+      <p className="mb-3 text-sm font-bold text-slate-400">Solicitudes separadas de los domicilios, pero asignables a la misma ruta y conductor.</p>
+      {proposals.length ? <div className="mb-3 grid gap-2 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3"><p className="text-sm font-black text-amber-100">Rutas propuestas por agencias</p>{proposals.map((proposal) => <div key={proposal.id} className="flex flex-wrap items-center gap-2 rounded-md bg-surface-inset p-2 text-sm"><span className="min-w-0 flex-1 font-bold text-slate-200">{proposal.agencyName}: {proposal.name} · día {proposal.weekday}{proposal.note ? <span className="block text-xs text-slate-400">{proposal.note}</span> : null}</span><button type="button" className={primaryButtonClass} disabled={pending} onClick={() => reviewProposal(proposal, "approved")}>Aprobar y crear ruta</button><button type="button" className="text-xs font-black text-rose-200" disabled={pending} onClick={() => reviewProposal(proposal, "rejected")}>Rechazar</button></div>)}</div> : null}
+      <div className="grid gap-2">
+        {requests.length ? requests.map((request) => <article key={request.id} className="grid gap-3 rounded-lg border border-black bg-surface-list-row p-3 lg:grid-cols-[minmax(0,1fr)_16rem_auto] lg:items-center"><div className="min-w-0"><p className="font-black text-slate-100">{request.agencyName} <span className="text-xs text-emerald-300">{request.code}</span></p><p className="truncate text-xs font-bold text-slate-400">{request.lines.map((line) => `${line.serviceKind === "empty_box_delivery" ? "Llevar" : "Recoger"} ${line.requestedQuantity} ${line.productKey || "cajas"}`).join(" · ")}</p></div><select className="h-9 rounded-lg border border-black bg-surface-inset px-2 text-sm font-black text-slate-100" value={routeByRequest[request.id] || ""} onChange={(event) => setRouteByRequest((current) => ({ ...current, [request.id]: event.target.value }))}><option value="">Asignar a ruta</option>{routes.map((route) => <option key={route.id} value={route.id}>{route.name} · {route.routeDate}</option>)}</select><button type="button" className={primaryButtonClass} onClick={() => assign(request)} disabled={pending}><Route className="h-4 w-4" />{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Asignar"}</button></article>) : <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center text-sm font-bold text-slate-400">No hay solicitudes de agencias pendientes.</div>}
+      </div>
+    </Panel>
+  );
+}

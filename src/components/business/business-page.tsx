@@ -1,6 +1,7 @@
 import { loadBusinessWorkspaceAction } from "@/app/actions/business-workspace";
 import { BusinessCommandCenter, type BusinessSurface } from "@/components/business/business-command-center";
 import { requirePathAccess } from "@/lib/auth/require";
+import { sessionHasPermission } from "@/lib/auth/permissions";
 import { emptyBusinessWorkspace } from "@/lib/business/workspace";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -27,6 +28,7 @@ export async function BusinessPage({ pathname, surface }: { pathname: string; su
         surface={surface}
         workspace={result?.ok ? result.data : fallback}
         canManageAgencyTeam={session?.roleSlug === "administrador_agencia"}
+        canRequestAgencyOperations={sessionHasPermission(session, "agency.requests.create")}
       />
     </>
   );

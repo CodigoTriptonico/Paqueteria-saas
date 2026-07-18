@@ -1,9 +1,9 @@
 "use client";
 
 import { Building2, KeyRound, Loader2, RefreshCw, UserRound } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createCaptorAgencyAction } from "@/app/actions/agencies";
+import { createCaptorAgencyAction, listCaptorRouteTemplatesAction } from "@/app/actions/agencies";
 import { EmailDomainSuggestionsInput } from "@/components/email-domain-suggestions-input";
 import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { passwordConfirmationMessage } from "@/lib/auth/password-confirmation";
@@ -19,14 +19,21 @@ export function AgencyCaptorCreatePanel() {
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState(() => {
     const password = generateTemporaryPassword();
-    return { name: "", administratorFullName: "", administratorEmail: "", password, confirmation: password };
+    return { name: "", administratorFullName: "", administratorEmail: "", password, confirmation: password, routeTemplateId: "", proposalName: "", proposalWeekday: "1", proposalNote: "" };
   });
+  const [routes, setRoutes] = useState<Array<{ id: string; name: string; weekday: number }>>([]);
   const confirmationError = passwordConfirmationMessage(form.password, form.confirmation);
 
   function generatePassword() {
     const password = generateTemporaryPassword();
     setForm((current) => ({ ...current, password, confirmation: password }));
   }
+
+  useEffect(() => {
+    void listCaptorRouteTemplatesAction().then((result) => {
+      if (result.ok) setRoutes(result.data);
+    });
+  }, []);
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,6 +48,8 @@ export function AgencyCaptorCreatePanel() {
         administratorFullName: form.administratorFullName,
         administratorEmail: form.administratorEmail,
         administratorPassword: form.password,
+        routeTemplateId: form.routeTemplateId || undefined,
+        routeProposal: form.routeTemplateId ? undefined : { name: form.proposalName, weekday: Number(form.proposalWeekday), note: form.proposalNote },
       });
 
       if (!result.ok) {
@@ -87,6 +96,20 @@ export function AgencyCaptorCreatePanel() {
           Correo del administrador
           <EmailDomainSuggestionsInput className="relative" inputClassName={fieldClass} name="agency_administrator_email" value={form.administratorEmail} onChange={(administratorEmail) => setForm((current) => ({ ...current, administratorEmail }))} placeholder="responsable@agencia.com" />
         </label>
+      </div>
+      <div className="grid gap-2 rounded-lg border border-black bg-surface-inset p-3 sm:grid-cols-2">
+        <label className="grid gap-1 text-xs font-black text-slate-300 sm:col-span-2">
+          Ruta de atención
+          <select className={fieldClass} value={form.routeTemplateId} onChange={(event) => setForm((current) => ({ ...current, routeTemplateId: event.target.value }))}>
+            <option value="">Solicitar nueva ruta para logística</option>
+            {routes.map((route) => <option key={route.id} value={route.id}>{route.name} · día {route.weekday}</option>)}
+          </select>
+        </label>
+        {!form.routeTemplateId ? <>
+          <label className="grid gap-1 text-xs font-black text-slate-300">Nombre de ruta propuesta<input className={fieldClass} required value={form.proposalName} onChange={(event) => setForm((current) => ({ ...current, proposalName: event.target.value }))} placeholder="Ej. Ruta Oeste" /></label>
+          <label className="grid gap-1 text-xs font-black text-slate-300">Día<select className={fieldClass} value={form.proposalWeekday} onChange={(event) => setForm((current) => ({ ...current, proposalWeekday: event.target.value }))}>{["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"].map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label>
+          <label className="grid gap-1 text-xs font-black text-slate-300 sm:col-span-2">Nota para logística<input className={fieldClass} value={form.proposalNote} onChange={(event) => setForm((current) => ({ ...current, proposalNote: event.target.value }))} placeholder="Zona o detalle de atención" /></label>
+        </> : null}
       </div>
       <div className="grid max-w-[34rem] gap-3">
         <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2">

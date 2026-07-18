@@ -3,6 +3,7 @@ import { Building2, CircleDollarSign, ClipboardList, PackageOpen, ShieldCheck, W
 import { Panel, StatCard, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { formatUsdCents, type BusinessWorkspace } from "@/lib/business/workspace";
 import { AgencyCaptorCreatePanel } from "@/components/business/agency-captor-create-panel";
+import { AgencyOperationsPanel } from "@/components/business/agency-operations-panel";
 
 export type BusinessSurface = "network" | "agency" | "captor" | "operations" | "finance";
 
@@ -136,7 +137,7 @@ function Finance({ workspace }: { workspace: BusinessWorkspace }) {
   );
 }
 
-function Agency({ workspace, canManageTeam }: { workspace: BusinessWorkspace; canManageTeam: boolean }) {
+function Agency({ workspace, canManageTeam, canRequest }: { workspace: BusinessWorkspace; canManageTeam: boolean; canRequest: boolean }) {
   return (
     <div className="space-y-4">
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -153,12 +154,12 @@ function Agency({ workspace, canManageTeam }: { workspace: BusinessWorkspace; ca
           <Link className={secondaryButtonClass} href="/agencia#cuenta-matriz">Mi cuenta con la matriz</Link>
         </div>
       </Panel>
-      <Operations workspace={workspace} />
+      <AgencyOperationsPanel canRequest={canRequest} />
     </div>
   );
 }
 
-export function BusinessCommandCenter({ surface, workspace, canManageAgencyTeam = false }: { surface: BusinessSurface; workspace: BusinessWorkspace; canManageAgencyTeam?: boolean }) {
+export function BusinessCommandCenter({ surface, workspace, canManageAgencyTeam = false, canRequestAgencyOperations = false }: { surface: BusinessSurface; workspace: BusinessWorkspace; canManageAgencyTeam?: boolean; canRequestAgencyOperations?: boolean }) {
   const title = surface === "network" ? "Red de agencias" : surface === "agency" ? "Mi agencia" : surface === "captor" ? "Mis agencias" : surface === "operations" ? "Solicitudes" : "Contabilidad";
   const description = surface === "finance"
     ? "Cargos, pagos, aplicaciones, efectivo en tránsito y liberaciones en una sola vista."
@@ -179,7 +180,7 @@ export function BusinessCommandCenter({ surface, workspace, canManageAgencyTeam 
           <div className="min-w-0"><h1 className="text-2xl font-black tracking-tight text-slate-50 sm:text-3xl">{title}</h1><p className="mt-1 max-w-3xl text-sm font-bold text-slate-300">{description}</p></div>
         </div>
       </header>
-      {surface === "network" ? <Network workspace={workspace} /> : surface === "captor" ? <Network workspace={workspace} captorOnly /> : surface === "agency" ? <Agency workspace={workspace} canManageTeam={canManageAgencyTeam} /> : surface === "operations" ? <Operations workspace={workspace} /> : <Finance workspace={workspace} />}
+      {surface === "network" ? <Network workspace={workspace} /> : surface === "captor" ? <Network workspace={workspace} captorOnly /> : surface === "agency" ? <Agency workspace={workspace} canManageTeam={canManageAgencyTeam} canRequest={canRequestAgencyOperations} /> : surface === "operations" ? <Operations workspace={workspace} /> : <Finance workspace={workspace} />}
     </div>
   );
 }

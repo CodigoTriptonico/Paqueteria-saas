@@ -54,6 +54,7 @@ import {
   type ConductorTruckInventorySummary,
 } from "@/lib/conductor-truck-inventory";
 import { buildMapsNavigationUrl } from "@/lib/logistics-navigation";
+import { AgencyVisitsPanel } from "@/components/conductor/agency-visits-panel";
 import { estimateRouteStopEtaMinutes, formatEtaMinutes } from "@/lib/logistics-eta";
 import { buildLogisticaShipmentDeepLink } from "@/lib/logistics-view";
 import { formatScheduleAtDisplay } from "@/lib/sale/schedule-time";
@@ -573,6 +574,7 @@ export function ConductorTareasClient({
   const { layout: viewLayout } = usePageViewLayout("conductor.tasks");
   const previewOptions = buildConductorPreviewPickerOptions(drivers);
   const [listMode, setListMode] = useState<TaskListMode>("pending");
+  const [operationScope, setOperationScope] = useState<"domicilios" | "agencias">("domicilios");
   const [doneTaskIds, setDoneTaskIds] = useState<string[]>([]);
   const [completedTasks, setCompletedTasks] = useState<ConductorDriverTask[]>(initialCompletedTasks);
   const [dialog, setDialog] = useState<TaskDialogState | null>(null);
@@ -996,7 +998,12 @@ export function ConductorTareasClient({
             </div>
           </div>
 
-          <div className="flex h-10 min-w-0 overflow-hidden rounded-md border border-black" role="group" aria-label="Filtrar tareas por tipo">
+          <div className="flex h-10 min-w-0 overflow-hidden rounded-md border border-black" role="group" aria-label="Cambiar origen de tareas">
+            <button type="button" className={`flex-1 text-xs font-black ${operationScope === "domicilios" ? "bg-emerald-950/35 text-emerald-100" : "bg-surface-card text-slate-300"}`} onClick={() => setOperationScope("domicilios")}>Domicilios</button>
+            <button type="button" className={`flex-1 border-l border-black text-xs font-black ${operationScope === "agencias" ? "bg-emerald-950/35 text-emerald-100" : "bg-surface-card text-slate-300"}`} onClick={() => setOperationScope("agencias")}>Agencias</button>
+          </div>
+
+          {operationScope === "domicilios" ? <><div className="flex h-10 min-w-0 overflow-hidden rounded-md border border-black" role="group" aria-label="Filtrar tareas por tipo">
             <button
               type="button"
               aria-pressed={taskFilter === "deliver_empty_box"}
@@ -1083,6 +1090,7 @@ export function ConductorTareasClient({
             )}
             <span className="truncate">{offlineGlobalLabel}</span>
           </button>
+          </> : null}
         </section>
 
         {routeBlocked ? (
@@ -1100,7 +1108,7 @@ export function ConductorTareasClient({
           </div>
         ) : null}
 
-        {filteredTasks.length ? (
+        {operationScope === "agencias" && effectiveDriverId ? <AgencyVisitsPanel driverId={effectiveDriverId} /> : filteredTasks.length ? (
           <div className="pr-1 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
             {viewLayout === "rows" ? (
               <div className={`${cardClass} overflow-hidden p-2`}>

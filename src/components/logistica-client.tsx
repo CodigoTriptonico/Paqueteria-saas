@@ -62,6 +62,7 @@ import { LogisticsTaskEditPanel } from "@/components/logistica/logistics-task-ed
 import { LogisticsTaskReprogramPanel } from "@/components/logistica/logistics-task-reprogram-panel";
 import { LogisticsTaskScheduleConfirmPanel } from "@/components/logistica/logistics-task-schedule-confirm-panel";
 import { LogisticsSectionNav } from "@/components/logistica/logistics-section-nav";
+import { AgencyLogisticsPanel } from "@/components/logistica/agency-logistics-panel";
 import { LogisticsTaskStatusBadge } from "@/components/logistica/logistics-task-status-badge";
 import { InlineSearchCombobox, InlineSearchPicker } from "@/components/inline-search-picker";
 import { PageLoading } from "@/components/page-loading";
@@ -402,6 +403,7 @@ export function LogisticaClient({
   const [zoneFilter, setZoneFilter] = useState("");
   const [failedFilter, setFailedFilter] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [operationScope, setOperationScope] = useState<"domicilios" | "agencias">("domicilios");
   const [selectedRouteId, setSelectedRouteId] = useState<string>("");
   const [routeDetailDrawerOpen, setRouteDetailDrawerOpen] = useState(false);
   const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
@@ -2163,6 +2165,11 @@ export function LogisticaClient({
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
           <div className={panelToolbarClass}>
             <div className="flex flex-wrap items-center gap-2">
+              <div className="flex h-9 shrink-0 rounded-lg border border-black bg-surface-inset p-0.5 text-xs font-black">
+                <button type="button" className={`rounded-md px-2.5 ${operationScope === "domicilios" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`} onClick={() => setOperationScope("domicilios")}>Domicilios</button>
+                <button type="button" className={`rounded-md px-2.5 ${operationScope === "agencias" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`} onClick={() => setOperationScope("agencias")}>Agencias</button>
+              </div>
+              {operationScope === "domicilios" ? <>
               <InlineSearchCombobox
                 value={query}
                 onChange={setQuery}
@@ -2319,11 +2326,12 @@ export function LogisticaClient({
                 active="tasks"
                 className="basis-full border-t border-black/70 pt-2 lg:ml-auto lg:basis-auto lg:border-t-0 lg:pt-0"
               />
+              </> : <LogisticsSectionNav active="tasks" className="ml-auto" />}
             </div>
           </div>
 
           <div className={`${panelListScrollClass} pt-3`}>
-            {visibleInvoiceItems.length ? (
+            {operationScope === "agencias" ? <AgencyLogisticsPanel /> : visibleInvoiceItems.length ? (
               viewLayout === "rows" ? (
                 <div className={panelListStackClass}>
                   {visibleInvoiceItems.map((item) => renderInvoiceRow(item))}

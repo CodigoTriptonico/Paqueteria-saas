@@ -7,7 +7,7 @@ const ROLE_ROUTE_ACCESS: Partial<Record<RoleSlug, string[]>> = {
   conductor: ["/", "/conductor"],
   distribuidor: ["/", "/agencia", "/solicitudes", "/distribuidor"],
   administrador_agencia: ["/", "/agencia", "/venta", "/solicitudes"],
-  vendedor_agencia: ["/", "/agencia", "/venta"],
+  vendedor_agencia: ["/", "/agencia", "/venta", "/solicitudes"],
   caja_agencia: ["/", "/agencia"],
   operador_agencia: ["/", "/agencia", "/solicitudes"],
   captador_distribuidores: ["/", "/captacion", "/mis-distribuidores"],
