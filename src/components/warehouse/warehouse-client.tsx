@@ -18,6 +18,10 @@ import {
 import { ViewLayoutToggle } from "@/components/view-layout-toggle";
 import { useViewLayout } from "@/hooks/use-view-layout";
 import type { PhysicalPackage } from "@/lib/physical-packages";
+import {
+  packageInvoiceLifecycleLabel,
+  packageInvoiceStateSummary,
+} from "@/lib/package-invoice-lifecycle";
 import { formatWarehouseDateTime, formatWarehouseElapsed } from "@/lib/warehouse-timing";
 
 function contentText(pkg: PhysicalPackage) {
@@ -100,6 +104,30 @@ function PackagePhaseTimes({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function PackageInvoiceTimeline({ pkg }: { pkg: PhysicalPackage }) {
+  const state = packageInvoiceStateSummary({
+    paymentStatus: pkg.invoicePaymentStatus,
+    fulfillmentStatus: pkg.invoiceFulfillmentStatus,
+  });
+
+  return (
+    <details className="mt-3 rounded-lg border border-black bg-surface-inset/40 p-3">
+      <summary className="cursor-pointer list-none text-xs font-black text-emerald-200">
+        Factura {pkg.invoiceCode} · {state}
+      </summary>
+      <div className="mt-3 grid gap-2 border-t border-black pt-3 text-xs font-bold text-slate-300">
+        {pkg.invoiceLifecycle.map((event) => (
+          <div key={event.state} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <span className="font-black text-slate-100">{packageInvoiceLifecycleLabel[event.state]}</span>
+            <span>{formatWarehouseDateTime(event.occurredAt)} · {event.changedByName}</span>
+          </div>
+        ))}
+        {!pkg.invoiceLifecycle.length ? <p>Sin historial registrado.</p> : null}
+      </div>
+    </details>
   );
 }
 
@@ -262,13 +290,14 @@ export function WarehouseClient({
                 <p className="mt-3 text-sm font-black">
                   Ingreso: {pkg.intakeWeightKg?.toFixed(2)} kg
                 </p>
-                {pkg.weightDifferenceKg ? (
+                 {pkg.weightDifferenceKg ? (
                   <p className="mt-1 text-xs font-bold text-amber-300">
                     Diferencia: {pkg.weightDifferenceKg.toFixed(2)} kg
                   </p>
-                ) : null}
-                <PackagePhaseTimes pkg={pkg} />
-                <button
+                  ) : null}
+                 <PackagePhaseTimes pkg={pkg} />
+                 <PackageInvoiceTimeline pkg={pkg} />
+                 <button
                   onClick={() => void move(pkg)}
                   disabled={busy === pkg.id}
                   className={`${primaryButtonClass} mt-4 h-10 w-full text-sm disabled:opacity-40`}
@@ -309,9 +338,10 @@ export function WarehouseClient({
                   <button className={secondaryButtonClass} onClick={() => edit(pkg)}>
                     Revisar
                   </button>
-                </div>
-                <PackagePhaseTimes pkg={pkg} includeWarehouse />
-                {pkg.weightDifferenceKg &&
+                 </div>
+                 <PackagePhaseTimes pkg={pkg} includeWarehouse />
+                 <PackageInvoiceTimeline pkg={pkg} />
+                 {pkg.weightDifferenceKg &&
                 pkg.weightDifferenceKg > weightToleranceKg &&
                 !pkg.weightDifferenceReviewedAt ? (
                   <div className="mt-3 rounded-lg border border-amber-500/45 bg-amber-950/30 p-3">

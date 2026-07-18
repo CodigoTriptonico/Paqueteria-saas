@@ -1307,6 +1307,8 @@ export async function createShipmentAction(input: {
         code,
         country: shipment.country || "",
         invoice_code: invoiceBoxCode(shipment.code, index),
+        invoice_created_by: session.userId,
+        invoice_paid_by: invoiceStatus === "paid" ? session.userId : null,
       })),
     );
 

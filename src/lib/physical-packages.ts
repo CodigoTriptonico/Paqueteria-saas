@@ -13,6 +13,19 @@ export type PackageContentLine = {
   declaredValue: number;
 };
 
+export type PackageInvoiceLifecycleState =
+  | "created"
+  | "paid"
+  | "in_warehouse"
+  | "in_transit"
+  | "delivered";
+
+export type PackageInvoiceLifecycleEvent = {
+  state: PackageInvoiceLifecycleState;
+  occurredAt: string;
+  changedByName: string;
+};
+
 export type PhysicalPackage = {
   id: string;
   shipmentId: string;
@@ -52,6 +65,9 @@ export type PhysicalPackage = {
   invoicePickupEvidenceUrl: string;
   invoiceIncidentAt: string | null;
   invoiceIncidentReason: string;
+  invoicePaymentStatus: "pending" | "paid";
+  invoiceFulfillmentStatus: "created" | "in_warehouse" | "in_transit" | "delivered";
+  invoiceLifecycle: PackageInvoiceLifecycleEvent[];
 };
 
 export const physicalPackageStatusLabel: Record<PhysicalPackageStatus, string> = {

@@ -724,6 +724,20 @@ async function collectDriverPayment(admin: Admin, session: AppSession, shipment:
     throw new Error(error.message);
   }
 
+  if (settlement.isPaidInFull) {
+    const { error: lifecycleError } = await admin.rpc("record_shipment_package_invoice_state", {
+      target_shipment_id: shipment.id,
+      target_state: "paid",
+      target_occurred_at: new Date().toISOString(),
+      target_changed_by: session.userId,
+      target_source: "conductor_payment",
+    });
+
+    if (lifecycleError) {
+      throw new Error(lifecycleError.message);
+    }
+  }
+
   await recordActivityHistory(admin, session, {
     action: settlement.isPaidInFull ? "sale.invoice_finalized" : "sale.invoice_partial_payment",
     entityType: "shipment",
@@ -830,6 +844,8 @@ async function ensureShipmentPackages(
     code,
     country: shipment.country || "",
     invoice_code: invoiceBoxCode(shipment.code, index),
+    invoice_created_by: session.userId,
+    invoice_paid_by: shipment.invoice_status === "paid" ? session.userId : null,
   }));
 
   const { error } = await admin

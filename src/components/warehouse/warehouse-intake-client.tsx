@@ -13,6 +13,7 @@ import { inputClass, Panel, primaryButtonClass, secondaryButtonClass } from "@/c
 import { useViewLayout } from "@/hooks/use-view-layout";
 import { useNotify } from "@/hooks/use-notify";
 import type { PhysicalPackage } from "@/lib/physical-packages";
+import { packageInvoiceStateSummary } from "@/lib/package-invoice-lifecycle";
 
 function disclosureClass(active: boolean) {
   return `inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-black transition ${active ? "border-emerald-400 bg-emerald-400 text-slate-950" : "border-black bg-surface-inset text-slate-100 hover:bg-surface-card"}`;
@@ -20,9 +21,14 @@ function disclosureClass(active: boolean) {
 
 function PackageCard({ pkg, selected, layout, onClick }: { pkg: PhysicalPackage; selected?: boolean; layout: "cards" | "rows"; onClick?: () => void }) {
   const Tag = onClick ? "button" : "article";
+  const invoiceState = packageInvoiceStateSummary({
+    paymentStatus: pkg.invoicePaymentStatus,
+    fulfillmentStatus: pkg.invoiceFulfillmentStatus,
+  });
   return <Tag type={onClick ? "button" : undefined} onClick={onClick} className={`rounded-lg border p-3 text-left ${layout === "cards" ? "min-h-28" : ""} ${selected ? "border-emerald-400 bg-emerald-400/10" : "border-black bg-surface-card hover:bg-surface-card-hover"}`}>
     <p className="font-black text-slate-100">{pkg.code}</p>
     <p className="mt-1 font-mono text-xs font-black text-emerald-200">Factura {pkg.invoiceCode}</p>
+    <p className="mt-1 text-xs font-black text-sky-200">Estado: {invoiceState}</p>
     <p className="mt-1 text-xs font-bold text-slate-400">{pkg.customerName} · {pkg.country} · Recogida {pkg.collectionWeightKg?.toFixed(2) || "-"} kg</p>
     {pkg.truckUnloadedAt ? <p className="mt-2 text-xs font-bold text-sky-200">Descargada del camión</p> : null}
   </Tag>;

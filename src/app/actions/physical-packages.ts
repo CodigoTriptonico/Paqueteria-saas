@@ -8,6 +8,8 @@ import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/e
 import { recordActivityHistory } from "@/lib/activity-history";
 import {
   parsePackageContents,
+  type PackageInvoiceLifecycleEvent,
+  type PackageInvoiceLifecycleState,
   type PhysicalPackage,
   type PhysicalPackageStatus,
   validatePackageContents,
@@ -48,6 +50,13 @@ type PackageDbRow = Record<string, unknown> & {
   invoice_pickup_evidence_url: string | null;
   invoice_incident_at: string | null;
   invoice_incident_reason: string | null;
+  invoice_payment_status: "pending" | "paid" | null;
+  invoice_fulfillment_status: "created" | "in_warehouse" | "in_transit" | "delivered" | null;
+  shipment_package_invoice_events?: Array<{
+    state: PackageInvoiceLifecycleState;
+    occurred_at: string;
+    changed_by_profile?: { full_name?: string | null; email?: string | null } | Array<{ full_name?: string | null; email?: string | null }> | null;
+  }> | null;
   shipments?: {
     code?: string;
     customer_name?: string;
@@ -66,6 +75,21 @@ function recipientName(snapshot: Record<string, unknown> | null | undefined) {
     .map((value) => String(value || "").trim())
     .filter(Boolean)
     .join(" ");
+}
+
+function lifecycleEvents(row: PackageDbRow): PackageInvoiceLifecycleEvent[] {
+  return (row.shipment_package_invoice_events || [])
+    .map((event) => {
+      const profile = Array.isArray(event.changed_by_profile)
+        ? event.changed_by_profile[0]
+        : event.changed_by_profile;
+      return {
+        state: event.state,
+        occurredAt: event.occurred_at,
+        changedByName: String(profile?.full_name || profile?.email || "Sin registro"),
+      };
+    })
+    .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt));
 }
 
 function mapPackage(row: unknown): PhysicalPackage {
@@ -109,6 +133,9 @@ function mapPackage(row: unknown): PhysicalPackage {
     invoicePickupEvidenceUrl: packageRow.invoice_pickup_evidence_url || "",
     invoiceIncidentAt: packageRow.invoice_incident_at,
     invoiceIncidentReason: packageRow.invoice_incident_reason || "",
+    invoicePaymentStatus: packageRow.invoice_payment_status === "paid" ? "paid" : "pending",
+    invoiceFulfillmentStatus: packageRow.invoice_fulfillment_status || "created",
+    invoiceLifecycle: lifecycleEvents(packageRow),
   };
 }
 
@@ -126,7 +153,11 @@ const PACKAGE_SELECT = `
   provider_confirmation_number, provider_tracking_number, provider_tracking_url, pallet_id,
   truck_route_id, truck_task_id, truck_arrived_at, truck_unloaded_at, warehouse_placed_at, palletized_at,
   invoice_code, invoice_marked_at, invoice_delivery_evidence_url, invoice_pickup_confirmed_at, invoice_pickup_evidence_url,
-  invoice_incident_at, invoice_incident_reason,
+  invoice_incident_at, invoice_incident_reason, invoice_payment_status, invoice_fulfillment_status,
+  shipment_package_invoice_events(
+    state, occurred_at,
+    changed_by_profile:profiles!shipment_package_invoice_events_changed_by_fkey(full_name, email)
+  ),
   shipments(code, customer_name, recipient_snapshot), warehouse_pallets(code)
 `;
 
