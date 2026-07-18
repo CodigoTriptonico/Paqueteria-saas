@@ -997,6 +997,9 @@ export function ConductorTareasClient({
               <p className="text-base font-black tabular-nums text-rose-200">{completedOutcomeSummary.failedBoxes}</p>
             </div>
           </div>
+          <Link href="/seguimiento/excepciones" className={`${secondaryButtonClass} h-10 text-xs`}>
+            <AlertTriangle className="h-4 w-4" /> Excepciones
+          </Link>
 
           <div className="flex h-10 min-w-0 overflow-hidden rounded-md border border-black" role="group" aria-label="Cambiar origen de tareas">
             <button type="button" className={`flex-1 text-xs font-black ${operationScope === "domicilios" ? "bg-emerald-950/35 text-emerald-100" : "bg-surface-card text-slate-300"}`} onClick={() => setOperationScope("domicilios")}>Domicilios</button>

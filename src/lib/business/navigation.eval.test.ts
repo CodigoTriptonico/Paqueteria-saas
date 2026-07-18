@@ -17,8 +17,8 @@ describe("business navigation eval", () => {
   });
 
   it("keeps agency, finance and operations permissions separated", () => {
-    assert.match(permissions, /administrador_agencia/);
-    assert.match(permissions, /supervisor_agencias/);
+    assert.doesNotMatch(permissions, /ROLE_ROUTE_ACCESS/);
+    assert.match(permissions, /agency\.daily_close\.finalize/);
     assert.match(permissions, /accounting\.reconcile/);
     assert.match(permissions, /agency\.requests\.assign/);
     assert.match(permissions, /financial_hold\.release/);

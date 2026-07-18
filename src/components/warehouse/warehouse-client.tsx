@@ -297,6 +297,7 @@ export function WarehouseClient({
                   ) : null}
                  <PackagePhaseTimes pkg={pkg} />
                  <PackageInvoiceTimeline pkg={pkg} />
+                 <Link href={`/seguimiento/excepciones?package=${pkg.id}`} className={`${secondaryButtonClass} mt-3 h-9 text-xs`}>Custodia y excepción</Link>
                  <button
                   onClick={() => void move(pkg)}
                   disabled={busy === pkg.id}
@@ -341,6 +342,7 @@ export function WarehouseClient({
                  </div>
                  <PackagePhaseTimes pkg={pkg} includeWarehouse />
                  <PackageInvoiceTimeline pkg={pkg} />
+                 <Link href={`/seguimiento/excepciones?package=${pkg.id}`} className={`${secondaryButtonClass} mt-3 h-9 text-xs`}>Custodia y excepción</Link>
                  {pkg.weightDifferenceKg &&
                 pkg.weightDifferenceKg > weightToleranceKg &&
                 !pkg.weightDifferenceReviewedAt ? (

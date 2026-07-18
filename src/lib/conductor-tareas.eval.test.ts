@@ -32,10 +32,7 @@ describe("conductor tareas shell eval", () => {
   it("grants conductor role access to /conductor paths without envios", () => {
     assert.match(permissionsSource, /conductor: \["\/", "\/conductor"\]/);
     assert.doesNotMatch(permissionsSource, /conductor: \["\/", "\/envios", "\/conductor"\]/);
-    assert.match(
-      permissionsSource,
-      /administrador: \[.*"\/conductor"\]/,
-    );
+    assert.match(permissionsSource, /session\.permissions\.includes\("all"\)/);
     assert.match(permissionsSource, /"\/conductor": \["routes\.view"\]/);
   });
 

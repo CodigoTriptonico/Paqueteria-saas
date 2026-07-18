@@ -1,23 +1,10 @@
-import type { AppSession, PermissionKey, RoleSlug } from "@/lib/auth/types";
+import type { AppSession, PermissionKey } from "@/lib/auth/types";
 
-const ROLE_ROUTE_ACCESS: Partial<Record<RoleSlug, string[]>> = {
-  // prettier-ignore
-  administrador: ["/", "/venta", "/inventario", "/seguimiento", "/ingreso-bodega", "/bodega", "/paletas", "/logistica", "/estadisticas", "/auditoria", "/vendedores", "/configuracion", "/time-clock", "/agencias", "/contabilidad", "/solicitudes", "/distribuidores", "/conductor"],
-  vendedor: ["/", "/venta", "/inventario", "/seguimiento"],
+// Conductores use a personal field workflow. This is identity-based by design;
+// all other navigation is capability-based below.
+const DRIVER_ROUTE_ACCESS = {
   conductor: ["/", "/conductor"],
-  distribuidor: ["/", "/agencia", "/solicitudes", "/distribuidor"],
-  administrador_agencia: ["/", "/agencia", "/venta", "/solicitudes"],
-  vendedor_agencia: ["/", "/agencia", "/venta", "/solicitudes"],
-  caja_agencia: ["/", "/agencia"],
-  operador_agencia: ["/", "/agencia", "/solicitudes"],
-  captador_distribuidores: ["/", "/captacion", "/mis-distribuidores"],
-  captador_agencias: ["/", "/captacion"],
-  supervisor_agencias: ["/", "/captacion", "/agencias"],
-  finanzas: ["/", "/contabilidad", "/agencias", "/seguimiento"],
-  logistica: ["/", "/logistica", "/solicitudes", "/seguimiento"],
-  bodega: ["/", "/inventario", "/ingreso-bodega", "/bodega", "/paletas"],
-  auditor: ["/", "/auditoria", "/estadisticas", "/contabilidad"],
-};
+} as const;
 
 const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
   "/configuracion": [
@@ -54,6 +41,9 @@ const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
     "agency.customers.manage",
     "agency.pricing.manage",
     "distribution.sell",
+    "agency.daily_close.view",
+    "agency.daily_close.prepare",
+    "agency.daily_close.finalize",
   ],
   "/captacion": [
     "agency.view",
@@ -80,6 +70,11 @@ const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
     "financial_hold.release",
   ],
   "/auditoria": ["audit.immutable.view", "settings.manage"],
+  "/estadisticas": ["audit.immutable.view"],
+  "/vendedores": ["users.manage"],
+  "/distribuidores": ["distribution.manage"],
+  "/distribuidor": ["distribution.sell"],
+  "/mis-distribuidores": ["distribution.acquire"],
 };
 
 /** A platform account can administer organizations, never client operations. */
@@ -95,10 +90,7 @@ export function sessionHasPermission(
     return false;
   }
 
-  if (
-    session.roleSlug === "administrador" ||
-    session.permissions.includes("all")
-  ) {
+  if (session.permissions.includes("all")) {
     return true;
   }
 
@@ -126,47 +118,42 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
   }
 
   const base = "/" + (pathname.split("/").filter(Boolean)[0] || "");
-  const allowedPrefixes = ROLE_ROUTE_ACCESS[session.roleSlug];
+  if (pathname === "/agencia/equipo" && !sessionHasPermission(session, "agency.users.manage")) {
+    return false;
+  }
 
-  if (pathname === "/agencia/equipo" && session.roleSlug !== "administrador_agencia") {
+  if (pathname === "/seguimiento/excepciones" || pathname.startsWith("/seguimiento/excepciones/")) {
+    return [
+      "package.custody.view",
+      "package.custody.transfer",
+      "package.custody.receive",
+      "exceptions.report",
+      "exceptions.resolve",
+      "exceptions.approve",
+    ].some((permission) => sessionHasPermission(session, permission as PermissionKey));
+  }
+
+  if (pathname === "/agencia/cierre" && ![
+    "agency.daily_close.view",
+    "agency.daily_close.prepare",
+    "agency.daily_close.finalize",
+  ].some((permission) => sessionHasPermission(session, permission as PermissionKey))) {
     return false;
   }
 
   if (
-    base === "/logistica" &&
-    !["administrador", "logistica"].includes(session.roleSlug)
+    session.roleSlug === "conductor" &&
+    !DRIVER_ROUTE_ACCESS.conductor.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    )
   ) {
     return false;
-  }
-
-  if (
-    base === "/estadisticas" &&
-    !["administrador", "auditor"].includes(session.roleSlug)
-  ) {
-    return false;
-  }
-
-  if (base === "/vendedores" && session.roleSlug !== "administrador") {
-    return false;
-  }
-
-  if (base === "/time-clock" && session.roleSlug !== "administrador") {
-    return requiredTimeClockAccess(session);
   }
 
   if (
     base === "/conductor" &&
     session.roleSlug !== "conductor" &&
-    session.roleSlug !== "administrador"
-  ) {
-    return false;
-  }
-
-  if (
-    allowedPrefixes &&
-    !allowedPrefixes.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-    )
+    !sessionHasPermission(session, "all")
   ) {
     return false;
   }
@@ -181,13 +168,6 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
   );
 }
 
-function requiredTimeClockAccess(session: AppSession) {
-  return (
-    sessionHasPermission(session, "time_clock.view") ||
-    sessionHasPermission(session, "time_clock.manage")
-  );
-}
-
 export function canAccessWarehouse(
   session: AppSession | null,
   warehouseId: string,
@@ -197,7 +177,7 @@ export function canAccessWarehouse(
   }
 
   return (
-    session.roleSlug === "administrador" ||
+    sessionHasPermission(session, "all") ||
     session.warehouseIds.includes(warehouseId)
   );
 }

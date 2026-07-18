@@ -52,7 +52,17 @@ export type PermissionKey =
   | "financial_hold.view"
   | "financial_hold.release"
   | "financial_hold.release_manual"
-  | "audit.immutable.view";
+  | "audit.immutable.view"
+  | "package.custody.view"
+  | "package.custody.transfer"
+  | "package.custody.receive"
+  | "exceptions.report"
+  | "exceptions.resolve"
+  | "exceptions.approve"
+  | "sales.cancel_pre_departure"
+  | "agency.daily_close.view"
+  | "agency.daily_close.prepare"
+  | "agency.daily_close.finalize";
 
 export type RoleSlug = "administrador" | "vendedor" | "conductor" | (string & {});
 

@@ -117,6 +117,16 @@ describe("canAccessPath seller shipments", () => {
     assert.equal(canAccessPath(adminSession(), "/bodega"), true);
     assert.equal(canAccessPath(adminSession(), "/paletas"), true);
   });
+
+  it("opens controlled operations from capabilities instead of a fixed role", () => {
+    const warehouseOperator = businessRoleSession("cualquier-rol", ["package.custody.receive"]);
+    assert.equal(canAccessPath(warehouseOperator, "/seguimiento/excepciones"), true);
+  });
+
+  it("opens logistics from its capability instead of the legacy role name", () => {
+    const dispatcher = businessRoleSession("cualquier-rol", ["routes.update_status"]);
+    assert.equal(canAccessPath(dispatcher, "/logistica"), true);
+  });
 });
 
 describe("canAccessPath platform account", () => {
