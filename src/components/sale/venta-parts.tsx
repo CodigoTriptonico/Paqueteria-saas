@@ -310,6 +310,9 @@ export function historyDateLabel(value: string) {
 
 export type SaleInvoicePaperProps = {
   invoiceNumber: string;
+  parentInvoiceNumber?: string;
+  boxPosition?: number;
+  boxCount?: number;
   sender: Sender;
   recipient?: Recipient | null;
   box: string[];
@@ -377,6 +380,9 @@ function InvoicePartyCard({
 
 export function SaleInvoicePaper({
   invoiceNumber,
+  parentInvoiceNumber,
+  boxPosition,
+  boxCount,
   sender,
   recipient,
   box,
@@ -396,6 +402,7 @@ export function SaleInvoicePaper({
     year: "numeric",
   });
   const boxTitle = invoiceBoxTitle(box[0] || "Paquete");
+  const isBoxInvoice = Boolean(parentInvoiceNumber);
   const deliveryEta = box[4]?.trim();
   const destinationCountry = recipient?.country?.trim();
   const amountLabel = lineAmount || box[1];
@@ -484,7 +491,9 @@ export function SaleInvoicePaper({
             </p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-[9px] font-black uppercase tracking-[0.28em] text-zinc-600">Factura</p>
+            <p className="text-[9px] font-black uppercase tracking-[0.28em] text-zinc-600">
+              {isBoxInvoice ? "Factura de caja" : "Factura"}
+            </p>
             <p className="mt-1 font-serif text-[1.65rem] font-black tabular-nums leading-tight text-zinc-950">
               {invoiceNumber}
             </p>
@@ -534,7 +543,28 @@ export function SaleInvoicePaper({
               </div>
             ) : null}
 
-            {billing ? (
+            {isBoxInvoice ? (
+              <div className="grid gap-3">
+                <div className="flex items-end justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">
+                      Caja identificada
+                    </p>
+                    <p className="mt-1 font-serif text-xl font-black leading-tight text-zinc-950">
+                      Caja {boxTitle}
+                    </p>
+                  </div>
+                  {boxPosition && boxCount ? (
+                    <span className="shrink-0 rounded-sm border border-zinc-400 bg-zinc-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-zinc-900">
+                      Caja {boxPosition} de {boxCount}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="border-t border-zinc-300 pt-3 text-[10px] font-bold leading-snug text-zinc-600">
+                  Factura principal: {parentInvoiceNumber}. Esta hoja identifica esta caja; el cobro total permanece en la factura principal.
+                </p>
+              </div>
+            ) : billing ? (
               <div className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2">
                 {chargeLines.map((line) => (
                   <div key={line.key} className="contents">

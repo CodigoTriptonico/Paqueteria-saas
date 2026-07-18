@@ -91,6 +91,7 @@ import {
   type InvoiceBillingSnapshot,
 } from "@/lib/invoice-billing";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
+import { invoiceBoxCodes } from "@/lib/invoice-child-codes";
 import type { PricingPromotionConfig } from "@/lib/pricing-promotions";
 import { promotionMatchesCartCatalog } from "@/lib/combo-rules";
 import { CountryName } from "@/components/country-flag";
@@ -209,6 +210,11 @@ type CreatedInvoiceSnapshot = {
   sender: Sender;
   recipient: Recipient;
   box: string[];
+  boxInvoices: Array<{
+    invoiceNumber: string;
+    box: string[];
+    position: number;
+  }>;
   deliveryLine: string;
   billing: InvoiceBillingSnapshot;
 };
@@ -322,6 +328,19 @@ function saleCartToBillingLines(lines: SaleBoxCartLine[]): InvoiceBillingCartLin
     unitCost: line.box[2] || "$0",
     carrier: line.box[3] || "",
     time: line.box[4] || "",
+  }));
+}
+
+function boxInvoicesForSale(invoiceNumber: string, lines: SaleBoxCartLine[]) {
+  const boxes = lines.flatMap((line) =>
+    Array.from({ length: Math.max(1, Math.floor(line.quantity) || 1) }, () => line.box),
+  );
+  const boxCount = boxes.length;
+
+  return invoiceBoxCodes(invoiceNumber, boxCount).map((childInvoiceNumber, index) => ({
+    invoiceNumber: childInvoiceNumber,
+    box: boxes[index] || [],
+    position: index + 1,
   }));
 }
 
@@ -2601,6 +2620,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         sender: selectedSender,
         recipient: selectedRecipient,
         box: selectedBox,
+        boxInvoices: boxInvoicesForSale(invoice, selectedBoxLines),
         deliveryLine: currentLogisticsSummary,
         billing: recordedBilling,
       });
@@ -3890,6 +3910,20 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   deliveryLine={createdInvoice.deliveryLine}
                   billing={createdInvoice.billing}
                 />
+                {createdInvoice.boxInvoices.map((boxInvoice) => (
+                  <SaleInvoicePaper
+                    key={boxInvoice.invoiceNumber}
+                    className="print:break-before-page"
+                    invoiceNumber={boxInvoice.invoiceNumber}
+                    parentInvoiceNumber={createdInvoice.invoiceNumber}
+                    boxPosition={boxInvoice.position}
+                    boxCount={createdInvoice.boxInvoices.length}
+                    sender={createdInvoice.sender}
+                    recipient={createdInvoice.recipient}
+                    box={boxInvoice.box}
+                    deliveryLine={createdInvoice.deliveryLine}
+                  />
+                ))}
                 <div className="no-print grid w-full max-w-[210mm] gap-3 sm:grid-cols-3">
                   <button
                     type="button"

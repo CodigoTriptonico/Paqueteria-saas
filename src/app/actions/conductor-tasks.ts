@@ -82,6 +82,7 @@ import {
 } from "@/lib/payment-methods";
 import { quoteFromShipment, syncShipmentStatusPatch } from "@/lib/shipment-display";
 import { physicalPackageCodesForShipment } from "@/lib/physical-packages";
+import { invoiceBoxCode } from "@/lib/invoice-child-codes";
 import {
   buildFirstMilestonePatch,
   milestoneKeyForLogisticsTask,
@@ -823,12 +824,12 @@ async function ensureShipmentPackages(
   session: AppSession,
   shipment: ShipmentRow,
 ) {
-  const rows = physicalPackageCodesForShipment(shipment.code, shipment.logistics_plan).map((code) => ({
+  const rows = physicalPackageCodesForShipment(shipment.code, shipment.logistics_plan).map((code, index) => ({
     organization_id: session.organizationId,
     shipment_id: shipment.id,
     code,
     country: shipment.country || "",
-    invoice_code: shipment.code,
+    invoice_code: invoiceBoxCode(shipment.code, index),
   }));
 
   const { error } = await admin
@@ -848,7 +849,6 @@ async function recordInvoiceEvidence(admin: Admin, session: AppSession, input: {
 
   const now = new Date().toISOString();
   const commonPatch = {
-    invoice_code: input.shipment.code,
     invoice_incident_at: null,
     invoice_incident_reason: "",
   };
@@ -909,7 +909,6 @@ async function recordInvoiceIncident(admin: Admin, session: AppSession, input: {
   const { error } = await admin
     .from("shipment_packages")
     .update({
-      invoice_code: input.shipment.code,
       invoice_incident_at: now,
       invoice_incident_reason: "Invoice no visible",
     })

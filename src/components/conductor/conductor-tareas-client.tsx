@@ -586,6 +586,7 @@ export function ConductorTareasClient({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [reactivateTask, setReactivateTask] = useState<ConductorDriverTask | null>(null);
   const [reactivating, setReactivating] = useState(false);
+  const boxInvoicesLabel = dialog?.task.boxInvoiceCodes.join(", ") || dialog?.task.shipmentCode || "";
   const [online, setOnline] = useState(true);
   const [offlineSnapshot, setOfflineSnapshot] = useState(() => summarizeConductorOfflineOperations([]));
   const submittingRef = useRef(false);
@@ -1231,7 +1232,7 @@ export function ConductorTareasClient({
                     onChange={(event) => setInvoiceVisible(event.target.checked)}
                   />
                   <span>
-                    Confirmo que el invoice <span className="font-mono text-emerald-300">{dialog.task.shipmentCode}</span> esta escrito con marcador y se ve claro en la caja.
+                    Confirmo que la factura de cada caja <span className="font-mono text-emerald-300">{boxInvoicesLabel}</span> esta escrita con marcador y se ve clara en la caja.
                   </span>
                 </label>
               ) : null}

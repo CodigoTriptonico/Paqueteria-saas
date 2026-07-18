@@ -88,6 +88,7 @@ import {
   resolveInitialShipmentStatus,
   syncShipmentStatusPatch,
 } from "@/lib/shipment-display";
+import { invoiceBoxCode } from "@/lib/invoice-child-codes";
 import { physicalPackageCodesForShipment } from "@/lib/physical-packages";
 import {
   assertSameOrgCustomerIds,
@@ -1300,12 +1301,12 @@ export async function createShipmentAction(input: {
     let shouldReloadShipment = false;
 
     const { error: packageError } = await supabase.from("shipment_packages").insert(
-      physicalPackageCodesForShipment(shipment.code, logisticsPlan).map((code) => ({
+      physicalPackageCodesForShipment(shipment.code, logisticsPlan).map((code, index) => ({
         organization_id: session.organizationId,
         shipment_id: shipment.id,
         code,
         country: shipment.country || "",
-        invoice_code: shipment.code,
+        invoice_code: invoiceBoxCode(shipment.code, index),
       })),
     );
 

@@ -21,6 +21,7 @@ import type { LogisticsRouteRow, LogisticsRouteStopRow } from "@/lib/logistics-r
 import { vehicleDisplayLabel } from "@/lib/logistics-route-vehicle";
 import type { LogisticsVehicleRow } from "@/lib/logistics-fleet";
 import { formatScheduleDateInput } from "@/lib/schedule-date";
+import { invoiceBoxCodes } from "@/lib/invoice-child-codes";
 
 export type ConductorDriverTask = {
   id: string;
@@ -49,6 +50,7 @@ export type ConductorDriverTask = {
   boxLines: ConductorTruckBoxLine[];
   boxSummary: string;
   boxDisplayLines: ShipmentBoxLine[];
+  boxInvoiceCodes: string[];
   boxTotal: string;
   paid: number;
   depositDue: number;
@@ -268,6 +270,7 @@ export function buildConductorDriverTasks(input: {
       const quote = quoteFromShipment(shipment);
       const boxLines = readConductorTruckBoxLinesFromPlan(shipment.logistics_plan);
       const displayBoxLines = readShipmentBoxLines(shipment);
+      const boxCount = displayBoxLines.reduce((total, line) => total + line.quantity, 0);
       const recipient = conductorRecipientFromShipment(shipment);
 
       tasks.push({
@@ -297,6 +300,7 @@ export function buildConductorDriverTasks(input: {
         boxLines,
         boxSummary: shipmentBoxLinesTriggerLabel(displayBoxLines) || quote?.label || "",
         boxDisplayLines: displayBoxLines,
+        boxInvoiceCodes: invoiceBoxCodes(shipment.code, boxCount),
         boxTotal: quote?.total || "",
         paid: shipment.paid,
         depositDue: Math.max(depositFromShipment(shipment) - shipment.paid, 0),

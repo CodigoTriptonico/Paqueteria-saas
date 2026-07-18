@@ -13,7 +13,8 @@ const migrationSource = readFileSync(join(root, "supabase/migrations/079_package
 
 describe("invoice visible on physical boxes eval", () => {
   it("requires an explicit driver confirmation and matching photo guidance", () => {
-    assert.match(clientSource, /Confirmo que el invoice/);
+    assert.match(clientSource, /Confirmo que la factura de cada caja/);
+    assert.match(clientSource, /dialog\?\.task\.boxInvoiceCodes/);
     assert.match(clientSource, /La foto debe mostrar el invoice escrito en la caja/);
     assert.match(clientSource, /Confirma que el invoice se ve escrito en la caja/);
   });
