@@ -71,11 +71,12 @@ function Network({ workspace, captorOnly = false }: { workspace: BusinessWorkspa
         {workspace.agencies.length ? (
           <div className="grid gap-2">
             {workspace.agencies.map((agency) => (
-              <article key={agency.id} className="grid gap-3 rounded-lg border border-black bg-surface-list-row p-3 md:grid-cols-[7rem_minmax(0,1fr)_12rem_9rem] md:items-center">
+              <article key={agency.id} className="grid gap-3 rounded-lg border border-black bg-surface-list-row p-3 md:grid-cols-[7rem_minmax(0,1fr)_12rem_9rem_10rem] md:items-center">
                 <span className="text-xs font-black uppercase tracking-wider text-emerald-300">{agency.code}</span>
                 <div className="min-w-0"><p className="truncate font-black text-slate-100">{agency.name}</p><p className="text-xs font-bold text-slate-500">{agency.captorName ? `Captador: ${agency.captorName}` : "Sin captador activo"}</p></div>
                 <span className="text-sm font-black text-slate-300">{statusLabel(agency.status)}</span>
                 <div className="text-right"><p className="font-black text-slate-100">{formatUsdCents(agency.chargeBalanceCents)}</p><p className="text-xs text-slate-500">{agency.openRequests} solicitudes</p></div>
+                {!captorOnly ? <Link href={`/agencias/${agency.id}`} className={`${secondaryButtonClass} w-full text-xs`}>Tarifas y saldo</Link> : null}
               </article>
             ))}
           </div>
