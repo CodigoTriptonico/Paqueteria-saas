@@ -3,5 +3,3 @@ export const HOME_ACTION_HREFS = {
   logistics: "/logistica",
   inventory: "/inventario",
 } as const;
-
-export type HomeActionId = keyof typeof HOME_ACTION_HREFS;

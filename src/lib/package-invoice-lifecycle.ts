@@ -5,12 +5,6 @@ export type PackageInvoiceLifecycleState =
   | "in_transit"
   | "delivered";
 
-export type PackageInvoiceLifecycleEvent = {
-  state: PackageInvoiceLifecycleState;
-  occurredAt: string;
-  changedByName: string;
-};
-
 export const packageInvoiceLifecycleLabel: Record<PackageInvoiceLifecycleState, string> = {
   created: "Creada",
   paid: "Pagada",

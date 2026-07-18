@@ -51,16 +51,6 @@ export const selectionShellClass = "border border-black transition-colors";
 
 export const selectionActiveClass = "border-black bg-emerald-400/10 hover:bg-emerald-400/15";
 
-const selectionIdleClass = "border-black hover:bg-surface-card-hover";
-
-export function selectionSurfaceClass(selected: boolean, dimmed = false) {
-  if (selected) {
-    return `${selectionShellClass} ${selectionActiveClass}`;
-  }
-
-  return `${selectionShellClass} ${selectionIdleClass}${dimmed ? ` ${unselectedDimClass}` : ""}`;
-}
-
 export const accentEmeraldSolid =
   "border border-emerald-600 bg-emerald-400 text-slate-950";
 
