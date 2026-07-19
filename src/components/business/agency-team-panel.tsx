@@ -7,7 +7,7 @@ import { agencyDemoSellerLimit } from "@/lib/agency-demo-team";
 import { generateTemporaryPassword } from "@/lib/auth/temporary-password";
 import { inputClass, Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
-import { uppercasePersonNameInput } from "@/lib/person-name";
+import { formatPersonNameInput } from "@/lib/person-name";
 
 const fieldClass = `${inputClass} w-full`;
 
@@ -64,7 +64,7 @@ export function AgencyTeamPanel() {
       <Panel title="Equipo de la agencia" action={<span className="rounded-md border border-emerald-400/25 bg-emerald-400/10 px-2 py-1 text-xs font-black text-emerald-200">{sellers.length} / {agencyDemoSellerLimit} vendedores</span>}>
         <p className="text-sm font-bold text-slate-300">La agencia tiene un administrador responsable y hasta dos vendedores. No usa conductores, logística ni otros roles.</p>
         <form className="mt-4 grid gap-2 border-t border-black pt-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={submit}>
-          <input className={fieldClass} value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: uppercasePersonNameInput(event.target.value) }))} placeholder="Nombre del vendedor" required disabled={!availableSeats || pending} />
+          <input className={fieldClass} value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: formatPersonNameInput(event.target.value) }))} placeholder="Nombre del vendedor" required disabled={!availableSeats || pending} />
           <input className={fieldClass} type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="correo@agencia.com" required disabled={!availableSeats || pending} />
           <div className="flex min-w-0 gap-2"><input className={`${fieldClass} min-w-0 font-mono text-sm`} value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} placeholder="Contraseña temporal" required disabled={!availableSeats || pending} /><button type="button" className={`${secondaryButtonClass} h-10 px-2 text-xs`} onClick={() => setForm((current) => ({ ...current, password: generateTemporaryPassword() }))} disabled={!availableSeats || pending}>Nueva</button></div>
           <button type="submit" className={primaryButtonClass} disabled={!availableSeats || pending}>{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />} Agregar</button>

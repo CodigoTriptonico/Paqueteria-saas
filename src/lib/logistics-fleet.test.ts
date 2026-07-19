@@ -55,7 +55,7 @@ describe("logistics fleet", () => {
         data: {
           email: "chofer@boxario.local",
           password: "",
-          fullName: "CARLOS DE LA CRUZ",
+      fullName: "Carlos De La Cruz",
           phone: "",
         },
       },

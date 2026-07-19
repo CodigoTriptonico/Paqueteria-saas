@@ -8,7 +8,7 @@ import {
   type DistributionPartner,
 } from "@/app/actions/distribution";
 import { Panel, StatCard, inputClass, primaryButtonClass } from "@/components/ui-blocks";
-import { uppercasePersonNameInput } from "@/lib/person-name";
+import { formatPersonNameInput } from "@/lib/person-name";
 
 type Props = { initialPartners?: DistributionPartner[] | null };
 const fieldClass = `${inputClass} w-full`;
@@ -56,5 +56,5 @@ function CreateAcquiredPartner({ isPending, onDone, onError }: { isPending: bool
       onDone();
     });
   }
-  return <div className="mt-4 grid gap-2 border-t border-black pt-4 md:grid-cols-2 xl:grid-cols-5"><input className={fieldClass} value={name} onChange={(event) => setName(event.target.value)} placeholder="Empresa distribuidora" /><input className={fieldClass} value={fullName} onChange={(event) => setFullName(uppercasePersonNameInput(event.target.value))} placeholder="Responsable" /><input className={fieldClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Correo de acceso" /><input className={fieldClass} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Contraseña inicial" /><button disabled={isPending || saving} onClick={submit} className={primaryButtonClass}>Enviar a matriz</button></div>;
+  return <div className="mt-4 grid gap-2 border-t border-black pt-4 md:grid-cols-2 xl:grid-cols-5"><input className={fieldClass} value={name} onChange={(event) => setName(event.target.value)} placeholder="Empresa distribuidora" /><input className={fieldClass} value={fullName} onChange={(event) => setFullName(formatPersonNameInput(event.target.value))} placeholder="Responsable" /><input className={fieldClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Correo de acceso" /><input className={fieldClass} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Contraseña inicial" /><button disabled={isPending || saving} onClick={submit} className={primaryButtonClass}>Enviar a matriz</button></div>;
 }

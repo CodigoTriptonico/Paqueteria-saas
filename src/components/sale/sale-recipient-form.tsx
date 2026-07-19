@@ -26,7 +26,7 @@ import {
   type Recipient,
 } from "@/components/sale/venta-parts";
 import { resolveAddressValidationUi, addressCardSubtitle } from "@/lib/sale-address-validation-ui";
-import { uppercasePersonNameInput } from "@/lib/person-name";
+import { formatPersonNameInput } from "@/lib/person-name";
 import { configPricesCountryHref } from "@/lib/country-options";
 import {
   buildPhoneNumber,
@@ -327,7 +327,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                       disabled={!hasCountry}
                       tabIndex={hasCountry ? 0 : -1}
                       onChange={(event) =>
-                        form.setFirstName(uppercasePersonNameInput(event.target.value))
+                        form.setFirstName(formatPersonNameInput(event.target.value))
                       }
                     />
                   </label>
@@ -342,7 +342,7 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                       disabled={!hasCountry}
                       tabIndex={hasCountry ? 0 : -1}
                       onChange={(event) =>
-                        form.setLastName(uppercasePersonNameInput(event.target.value))
+                        form.setLastName(formatPersonNameInput(event.target.value))
                       }
                     />
                   </label>

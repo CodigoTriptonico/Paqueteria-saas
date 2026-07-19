@@ -3,20 +3,20 @@ import { describe, it } from "node:test";
 import {
   normalizePersonName,
   normalizePersonNameSnapshot,
-  uppercasePersonNameInput,
+  formatPersonNameInput,
 } from "./person-name";
 
-describe("person name normalization", () => {
-  it("stores names and surnames in uppercase", () => {
-    assert.equal(normalizePersonName("  Carlos   Santa  "), "CARLOS SANTA");
+describe("person name formatting", () => {
+  it("stores names and surnames with capital initials", () => {
+    assert.equal(normalizePersonName("  Carlos   Santa  "), "Carlos Santa");
   });
 
   it("preserves accents, apostrophes and hyphens", () => {
-    assert.equal(normalizePersonName("josé o'neill-pérez"), "JOSÉ O'NEILL-PÉREZ");
+    assert.equal(normalizePersonName("JOSÉ O'NEILL-PÉREZ"), "José O'Neill-Pérez");
   });
 
-  it("uppercases while typing without trimming the caret-adjacent spaces", () => {
-    assert.equal(uppercasePersonNameInput("  maría "), "  MARÍA ");
+  it("formats while typing without trimming the caret-adjacent spaces", () => {
+    assert.equal(formatPersonNameInput("  mARÍA "), "  María ");
   });
 
   it("keeps empty values empty", () => {
@@ -26,12 +26,12 @@ describe("person name normalization", () => {
   it("normalizes snapshot names without changing contact or address data", () => {
     assert.deepEqual(
       normalizePersonNameSnapshot({
-        name: "Ana María de León",
+        name: "ANA MARÍA DE LEÓN",
         phone: "+1 555 0100",
         address: "Calle Principal",
       }),
       {
-        name: "ANA MARÍA DE LEÓN",
+        name: "Ana María De León",
         phone: "+1 555 0100",
         address: "Calle Principal",
       },

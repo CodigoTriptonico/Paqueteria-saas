@@ -31,7 +31,7 @@ import {
 import { FlowStepTitle } from "@/components/flow-step-title";
 import { EmailDomainSuggestionsInput } from "@/components/email-domain-suggestions-input";
 import { PhoneCountryInput } from "@/components/phone-country-input";
-import { uppercasePersonNameInput } from "@/lib/person-name";
+import { formatPersonNameInput } from "@/lib/person-name";
 import {
   isValidNationalPhone,
   maxNationalDigitsForDialCode,
@@ -487,7 +487,7 @@ export function PlatformCreateClientWizard({
                       onChange={(e) => {
                         setForm((c) => ({
                           ...c,
-                          adminFirstName: uppercasePersonNameInput(e.target.value),
+                          adminFirstName: formatPersonNameInput(e.target.value),
                         }));
                         setStepHint(null);
                       }}
@@ -503,7 +503,7 @@ export function PlatformCreateClientWizard({
                       onChange={(e) => {
                         setForm((c) => ({
                           ...c,
-                          adminLastName: uppercasePersonNameInput(e.target.value),
+                          adminLastName: formatPersonNameInput(e.target.value),
                         }));
                         setStepHint(null);
                       }}
