@@ -5,10 +5,17 @@ type UseContextNavOptions = {
   title: string;
   onBack: () => void;
   target?: string;
+  keepBrand?: boolean;
   enabled?: boolean;
 };
 
-export function useContextNav({ title, onBack, target, enabled = true }: UseContextNavOptions) {
+export function useContextNav({
+  title,
+  onBack,
+  target,
+  keepBrand = false,
+  enabled = true,
+}: UseContextNavOptions) {
   const setShellConfig = useSetShellConfig();
   const onBackRef = useRef(onBack);
   const lastAppliedRef = useRef<string | null>(null);
@@ -37,8 +44,9 @@ export function useContextNav({ title, onBack, target, enabled = true }: UseCont
       contextNavLabel: title,
       onContextNavBack: () => onBackRef.current(),
       contextNavTarget: target,
+      contextNavKeepBrand: keepBrand,
     });
-  }, [enabled, setShellConfig, target, title]);
+  }, [enabled, keepBrand, setShellConfig, target, title]);
 
   useEffect(() => {
     return () => {

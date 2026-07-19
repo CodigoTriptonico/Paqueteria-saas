@@ -36,7 +36,7 @@ describe("onboarding micro steps", () => {
 
     assert.ok(guide);
     assert.equal(guide?.microStepIndex, 3);
-    assert.match(guide?.body ?? "", /Volver a precios/);
+    assert.match(guide?.body ?? "", /flecha junto a Boxario/);
     assert.match(guide?.actionHref ?? "", /returnTo=/);
   });
 

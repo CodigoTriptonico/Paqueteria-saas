@@ -147,6 +147,7 @@ export function InventarioClient({
     title: showWarehouseSettings ? "Bodegas" : returnActionLabel || inventarioNavTitle,
     onBack: handleInventarioNavBack,
     target: returnTo ? ONBOARDING_TARGETS.INVENTORY_RETURN_PRICING : undefined,
+    keepBrand: Boolean(returnTo),
     enabled: loaded && enabled,
   });
 

@@ -23,6 +23,7 @@ type ShellConfig = {
   contextNavLabel?: string;
   onContextNavBack?: () => void;
   contextNavTarget?: string;
+  contextNavKeepBrand?: boolean;
   contentEdgeToEdge?: boolean;
   /** Override del contexto de paleta (p. ej. remitente vs destinatario en venta). */
   surfaceContextId?: UiSurfaceContextId | null;
@@ -180,6 +181,7 @@ export function AppFrame({
             contextNavLabel={contextNavLabel}
             onContextNavBack={onContextNavBack}
             contextNavTarget={config.contextNavTarget}
+            contextNavKeepBrand={config.contextNavKeepBrand}
             contentEdgeToEdge={config.contentEdgeToEdge}
             surfaceContextId={surfaceContextId}
           >

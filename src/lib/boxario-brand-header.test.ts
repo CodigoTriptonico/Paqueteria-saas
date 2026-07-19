@@ -15,12 +15,13 @@ describe("BoxarioBrandHeader layout", () => {
     assert.match(source, /<h1 className=\{titleClass\}>Boxario<\/h1>/);
   });
 
-  it("uses the Boxario mark as the home link", () => {
+  it("keeps the Boxario mark as the home link even with contextual navigation", () => {
     assert.match(source, /import Link from "next\/link"/);
     assert.match(source, /<Link href="\/" prefetch aria-label="Ir al inicio"/);
     assert.match(source, /<h1 className=\{titleClass\}>Boxario<\/h1>/);
+    assert.match(source, /keepBrand && onBack/);
     assert.doesNotMatch(source, /<House className=/);
-    assert.match(source, /\{onBack && title !== "Boxario" \? \(/);
+    assert.match(source, /\{onBack && !keepBrand && title !== "Boxario" \? \(/);
   });
 
   it("does not render the old cube mark in the brand header", () => {
@@ -39,7 +40,8 @@ describe("BoxarioBrandHeader layout", () => {
   });
 
   it("keeps context back navigation separate from sidebar collapse", () => {
-    assert.match(source, /\{onBack \? \([\s\S]*onClick=\{onBack\}/);
+    assert.match(source, /\{onBack && !keepBrand \? \([\s\S]*onClick=\{onBack\}/);
+    assert.match(source, /\{onBack && keepBrand \? \([\s\S]*onClick=\{onBack\}/);
     assert.doesNotMatch(source, /sidebarToggle/);
   });
 

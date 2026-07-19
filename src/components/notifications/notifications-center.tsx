@@ -44,6 +44,7 @@ type BoxarioBrandHeaderProps = {
   title?: string;
   backTitle?: string;
   backTarget?: string;
+  keepBrand?: boolean;
   sidebarGroupsToggle?: {
     allExpanded: boolean;
     onToggle: () => void;
@@ -88,10 +89,11 @@ export function BoxarioBrandHeader({
   title = "Boxario",
   backTitle = "Volver",
   backTarget,
+  keepBrand = false,
   sidebarGroupsToggle,
 }: BoxarioBrandHeaderProps) {
-  const shellClass = `relative flex items-center overflow-hidden rounded-xl border border-black bg-surface-card-header text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
-    compact ? "h-12 px-2.5" : "h-14 px-3"
+  const shellClass = `relative flex overflow-hidden rounded-xl border border-black bg-surface-card-header text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
+    keepBrand && onBack ? "min-h-[4.75rem] flex-col px-2.5 py-2" : compact ? "h-12 items-center px-2.5" : "h-14 items-center px-3"
   } ${className}`;
   const titleClass = `min-w-0 truncate font-black tracking-tight leading-none ${
     compact ? "text-lg" : "text-xl"
@@ -105,7 +107,7 @@ export function BoxarioBrandHeader({
     <div className={shellClass}>
       <div className="flex w-full min-w-0 items-center justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
-          {onBack ? (
+          {onBack && !keepBrand ? (
             <button
               type="button"
               onClick={onBack}
@@ -117,7 +119,7 @@ export function BoxarioBrandHeader({
               <ArrowLeft className="h-4 w-4" strokeWidth={2.5} />
             </button>
           ) : null}
-          {onBack && title !== "Boxario" ? (
+          {onBack && !keepBrand && title !== "Boxario" ? (
             <span className={titleClass}>{title}</span>
           ) : (
             <Link href="/" prefetch aria-label="Ir al inicio" title="Ir al inicio" className={homeButtonClass}>
@@ -147,6 +149,19 @@ export function BoxarioBrandHeader({
           {showNotifications ? <NotificationsCenter session={session} variant="brand" /> : null}
         </div>
       </div>
+      {onBack && keepBrand ? (
+        <button
+          type="button"
+          onClick={onBack}
+          title={backTitle}
+          aria-label={`${backTitle}: ${title}`}
+          data-onboarding-target={backTarget}
+          className="mt-1 flex w-full min-w-0 items-center gap-1.5 rounded-md border border-emerald-700/35 bg-emerald-400/10 px-2 py-1.5 text-left text-xs font-black leading-snug text-emerald-200 transition hover:bg-emerald-400/15 hover:text-emerald-100"
+        >
+          <ArrowLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+          <span className="min-w-0 break-words">{title}</span>
+        </button>
+      ) : null}
     </div>
   );
 }
