@@ -21,7 +21,6 @@ import { InventoryWarehouseBar } from "@/components/inventory-warehouse-bar";
 import { WarehousesSettingsPanel } from "@/components/config/warehouses-settings-panel";
 import { PageLoading } from "@/components/page-loading";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
-import { primaryButtonClass } from "@/components/ui-blocks";
 import { useContextNav } from "@/hooks/use-context-nav";
 import { useNotify } from "@/hooks/use-notify";
 import {
@@ -145,8 +144,9 @@ export function InventarioClient({
   }, [activeWarehouseName, enabled, loaded, warehouseId, warehouses.length]);
 
   useContextNav({
-    title: showWarehouseSettings ? "Bodegas" : inventarioNavTitle,
+    title: showWarehouseSettings ? "Bodegas" : returnActionLabel || inventarioNavTitle,
     onBack: handleInventarioNavBack,
+    target: returnTo ? ONBOARDING_TARGETS.INVENTORY_RETURN_PRICING : undefined,
     enabled: loaded && enabled,
   });
 
@@ -459,15 +459,6 @@ export function InventarioClient({
         }
         headerSlot={
           <>
-            {returnTo ? (
-              <Link
-                href={returnTo}
-                className={`${primaryButtonClass} h-9 shrink-0 px-3 text-xs font-black sm:px-4 sm:text-sm`}
-                data-onboarding-target={ONBOARDING_TARGETS.INVENTORY_RETURN_PRICING}
-              >
-                {returnActionLabel}
-              </Link>
-            ) : null}
             <InventoryWarehouseBar
               compact
               warehouses={warehouses}

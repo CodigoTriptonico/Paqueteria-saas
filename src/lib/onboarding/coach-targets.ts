@@ -265,7 +265,7 @@ export function resolveOnboardingCoachHint(
           return hint(
             ONBOARDING_TARGETS.INVENTORY_RETURN_PRICING,
             title,
-            "Cuando termines, pulsa Volver a precios (arriba a la izquierda).",
+            "Cuando termines, pulsa la flecha junto a Boxario.",
           );
         }
 

@@ -98,6 +98,7 @@ type AppShellProps = {
   compactNavSettingsHref?: string;
   contextNavLabel?: string;
   onContextNavBack?: () => void;
+  contextNavTarget?: string;
   contentEdgeToEdge?: boolean;
   surfaceContextId?: UiSurfaceContextId | null;
   children: React.ReactNode;
@@ -401,6 +402,7 @@ export function AppShell({
   compactNavSettingsHref,
   contextNavLabel,
   onContextNavBack,
+  contextNavTarget,
   onActiveClick,
   contentEdgeToEdge = false,
   surfaceContextId = null,
@@ -589,6 +591,7 @@ export function AppShell({
                     className="w-full min-w-0"
                     onBack={showContextNav ? onContextNavBack : undefined}
                     title={showContextNav ? brandTitle : undefined}
+                    backTarget={showContextNav ? contextNavTarget : undefined}
                     sidebarGroupsToggle={{
                       allExpanded: allSidebarGroupsExpanded,
                       onToggle: toggleAllSidebarGroups,
@@ -731,6 +734,7 @@ export function AppShell({
               className="min-w-0 flex-1"
               onBack={showContextNav ? onContextNavBack : undefined}
               title={showContextNav ? brandTitle : undefined}
+              backTarget={showContextNav ? contextNavTarget : undefined}
             />
             <UserAccountMenu session={session} variant="bar" />
             {surfaceContextId ? (

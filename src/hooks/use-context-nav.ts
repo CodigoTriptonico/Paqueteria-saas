@@ -4,10 +4,11 @@ import { useSetShellConfig } from "@/components/app-frame";
 type UseContextNavOptions = {
   title: string;
   onBack: () => void;
+  target?: string;
   enabled?: boolean;
 };
 
-export function useContextNav({ title, onBack, enabled = true }: UseContextNavOptions) {
+export function useContextNav({ title, onBack, target, enabled = true }: UseContextNavOptions) {
   const setShellConfig = useSetShellConfig();
   const onBackRef = useRef(onBack);
   const lastAppliedRef = useRef<string | null>(null);
@@ -35,8 +36,9 @@ export function useContextNav({ title, onBack, enabled = true }: UseContextNavOp
     setShellConfig({
       contextNavLabel: title,
       onContextNavBack: () => onBackRef.current(),
+      contextNavTarget: target,
     });
-  }, [enabled, setShellConfig, title]);
+  }, [enabled, setShellConfig, target, title]);
 
   useEffect(() => {
     return () => {

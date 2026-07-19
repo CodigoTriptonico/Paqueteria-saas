@@ -189,7 +189,7 @@ function resolvePricingGuide(
     {
       label: "Vincular productos",
       title: "Agrega productos al país",
-      body: "Si no hay productos en el catálogo, créalos en Inventario. Si ya existen, pulsa + Agregar ítems y elígelos. Desde Inventario usa Volver a precios (arriba a la izquierda) cuando termines.",
+      body: "Si no hay productos en el catálogo, créalos en Inventario. Si ya existen, pulsa + Agregar ítems y elígelos. Al terminar, usa la flecha junto a Boxario para volver a precios.",
       actionHref: inventarioHref,
       actionLabel: "Ir a Inventario",
     },

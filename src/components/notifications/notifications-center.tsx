@@ -43,6 +43,7 @@ type BoxarioBrandHeaderProps = {
   onBack?: () => void;
   title?: string;
   backTitle?: string;
+  backTarget?: string;
   sidebarGroupsToggle?: {
     allExpanded: boolean;
     onToggle: () => void;
@@ -86,6 +87,7 @@ export function BoxarioBrandHeader({
   onBack,
   title = "Boxario",
   backTitle = "Volver",
+  backTarget,
   sidebarGroupsToggle,
 }: BoxarioBrandHeaderProps) {
   const shellClass = `relative flex items-center overflow-hidden rounded-xl border border-black bg-surface-card-header text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
@@ -109,6 +111,7 @@ export function BoxarioBrandHeader({
               onClick={onBack}
               title={backTitle}
               aria-label={`${backTitle}: ${title}`}
+              data-onboarding-target={backTarget}
               className={backButtonClass}
             >
               <ArrowLeft className="h-4 w-4" strokeWidth={2.5} />

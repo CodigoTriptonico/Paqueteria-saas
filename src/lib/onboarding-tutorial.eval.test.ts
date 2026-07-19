@@ -80,8 +80,8 @@ describe("onboarding tutorial eval", () => {
     assert.match(microStepsSource, /inventarioHrefWithReturn/);
   });
 
-  it("mentions return to pricing from inventario", () => {
-    assert.match(microStepsSource, /Volver a precios/);
+  it("mentions the header return to pricing from inventario", () => {
+    assert.match(microStepsSource, /flecha junto a Boxario/);
     assert.match(onboardingHelpSource, /Nueva venta/);
   });
 

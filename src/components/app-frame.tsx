@@ -22,6 +22,7 @@ type ShellConfig = {
   compactNavSettingsHref?: string;
   contextNavLabel?: string;
   onContextNavBack?: () => void;
+  contextNavTarget?: string;
   contentEdgeToEdge?: boolean;
   /** Override del contexto de paleta (p. ej. remitente vs destinatario en venta). */
   surfaceContextId?: UiSurfaceContextId | null;
@@ -178,6 +179,7 @@ export function AppFrame({
             compactNavSettingsHref={config.compactNavSettingsHref}
             contextNavLabel={contextNavLabel}
             onContextNavBack={onContextNavBack}
+            contextNavTarget={config.contextNavTarget}
             contentEdgeToEdge={config.contentEdgeToEdge}
             surfaceContextId={surfaceContextId}
           >
