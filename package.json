@@ -53,6 +53,7 @@
     "test:platform-auth": "node scripts/test-platform-auth-flow.mjs",
     "test:matrix-initialization": "node scripts/test-matrix-initialization.mjs",
     "test:business-db": "node scripts/test-business-model.mjs",
+    "test:commercial-db": "node scripts/test-commercial-config.mjs",
     "test:sms": "node scripts/test-sms-flow.mjs"
   },
   "dependencies": {

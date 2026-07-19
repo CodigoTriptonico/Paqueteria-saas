@@ -60,7 +60,7 @@ const navItems: {
   { label: "Nueva venta", href: "/venta", icon: CreditCard, section: "shipments", hasSubmenu: true },
   { label: "Mi agencia", href: "/agencia", icon: Building2, section: "main" },
   { label: "Mis agencias", href: "/captacion", icon: Users, section: "agencies" },
-  { label: "Red de agencias", href: "/agencias", icon: Building2, section: "agencies" },
+  { label: "Vendedores y agencias", href: "/agencias", icon: Building2, section: "agencies" },
   { label: "Solicitudes", href: "/solicitudes", icon: ClipboardList, section: "agencies" },
   { label: "Seguimiento", href: "/seguimiento", icon: ClipboardList, section: "shipments" },
   { label: "Historial envíos", href: "/seguimiento/historial", icon: History, section: "shipments" },

@@ -10,7 +10,7 @@ const permissions = readFileSync(join(root, "src/lib/auth/permissions.ts"), "utf
 describe("business navigation eval", () => {
   it("uses Agencia in canonical navigation and exposes the new work areas", () => {
     assert.match(shell, /Mi agencia/);
-    assert.match(shell, /Red de agencias/);
+    assert.match(shell, /Vendedores y agencias/);
     assert.match(shell, /Solicitudes/);
     assert.match(shell, /Contabilidad/);
     assert.doesNotMatch(shell, /label: "Mi distribuidora"/);

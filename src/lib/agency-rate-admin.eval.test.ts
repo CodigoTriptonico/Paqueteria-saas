@@ -6,7 +6,7 @@ import test from "node:test";
 const root = process.cwd();
 const migration = readFileSync(join(root, "supabase/migrations/085_agency_rate_administration.sql"), "utf8");
 const publicPricesMigration = readFileSync(join(root, "supabase/migrations/086_agency_public_price_workspace.sql"), "utf8");
-const panel = readFileSync(join(root, "src/components/business/agency-rate-admin-panel.tsx"), "utf8");
+const panel = readFileSync(join(root, "src/components/commercial/commercial-admin-client.tsx"), "utf8");
 const publicPanel = readFileSync(join(root, "src/components/business/agency-public-price-panel.tsx"), "utf8");
 
 test("la administración tarifa cada agencia contra el catálogo real y conserva el historial", () => {
@@ -17,10 +17,11 @@ test("la administración tarifa cada agencia contra el catálogo real y conserva
   assert.match(migration, /agency\.pricing\.manage/i);
 });
 
-test("el panel explica que el monto es la cuenta por cobrar de la matriz", () => {
-  assert.match(panel, /paga a la matriz por cada caja/i);
-  assert.match(panel, /Saldo pendiente/i);
-  assert.match(panel, /Guardar tarifas/i);
+test("el panel integra la tarifa interna sin mezclar saldos ni pagos", () => {
+  assert.match(panel, /Tarifas internas de la matriz/i);
+  assert.match(panel, /No representa saldos ni pagos/i);
+  assert.match(panel, /Volver a heredar/i);
+  assert.doesNotMatch(panel, /Saldo pendiente/i);
 });
 
 test("la agencia ve su tarifa interna, controla solo su precio público y calcula margen", () => {

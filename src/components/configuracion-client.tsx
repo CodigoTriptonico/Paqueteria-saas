@@ -37,6 +37,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { CompanySettingsPanel } from "@/components/config/company-settings-panel";
+import { CountryCommercialServiceCosts } from "@/components/config/country-commercial-service-costs";
 import { AppearanceSettingsPanel } from "@/components/config/appearance-settings-panel";
 import { PlanSettingsPanel } from "@/components/config/plan-settings-panel";
 import { PageLoading } from "@/components/page-loading";
@@ -1913,6 +1914,9 @@ export function ConfiguracionClient({
                 value={selectedCountryData?.deliveryTime || ""}
                 onChange={updateCountryTime}
               />
+              {selectedCountryData?.code ? (
+                <CountryCommercialServiceCosts destinationCode={selectedCountryData.code} />
+              ) : null}
             </div>
           ) : null}
 
@@ -2041,7 +2045,7 @@ export function ConfiguracionClient({
 
                         <label className="flex items-center justify-between gap-3 rounded-lg border border-black bg-surface-inset px-3 py-2">
                           <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">
-                            Costo
+                            Tarifa interna base
                           </span>
                           <span className="flex items-center gap-1 tabular-nums text-[#f8fafc]">
                             <DollarSign className="h-4 w-4 shrink-0 text-slate-400" />

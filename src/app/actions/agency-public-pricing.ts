@@ -7,7 +7,7 @@ import { sessionHasPermission } from "@/lib/auth/permissions";
 import { requireAppSession } from "@/lib/auth/session";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 
-export type AgencyPublicPriceLine = {
+type AgencyPublicPriceLine = {
   destinationCode: string;
   destinationName: string;
   productCode: string;

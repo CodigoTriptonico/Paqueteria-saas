@@ -34,6 +34,8 @@ const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
     "agency.support",
     "distribution.manage",
     "distribution.acquire",
+    "commercial.settings.view",
+    "commercial.settings.manage",
   ],
   "/agencia": [
     "agency.sales.view",
@@ -71,7 +73,7 @@ const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
   ],
   "/auditoria": ["audit.immutable.view", "settings.manage"],
   "/estadisticas": ["audit.immutable.view"],
-  "/vendedores": ["users.manage"],
+  "/vendedores": ["commercial.settings.view", "commercial.settings.manage"],
   "/distribuidores": ["distribution.manage"],
   "/distribuidor": ["distribution.sell"],
   "/mis-distribuidores": ["distribution.acquire"],

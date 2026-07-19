@@ -30,7 +30,7 @@ export type ControlledException = {
   blocksRelease: boolean;
 };
 
-export type ControlledCustodyEvent = {
+type ControlledCustodyEvent = {
   id: string;
   type: PackageCustodyEventType;
   fromLabel: string;

@@ -26,13 +26,23 @@ export type AgencyBoxCatalogItem = {
   availableQuantity: number;
 };
 
+export type AgencyServiceCode =
+  | "agency_office_empty_box_delivery"
+  | "agency_office_full_box_pickup"
+  | "customer_home_delivery"
+  | "customer_empty_box_delivery"
+  | "customer_full_box_pickup";
+
 type AgencyRequestLine = {
   id: string;
-  serviceKind: "empty_box_delivery" | "full_box_pickup";
+  serviceKind: "empty_box_delivery" | "full_box_pickup" | "home_delivery" | "home_pickup";
+  serviceCode: AgencyServiceCode;
   requestedQuantity: number;
   confirmedQuantity: number | null;
   productKey: string;
   boxSize: string;
+  unitChargeAmountCents: number;
+  priceSource: string;
 };
 
 export type AgencyRequest = {
@@ -42,6 +52,9 @@ export type AgencyRequest = {
   requestedServiceDate: string | null;
   notes: string;
   createdAt: string;
+  requestScope: "agency_office" | "agency_customer";
+  agencyCustomerId: string | null;
+  address: string;
   lines: AgencyRequestLine[];
 };
 
@@ -59,13 +72,19 @@ type AgencyRequestDbRow = {
   notes: string | null;
   created_at: string;
   agency_id: string;
+  request_scope: "agency_office" | "agency_customer";
+  agency_customer_id: string | null;
+  address_snapshot: Record<string, unknown> | null;
   agency_service_request_lines: Array<{
     id: string;
-    service_kind: "empty_box_delivery" | "full_box_pickup";
+    service_kind: "empty_box_delivery" | "full_box_pickup" | "home_delivery" | "home_pickup";
+    service_code: AgencyServiceCode;
     requested_quantity: number;
     confirmed_quantity: number | null;
     product_key: string | null;
     box_size: string | null;
+    unit_charge_amount_cents: number | string;
+    commercial_price_snapshot: Record<string, unknown> | null;
   }> | null;
 };
 
@@ -77,13 +96,19 @@ function mapRequest(row: AgencyRequestDbRow): AgencyRequest {
     requestedServiceDate: row.requested_service_date,
     notes: row.notes || "",
     createdAt: row.created_at,
+    requestScope: row.request_scope || "agency_office",
+    agencyCustomerId: row.agency_customer_id || null,
+    address: String(row.address_snapshot?.formattedAddress || row.address_snapshot?.address || ""),
     lines: (row.agency_service_request_lines || []).map((line) => ({
       id: line.id,
       serviceKind: line.service_kind,
+      serviceCode: line.service_code,
       requestedQuantity: Number(line.requested_quantity),
       confirmedQuantity: line.confirmed_quantity === null ? null : Number(line.confirmed_quantity),
       productKey: line.product_key || "",
       boxSize: line.box_size || "",
+      unitChargeAmountCents: Number(line.unit_charge_amount_cents) || 0,
+      priceSource: String(line.commercial_price_snapshot?.sourceLevel || "country"),
     })),
   };
 }
@@ -154,6 +179,41 @@ export async function loadAgencyDeliveryCatalogAction(): Promise<ActionResult<Ag
   }
 }
 
+export type AgencyRequestCustomer = {
+  id: string;
+  name: string;
+  destinationCode: string;
+  address: Record<string, unknown>;
+  addressLabel: string;
+};
+
+export async function listAgencyRequestCustomersAction(): Promise<ActionResult<AgencyRequestCustomer[]>> {
+  try {
+    const session = await requireAppSession();
+    if (!sessionHasPermission(session, "agency.requests.create")) throw new Error("FORBIDDEN");
+    const db = await createScopedSupabase(session);
+    if (!db) throw new Error("Supabase no configurado");
+    const { data, error } = await db.from("customers")
+      .select("id, first_name, last_name, country, street, house_number, neighborhood, city, state, postal_code, formatted_address, place_id, lat, lng")
+      .eq("organization_id", session.organizationId).eq("is_active", true).order("first_name");
+    if (error) throw new Error(error.message);
+    const admin = createSupabaseAdminClient();
+    const { data: agency } = admin ? await admin.from("agencies").select("matrix_organization_id").eq("organization_id", session.organizationId).maybeSingle() : { data: null };
+    const { data: countries } = admin && agency?.matrix_organization_id ? await admin.from("pricing_countries").select("code, name").eq("organization_id", agency.matrix_organization_id) : { data: [] };
+    const countryCode = (value: string) => (countries || []).find((country) => country.code.toLowerCase() === value.toLowerCase() || country.name.toLowerCase() === value.toLowerCase())?.code || value;
+    return ok((data || []).map((row) => {
+      const addressLabel = row.formatted_address || [row.street, row.house_number, row.neighborhood, row.city, row.state, row.postal_code].filter(Boolean).join(", ");
+      return {
+        id: row.id,
+        name: `${row.first_name} ${row.last_name}`.trim(),
+        destinationCode: countryCode(String(row.country || "").trim()).toUpperCase(),
+        addressLabel,
+        address: { formattedAddress: addressLabel, street: row.street, houseNumber: row.house_number, neighborhood: row.neighborhood, city: row.city, state: row.state, postalCode: row.postal_code, country: row.country, placeId: row.place_id, lat: row.lat, lng: row.lng },
+      };
+    }));
+  } catch (error) { return fail(actionErrorMessage(error)); }
+}
+
 export async function listAgencyRequestsAction(): Promise<ActionResult<AgencyRequest[]>> {
   try {
     const session = await requireAppSession();
@@ -161,7 +221,7 @@ export async function listAgencyRequestsAction(): Promise<ActionResult<AgencyReq
     if (!db) throw new Error("Supabase no configurado");
     const { data, error } = await db
       .from("agency_service_requests")
-      .select("id, code, status, requested_service_date, notes, created_at, agency_id, agency_service_request_lines(id, service_kind, requested_quantity, confirmed_quantity, product_key, box_size)")
+      .select("id, code, status, requested_service_date, notes, created_at, agency_id, request_scope, agency_customer_id, address_snapshot, agency_service_request_lines(id, service_kind, service_code, requested_quantity, confirmed_quantity, product_key, box_size, unit_charge_amount_cents, commercial_price_snapshot)")
       .eq("organization_id", session.organizationId)
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
@@ -172,7 +232,7 @@ export async function listAgencyRequestsAction(): Promise<ActionResult<AgencyReq
 }
 
 export async function createAgencyBoxRequestAction(input: {
-  lines: Array<{ serviceKind: "empty_box_delivery" | "full_box_pickup"; quantity: number; productKey: string; boxSize: string; inventoryItemId?: string; warehouseId?: string }>;
+  lines: Array<{ serviceCode: AgencyServiceCode; quantity: number; productKey: string; boxSize: string; inventoryItemId?: string; warehouseId?: string; customerId?: string; destinationCode?: string; address?: Record<string, unknown> }>;
   requestedDate?: string;
   note?: string;
 }): Promise<ActionResult<{ requestId: string }>> {
@@ -184,7 +244,7 @@ export async function createAgencyBoxRequestAction(input: {
     const lines = input.lines.filter((line) => Number.isSafeInteger(line.quantity) && line.quantity > 0);
     if (!lines.length) return fail("Agrega al menos una caja con cantidad válida");
     const { data, error } = await db.rpc("create_agency_service_request", {
-      lines: lines.map((line) => ({ serviceKind: line.serviceKind, quantity: line.quantity, productKey: line.productKey.trim(), boxSize: line.boxSize.trim(), inventoryItemId: line.inventoryItemId || "", warehouseId: line.warehouseId || "" })),
+      lines: lines.map((line) => ({ serviceCode: line.serviceCode, quantity: line.quantity, productKey: line.productKey.trim(), boxSize: line.boxSize.trim(), inventoryItemId: line.inventoryItemId || "", warehouseId: line.warehouseId || "", customerId: line.customerId || "", destinationCode: line.destinationCode || "", address: line.address || {} })),
       requested_date: input.requestedDate || null,
       note: input.note || "",
       idempotency_key: randomUUID(),
@@ -204,7 +264,7 @@ export async function listLogisticsAgencyRequestsAction(): Promise<ActionResult<
     if (!db) throw new Error("Supabase no configurado");
     const { data, error } = await db
       .from("agency_service_requests")
-      .select("id, code, status, requested_service_date, notes, created_at, agency_id, agency_service_request_lines(id, service_kind, requested_quantity, confirmed_quantity, product_key, box_size), agencies!inner(id, organizations!agencies_organization_id_fkey(name))")
+      .select("id, code, status, requested_service_date, notes, created_at, agency_id, request_scope, agency_customer_id, address_snapshot, agency_service_request_lines(id, service_kind, service_code, requested_quantity, confirmed_quantity, product_key, box_size, unit_charge_amount_cents, commercial_price_snapshot), agencies!inner(id, organizations!agencies_organization_id_fkey(name))")
       .in("status", ["submitted", "under_review", "confirmed", "scheduled"])
       .order("created_at");
     if (error) throw new Error(error.message);
@@ -245,8 +305,7 @@ export type AgencyDriverVisit = {
   agencyName: string;
   routeName: string;
   address: string;
-  lines: Array<{ id: string; label: string; requestedQuantity: number }>;
-  charges: Array<{ id: string; label: string; outstandingCents: number }>;
+  lines: Array<{ id: string; label: string; requestedQuantity: number; serviceCode: AgencyServiceCode }>;
 };
 
 export async function listConductorAgencyVisitsAction(driverId: string): Promise<ActionResult<AgencyDriverVisit[]>> {
@@ -261,12 +320,10 @@ export async function listConductorAgencyVisitsAction(driverId: string): Promise
     if (!routeById.size) return ok([]);
     const { data: visits, error } = await admin
       .from("agency_visits")
-      .select("id, route_id, organization_id, address_snapshot, agencies!inner(organizations!agencies_organization_id_fkey(name)), agency_visit_lines(id, requested_quantity, agency_service_request_lines(service_kind, product_key, box_size))")
+      .select("id, route_id, organization_id, address_snapshot, agencies!inner(organizations!agencies_organization_id_fkey(name)), agency_visit_lines(id, requested_quantity, agency_service_request_lines(service_kind, service_code, product_key, box_size))")
       .in("route_id", [...routeById.keys()])
       .in("status", ["assigned", "in_route", "scheduled"]);
     if (error) throw new Error(error.message);
-    const organizationIds = [...new Set((visits || []).map((visit) => visit.organization_id))];
-    const { data: balances } = organizationIds.length ? await admin.from("agency_charge_balances").select("charge_id, agency_organization_id, outstanding_cents").in("agency_organization_id", organizationIds).gt("outstanding_cents", 0) : { data: [] };
     return ok((visits || []).map((visit) => {
       const agency = Array.isArray(visit.agencies) ? visit.agencies[0] : visit.agencies;
       const organizations = agency && "organizations" in agency ? (Array.isArray(agency.organizations) ? agency.organizations[0] : agency.organizations) : null;
@@ -277,9 +334,10 @@ export async function listConductorAgencyVisitsAction(driverId: string): Promise
         address: typeof visit.address_snapshot === "object" && visit.address_snapshot ? String((visit.address_snapshot as { formattedAddress?: string; address?: string }).formattedAddress || (visit.address_snapshot as { address?: string }).address || "Dirección registrada") : "Dirección registrada",
         lines: (visit.agency_visit_lines || []).map((line) => {
           const requestLine = Array.isArray(line.agency_service_request_lines) ? line.agency_service_request_lines[0] : line.agency_service_request_lines;
-          return { id: line.id, requestedQuantity: Number(line.requested_quantity), label: `${requestLine?.service_kind === "empty_box_delivery" ? "Entregar" : "Recoger"} ${requestLine?.product_key || "cajas"} ${requestLine?.box_size || ""}`.trim() };
+          const serviceCode = (requestLine?.service_code || (requestLine?.service_kind === "empty_box_delivery" ? "agency_office_empty_box_delivery" : "agency_office_full_box_pickup")) as AgencyServiceCode;
+          const labelByCode: Record<AgencyServiceCode, string> = { agency_office_empty_box_delivery: "Entregar cajas vacías en agencia", agency_office_full_box_pickup: "Recoger cajas llenas en agencia", customer_home_delivery: "Atender domicilio del cliente", customer_empty_box_delivery: "Entregar caja vacía al cliente", customer_full_box_pickup: "Recoger caja llena del cliente" };
+          return { id: line.id, requestedQuantity: Number(line.requested_quantity), serviceCode, label: `${labelByCode[serviceCode]} ${requestLine?.product_key || ""} ${requestLine?.box_size || ""}`.trim() };
         }),
-        charges: (balances || []).filter((balance) => balance.agency_organization_id === visit.organization_id).map((balance) => ({ id: balance.charge_id, label: "Cargo pendiente", outstandingCents: Number(balance.outstanding_cents) })),
       };
     }));
   } catch (error) {
@@ -287,7 +345,7 @@ export async function listConductorAgencyVisitsAction(driverId: string): Promise
   }
 }
 
-export async function completeConductorAgencyVisitAction(input: { visitId: string; lines: Array<{ visitLineId: string; confirmedQuantity: number; differenceReason?: string }>; payment?: { amountCents: number; method: string; reference?: string; applications: Array<{ chargeId: string; amountCents: number }> } }): Promise<ActionResult<{ paymentId: string | null }>> {
+export async function completeConductorAgencyVisitAction(input: { visitId: string; lines: Array<{ visitLineId: string; confirmedQuantity: number; differenceReason?: string; evidence?: Record<string, unknown> }> }): Promise<ActionResult<{ paymentId: string | null }>> {
   try {
     const session = await requireAppSession();
     if (session.roleSlug !== "conductor") throw new Error("FORBIDDEN");
@@ -295,9 +353,9 @@ export async function completeConductorAgencyVisitAction(input: { visitId: strin
     if (!db) throw new Error("Supabase no configurado");
     const { data, error } = await db.rpc("complete_agency_visit_by_driver", {
       target_visit_id: input.visitId,
-      line_confirmations: input.lines,
+      line_confirmations: input.lines.map((line) => ({ ...line, evidence: line.evidence || { source: "driver_confirmation" } })),
       confirmation_reason: "Confirmada por conductor",
-      payment: input.payment && input.payment.amountCents > 0 ? { amountCents: input.payment.amountCents, method: input.payment.method, reference: input.payment.reference || "", applications: input.payment.applications } : null,
+      payment: null,
       idempotency_key: randomUUID(),
     });
     if (error) throw new Error(error.message);

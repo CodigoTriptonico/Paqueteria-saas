@@ -23,10 +23,10 @@ test("agency operations connect requests, route stops and assigned drivers", () 
 
 test("each operational surface keeps agencies visibly separate", () => {
   assert.match(agencyPanel, /Cajas de mi agencia/);
-  assert.match(agencyPanel, /Pedir cajas/);
+  assert.match(agencyPanel, /Solicitudes logísticas/);
   assert.match(logistics, /Domicilios/);
   assert.match(logistics, /Agencias/);
   assert.match(conductor, /AgencyVisitsPanel/);
-  assert.match(agencyPanel, /Agregar otra caja/);
+  assert.match(agencyPanel, /Agregar otro servicio/);
   assert.match(agenciesActions, /reviewAgencyRouteProposalAction/);
 });

@@ -62,7 +62,9 @@ export type PermissionKey =
   | "sales.cancel_pre_departure"
   | "agency.daily_close.view"
   | "agency.daily_close.prepare"
-  | "agency.daily_close.finalize";
+  | "agency.daily_close.finalize"
+  | "commercial.settings.view"
+  | "commercial.settings.manage";
 
 export type RoleSlug = "administrador" | "vendedor" | "conductor" | (string & {});
 
