@@ -7,6 +7,7 @@ const sql = readFileSync(join(process.cwd(), "supabase/migrations/094_commercial
 const intervalSql = readFileSync(join(process.cwd(), "supabase/migrations/096_commercial_override_half_open_intervals.sql"), "utf8");
 const requestScopeSql = readFileSync(join(process.cwd(), "supabase/migrations/097_agency_request_scope_guard.sql"), "utf8");
 const resolverAuthorizationSql = readFileSync(join(process.cwd(), "supabase/migrations/098_commercial_price_resolver_authorization.sql"), "utf8");
+const minimumPriceSql = readFileSync(join(process.cwd(), "supabase/migrations/099_commercial_minimum_price_guard.sql"), "utf8");
 
 describe("commercial configuration schema", () => {
   it("uses half-open intervals so same-transaction restore is safe", () => {
@@ -68,5 +69,10 @@ describe("commercial configuration schema", () => {
     assert.match(resolverAuthorizationSql, /target_entity_id = auth\.uid\(\)/);
     assert.match(resolverAuthorizationSql, /commercial\.settings\.view/);
     assert.match(resolverAuthorizationSql, /then raise exception 'FORBIDDEN'/);
+  });
+
+  it("keeps seller minimum prices below the configured public price without rewriting history", () => {
+    assert.match(minimumPriceSql, /minimum_amount_cents <= amount_cents/);
+    assert.match(minimumPriceSql, /not valid/);
   });
 });

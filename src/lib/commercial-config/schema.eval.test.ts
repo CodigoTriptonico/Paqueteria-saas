@@ -16,6 +16,8 @@ describe("commercial separation eval", () => {
     assert.match(adminUi, /Precios sugeridos/);
     assert.match(adminUi, /Tarifas internas/);
     assert.doesNotMatch(adminUi, /Saldo pendiente|Registrar pago|Cobrar/);
+    assert.match(adminUi, /Precio mínimo permitido/);
+    assert.match(adminUi, /Servicios que puede vender/);
   });
 
   it("keeps logistics operational and visibly source-separated", () => {

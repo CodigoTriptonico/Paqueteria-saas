@@ -106,6 +106,7 @@ export async function saveCommercialOverrideAction(input: { audience: Commercial
   try {
     const session = await requireAppSession(); if (!canManage(session)) throw new Error("FORBIDDEN");
     if (!Number.isSafeInteger(input.amountCents) || input.amountCents < 0) return fail("Ingresa un monto valido");
+    if (input.minimumAmountCents !== null && input.minimumAmountCents !== undefined && (!Number.isSafeInteger(input.minimumAmountCents) || input.minimumAmountCents < 0 || input.minimumAmountCents > input.amountCents)) return fail("El precio mínimo debe ser un monto válido y no superar el precio configurado");
     const db = await createScopedSupabase(session); if (!db) throw new Error("Supabase no configurado");
     const { data, error } = await db.rpc("save_commercial_price_override", { target_audience: input.audience, target_entity_id: input.entityId || null, target_destination_code: input.destinationCode, target_product_code: input.productCode, target_price_kind: input.priceKind, target_service_concept: input.serviceConcept, target_amount_cents: input.amountCents, target_minimum_amount_cents: input.minimumAmountCents ?? null, target_currency: input.currency || "USD", target_calculation_rule: { type: "fixed" }, idempotency_key: randomUUID() });
     if (error || !data?.overrideId) throw new Error(error?.message || "No se pudo guardar la excepcion"); revalidatePath("/agencias"); revalidatePath("/vendedores"); return ok({ overrideId: String(data.overrideId) });

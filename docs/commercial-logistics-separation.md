@@ -89,6 +89,7 @@ Los roles y usuarios continúan administrándose en el módulo de equipo. El pan
 - `096_commercial_override_half_open_intervals.sql`: vigencia semiabierta segura para reemplazar o restaurar dentro de una transacción.
 - `097_agency_request_scope_guard.sql`: protección de backend contra solicitudes que mezclen oficina y cliente.
 - `098_commercial_price_resolver_authorization.sql`: limita el resolver a la propia entidad o gestores comerciales autorizados.
+- `099_commercial_minimum_price_guard.sql`: impide mínimos nuevos superiores al precio público sin reescribir excepciones históricas ambiguas.
 
 La migración es conservadora: agrega tablas/columnas, inicializa los dos servicios adicionales desde los valores logísticos actuales y no elimina ni reescribe hechos financieros históricos.
 
