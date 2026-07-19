@@ -8,11 +8,14 @@ const shell = readFileSync(join(root, "src/components/app-shell.tsx"), "utf8");
 const permissions = readFileSync(join(root, "src/lib/auth/permissions.ts"), "utf8");
 
 describe("business navigation eval", () => {
-  it("uses Agencia in canonical navigation and exposes the new work areas", () => {
-    assert.match(shell, /Mi agencia/);
+  it("keeps every agency workspace under one navigation section", () => {
+    assert.match(shell, /\{ label: "Mi agencia", href: "\/agencia", icon: Building2, section: "agencies" \}/);
+    assert.match(shell, /\{ label: "Agencias a mi cargo", href: "\/captacion", icon: Users, section: "agencies" \}/);
     assert.match(shell, /Vendedores y agencias/);
     assert.match(shell, /Solicitudes/);
     assert.match(shell, /Contabilidad/);
+    assert.doesNotMatch(shell, /\{ label: "Mi agencia", href: "\/agencia", icon: Building2, section: "main" \}/);
+    assert.doesNotMatch(shell, /label: "Mis agencias"/);
     assert.doesNotMatch(shell, /label: "Mi distribuidora"/);
   });
 
