@@ -20,8 +20,10 @@ describe("business navigation", () => {
     assert.match(frame, /pathname\.startsWith\("\/captacion"\)[\s\S]*return "Agencias a mi cargo"/);
   });
 
-  it("keeps Nueva venta in its single navigation entry instead of repeating it in Mi agencia", () => {
+  it("keeps sidebar routes out of Mi agencia shortcuts", () => {
     assert.match(shell, /\{ label: "Nueva venta", href: "\/venta"/);
+    assert.match(shell, /\{ label: "Solicitudes", href: "\/solicitudes"/);
     assert.doesNotMatch(commandCenter, /<Link className=\{primaryButtonClass\} href="\/venta">Crear venta<\/Link>/);
+    assert.doesNotMatch(commandCenter, /href="\/solicitudes">Nueva solicitud/);
   });
 });

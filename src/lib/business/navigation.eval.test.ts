@@ -21,6 +21,7 @@ describe("business navigation eval", () => {
     assert.doesNotMatch(shell, /label: "Mi distribuidora"/);
     assert.match(frame, /return "Agencias a mi cargo"/);
     assert.doesNotMatch(commandCenter, /href="\/venta">Crear venta/);
+    assert.doesNotMatch(commandCenter, /href="\/solicitudes">Nueva solicitud/);
   });
 
   it("keeps agency, finance and operations permissions separated", () => {
