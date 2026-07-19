@@ -170,9 +170,12 @@ describe("app shell sidebar eval", () => {
     assert.match(appShellSource, /sidebarNavGroups\.map/);
   });
 
-  it("keeps the mobile more sheet separate from desktop rail behavior", () => {
+  it("keeps the mobile more sheet separate from desktop rail behavior and makes its groups collapsible", () => {
     assert.match(appShellSource, /mobileMoreNavGroups\.map/);
     assert.doesNotMatch(appShellSource, /mobileMoreNavGroups\.map[\s\S]*showDesktopRail/);
+    assert.match(appShellSource, /mobile-more-group-\$\{section\.id\}/);
+    assert.match(appShellSource, /mobileMoreNavGroups\.map[\s\S]*toggleSidebarGroup\(section\.id\)/);
+    assert.match(appShellSource, /mobileMoreNavGroups\.map[\s\S]*expandedSidebarGroups\.includes\(section\.id\)/);
   });
 
   it("places desktop sidebar toggle in the grouped footer controls", () => {

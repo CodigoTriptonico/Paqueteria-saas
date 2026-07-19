@@ -791,7 +791,7 @@ export const saleSteps: { id: SaleStep; label: string; compactLabel: string }[] 
   { id: "client", label: "Remitente", compactLabel: "Remite" },
   { id: "recipient", label: "Destinatario", compactLabel: "Destino" },
   { id: "box", label: "Caja", compactLabel: "Caja" },
-  { id: "delivery", label: "Logistica", compactLabel: "Logíst." },
+  { id: "delivery", label: "Logística", compactLabel: "Logística" },
   { id: "finish", label: "Final", compactLabel: "Final" },
 ];
 

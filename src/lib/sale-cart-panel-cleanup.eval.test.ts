@@ -21,4 +21,11 @@ describe("sale cart panel cleanup eval", () => {
   it("does not retain portal or lifecycle code from the removed cart variants", () => {
     assert.doesNotMatch(source, /createPortal|useEffect|useState/);
   });
+
+  it("keeps the step-bar cart label readable inside a mobile step tile", () => {
+    assert.match(source, /grid-cols-\[2rem_minmax\(0,1fr\)\]/);
+    assert.match(source, /truncate whitespace-nowrap text-\[9px\]/);
+    assert.match(source, /hidden shrink-0 text-xs font-black tabular-nums/);
+    assert.match(source, /hidden h-3\.5 w-3\.5 shrink-0/);
+  });
 });

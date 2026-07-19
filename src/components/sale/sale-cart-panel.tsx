@@ -283,7 +283,7 @@ export function SaleStepCartTrigger({
           ? `Carrito, ${itemCount} producto${itemCount === 1 ? "" : "s"}${total ? `, ${total}` : ""}`
           : "Abrir carrito"
       }
-      className={`group flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:gap-2.5 sm:px-2.5 sm:py-2 ${
+      className={`group grid w-full grid-cols-[2rem_minmax(0,1fr)] items-center gap-2 rounded-md border px-2 py-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:flex sm:gap-2.5 sm:px-2.5 sm:py-2 ${
         open
           ? "border-emerald-500/70 bg-emerald-400/15 shadow-[inset_0_1px_0_rgba(52,211,153,0.12)]"
           : itemCount
@@ -307,12 +307,12 @@ export function SaleStepCartTrigger({
           </span>
         ) : null}
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[9px] font-black uppercase tracking-wide text-slate-500 sm:text-[10px]">
+      <span className="min-w-0 sm:flex-1">
+        <span className="block truncate whitespace-nowrap text-[9px] font-black uppercase leading-none tracking-normal text-slate-500 sm:text-[10px] sm:tracking-wide">
           Carrito
         </span>
         <span
-          className={`block truncate text-[10px] font-black sm:text-[11px] ${
+          className={`hidden truncate text-[10px] font-black sm:block sm:text-[11px] ${
             itemCount ? "text-emerald-100" : "text-slate-400"
           }`}
         >
@@ -322,12 +322,12 @@ export function SaleStepCartTrigger({
         </span>
       </span>
       {total && itemCount ? (
-        <span className="shrink-0 text-xs font-black tabular-nums text-emerald-300 sm:text-sm">
+        <span className="hidden shrink-0 text-xs font-black tabular-nums text-emerald-300 sm:inline sm:text-sm">
           {total}
         </span>
       ) : null}
       <ChevronDown
-        className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform sm:h-4 sm:w-4 ${
+        className={`hidden h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform sm:block sm:h-4 sm:w-4 ${
           open ? "rotate-180 text-emerald-300" : ""
         }`}
         aria-hidden

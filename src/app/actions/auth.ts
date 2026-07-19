@@ -1,9 +1,11 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { fail, ok, type ActionResult } from "@/lib/actions/errors";
+import { isSupabaseAuthCookie } from "@/lib/auth/clear-auth-cookies";
 import { isPublicSignupEnabled } from "@/lib/auth/public-signup";
 import { resolvePostLoginRedirect } from "@/lib/organizations/kind";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -75,5 +77,13 @@ export async function signOutAction() {
   if (supabase) {
     await supabase.auth.signOut();
   }
+
+  const cookieStore = await cookies();
+  for (const cookie of cookieStore.getAll()) {
+    if (isSupabaseAuthCookie(cookie.name)) {
+      cookieStore.delete(cookie.name);
+    }
+  }
+
   redirect("/login");
 }

@@ -37,6 +37,7 @@ yarn-error.log*
 codex-next-*.log
 next-live-debug.log
 .cloudflared*.log
+.share-*.log
 .next-dev*.log
 .next-prod*.log
 .dev-tunnel.url

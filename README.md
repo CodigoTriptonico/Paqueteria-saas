@@ -87,3 +87,4 @@ http://localhost:3000/login
 
 - Setup y pruebas: [SETUP.md](./SETUP.md)
 - Docker, puertos y troubleshooting: [DESARROLLO-LOCAL.md](./DESARROLLO-LOCAL.md)
+- Sesión y experiencia móvil: [docs/auth-mobile-contract.md](./docs/auth-mobile-contract.md)

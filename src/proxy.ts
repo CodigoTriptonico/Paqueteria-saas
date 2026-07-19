@@ -1,9 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { clearAuthCookies } from "@/lib/auth/clear-auth-cookies";
+import {
+  isPublicProxyPath,
+  resolveAuthenticatedLoginPath,
+} from "@/lib/auth/proxy-paths";
 import { resolveAuthUser } from "@/lib/auth/resolve-auth-user";
-
-const PUBLIC_PATHS = ["/login", "/rastrear", "/api/auth/sign-in", "/api/public/tracking"];
 
 function redirectToLogin(
   request: NextRequest,
@@ -60,11 +62,6 @@ export async function proxy(request: NextRequest) {
     return redirectToLogin(request, { error: "Servicio no configurado" });
   }
 
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
-  if (isPublic) {
-    return NextResponse.next();
-  }
-
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-boxario-pathname", pathname);
 
@@ -80,13 +77,21 @@ export async function proxy(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
-        cookiesToSet.forEach(({ name, value }) => {
+        const changedCookies = cookiesToSet.filter(
+          ({ name, value }) => request.cookies.get(name)?.value !== value,
+        );
+
+        if (changedCookies.length === 0) {
+          return;
+        }
+
+        changedCookies.forEach(({ name, value }) => {
           request.cookies.set(name, value);
         });
         supabaseResponse = NextResponse.next({
           request: forwardedRequest,
         });
-        cookiesToSet.forEach(({ name, value, options }) => {
+        changedCookies.forEach(({ name, value, options }) => {
           supabaseResponse.cookies.set(name, value, options);
         });
       },
@@ -94,6 +99,22 @@ export async function proxy(request: NextRequest) {
   });
 
   const auth = await resolveAuthUser(() => supabase.auth.getUser());
+
+  const authenticatedLoginPath = resolveAuthenticatedLoginPath(
+    pathname,
+    request.nextUrl.searchParams.get("next"),
+  );
+  if (authenticatedLoginPath && auth.status === "authenticated") {
+    const redirectResponse = NextResponse.redirect(new URL(authenticatedLoginPath, request.url));
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+    return redirectResponse;
+  }
+
+  if (isPublicProxyPath(pathname)) {
+    return supabaseResponse;
+  }
 
   if (auth.status === "unavailable") {
     if (pathname.startsWith("/api/")) {

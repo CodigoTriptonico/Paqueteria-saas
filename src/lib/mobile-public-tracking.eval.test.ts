@@ -17,9 +17,11 @@ describe("mobile navigation and public tracking eval", () => {
 
   it("makes the customer portal public but preserves server-only verification", () => {
     const proxy = read("proxy.ts");
+    const proxyPaths = read("lib", "auth", "proxy-paths.ts");
     const route = read("app", "api", "public", "tracking", "route.ts");
     const dto = read("lib", "public-tracking.ts");
-    assert.match(proxy, /"\/rastrear"/);
+    assert.match(proxy, /isPublicProxyPath\(pathname\)/);
+    assert.match(proxyPaths, /"\/rastrear"/);
     assert.match(route, /enforcePublicTrackingRateLimit/);
     assert.match(route, /senderPhoneMatches/);
     assert.match(dto, /export type PublicTrackingShipment/);

@@ -778,30 +778,63 @@ export function AppShell({
                   />
                   <nav aria-label="Más opciones" className="absolute inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] max-h-[72dvh] space-y-3 overflow-y-auto rounded-t-[1.5rem] border border-black bg-surface-panel p-4 shadow-[0_-18px_44px_rgba(0,0,0,0.55)]">
                     <div className="mx-auto mb-1 h-1.5 w-10 rounded-full bg-slate-600" />
-                    {mobileMoreNavGroups.map((section) => (
-                      <div key={section.id} className="space-y-1.5">
-                        <p className="px-2 text-[10px] font-black uppercase leading-none text-slate-500">
-                          {section.label}
-                        </p>
-                        <div className="grid gap-1">
-                          {section.items.map((item) => {
-                            const label = navItemLabel(item, session);
+                    {mobileMoreNavGroups.map((section) => {
+                      const canCollapse = section.items.length > 0;
+                      const sectionCollapsed = canCollapse && !expandedSidebarGroups.includes(section.id);
+                      const sectionExpanded = !sectionCollapsed;
+                      const groupPanelId = `mobile-more-group-${section.id}`;
+                      const SectionIcon = navSectionIcon(section.id);
 
-                            return (
-                              <ShellNavItem
-                                key={item.href}
-                                item={item}
-                                label={label}
-                                session={session}
-                                isActive={label === active}
-                                variant="mobile"
-                                onNavigate={handleNavClick}
+                      return (
+                        <div key={section.id} className="space-y-1.5">
+                          <button
+                            type="button"
+                            onClick={canCollapse ? () => toggleSidebarGroup(section.id) : undefined}
+                            aria-controls={canCollapse ? groupPanelId : undefined}
+                            aria-expanded={canCollapse ? sectionExpanded : undefined}
+                            className="group flex min-h-11 w-full items-center justify-between rounded-lg border border-black/75 bg-surface-inset/55 px-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-[background-color,border-color,box-shadow,transform] duration-200 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70"
+                          >
+                            <span className="flex min-w-0 items-center gap-2.5">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-black/70 bg-surface-card text-emerald-200">
+                                <SectionIcon className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+                              </span>
+                              <span className="truncate text-[11px] font-black uppercase leading-none tracking-[0.08em] text-slate-200">
+                                {section.label}
+                              </span>
+                            </span>
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-black/70 bg-black/20 text-emerald-200">
+                              <ChevronDown
+                                className={`h-4 w-4 transition-transform duration-200 ${
+                                  sectionCollapsed ? "-rotate-90" : "rotate-0"
+                                }`}
+                                aria-hidden
                               />
-                            );
-                          })}
+                            </span>
+                          </button>
+                          <div
+                            id={canCollapse ? groupPanelId : undefined}
+                            aria-hidden={sectionCollapsed}
+                            inert={sectionCollapsed}
+                            className={sectionCollapsed ? "hidden" : "grid gap-1"}
+                          >
+                            {section.items.map((item) => {
+                              const label = navItemLabel(item, session);
+
+                              return (
+                                <ShellNavItem
+                                  key={item.href}
+                                  item={item}
+                                  label={label}
+                                  isActive={label === active}
+                                  variant="mobile"
+                                  onNavigate={handleNavClick}
+                                />
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </nav>
                 </div>
               ) : null}
