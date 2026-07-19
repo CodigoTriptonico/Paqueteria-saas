@@ -149,7 +149,6 @@ function Agency({ workspace, canManageTeam, canRequest, canCloseDay }: { workspa
       </section>
       <Panel title="Trabajo de mi agencia" action={<WalletCards className="h-5 w-5 text-emerald-300" />}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Link className={primaryButtonClass} href="/venta">Crear venta</Link>
           <Link className={secondaryButtonClass} href="/agencia/precios">Mis precios y ganancia</Link>
           <Link className={secondaryButtonClass} href="/solicitudes">Nueva solicitud</Link>
           {canCloseDay ? <Link className={secondaryButtonClass} href="/agencia/cierre">Cierre diario</Link> : null}

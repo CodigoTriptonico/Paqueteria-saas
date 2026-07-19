@@ -6,6 +6,7 @@ import { join } from "node:path";
 const root = process.cwd();
 const shell = readFileSync(join(root, "src/components/app-shell.tsx"), "utf8");
 const frame = readFileSync(join(root, "src/components/app-frame.tsx"), "utf8");
+const commandCenter = readFileSync(join(root, "src/components/business/business-command-center.tsx"), "utf8");
 const permissions = readFileSync(join(root, "src/lib/auth/permissions.ts"), "utf8");
 
 describe("business navigation eval", () => {
@@ -19,6 +20,7 @@ describe("business navigation eval", () => {
     assert.doesNotMatch(shell, /label: "Mis agencias"/);
     assert.doesNotMatch(shell, /label: "Mi distribuidora"/);
     assert.match(frame, /return "Agencias a mi cargo"/);
+    assert.doesNotMatch(commandCenter, /href="\/venta">Crear venta/);
   });
 
   it("keeps agency, finance and operations permissions separated", () => {

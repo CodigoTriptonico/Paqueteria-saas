@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 
 const shell = readFileSync(join(process.cwd(), "src/components/app-shell.tsx"), "utf8");
 const frame = readFileSync(join(process.cwd(), "src/components/app-frame.tsx"), "utf8");
+const commandCenter = readFileSync(join(process.cwd(), "src/components/business/business-command-center.tsx"), "utf8");
 
 describe("business navigation", () => {
   it("does not split the current agency into Trabajo and Agencias", () => {
@@ -17,5 +18,10 @@ describe("business navigation", () => {
     assert.ok(managedAgenciesItem > ownAgencyItem);
     assert.equal(shell.includes('label: "Mis agencias"'), false);
     assert.match(frame, /pathname\.startsWith\("\/captacion"\)[\s\S]*return "Agencias a mi cargo"/);
+  });
+
+  it("keeps Nueva venta in its single navigation entry instead of repeating it in Mi agencia", () => {
+    assert.match(shell, /\{ label: "Nueva venta", href: "\/venta"/);
+    assert.doesNotMatch(commandCenter, /<Link className=\{primaryButtonClass\} href="\/venta">Crear venta<\/Link>/);
   });
 });
