@@ -14,6 +14,7 @@ export type InventoryStructureOptionsMenuProps = {
   embedded: boolean;
   showStructureOptions: boolean;
   optionsOpen: boolean;
+  mode: "create" | "manage";
   structureMenuPosition: { top: number; left: number } | null;
   structureMenuMounted: boolean;
   structurePanelRef: React.RefObject<HTMLDivElement | null>;
@@ -42,6 +43,7 @@ export function InventoryStructureOptionsMenu({
   embedded,
   showStructureOptions,
   optionsOpen,
+  mode,
   structureMenuPosition,
   structureMenuMounted,
   structurePanelRef,
@@ -119,9 +121,9 @@ export function InventoryStructureOptionsMenu({
       }}
     >
       <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-500">
-        Estructura
+        {mode === "manage" ? "Gestionar estructura" : "Crear estructura"}
       </p>
-      {addingSubcategoryForSelectedCategory ? (
+      {mode === "create" && addingSubcategoryForSelectedCategory ? (
         <div className="space-y-1.5">
           <p className="text-[11px] font-black uppercase tracking-wide text-emerald-300">
             Nueva subcategoría
@@ -131,7 +133,7 @@ export function InventoryStructureOptionsMenu({
             Dentro de {selectedCategoryData?.name}
           </p>
         </div>
-      ) : (
+      ) : mode === "create" ? (
         <>
           <button
             type="button"
@@ -197,9 +199,9 @@ export function InventoryStructureOptionsMenu({
             </button>
           )}
         </>
-      )}
+      ) : null}
 
-      {showStructureDelete ? (
+      {showStructureDelete && mode === "manage" ? (
         <div className="space-y-2 border-t border-black/70 pt-2">
           <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">
             Eliminar

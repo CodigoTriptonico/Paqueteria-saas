@@ -2,10 +2,12 @@
 
 import {
   Check,
+  FolderPlus,
   Layers3,
   Package2,
   Plus,
   Search,
+  Settings2,
   Sparkles,
   X,
 } from "lucide-react";
@@ -142,12 +144,16 @@ export function InventoryStructureEditor({
   const [newCategoryName, setNewCategoryName] = useState("");
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [structureMenuMode, setStructureMenuMode] = useState<"create" | "manage">(
+    "create",
+  );
   const [structureMenuPosition, setStructureMenuPosition] = useState<{
     top: number;
     left: number;
   } | null>(null);
   const [structureMenuMounted, setStructureMenuMounted] = useState(false);
   const structureButtonRef = useRef<HTMLButtonElement>(null);
+  const newItemButtonRef = useRef<HTMLButtonElement>(null);
   const structurePanelRef = useRef<HTMLDivElement>(null);
   const newItemPopoverRef = useRef<HTMLDivElement>(null);
   const [newItemPopoverPosition, setNewItemPopoverPosition] = useState<{
@@ -217,6 +223,7 @@ export function InventoryStructureEditor({
     addCategory?: boolean;
     addItem?: boolean;
   }) {
+    setStructureMenuMode("create");
     setOptionsOpen(true);
 
     if (opts?.addCategory) {
@@ -280,7 +287,7 @@ export function InventoryStructureEditor({
   }, [embedded, optionsOpen, updateStructureMenuPosition]);
 
   const updateNewItemPopoverPosition = useCallback(() => {
-    const trigger = structureButtonRef.current;
+    const trigger = newItemButtonRef.current;
 
     if (!trigger) {
       return;
@@ -325,6 +332,7 @@ export function InventoryStructureEditor({
 
       if (
         structureButtonRef.current?.contains(target) ||
+        newItemButtonRef.current?.contains(target) ||
         structurePanelRef.current?.contains(target) ||
         newItemPopoverRef.current?.contains(target) ||
         emptyCategoryFormRef.current?.contains(target)
@@ -411,6 +419,7 @@ export function InventoryStructureEditor({
     setShowNewCategoryInput(false);
     setShowNewItemForm(false);
     setOpenSubcategoryInput(selectedCategory);
+    setStructureMenuMode("create");
     setOptionsOpen(true);
   }
 
@@ -418,6 +427,16 @@ export function InventoryStructureEditor({
     setShowNewItemForm(false);
     setOpenSubcategoryInput("");
     setShowNewCategoryInput(true);
+    setStructureMenuMode("create");
+    setOptionsOpen(true);
+  }
+
+  function openStructureMenu(
+    trigger: HTMLButtonElement,
+    mode: "create" | "manage",
+  ) {
+    structureButtonRef.current = trigger;
+    setStructureMenuMode(mode);
     setOptionsOpen(true);
   }
 
@@ -1570,31 +1589,67 @@ export function InventoryStructureEditor({
               ) : null}
               {toolbarEndSlot}
               {showStructureOptions ? (
-                <InventoryToolbarIconButton
-                  buttonRef={structureButtonRef}
-                  icon={Plus}
-                  label="Agregar y estructura"
-                  showLabel
-                  visibleLabel="Agregar"
-                  tone={optionsOpen || showNewItemForm ? "active" : "primary"}
-                  disabled={!selectedCategoryData && categoryConfigs.length > 0}
-                  ariaExpanded={optionsOpen || showNewItemForm}
-                  ariaHaspopup="menu"
-                  onboardingTarget={ONBOARDING_TARGETS.INVENTORY_STRUCTURE_MENU}
-                  onClick={() => {
-                    if (showNewItemForm) {
-                      setShowNewItemForm(false);
-                      return;
-                    }
+                <>
+                  <InventoryToolbarIconButton
+                    buttonRef={newItemButtonRef}
+                    icon={Plus}
+                    label="Agregar artículo"
+                    showLabel
+                    visibleLabel="Agregar"
+                    tone={showNewItemForm ? "active" : "primary"}
+                    disabled={!selectedCategoryData}
+                    ariaExpanded={showNewItemForm}
+                    ariaHaspopup="dialog"
+                    onboardingTarget={ONBOARDING_TARGETS.INVENTORY_STRUCTURE_MENU}
+                    onClick={() => {
+                      if (showNewItemForm) {
+                        setShowNewItemForm(false);
+                        return;
+                      }
 
-                    if (!categoryConfigs.length) {
-                      setOptionsOpen(true);
-                      return;
-                    }
-
-                    setOptionsOpen((current) => !current);
-                  }}
-                />
+                      beginAddItem();
+                    }}
+                  />
+                  <InventoryToolbarIconButton
+                    icon={FolderPlus}
+                    label="Nueva categoría"
+                    showLabel
+                    visibleLabel="Categoría"
+                    tone={showNewCategoryInput ? "active" : "default"}
+                    ariaExpanded={optionsOpen && structureMenuMode === "create"}
+                    ariaHaspopup="dialog"
+                    onboardingTarget={ONBOARDING_TARGETS.INVENTORY_ADD_CATEGORY}
+                    onClick={(event) => {
+                      openStructureMenu(event.currentTarget, "create");
+                      beginAddCategory();
+                    }}
+                  />
+                  <InventoryToolbarIconButton
+                    icon={Layers3}
+                    label="Nueva subcategoría"
+                    showLabel
+                    visibleLabel="Subcategoría"
+                    tone={addingSubcategoryForSelectedCategory ? "active" : "default"}
+                    disabled={!selectedCategoryData}
+                    ariaExpanded={optionsOpen && structureMenuMode === "create"}
+                    ariaHaspopup="dialog"
+                    onClick={(event) => {
+                      openStructureMenu(event.currentTarget, "create");
+                      beginAddSubcategory();
+                    }}
+                  />
+                  <InventoryToolbarIconButton
+                    icon={Settings2}
+                    label="Gestionar estructura"
+                    tone={optionsOpen && structureMenuMode === "manage" ? "active" : "default"}
+                    disabled={!selectedCategoryData}
+                    ariaExpanded={optionsOpen && structureMenuMode === "manage"}
+                    ariaHaspopup="menu"
+                    onClick={(event) => {
+                      openStructureMenu(event.currentTarget, "manage");
+                    }}
+                  />
+                </>
               ) : null}
             </div>
           ) : null}
@@ -1691,6 +1746,7 @@ export function InventoryStructureEditor({
         embedded={embedded}
         showStructureOptions={showStructureOptions}
         optionsOpen={optionsOpen}
+        mode={structureMenuMode}
         structureMenuPosition={structureMenuPosition}
         structureMenuMounted={structureMenuMounted}
         structurePanelRef={structurePanelRef}
@@ -1706,7 +1762,7 @@ export function InventoryStructureEditor({
         beginAddItem={beginAddItem}
         beginAddSubcategory={beginAddSubcategory}
         renderSubcategoryForm={renderSubcategoryForm}
-        showStructureDelete={showStructureDelete}
+        showStructureDelete={showStructureDelete && structureMenuMode === "manage"}
         selectedCategoryName={selectedCategory}
         deleteCategory={deleteCategory}
         deleteSubcategory={deleteSubcategory}
@@ -1715,7 +1771,7 @@ export function InventoryStructureEditor({
         open={showNewItemForm}
         mounted={structureMenuMounted}
         position={newItemPopoverPosition}
-        anchorRef={structureButtonRef}
+        anchorRef={newItemButtonRef}
         panelRef={newItemPopoverRef}
         selectedCategoryData={selectedCategoryData}
         selectedSubcategory={selectedSubcategory}

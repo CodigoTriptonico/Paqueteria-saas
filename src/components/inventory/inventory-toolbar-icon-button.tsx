@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import type { RefObject } from "react";
+import type { MouseEvent, RefObject } from "react";
 
 export const inventoryToolbarGroupClass =
   "flex shrink-0 items-center gap-1 rounded-lg border border-black bg-[#141a18] p-1";
@@ -24,7 +24,7 @@ const toneClass = {
 export type InventoryToolbarIconButtonProps = {
   icon: LucideIcon;
   label: string;
-  onClick: () => void;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   tone?: keyof typeof toneClass;
   badge?: number;
   buttonRef?: RefObject<HTMLButtonElement | null>;

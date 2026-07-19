@@ -225,7 +225,7 @@ export function resolveOnboardingCoachHint(
         return hint(
           ONBOARDING_TARGETS.INVENTORY_STRUCTURE_MENU,
           title,
-          "Pulsa + y elige Nueva categoría.",
+          "Pulsa Categoría para crear una categoría nueva.",
         );
       }
 
@@ -233,7 +233,7 @@ export function resolveOnboardingCoachHint(
         return hint(
           ONBOARDING_TARGETS.INVENTORY_STRUCTURE_MENU,
           title,
-          "Pulsa + y elige Nuevo item.",
+          "Pulsa Agregar para crear el primer artículo.",
         );
       }
 

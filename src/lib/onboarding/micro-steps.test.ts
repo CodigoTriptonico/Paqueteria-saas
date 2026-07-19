@@ -53,7 +53,7 @@ describe("onboarding micro steps", () => {
     assert.match(guide?.actionHref ?? "", /country=M/);
   });
 
-  it("describes the embedded inventory structure menu", () => {
+  it("describes the direct inventory actions", () => {
     const guide = resolveOnboardingGuideForStep(
       "inventory",
       "/inventario",
@@ -62,6 +62,6 @@ describe("onboarding micro steps", () => {
     );
 
     assert.ok(guide);
-    assert.match(guide?.body ?? "", /Nuevo item/);
+    assert.match(guide?.body ?? "", /pulsa Agregar/);
   });
 });

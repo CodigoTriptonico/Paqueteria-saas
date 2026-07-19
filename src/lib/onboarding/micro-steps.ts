@@ -137,14 +137,14 @@ function resolveInventoryGuide(
     {
       label: "Crear categoría",
       title: "Crea tu primera categoría",
-      body: "Si la pantalla está vacía, pulsa Agregar categoría. Si ya hay categorías, usa el botón + (Agregar y estructura) y elige Nueva categoría. Ejemplo: Cajas.",
+      body: "Pulsa Categoría para crear la primera. Ejemplo: Cajas.",
       actionHref: "/inventario",
       actionLabel: "Ir a Inventario",
     },
     {
       label: "Agregar item",
       title: "Agrega tu primer producto",
-      body: "Elige la categoría en el filtro superior, pulsa + y selecciona Nuevo item. Escribe un nombre como Mediana o 14×14×14 y confirma.",
+      body: "Elige la categoría en el filtro superior y pulsa Agregar. Escribe un nombre como Mediana o 14×14×14 y confirma.",
       actionHref: "/inventario",
       actionLabel: "Ir a Inventario",
     },
