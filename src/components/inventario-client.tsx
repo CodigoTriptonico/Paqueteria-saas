@@ -470,7 +470,7 @@ export function InventarioClient({
         }
         toolbarEndSlot={
           <InventoryControlMenu
-            bare
+            variant="menu"
             warehouseId={warehouseId}
             warehouseName={activeWarehouseName}
             assignments={assignments}

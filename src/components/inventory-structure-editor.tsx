@@ -2,9 +2,12 @@
 
 import {
   Check,
+  LayoutGrid,
   Layers3,
+  MoreHorizontal,
   Package2,
   Plus,
+  Rows3,
   Search,
   Settings2,
   Sparkles,
@@ -36,7 +39,6 @@ import {
 } from "@/components/inventory/inventory-toolbar-icon-button";
 import { InventoryNewItemPopover } from "@/components/inventory/inventory-new-item-popover";
 import { InventoryStructureOptionsMenu } from "@/components/inventory/inventory-structure-options-menu";
-import { ViewLayoutToggle } from "@/components/view-layout-toggle";
 import { useNotify } from "@/hooks/use-notify";
 import { useViewLayout } from "@/hooks/use-view-layout";
 import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
@@ -143,6 +145,7 @@ export function InventoryStructureEditor({
   const [newCategoryName, setNewCategoryName] = useState("");
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
   const [structureMenuMode, setStructureMenuMode] = useState<"create" | "manage">(
     "create",
   );
@@ -152,6 +155,8 @@ export function InventoryStructureEditor({
   } | null>(null);
   const [structureMenuMounted, setStructureMenuMounted] = useState(false);
   const structureButtonRef = useRef<HTMLButtonElement>(null);
+  const toolbarMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const toolbarMenuRef = useRef<HTMLDivElement>(null);
   const newItemButtonRef = useRef<HTMLButtonElement>(null);
   const structurePanelRef = useRef<HTMLDivElement>(null);
   const newItemPopoverRef = useRef<HTMLDivElement>(null);
@@ -365,6 +370,39 @@ export function InventoryStructureEditor({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [categoryConfigs.length, embedded, optionsOpen, showNewCategoryInput]);
+
+  useEffect(() => {
+    if (!toolbarMenuOpen) {
+      return;
+    }
+
+    function closeToolbarMenu(event: globalThis.MouseEvent) {
+      const target = event.target as Node;
+
+      if (
+        toolbarMenuRef.current?.contains(target) ||
+        toolbarMenuButtonRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setToolbarMenuOpen(false);
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setToolbarMenuOpen(false);
+      }
+    }
+
+    window.addEventListener("mousedown", closeToolbarMenu);
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      window.removeEventListener("mousedown", closeToolbarMenu);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [toolbarMenuOpen]);
 
   useEffect(() => {
     if (selectedCategory || !categoryConfigs.length) {
@@ -1581,15 +1619,9 @@ export function InventoryStructureEditor({
               persistent
             />
           ) : null}
-          {!truckTabOpen && (toolbarEndSlot || showStructureOptions) ? (
+          {!truckTabOpen && showStructureOptions ? (
             <div className={inventoryToolbarGroupClass}>
-              {!truckTabOpen && selectedCategoryData ? (
-                <ViewLayoutToggle layout={viewLayout} onToggle={toggleViewLayout} />
-              ) : null}
-              {toolbarEndSlot}
-              {showStructureOptions ? (
-                <>
-                  <InventoryToolbarIconButton
+              <InventoryToolbarIconButton
                     buttonRef={newItemButtonRef}
                     icon={Plus}
                     label="Agregar artículo"
@@ -1609,37 +1641,78 @@ export function InventoryStructureEditor({
                       beginAddItem();
                     }}
                   />
-                  <InventoryToolbarIconButton
-                    icon={Layers3}
-                    label="Categorías y subcategorías"
-                    tone={optionsOpen && structureMenuMode === "create" ? "active" : "default"}
-                    ariaExpanded={optionsOpen && structureMenuMode === "create"}
-                    ariaHaspopup="menu"
-                    onboardingTarget={ONBOARDING_TARGETS.INVENTORY_STRUCTURE_MENU}
+              <div className="relative">
+                <InventoryToolbarIconButton
+                  buttonRef={toolbarMenuButtonRef}
+                  icon={MoreHorizontal}
+                  label="Más acciones de inventario"
+                  tone={toolbarMenuOpen ? "active" : "default"}
+                  ariaExpanded={toolbarMenuOpen}
+                  ariaHaspopup="menu"
+                  onClick={() => setToolbarMenuOpen((current) => !current)}
+                />
+                {toolbarMenuOpen ? (
+                  <div
+                    ref={toolbarMenuRef}
+                    role="menu"
                     onClick={(event) => {
-                      if (optionsOpen && structureMenuMode === "create") {
-                        setOptionsOpen(false);
-                        return;
+                      if (
+                        (event.target as HTMLElement).closest(
+                          "[data-inventory-toolbar-menu-action]",
+                        )
+                      ) {
+                        setToolbarMenuOpen(false);
                       }
-
-                      openStructureMenu(event.currentTarget, "create");
-                      setShowNewCategoryInput(false);
-                      setOpenSubcategoryInput("");
                     }}
-                  />
-                  <InventoryToolbarIconButton
-                    icon={Settings2}
-                    label="Gestionar estructura"
-                    tone={optionsOpen && structureMenuMode === "manage" ? "active" : "default"}
-                    disabled={!selectedCategoryData}
-                    ariaExpanded={optionsOpen && structureMenuMode === "manage"}
-                    ariaHaspopup="menu"
-                    onClick={(event) => {
-                      openStructureMenu(event.currentTarget, "manage");
-                    }}
-                  />
-                </>
-              ) : null}
+                    className="absolute right-0 top-[calc(100%+0.5rem)] z-[120] w-64 rounded-lg border border-black bg-[#101820] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+                  >
+                    {selectedCategoryData ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          toggleViewLayout();
+                          setToolbarMenuOpen(false);
+                        }}
+                        className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc]"
+                      >
+                        {viewLayout === "rows" ? (
+                          <LayoutGrid className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                        ) : (
+                          <Rows3 className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                        )}
+                        {viewLayout === "rows" ? "Ver tarjetas" : "Ver lista"}
+                      </button>
+                    ) : null}
+                    {toolbarEndSlot}
+                    <div className="my-1.5 border-t border-black/70" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setToolbarMenuOpen(false);
+                        setShowNewCategoryInput(false);
+                        setOpenSubcategoryInput("");
+                        openStructureMenu(toolbarMenuButtonRef.current!, "create");
+                      }}
+                      className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc]"
+                    >
+                      <Layers3 className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                      Categorías y subcategorías
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!selectedCategoryData}
+                      onClick={() => {
+                        setToolbarMenuOpen(false);
+                        openStructureMenu(toolbarMenuButtonRef.current!, "manage");
+                      }}
+                      className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Settings2 className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                      Gestionar estructura
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>

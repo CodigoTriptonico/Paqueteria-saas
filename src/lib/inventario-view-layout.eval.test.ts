@@ -9,10 +9,12 @@ const editorSource = readFileSync(join(root, "components/inventory-structure-edi
 const gridSource = readFileSync(join(root, "components/inventory/inventory-item-grid.tsx"), "utf8");
 
 describe("inventario view layout eval", () => {
-  it("wires the shared view layout toggle in inventario", () => {
+  it("keeps the view layout toggle inside the compact inventory menu", () => {
     assert.equal(editorSource.includes("useViewLayout"), true);
-    assert.equal(editorSource.includes("ViewLayoutToggle"), true);
-    assert.equal(editorSource.includes("viewLayout={viewLayout}"), true);
+    assert.equal(editorSource.includes("toolbarMenuOpen"), true);
+    assert.equal(editorSource.includes("toggleViewLayout()"), true);
+    assert.equal(editorSource.includes("Ver tarjetas"), true);
+    assert.equal(editorSource.includes("Ver lista"), true);
   });
 
   it("keeps inventario toolbar controls left and metrics on the right in one row", () => {

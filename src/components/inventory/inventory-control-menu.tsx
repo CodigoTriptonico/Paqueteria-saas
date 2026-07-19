@@ -26,6 +26,7 @@ export function InventoryControlMenu({
   onCloseAssignment,
   closingAssignmentId = "",
   bare = false,
+  variant = "toolbar",
 }: {
   warehouseId: string;
   warehouseName?: string;
@@ -37,11 +38,41 @@ export function InventoryControlMenu({
   onCloseAssignment: (assignmentId: string, input: CloseAssignmentSubmit) => Promise<boolean>;
   closingAssignmentId?: string;
   bare?: boolean;
+  variant?: "toolbar" | "menu";
 }) {
   const [assignmentsOpen, setAssignmentsOpen] = useState(false);
   const [movementsOpen, setMovementsOpen] = useState(false);
 
-  const triggerButtons = (
+  const menuItemClass =
+    "flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc]";
+
+  const triggerButtons = variant === "menu" ? (
+    <>
+      <button
+        type="button"
+        onClick={() => setAssignmentsOpen(true)}
+        data-inventory-toolbar-menu-action
+        className={menuItemClass}
+      >
+        <ClipboardList className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+        <span className="min-w-0 flex-1">Asignaciones activas</span>
+        {assignments.length ? (
+          <span className="rounded bg-surface-inset px-1.5 py-0.5 text-[10px] tabular-nums text-slate-400">
+            {assignments.length}
+          </span>
+        ) : null}
+      </button>
+      <button
+        type="button"
+        onClick={() => setMovementsOpen(true)}
+        data-inventory-toolbar-menu-action
+        className={menuItemClass}
+      >
+        <History className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+        <span className="min-w-0 flex-1">Historial de movimientos</span>
+      </button>
+    </>
+  ) : (
     <>
       <InventoryToolbarIconButton
         icon={ClipboardList}
@@ -66,7 +97,11 @@ export function InventoryControlMenu({
 
   return (
     <>
-      {bare ? triggerButtons : <div className={inventoryToolbarGroupClass}>{triggerButtons}</div>}
+      {bare || variant === "menu" ? (
+        triggerButtons
+      ) : (
+        <div className={inventoryToolbarGroupClass}>{triggerButtons}</div>
+      )}
 
       <InventoryAssignmentsDrawer
         warehouseId={warehouseId}

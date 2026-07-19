@@ -15,16 +15,19 @@ const menuSource = readFileSync(
 );
 
 describe("inventory toolbar action separation eval", () => {
-  it("keeps article creation primary and structure creation compact", () => {
+  it("keeps article creation primary and secondary inventory work in one menu", () => {
     assert.match(editorSource, /label="Agregar artículo"/);
-    assert.match(editorSource, /label="Categorías y subcategorías"/);
+    assert.match(editorSource, /label="Más acciones de inventario"/);
+    assert.match(editorSource, /Categorías y subcategorías/);
+    assert.match(editorSource, /Ver tarjetas/);
+    assert.match(editorSource, /Ver lista/);
     assert.match(menuSource, /Nueva categoría/);
     assert.match(menuSource, /Nueva subcategoría/);
     assert.doesNotMatch(menuSource, /Nuevo item/);
   });
 
   it("isolates destructive actions in the manage-structure menu", () => {
-    assert.match(editorSource, /label="Gestionar estructura"/);
+    assert.match(editorSource, /Gestionar estructura/);
     assert.match(editorSource, /showStructureDelete && structureMenuMode === "manage"/);
     assert.match(menuSource, /showStructureDelete && mode === "manage"/);
   });
