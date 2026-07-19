@@ -721,7 +721,7 @@ export function clientFormAddressLabelClass(
   const enabled = options?.enabled ?? true;
 
   if (enabled && !value.trim()) {
-    return "text-[11px] font-black uppercase tracking-[0.08em] text-rose-300";
+    return "text-[11px] font-black uppercase tracking-[0.08em] text-rose-400";
   }
 
   return clientFormLabelClass;
