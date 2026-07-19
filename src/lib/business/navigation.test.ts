@@ -8,14 +8,18 @@ const frame = readFileSync(join(process.cwd(), "src/components/app-frame.tsx"), 
 const commandCenter = readFileSync(join(process.cwd(), "src/components/business/business-command-center.tsx"), "utf8");
 
 describe("business navigation", () => {
-  it("does not split the current agency into Trabajo and Agencias", () => {
+  it("keeps Mi agencia first and Agencias a mi cargo last", () => {
     const agencySection = shell.indexOf('{ id: "agencies", label: "Agencias" }');
     const ownAgencyItem = shell.indexOf('{ label: "Mi agencia", href: "/agencia", icon: Building2, section: "agencies" }');
+    const requestsItem = shell.indexOf('{ label: "Solicitudes", href: "/solicitudes", icon: ClipboardList, section: "agencies" }');
+    const administrationItem = shell.indexOf('{ label: "Vendedores y agencias", href: "/agencias", icon: Building2, section: "agencies" }');
     const managedAgenciesItem = shell.indexOf('{ label: "Agencias a mi cargo", href: "/captacion", icon: Users, section: "agencies" }');
 
     assert.ok(agencySection >= 0);
     assert.ok(ownAgencyItem > agencySection);
-    assert.ok(managedAgenciesItem > ownAgencyItem);
+    assert.ok(requestsItem > ownAgencyItem);
+    assert.ok(administrationItem > requestsItem);
+    assert.ok(managedAgenciesItem > administrationItem);
     assert.equal(shell.includes('label: "Mis agencias"'), false);
     assert.match(frame, /pathname\.startsWith\("\/captacion"\)[\s\S]*return "Agencias a mi cargo"/);
   });

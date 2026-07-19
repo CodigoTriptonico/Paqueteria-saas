@@ -59,9 +59,9 @@ const navItems: {
 }[] = [
   { label: "Nueva venta", href: "/venta", icon: CreditCard, section: "shipments", hasSubmenu: true },
   { label: "Mi agencia", href: "/agencia", icon: Building2, section: "agencies" },
-  { label: "Agencias a mi cargo", href: "/captacion", icon: Users, section: "agencies" },
-  { label: "Vendedores y agencias", href: "/agencias", icon: Building2, section: "agencies" },
   { label: "Solicitudes", href: "/solicitudes", icon: ClipboardList, section: "agencies" },
+  { label: "Vendedores y agencias", href: "/agencias", icon: Building2, section: "agencies" },
+  { label: "Agencias a mi cargo", href: "/captacion", icon: Users, section: "agencies" },
   { label: "Seguimiento", href: "/seguimiento", icon: ClipboardList, section: "shipments" },
   { label: "Historial envíos", href: "/seguimiento/historial", icon: History, section: "shipments" },
   { label: "Inventario", href: "/inventario", icon: Boxes, section: "stock", hasSubmenu: true },
