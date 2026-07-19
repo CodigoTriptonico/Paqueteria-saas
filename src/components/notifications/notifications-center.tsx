@@ -92,8 +92,8 @@ export function BoxarioBrandHeader({
   keepBrand = false,
   sidebarGroupsToggle,
 }: BoxarioBrandHeaderProps) {
-  const shellClass = `relative flex overflow-hidden rounded-xl border border-black bg-surface-card-header text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
-    keepBrand && onBack ? "min-h-[4.75rem] flex-col px-2.5 py-2" : compact ? "h-12 items-center px-2.5" : "h-14 items-center px-3"
+  const shellClass = `relative flex min-h-[4.75rem] flex-col overflow-hidden rounded-xl border border-black bg-surface-card-header px-2.5 py-2 text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
+    compact ? "" : "px-3"
   } ${className}`;
   const titleClass = `min-w-0 truncate font-black tracking-tight leading-none ${
     compact ? "text-lg" : "text-xl"
@@ -161,6 +161,9 @@ export function BoxarioBrandHeader({
           <ArrowLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
           <span className="min-w-0 break-words">{title}</span>
         </button>
+      ) : null}
+      {!onBack || !keepBrand ? (
+        <div className="mt-1 h-8 w-full" aria-hidden />
       ) : null}
     </div>
   );

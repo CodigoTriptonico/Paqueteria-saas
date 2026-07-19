@@ -20,6 +20,8 @@ describe("BoxarioBrandHeader layout", () => {
     assert.match(source, /<Link href="\/" prefetch aria-label="Ir al inicio"/);
     assert.match(source, /<h1 className=\{titleClass\}>Boxario<\/h1>/);
     assert.match(source, /keepBrand && onBack/);
+    assert.match(source, /min-h-\[4\.75rem\] flex-col/);
+    assert.match(source, /<div className="mt-1 h-8 w-full" aria-hidden \/>/);
     assert.doesNotMatch(source, /<House className=/);
     assert.match(source, /\{onBack && !keepBrand && title !== "Boxario" \? \(/);
   });
