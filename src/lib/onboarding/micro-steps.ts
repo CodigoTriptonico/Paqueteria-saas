@@ -137,7 +137,7 @@ function resolveInventoryGuide(
     {
       label: "Crear categoría",
       title: "Crea tu primera categoría",
-      body: "Pulsa Categoría para crear la primera. Ejemplo: Cajas.",
+      body: "Pulsa el icono de estructura para crear la primera categoría. Ejemplo: Cajas.",
       actionHref: "/inventario",
       actionLabel: "Ir a Inventario",
     },

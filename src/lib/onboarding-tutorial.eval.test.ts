@@ -74,8 +74,8 @@ describe("onboarding tutorial eval", () => {
     assert.match(onboardingPanelSource, /OnboardingPanel/);
   });
 
-  it("guides inventory with direct category and item actions", () => {
-    assert.match(microStepsSource, /Pulsa Categoría/);
+  it("guides inventory with compact structure and item actions", () => {
+    assert.match(microStepsSource, /icono de estructura/);
     assert.match(microStepsSource, /pulsa Agregar/);
     assert.match(microStepsSource, /inventarioHrefWithReturn/);
   });

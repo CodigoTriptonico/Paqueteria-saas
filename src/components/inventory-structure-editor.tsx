@@ -2,7 +2,6 @@
 
 import {
   Check,
-  FolderPlus,
   Layers3,
   Package2,
   Plus,
@@ -1611,31 +1610,21 @@ export function InventoryStructureEditor({
                     }}
                   />
                   <InventoryToolbarIconButton
-                    icon={FolderPlus}
-                    label="Nueva categoría"
-                    showLabel
-                    visibleLabel="Categoría"
-                    tone={showNewCategoryInput ? "active" : "default"}
-                    ariaExpanded={optionsOpen && structureMenuMode === "create"}
-                    ariaHaspopup="dialog"
-                    onboardingTarget={ONBOARDING_TARGETS.INVENTORY_ADD_CATEGORY}
-                    onClick={(event) => {
-                      openStructureMenu(event.currentTarget, "create");
-                      beginAddCategory();
-                    }}
-                  />
-                  <InventoryToolbarIconButton
                     icon={Layers3}
-                    label="Nueva subcategoría"
-                    showLabel
-                    visibleLabel="Subcategoría"
-                    tone={addingSubcategoryForSelectedCategory ? "active" : "default"}
-                    disabled={!selectedCategoryData}
+                    label="Categorías y subcategorías"
+                    tone={optionsOpen && structureMenuMode === "create" ? "active" : "default"}
                     ariaExpanded={optionsOpen && structureMenuMode === "create"}
-                    ariaHaspopup="dialog"
+                    ariaHaspopup="menu"
+                    onboardingTarget={ONBOARDING_TARGETS.INVENTORY_STRUCTURE_MENU}
                     onClick={(event) => {
+                      if (optionsOpen && structureMenuMode === "create") {
+                        setOptionsOpen(false);
+                        return;
+                      }
+
                       openStructureMenu(event.currentTarget, "create");
-                      beginAddSubcategory();
+                      setShowNewCategoryInput(false);
+                      setOpenSubcategoryInput("");
                     }}
                   />
                   <InventoryToolbarIconButton
@@ -1759,7 +1748,6 @@ export function InventoryStructureEditor({
         selectedSubcategory={selectedSubcategory}
         addingSubcategoryForSelectedCategory={addingSubcategoryForSelectedCategory}
         addCategory={addCategory}
-        beginAddItem={beginAddItem}
         beginAddSubcategory={beginAddSubcategory}
         renderSubcategoryForm={renderSubcategoryForm}
         showStructureDelete={showStructureDelete && structureMenuMode === "manage"}

@@ -15,7 +15,7 @@ export const onboardingStepHelp: Record<OnboardingStepId, OnboardingHelpBlock> =
   inventory: {
     what: "En Inventario creas categorías y productos: cajas, tamaños o artículos que vendes.",
     why: "Sin productos en el catálogo no hay nada que asignar a un país ni cobrar en venta.",
-    tip: "Inventario → Categoría → elige la categoría → Agregar.",
+    tip: "Inventario → icono de estructura → Nueva categoría → elige la categoría → Agregar.",
   },
   pricing: {
     what: "En Países y precios eliges un destino, vinculas productos y pones su precio de venta.",

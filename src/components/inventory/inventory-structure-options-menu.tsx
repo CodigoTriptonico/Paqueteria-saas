@@ -2,7 +2,7 @@
 
 import { Check, Plus, Trash2, X } from "lucide-react";
 import { createPortal } from "react-dom";
-import { secondaryButtonClass, primaryButtonClass } from "@/components/ui-blocks";
+import { secondaryButtonClass } from "@/components/ui-blocks";
 import {
   addBtnClass,
   iconBtnClass,
@@ -27,7 +27,6 @@ export type InventoryStructureOptionsMenuProps = {
   selectedSubcategory: InventoryTreeItem | null;
   addingSubcategoryForSelectedCategory: boolean;
   addCategory: () => void;
-  beginAddItem: () => void;
   beginAddSubcategory: () => void;
   renderSubcategoryForm: (compact?: boolean) => React.ReactNode;
   showStructureDelete?: boolean;
@@ -56,7 +55,6 @@ export function InventoryStructureOptionsMenu({
   selectedSubcategory,
   addingSubcategoryForSelectedCategory,
   addCategory,
-  beginAddItem,
   beginAddSubcategory,
   renderSubcategoryForm,
   showStructureDelete = false,
@@ -135,16 +133,6 @@ export function InventoryStructureOptionsMenu({
         </div>
       ) : mode === "create" ? (
         <>
-          <button
-            type="button"
-            disabled={!selectedCategoryData}
-            onClick={beginAddItem}
-            className={`${primaryButtonClass} h-9 w-full text-xs disabled:cursor-not-allowed disabled:opacity-50`}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Nuevo item
-          </button>
-
           <button
             type="button"
             disabled={!selectedCategoryData}

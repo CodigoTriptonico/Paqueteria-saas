@@ -15,10 +15,12 @@ const menuSource = readFileSync(
 );
 
 describe("inventory toolbar action separation eval", () => {
-  it("keeps article, category, and subcategory creation as direct actions", () => {
+  it("keeps article creation primary and structure creation compact", () => {
     assert.match(editorSource, /label="Agregar artículo"/);
-    assert.match(editorSource, /label="Nueva categoría"/);
-    assert.match(editorSource, /label="Nueva subcategoría"/);
+    assert.match(editorSource, /label="Categorías y subcategorías"/);
+    assert.match(menuSource, /Nueva categoría/);
+    assert.match(menuSource, /Nueva subcategoría/);
+    assert.doesNotMatch(menuSource, /Nuevo item/);
   });
 
   it("isolates destructive actions in the manage-structure menu", () => {

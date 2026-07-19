@@ -225,7 +225,7 @@ export function resolveOnboardingCoachHint(
         return hint(
           ONBOARDING_TARGETS.INVENTORY_STRUCTURE_MENU,
           title,
-          "Pulsa Categoría para crear una categoría nueva.",
+          "Pulsa el icono de estructura para crear una categoría nueva.",
         );
       }
 
