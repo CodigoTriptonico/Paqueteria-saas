@@ -37,7 +37,7 @@ function activeFromPath(pathname: string, session: AppSession | null) {
   }
 
   if (pathname.startsWith("/captacion")) {
-    return "Mis agencias";
+    return "Agencias a mi cargo";
   }
 
   if (pathname.startsWith("/agencias")) {

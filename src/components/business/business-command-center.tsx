@@ -67,7 +67,7 @@ function Network({ workspace, captorOnly = false }: { workspace: BusinessWorkspa
         <StatCard label="Cuenta por cobrar" value={formatUsdCents(workspace.metrics.agencyReceivableCents)} tone="text-emerald-300" />
         <StatCard label="Retenciones activas" value={String(workspace.metrics.activeHolds)} tone={workspace.metrics.activeHolds ? "text-amber-300" : "text-slate-100"} />
       </section>
-      <Panel title={captorOnly ? "Mis agencias" : "Red de agencias"} action={captorOnly ? <AgencyCaptorCreatePanel /> : <Building2 className="h-5 w-5 text-emerald-300" />}>
+      <Panel title={captorOnly ? "Agencias a mi cargo" : "Red de agencias"} action={captorOnly ? <AgencyCaptorCreatePanel /> : <Building2 className="h-5 w-5 text-emerald-300" />}>
         {workspace.agencies.length ? (
           <div className="grid gap-2">
             {workspace.agencies.map((agency) => (
@@ -163,7 +163,7 @@ function Agency({ workspace, canManageTeam, canRequest, canCloseDay }: { workspa
 }
 
 export function BusinessCommandCenter({ surface, workspace, canManageAgencyTeam = false, canRequestAgencyOperations = false, canCloseAgencyDay = false }: { surface: BusinessSurface; workspace: BusinessWorkspace; canManageAgencyTeam?: boolean; canRequestAgencyOperations?: boolean; canCloseAgencyDay?: boolean }) {
-  const title = surface === "network" ? "Red de agencias" : surface === "agency" ? "Mi agencia" : surface === "captor" ? "Mis agencias" : surface === "operations" ? "Solicitudes" : "Contabilidad";
+  const title = surface === "network" ? "Red de agencias" : surface === "agency" ? "Mi agencia" : surface === "captor" ? "Agencias a mi cargo" : surface === "operations" ? "Solicitudes" : "Contabilidad";
   const description = surface === "finance"
     ? "Cargos, pagos, aplicaciones, efectivo en tránsito y liberaciones en una sola vista."
     : surface === "operations"
