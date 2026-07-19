@@ -9,9 +9,8 @@ import {
 import { listShipmentsAction, type ShipmentRow } from "@/app/actions/shipments";
 import { AuditHistoryEntry } from "@/components/audit-history-entry";
 import { PageLoading } from "@/components/page-loading";
+import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provider";
 import { cardClass } from "@/components/ui-blocks";
-import { ViewLayoutToggle } from "@/components/view-layout-toggle";
-import { useViewLayout } from "@/hooks/use-view-layout";
 import {
   consolidateShipmentActivityHistory,
 } from "@/lib/shipment-step-history";
@@ -32,7 +31,7 @@ export function EstadisticasAuditoriaPanel({
   initialShipments = [],
   selectedShipmentId = null,
 }: EstadisticasAuditoriaPanelProps) {
-  const { layout: viewLayout, toggleViewLayout } = useViewLayout();
+  const { layout: viewLayout } = usePageViewLayout("audit.shipments");
   const [shipments, setShipments] = useState(initialShipments);
   const [loadingShipments, setLoadingShipments] = useState(!initialShipments.length);
   const [query, setQuery] = useState("");
@@ -180,7 +179,6 @@ export function EstadisticasAuditoriaPanel({
               className="h-9 w-full rounded-lg border border-black bg-surface-inset pl-8 pr-2 text-sm font-bold text-[#f8fafc] outline-none"
             />
           </label>
-          <ViewLayoutToggle layout={viewLayout} onToggle={toggleViewLayout} />
         </div>
 
         <div className="mt-2 min-h-0 flex-1 overflow-y-auto">

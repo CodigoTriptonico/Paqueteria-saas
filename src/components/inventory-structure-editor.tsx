@@ -2,12 +2,10 @@
 
 import {
   Check,
-  LayoutGrid,
   Layers3,
   MoreHorizontal,
   Package2,
   Plus,
-  Rows3,
   Search,
   Settings2,
   Sparkles,
@@ -39,8 +37,8 @@ import {
 } from "@/components/inventory/inventory-toolbar-icon-button";
 import { InventoryNewItemPopover } from "@/components/inventory/inventory-new-item-popover";
 import { InventoryStructureOptionsMenu } from "@/components/inventory/inventory-structure-options-menu";
+import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provider";
 import { useNotify } from "@/hooks/use-notify";
-import { useViewLayout } from "@/hooks/use-view-layout";
 import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 import {
   addBtnClass,
@@ -139,7 +137,7 @@ export function InventoryStructureEditor({
 }: InventoryStructureEditorProps) {
   const setShellConfig = useSetShellConfig();
   const notify = useNotify();
-  const { layout: viewLayout, toggleViewLayout } = useViewLayout();
+  const { layout: viewLayout } = usePageViewLayout("inventory.items");
   const [categoryQuery, setCategoryQuery] = useState("");
   const [itemQuery, setItemQuery] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -1666,23 +1664,6 @@ export function InventoryStructureEditor({
                     }}
                     className="absolute right-0 top-[calc(100%+0.5rem)] z-[120] w-64 rounded-lg border border-black bg-[#101820] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
                   >
-                    {selectedCategoryData ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          toggleViewLayout();
-                          setToolbarMenuOpen(false);
-                        }}
-                        className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc]"
-                      >
-                        {viewLayout === "rows" ? (
-                          <LayoutGrid className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-                        ) : (
-                          <Rows3 className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-                        )}
-                        {viewLayout === "rows" ? "Ver tarjetas" : "Ver lista"}
-                      </button>
-                    ) : null}
                     {toolbarEndSlot}
                     <div className="my-1.5 border-t border-black/70" />
                     <button

@@ -15,9 +15,13 @@ describe("ui surface route context", () => {
     assert.equal(resolveSurfaceContextFromPathname("/venta"), "sale.senderCard");
   });
 
-  it("returns null on pages without a list palette context", () => {
+  it("assigns every view-switching page a sidebar preference context", () => {
     assert.equal(resolveSurfaceContextFromPathname("/configuracion"), null);
-    assert.equal(resolveSurfaceContextFromPathname("/inventario"), null);
+    assert.equal(resolveSurfaceContextFromPathname("/inventario"), "inventory.items");
+    assert.equal(resolveSurfaceContextFromPathname("/auditoria"), "audit.shipments");
+    assert.equal(resolveSurfaceContextFromPathname("/ingreso-bodega"), "warehouse.intake");
+    assert.equal(resolveSurfaceContextFromPathname("/bodega"), "warehouse.inventory");
+    assert.equal(resolveSurfaceContextFromPathname("/paletas"), "warehouse.pallets");
     assert.equal(resolveSurfaceContextFromPathname("/conductor/inventario-camion"), null);
   });
 });

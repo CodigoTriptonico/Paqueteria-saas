@@ -8,10 +8,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const source = readFileSync(join(root, "components/estadisticas/auditoria-panel.tsx"), "utf8");
 
 describe("auditoria view layout eval", () => {
-  it("wires the shared view layout toggle in auditoria", () => {
-    assert.equal(source.includes("useViewLayout"), true);
-    assert.equal(source.includes("ViewLayoutToggle"), true);
-    assert.equal(source.includes("toggleViewLayout"), true);
+  it("uses the shared sidebar preference for auditoria", () => {
+    assert.equal(source.includes("usePageViewLayout"), true);
+    assert.equal(source.includes('usePageViewLayout("audit.shipments")'), true);
+    assert.equal(source.includes("ViewLayoutToggle"), false);
+    assert.equal(source.includes("toggleViewLayout"), false);
   });
 
   it("switches shipment picker between rows and cards", () => {

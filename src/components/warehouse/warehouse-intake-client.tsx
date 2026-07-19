@@ -8,9 +8,8 @@ import {
   unloadTruckToWarehouseIntakeAction,
   type WarehouseTruckArrival,
 } from "@/app/actions/physical-packages";
-import { ViewLayoutToggle } from "@/components/view-layout-toggle";
+import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provider";
 import { inputClass, Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
-import { useViewLayout } from "@/hooks/use-view-layout";
 import { useNotify } from "@/hooks/use-notify";
 import type { PhysicalPackage } from "@/lib/physical-packages";
 import { packageInvoiceStateSummary } from "@/lib/package-invoice-lifecycle";
@@ -40,7 +39,7 @@ export function WarehouseIntakeClient({ initialPackages = [], initialReceived = 
   initialTruckArrivals?: WarehouseTruckArrival[];
 }) {
   const notify = useNotify();
-  const { layout, toggleViewLayout } = useViewLayout();
+  const { layout } = usePageViewLayout("warehouse.intake");
   const [packages, setPackages] = useState(initialPackages);
   const [receivedPackages, setReceivedPackages] = useState(initialReceived);
   const [trucks, setTrucks] = useState(initialTruckArrivals);
@@ -100,7 +99,7 @@ export function WarehouseIntakeClient({ initialPackages = [], initialReceived = 
     <div className="min-h-full space-y-4 p-4 pb-8 sm:p-5 sm:pb-10">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-black pb-4">
         <div><h1 className="text-xl font-black text-slate-100">Ingreso a bodega</h1><p className="mt-1 text-sm font-bold text-slate-400">Confirma el peso de cada caja al llegar.</p></div>
-        <div className="flex flex-wrap items-center gap-2"><ViewLayoutToggle layout={layout} onToggle={toggleViewLayout} /><button type="button" className={disclosureClass(showPending)} onClick={() => setShowPending((value) => !value)}>{showPending ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}Pendientes <span>{packages.length}</span></button><button type="button" className={disclosureClass(showReceived)} onClick={() => setShowReceived((value) => !value)}>{showReceived ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}Ingresadas <span>{receivedPackages.length}</span></button><button type="button" className={disclosureClass(showTrucks)} onClick={() => setShowTrucks((value) => !value)}><Truck className="h-4 w-4" />Camiones <span>{trucks.length}</span></button></div>
+        <div className="flex flex-wrap items-center gap-2"><button type="button" className={disclosureClass(showPending)} onClick={() => setShowPending((value) => !value)}>{showPending ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}Pendientes <span>{packages.length}</span></button><button type="button" className={disclosureClass(showReceived)} onClick={() => setShowReceived((value) => !value)}>{showReceived ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}Ingresadas <span>{receivedPackages.length}</span></button><button type="button" className={disclosureClass(showTrucks)} onClick={() => setShowTrucks((value) => !value)}><Truck className="h-4 w-4" />Camiones <span>{trucks.length}</span></button></div>
       </header>
 
       <section className="border-b border-black pb-4"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-400 text-slate-950"><ScanLine className="h-5 w-5" /></span><div><h2 className="font-black text-slate-100">Registrar llegada</h2><p className="text-sm font-bold text-slate-400">Escanea una caja o tócala en la cola.</p></div></div><div className="mt-3 grid grid-cols-[minmax(0,1fr)_6rem] gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto]"><label className="grid min-w-0 gap-1 text-xs font-black uppercase text-slate-500">Código de caja<input autoFocus className={`${inputClass} w-full`} value={code} onChange={(event) => setCode(event.target.value)} placeholder="Ej. INV-0001-01" /></label><label className="grid w-24 gap-1 text-xs font-black uppercase text-slate-500">Peso (kg)<input className={`${inputClass} w-full`} inputMode="decimal" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="0.00" /></label><button type="button" className={`${primaryButtonClass} col-span-2 h-11 sm:col-span-1`} disabled={!selected || !enteredWeight || saving} onClick={() => void receive()}>{saving ? "Guardando..." : "Confirmar"}</button></div>{selected ? <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-black bg-surface-card p-3"><p className="text-sm font-black text-slate-100">{selected.code} <span className="text-slate-400">· {selected.customerName}</span></p>{selected.truckRouteId ? <button type="button" className={`${secondaryButtonClass} h-8 text-xs`} disabled={returning} onClick={() => void returnToTruck()}>{returning ? "Devolviendo..." : "Devolver al camión"}</button> : null}</div> : code ? <p className="mt-2 text-sm font-bold text-amber-300">El código no está en la cola de ingreso.</p> : null}</section>

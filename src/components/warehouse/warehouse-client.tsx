@@ -15,8 +15,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "@/components/ui-blocks";
-import { ViewLayoutToggle } from "@/components/view-layout-toggle";
-import { useViewLayout } from "@/hooks/use-view-layout";
+import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provider";
 import type { PhysicalPackage } from "@/lib/physical-packages";
 import {
   packageInvoiceLifecycleLabel,
@@ -143,7 +142,7 @@ export function WarehouseClient({
   weightToleranceKg?: number;
 }) {
   const notify = useNotify();
-  const { layout, toggleViewLayout } = useViewLayout();
+  const { layout } = usePageViewLayout("warehouse.inventory");
   const [intake, setIntake] = useState(initialIntake);
   const [warehouse, setWarehouse] = useState(initialWarehouse);
   const [showIntake, setShowIntake] = useState(false);
@@ -233,7 +232,6 @@ export function WarehouseClient({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <ViewLayoutToggle layout={layout} onToggle={toggleViewLayout} />
             <button
               type="button"
               onClick={() => setShowIntake((value) => !value)}

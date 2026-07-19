@@ -9,14 +9,17 @@ const shell = readFileSync("src/components/app-shell.tsx", "utf8");
 const actions = readFileSync("src/app/actions/physical-packages.ts", "utf8");
 const physicalPackages = readFileSync("src/lib/physical-packages.ts", "utf8");
 
-test("warehouse surfaces keep compact disclosure and shared layout controls", () => {
+test("warehouse surfaces keep compact disclosure and shared sidebar layout controls", () => {
   assert.match(intake, /showPending/);
   assert.match(intake, /showReceived/);
-  assert.match(intake, /ViewLayoutToggle/);
+  assert.match(intake, /usePageViewLayout\("warehouse\.intake"\)/);
+  assert.doesNotMatch(intake, /ViewLayoutToggle/);
   assert.match(intake, /returnPhysicalPackageToTruckAction/);
   assert.match(warehouse, /hidden=\{!showIntake\}/);
-  assert.match(warehouse, /ViewLayoutToggle/);
-  assert.match(pallets, /ViewLayoutToggle/);
+  assert.match(warehouse, /usePageViewLayout\("warehouse\.inventory"\)/);
+  assert.match(pallets, /usePageViewLayout\("warehouse\.pallets"\)/);
+  assert.doesNotMatch(warehouse, /ViewLayoutToggle/);
+  assert.doesNotMatch(pallets, /ViewLayoutToggle/);
   assert.match(pallets, /bg-emerald-400/);
   assert.match(shell, /flowStep: "01"/);
   assert.match(shell, /flowStep: "02"/);

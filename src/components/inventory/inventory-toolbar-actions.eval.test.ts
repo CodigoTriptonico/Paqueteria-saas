@@ -19,8 +19,8 @@ describe("inventory toolbar action separation eval", () => {
     assert.match(editorSource, /label="Agregar artículo"/);
     assert.match(editorSource, /label="Más acciones de inventario"/);
     assert.match(editorSource, /Categorías y subcategorías/);
-    assert.match(editorSource, /Ver tarjetas/);
-    assert.match(editorSource, /Ver lista/);
+    assert.doesNotMatch(editorSource, /Ver tarjetas/);
+    assert.doesNotMatch(editorSource, /Ver lista/);
     assert.match(menuSource, /Nueva categoría/);
     assert.match(menuSource, /Nueva subcategoría/);
     assert.doesNotMatch(menuSource, /Nuevo item/);

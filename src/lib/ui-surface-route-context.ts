@@ -2,6 +2,26 @@ import type { UiSurfaceContextId } from "@/lib/ui-surface-context";
 
 /** Contexto de paleta asociado a la ruta actual (sin overrides de página). */
 export function resolveSurfaceContextFromPathname(pathname: string): UiSurfaceContextId | null {
+  if (pathname.startsWith("/inventario")) {
+    return "inventory.items";
+  }
+
+  if (pathname.startsWith("/auditoria")) {
+    return "audit.shipments";
+  }
+
+  if (pathname.startsWith("/ingreso-bodega")) {
+    return "warehouse.intake";
+  }
+
+  if (pathname.startsWith("/bodega")) {
+    return "warehouse.inventory";
+  }
+
+  if (pathname.startsWith("/paletas")) {
+    return "warehouse.pallets";
+  }
+
   if (pathname.startsWith("/logistica")) {
     return "logistics.tasks";
   }
