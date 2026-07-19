@@ -9,6 +9,7 @@ import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/componen
 import { passwordConfirmationMessage } from "@/lib/auth/password-confirmation";
 import { generateTemporaryPassword } from "@/lib/organizations/slug";
 import { useNotify } from "@/hooks/use-notify";
+import { uppercasePersonNameInput } from "@/lib/person-name";
 
 const fieldClass = `${inputClass} w-full`;
 
@@ -90,7 +91,7 @@ export function AgencyCaptorCreatePanel() {
         </label>
         <label className="grid gap-1 text-xs font-black text-slate-300">
           Responsable
-          <input className={fieldClass} value={form.administratorFullName} onChange={(event) => setForm((current) => ({ ...current, administratorFullName: event.target.value }))} required />
+          <input className={fieldClass} value={form.administratorFullName} onChange={(event) => setForm((current) => ({ ...current, administratorFullName: uppercasePersonNameInput(event.target.value) }))} required />
         </label>
         <label className="grid gap-1 text-xs font-black text-slate-300 sm:col-span-2">
           Correo del administrador

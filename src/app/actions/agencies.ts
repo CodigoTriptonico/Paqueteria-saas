@@ -8,6 +8,7 @@ import { captorAgencyLimitMessage, isCaptorAgencyLimitError } from "@/lib/agency
 import { agencyDemoTeamErrorMessage } from "@/lib/agency-demo-team";
 import { deleteAuthUserSafely } from "@/lib/security/auth-cleanup";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { normalizePersonName } from "@/lib/person-name";
 
 function agencyActionErrorMessage(message: string) {
   if (isCaptorAgencyLimitError(message)) {
@@ -67,7 +68,9 @@ export async function createCaptorAgencyAction(input: {
       org_name: name,
       owner_id: createdUserId,
       owner_email: administratorEmail,
-      owner_name: input.administratorFullName?.trim() || null,
+      owner_name: input.administratorFullName
+        ? normalizePersonName(input.administratorFullName) || null
+        : null,
       org_slug: null,
       org_kind: "client",
       owner_phone: null,

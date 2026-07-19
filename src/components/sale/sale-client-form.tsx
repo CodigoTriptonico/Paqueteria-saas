@@ -19,6 +19,7 @@ import {
   type Sender,
 } from "@/components/sale/venta-parts";
 import { resolveAddressValidationUi, addressCardSubtitle } from "@/lib/sale-address-validation-ui";
+import { uppercasePersonNameInput } from "@/lib/person-name";
 
 type SaleClientFormProps = {
   form: {
@@ -216,7 +217,9 @@ export function SaleClientForm({ form, address, actions, meta }: SaleClientFormP
                     className={clientFormInputClass}
                     placeholder="Carlos"
                     value={form.firstName}
-                    onChange={(event) => form.setFirstName(event.target.value)}
+                    onChange={(event) =>
+                      form.setFirstName(uppercasePersonNameInput(event.target.value))
+                    }
                   />
                 </label>
                 <label className="grid gap-1.5">
@@ -227,7 +230,9 @@ export function SaleClientForm({ form, address, actions, meta }: SaleClientFormP
                     className={clientFormInputClass}
                     placeholder="Diaz"
                     value={form.lastName}
-                    onChange={(event) => form.setLastName(event.target.value)}
+                    onChange={(event) =>
+                      form.setLastName(uppercasePersonNameInput(event.target.value))
+                    }
                   />
                 </label>
               </div>

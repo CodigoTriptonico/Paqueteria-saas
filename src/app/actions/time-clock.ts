@@ -26,6 +26,7 @@ import {
 } from "@/lib/time-clock-session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
+import { normalizePersonName } from "@/lib/person-name";
 
 type TimeClockEmployeeInput = {
   employeeId: string;
@@ -63,7 +64,7 @@ function canManageTimeClock(session: Awaited<ReturnType<typeof requireAppSession
 function validateEmployeeInput(input: TimeClockEmployeeInput) {
   const employeeId = input.employeeId.trim();
   const employeeIdKey = normalizeEmployeeId(employeeId);
-  const fullName = input.fullName.trim();
+  const fullName = normalizePersonName(input.fullName);
   if (!employeeId || !employeeIdKey || employeeIdKey.length > 80) {
     throw new Error("Employee ID requerido");
   }

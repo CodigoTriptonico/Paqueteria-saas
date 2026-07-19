@@ -10,6 +10,7 @@ import { assertSameOrgWarehouseIds } from "@/lib/security/org-scope";
 import { deleteAuthUserSafely } from "@/lib/security/auth-cleanup";
 import type { RoleSlug } from "@/lib/auth/types";
 import { agencyDemoTeamErrorMessage } from "@/lib/agency-demo-team";
+import { normalizePersonName } from "@/lib/person-name";
 
 function canManageOrganizationUsers(session: Awaited<ReturnType<typeof requireAppSession>>) {
   return (
@@ -218,7 +219,7 @@ export async function inviteOrgUserAction(input: {
       id: created.user.id,
       organization_id: session.organizationId,
       email: input.email.trim(),
-      full_name: input.fullName?.trim() || null,
+      full_name: input.fullName ? normalizePersonName(input.fullName) || null : null,
       role_id: role.id,
       is_active: true,
     });
@@ -314,7 +315,7 @@ export async function updateOrgUserAction(input: {
     const updates: Record<string, unknown> = {};
 
     if (input.fullName !== undefined) {
-      updates.full_name = input.fullName.trim() || null;
+      updates.full_name = normalizePersonName(input.fullName) || null;
     }
 
     if (input.isActive !== undefined) {

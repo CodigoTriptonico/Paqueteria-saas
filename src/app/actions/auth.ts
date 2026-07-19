@@ -10,6 +10,7 @@ import { isPublicSignupEnabled } from "@/lib/auth/public-signup";
 import { resolvePostLoginRedirect } from "@/lib/organizations/kind";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { deleteAuthUserSafely } from "@/lib/security/auth-cleanup";
+import { normalizePersonName } from "@/lib/person-name";
 
 
 
@@ -52,7 +53,7 @@ export async function signUpAction(
     org_name: orgName,
     owner_id: signUpData.user.id,
     owner_email: email,
-    owner_name: fullName?.trim() || null,
+    owner_name: fullName ? normalizePersonName(fullName) || null : null,
     org_kind: "client",
   });
 

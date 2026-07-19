@@ -16,6 +16,7 @@ import {
 } from "@/lib/customers/load";
 import type { ListCustomersParams } from "@/lib/customers/list-params";
 import { assertSameOrgCustomerIds } from "@/lib/security/org-scope";
+import { normalizePersonName } from "@/lib/person-name";
 
 export type { CustomerRecipientRow, CustomerWithRecipientsRow } from "@/lib/customers/load";
 
@@ -111,6 +112,8 @@ export async function createCustomerAction(input: {
 
     const phones = input.phones.map((phone) => phone.trim()).filter(Boolean);
     const emails = normalizeEmailList(input.emails?.length ? input.emails : [input.email || ""]);
+    const firstName = normalizePersonName(input.firstName);
+    const lastName = normalizePersonName(input.lastName);
     if (!phones.length) {
       return fail("Agrega al menos un telefono");
     }
@@ -123,8 +126,8 @@ export async function createCustomerAction(input: {
       .from("customers")
       .insert({
         organization_id: session.organizationId,
-        first_name: input.firstName.trim(),
-        last_name: input.lastName.trim(),
+        first_name: firstName,
+        last_name: lastName,
         phones,
         email: emails[0] || "",
         emails,
@@ -151,7 +154,7 @@ export async function createCustomerAction(input: {
       action: "customer.created",
       entityType: "customer",
       entityId: data.id,
-      title: `Cliente creado: ${input.firstName.trim()} ${input.lastName.trim()}`.trim(),
+      title: `Cliente creado: ${firstName} ${lastName}`.trim(),
       description: phones.join(", "),
     });
 
@@ -197,6 +200,8 @@ export async function updateCustomerAction(input: {
 
     const phones = input.phones.map((phone) => phone.trim()).filter(Boolean);
     const emails = normalizeEmailList(input.emails?.length ? input.emails : [input.email || ""]);
+    const firstName = normalizePersonName(input.firstName);
+    const lastName = normalizePersonName(input.lastName);
     if (!phones.length) {
       return fail("Agrega al menos un telefono");
     }
@@ -204,8 +209,8 @@ export async function updateCustomerAction(input: {
     const { data, error } = await supabase
       .from("customers")
       .update({
-        first_name: input.firstName.trim(),
-        last_name: input.lastName.trim(),
+        first_name: firstName,
+        last_name: lastName,
         phones,
         email: emails[0] || "",
         emails,
@@ -276,7 +281,7 @@ export async function updateCustomerAction(input: {
       action: "customer.updated",
       entityType: "customer",
       entityId: data.id,
-      title: `Cliente editado: ${input.firstName.trim()} ${input.lastName.trim()}`.trim(),
+      title: `Cliente editado: ${firstName} ${lastName}`.trim(),
       description: phones.join(", "),
     });
 
@@ -458,6 +463,8 @@ export async function createRecipientAction(input: {
     }
 
     const emails = normalizeEmailList(input.emails?.length ? input.emails : [input.email || ""]);
+    const firstName = normalizePersonName(input.firstName);
+    const lastName = normalizePersonName(input.lastName);
 
     const { data, error } = await supabase
       .from("customer_recipients")
@@ -465,8 +472,8 @@ export async function createRecipientAction(input: {
         organization_id: session.organizationId,
         customer_id: input.customerId,
         country_id: country.id,
-        first_name: input.firstName.trim(),
-        last_name: input.lastName.trim(),
+        first_name: firstName,
+        last_name: lastName,
         phone: input.phone.trim(),
         email: emails[0] || "",
         emails,
@@ -492,7 +499,7 @@ export async function createRecipientAction(input: {
       action: "recipient.created",
       entityType: "recipient",
       entityId: data.id,
-      title: `Destinatario creado: ${input.firstName.trim()} ${input.lastName.trim()}`.trim(),
+      title: `Destinatario creado: ${firstName} ${lastName}`.trim(),
       description: [input.country.trim(), input.phone.trim(), emails[0]].filter(Boolean).join(" · "),
       metadata: { customerId: input.customerId },
     });
@@ -552,12 +559,14 @@ export async function updateRecipientAction(input: {
     }
 
     const emails = normalizeEmailList(input.emails?.length ? input.emails : [input.email || ""]);
+    const firstName = normalizePersonName(input.firstName);
+    const lastName = normalizePersonName(input.lastName);
 
     const { data, error } = await supabase
       .from("customer_recipients")
       .update({
-        first_name: input.firstName.trim(),
-        last_name: input.lastName.trim(),
+        first_name: firstName,
+        last_name: lastName,
         phone: input.phone.trim(),
         email: emails[0] || "",
         emails,
@@ -587,7 +596,7 @@ export async function updateRecipientAction(input: {
       action: "recipient.updated",
       entityType: "recipient",
       entityId: data.id,
-      title: `Destinatario editado: ${input.firstName.trim()} ${input.lastName.trim()}`.trim(),
+      title: `Destinatario editado: ${firstName} ${lastName}`.trim(),
       description: [input.country.trim(), input.phone.trim(), emails[0]].filter(Boolean).join(" · "),
     });
 

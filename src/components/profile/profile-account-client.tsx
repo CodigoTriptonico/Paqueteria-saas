@@ -28,6 +28,7 @@ import {
   secondaryButtonClass,
 } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
+import { uppercasePersonNameInput } from "@/lib/person-name";
 
 function initials(fullName: string, email: string) {
   const parts = (fullName || email).trim().split(/\s+/).filter(Boolean);
@@ -191,7 +192,7 @@ export function ProfileAccountClient({ initialAvatarUrl, session }: ProfileAccou
               <div><h2 className="text-lg font-black text-[#f8fafc]">Datos personales</h2><p className="text-sm font-bold text-slate-400">Así aparece tu cuenta dentro de la aplicación.</p></div>
             </div>
             <form className="mt-4 grid gap-4" onSubmit={(event) => void saveProfile(event)}>
-              <label className="grid gap-1.5"><span className={labelMutedClass}>Nombre</span><input className={inputClass} value={fullName} onChange={(event) => setFullName(event.target.value)} maxLength={120} autoComplete="name" required /></label>
+              <label className="grid gap-1.5"><span className={labelMutedClass}>Nombre</span><input className={inputClass} value={fullName} onChange={(event) => setFullName(uppercasePersonNameInput(event.target.value))} maxLength={120} autoComplete="name" required /></label>
               <label className="grid gap-1.5"><span className={labelMutedClass}>Correo de acceso</span><span className={`${inputClass} flex items-center text-slate-400`}>{session.email}</span><span className="text-xs font-bold text-slate-500">El correo lo gestiona el administrador de la empresa.</span></label>
               <div className="flex justify-end"><button type="submit" className={primaryButtonClass} disabled={savingProfile || fullName.trim() === savedName.trim()}>{savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}{savingProfile ? "Guardando..." : "Guardar nombre"}</button></div>
             </form>

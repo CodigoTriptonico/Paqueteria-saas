@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAppSession } from "@/lib/auth/session";
+import { normalizePersonName, normalizePersonNameSnapshot } from "@/lib/person-name";
 import { canAccessWarehouse, sessionHasPermission } from "@/lib/auth/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
@@ -1273,7 +1274,7 @@ export async function createShipmentAction(input: {
       .insert({
         organization_id: session.organizationId,
         code: input.invoiceNumber,
-        customer_name: input.customerName,
+        customer_name: normalizePersonName(input.customerName),
         country,
         carrier: input.carrier || "Sin carrier",
         paid,
@@ -1282,7 +1283,7 @@ export async function createShipmentAction(input: {
         ...shipmentOwnershipInsert(session.userId),
         customer_id: input.customerId || null,
         recipient_id: input.recipientId || null,
-        recipient_snapshot: input.recipientSnapshot || null,
+        recipient_snapshot: normalizePersonNameSnapshot(input.recipientSnapshot),
         sale_kind: saleKind,
         delivery_notes: deliveryNotes,
         logistics_plan: input.logisticsPlan || {},

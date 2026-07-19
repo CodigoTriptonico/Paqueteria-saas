@@ -13,6 +13,7 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createStorageSignedUrl } from "@/lib/supabase/storage-url";
+import { normalizePersonName } from "@/lib/person-name";
 
 function refreshAccountSurfaces() {
   revalidatePath("/", "layout");
@@ -34,7 +35,7 @@ export async function updateMyProfileAction(
       return fail("No se pudo conectar con la cuenta");
     }
 
-    const normalizedName = fullName.trim();
+    const normalizedName = normalizePersonName(fullName);
     const { error } = await supabase
       .from("profiles")
       .update({ full_name: normalizedName })

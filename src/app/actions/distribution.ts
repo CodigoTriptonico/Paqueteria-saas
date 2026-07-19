@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { availableDistributionCredit, distributionBalance, type DistributionLedgerEntry } from "@/lib/distribution/ledger";
+import { normalizePersonName, normalizePersonNameSnapshot } from "@/lib/person-name";
 
 type DistributionOffer = {
   id: string;
@@ -369,7 +370,7 @@ export async function createDistributionPartnerAction(input: {
       org_name: name,
       owner_id: created.user.id,
       owner_email: email,
-      owner_name: input.fullName?.trim() || null,
+      owner_name: input.fullName ? normalizePersonName(input.fullName) || null : null,
       org_slug: null,
       org_kind: "client",
       owner_phone: null,
@@ -454,7 +455,7 @@ export async function createAcquiredDistributionPartnerAction(input: {
       org_name: name,
       owner_id: created.user.id,
       owner_email: email,
-      owner_name: input.fullName?.trim() || null,
+      owner_name: input.fullName ? normalizePersonName(input.fullName) || null : null,
       org_slug: null,
       org_kind: "client",
       owner_phone: null,
@@ -553,7 +554,7 @@ export async function updateDistributionPartnerAction(input: {
     const admin = createSupabaseAdminClient();
     if (!admin) return fail("Supabase no configurado");
     const name = input.name.trim();
-    const ownerName = input.ownerName.trim();
+    const ownerName = normalizePersonName(input.ownerName);
     const ownerEmail = input.ownerEmail.trim().toLowerCase();
     if (!input.partnerId || !name || !ownerEmail.includes("@")) {
       return fail("Completa empresa y correo del responsable.");
@@ -803,15 +804,15 @@ export async function createDistributionSaleAction(input: {
     const session = await requireAppSession();
     const supabase = await createScopedSupabase(session);
     if (!supabase) return fail("Supabase no configurado");
-    const recipientSnapshot = {
-      name: input.recipientName?.trim() || "",
+    const recipientSnapshot = normalizePersonNameSnapshot({
+      name: input.recipientName || "",
       phone: input.recipientPhone?.trim() || "",
       address: input.recipientAddress?.trim() || "",
       source: "distributor",
-    };
+    });
     const { data, error } = await supabase.rpc("distribution_create_sale", {
       target_offer_id: input.offerId,
-      customer_name_input: input.customerName.trim(),
+      customer_name_input: normalizePersonName(input.customerName),
       recipient_snapshot_input: recipientSnapshot,
       carrier_input: input.carrier?.trim() || "",
       delivery_notes_input: input.notes?.trim() || "",

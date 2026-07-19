@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { signUpAction } from "@/app/actions/auth";
 import { getCurrentSessionAction } from "@/app/actions/session";
 import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import { uppercasePersonNameInput } from "@/lib/person-name";
 
 type FormMode = "login" | "signup" | "recover";
 
@@ -228,7 +229,9 @@ export function LoginForm({ allowSignup = false }: { allowSignup?: boolean }) {
                       className={inputClass}
                       style={fallbackStyles.input}
                       value={fullName}
-                      onChange={(event) => setFullName(event.target.value)}
+                      onChange={(event) =>
+                        setFullName(uppercasePersonNameInput(event.target.value))
+                      }
                       placeholder="Tu nombre"
                     />
                   </label>

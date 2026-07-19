@@ -4,6 +4,7 @@ import {
   assertAssignableVehicleDriver,
   moveVehicleDriverAssignment,
   normalizeVehiclePlate,
+  validateLogisticsDriverInput,
   validateLogisticsVehicleInput,
 } from "./logistics-fleet";
 
@@ -40,6 +41,24 @@ describe("logistics fleet", () => {
         cargoCapacity: "1200 lb",
       }).ok,
       true,
+    );
+  });
+
+  it("normalizes driver names before persistence", () => {
+    assert.deepEqual(
+      validateLogisticsDriverInput({
+        email: "chofer@boxario.local",
+        fullName: "  Carlos   de la Cruz ",
+      }),
+      {
+        ok: true,
+        data: {
+          email: "chofer@boxario.local",
+          password: "",
+          fullName: "CARLOS DE LA CRUZ",
+          phone: "",
+        },
+      },
     );
   });
 

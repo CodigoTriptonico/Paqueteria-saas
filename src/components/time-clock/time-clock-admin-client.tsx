@@ -33,6 +33,7 @@ import type {
   TimeClockEmployee,
 } from "@/lib/time-clock-data";
 import { buildTimeClockReportCsv, type TimeClockReportRow } from "@/lib/time-clock-report";
+import { uppercasePersonNameInput } from "@/lib/person-name";
 
 type TimeClockAdminClientProps = {
   initialSnapshot?: TimeClockDashboardSnapshot;
@@ -416,7 +417,7 @@ export function TimeClockAdminClient({
               <form className="mt-4 grid gap-3" onSubmit={saveEmployee}>
                 <div className="grid gap-3 sm:grid-cols-2"><label className={fieldLabelClass}>Employee ID<input className={inputClass} value={employeeDraft.employeeId} onChange={(event) => setEmployeeDraft((current) => ({ ...current, employeeId: event.target.value }))} placeholder="EMP-001" required /></label><label className={fieldLabelClass}>Tipo<select className={inputClass} value={employeeDraft.employeeType} onChange={(event) => setEmployeeDraft((current) => ({ ...current, employeeType: event.target.value as "clock" | "system", profileId: "" }))}><option value="clock">Clock User</option><option value="system">Usuario del sistema</option></select></label></div>
                 {employeeDraft.employeeType === "system" ? <label className={fieldLabelClass}>Usuario del sistema<select className={inputClass} value={employeeDraft.profileId} onChange={(event) => { const user = snapshot.systemUsers.find((entry) => entry.id === event.target.value); setEmployeeDraft((current) => ({ ...current, profileId: event.target.value, fullName: user?.fullName || current.fullName })); }} required><option value="">Elegir usuario</option>{snapshot.systemUsers.map((user) => <option key={user.id} value={user.id}>{user.fullName} · {user.email}</option>)}</select></label> : null}
-                <label className={fieldLabelClass}>Nombre<input className={inputClass} value={employeeDraft.fullName} onChange={(event) => setEmployeeDraft((current) => ({ ...current, fullName: event.target.value }))} placeholder="Nombre completo" required /></label>
+                <label className={fieldLabelClass}>Nombre<input className={inputClass} value={employeeDraft.fullName} onChange={(event) => setEmployeeDraft((current) => ({ ...current, fullName: uppercasePersonNameInput(event.target.value) }))} placeholder="Nombre completo" required /></label>
                 <div className="flex flex-wrap gap-2"><button type="submit" className={primaryButtonClass} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}{editingEmployeeId ? "Guardar empleado" : "Crear empleado"}</button>{editingEmployeeId ? <button type="button" className={secondaryButtonClass} disabled={saving} onClick={() => { const employee = snapshot.employees.find((entry) => entry.id === editingEmployeeId); if (employee) void toggleEmployee(employee); }}>{employeeDraft.isActive ? "Desactivar" : "Activar"}</button> : null}</div>
               </form>
             </section>

@@ -1,4 +1,5 @@
 import type { RoleSlug } from "@/lib/auth/types";
+import { normalizePersonName } from "@/lib/person-name";
 
 export const LOGISTICS_VEHICLE_PHOTO_BUCKET = "logistics-vehicle-photos";
 const LOGISTICS_VEHICLE_PHOTO_MAX_BYTES = 4 * 1024 * 1024;
@@ -106,7 +107,7 @@ export function validateLogisticsDriverInput(
 ): ValidationResult<NormalizedLogisticsDriverInput> {
   const email = normalizeDriverEmail(input.email);
   const password = String(input.password || "");
-  const fullName = cleanFleetText(input.fullName, 120);
+  const fullName = normalizePersonName(cleanFleetText(input.fullName, 120));
   const phone = cleanFleetText(input.phone, 40);
 
   if (!email || !email.includes("@")) {

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { generateTemporaryPassword } from "@/lib/auth/temporary-password";
+import { uppercasePersonNameInput } from "@/lib/person-name";
 import {
   createLogisticsDriverAction,
   createLogisticsVehicleAction,
@@ -605,7 +606,13 @@ export function LogisticsFleetAdminClient({
                   className={compactInputClass}
                   value={driverForm.fullName}
                   onChange={(event) =>
-                    setDriverForm((current) => current && { ...current, fullName: event.target.value })
+                    setDriverForm(
+                      (current) =>
+                        current && {
+                          ...current,
+                          fullName: uppercasePersonNameInput(event.target.value),
+                        },
+                    )
                   }
                 />
               </label>

@@ -26,6 +26,7 @@ import {
   type Recipient,
 } from "@/components/sale/venta-parts";
 import { resolveAddressValidationUi, addressCardSubtitle } from "@/lib/sale-address-validation-ui";
+import { uppercasePersonNameInput } from "@/lib/person-name";
 import { configPricesCountryHref } from "@/lib/country-options";
 import {
   buildPhoneNumber,
@@ -325,7 +326,9 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                       value={form.firstName}
                       disabled={!hasCountry}
                       tabIndex={hasCountry ? 0 : -1}
-                      onChange={(event) => form.setFirstName(event.target.value)}
+                      onChange={(event) =>
+                        form.setFirstName(uppercasePersonNameInput(event.target.value))
+                      }
                     />
                   </label>
                   <label className="grid gap-1.5">
@@ -338,7 +341,9 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
                       value={form.lastName}
                       disabled={!hasCountry}
                       tabIndex={hasCountry ? 0 : -1}
-                      onChange={(event) => form.setLastName(event.target.value)}
+                      onChange={(event) =>
+                        form.setLastName(uppercasePersonNameInput(event.target.value))
+                      }
                     />
                   </label>
                 </div>

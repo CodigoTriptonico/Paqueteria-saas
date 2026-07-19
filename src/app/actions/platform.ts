@@ -28,6 +28,7 @@ import {
   type OrganizationSettings,
 } from "@/lib/organizations/settings";
 import { deleteAuthUserSafely } from "@/lib/security/auth-cleanup";
+import { normalizePersonName } from "@/lib/person-name";
 
 export async function listAllOrganizationsAction(): Promise<
   ActionResult<PlatformOrganizationRow[]>
@@ -149,7 +150,9 @@ export async function createOrganizationAction(input: {
         org_name: orgName,
         owner_id: created.user.id,
         owner_email: email,
-        owner_name: input.adminFullName?.trim() || null,
+        owner_name: input.adminFullName
+          ? normalizePersonName(input.adminFullName) || null
+          : null,
         org_slug: orgSlug || null,
         org_kind: "client",
         owner_phone: primaryPhoneE164,

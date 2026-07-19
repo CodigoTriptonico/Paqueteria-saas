@@ -33,6 +33,7 @@ import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/componen
 import { AppTabs, type AppTabDefinition } from "@/components/app-tabs";
 import { useNotify } from "@/hooks/use-notify";
 import { generateTemporaryPassword } from "@/lib/auth/temporary-password";
+import { uppercasePersonNameInput } from "@/lib/person-name";
 import {
   settingsFieldLabelClass as fieldLabelClass,
   settingsIconBoxClass as iconBoxClass,
@@ -315,7 +316,10 @@ export function UsersSettingsPanel() {
                 placeholder="Nombre completo"
                 value={invite.fullName}
                 onChange={(event) =>
-                  setInvite((current) => ({ ...current, fullName: event.target.value }))
+                  setInvite((current) => ({
+                    ...current,
+                    fullName: uppercasePersonNameInput(event.target.value),
+                  }))
                 }
               />
             </label>
