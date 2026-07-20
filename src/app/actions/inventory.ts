@@ -78,7 +78,7 @@ async function loadWarehouseInventoryCore(
       supabase
         .from("inventory_stock")
         .select(
-          "id, item_id, warehouse_id, stock, reserved, assigned, unavailable, min_stock, inventory_items(id, name, kind, subcategory, size, location, unit, photo_url, category_id, inventory_categories(name))",
+          "id, item_id, warehouse_id, stock, reserved, assigned, unavailable, min_stock, avg_cost, inventory_items(id, name, kind, subcategory, size, location, unit, photo_url, category_id, inventory_categories(name))",
         )
         .eq("warehouse_id", warehouseId)
         .eq("organization_id", organizationId),
@@ -758,6 +758,8 @@ export async function recordInventoryMovementForLeafAction(input: {
   note?: string;
   reasonCode?: InventoryMovementReasonCode;
   minStock?: number;
+  unitCost?: number | null;
+  totalCost?: number | null;
 }): Promise<
   ActionResult<{ item: InventoryStockItem; movement: InventoryMovement }>
 > {
@@ -809,6 +811,8 @@ export async function recordInventoryMovementForLeafAction(input: {
       note: input.note,
       reasonCode: input.reasonCode || defaultReasonCodeForMovementType(input.type),
       createdBy: session.userId,
+      unitCost: input.type === "entrada" ? (input.unitCost ?? null) : null,
+      totalCost: input.type === "entrada" ? (input.totalCost ?? null) : null,
     });
 
     const { data: movement, error: movError } = await supabase
@@ -822,7 +826,7 @@ export async function recordInventoryMovementForLeafAction(input: {
     }
 
     return ok({
-      item: inventoryLeafStateToItem(leafState, result.stock),
+      item: inventoryLeafStateToItem(leafState, result.stock, result.avgCost),
       movement: movementsFromDb([movement])[0],
     });
   } catch (error) {

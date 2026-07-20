@@ -40,6 +40,8 @@ export type InventoryMovement = {
   assigneeName?: string | null;
   assignmentId?: string | null;
   warehouseTransferId?: string | null;
+  unitCost?: number | null;
+  totalCost?: number | null;
 };
 
 export type InventoryAssignmentOutcome =

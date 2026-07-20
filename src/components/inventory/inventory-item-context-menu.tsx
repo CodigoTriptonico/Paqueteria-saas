@@ -10,6 +10,7 @@ import {
   manualMovementReasonOptions,
   movementReasonRequiresDetail,
 } from "@/lib/inventory-movement-audit";
+import { syncEntryCostFields } from "@/lib/inventory-entry-cost";
 import type { ItemContextMenu, MovementDraft } from "@/lib/inventory-structure-utils";
 import {
   formatInventoryStockLabel,
@@ -386,13 +387,100 @@ export function InventoryItemContextMenu({
                 step="1"
                 value={movementDraft.qty}
                 onChange={(event) =>
-                  setMovementDraft((current) =>
-                    current ? { ...current, qty: event.target.value } : current,
-                  )
+                  setMovementDraft((current) => {
+                    if (!current) {
+                      return current;
+                    }
+
+                    const nextQty = event.target.value;
+                    const synced = syncEntryCostFields({
+                      qty: nextQty,
+                      unitCost: current.unitCost || "",
+                      totalCost: current.totalCost || "",
+                      anchor: "qty",
+                    });
+
+                    return {
+                      ...current,
+                      qty: nextQty,
+                      unitCost: synced.unitCost,
+                      totalCost: synced.totalCost,
+                    };
+                  })
                 }
                 autoFocus
               />
             </label>
+            {movementDraft.type === "entrada" ? (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1.5 text-xs font-black uppercase text-slate-400">
+                  Costo total del lote
+                  <input
+                    className={`${inputClass} h-10 text-sm`}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={movementDraft.totalCost || ""}
+                    onChange={(event) =>
+                      setMovementDraft((current) => {
+                        if (!current) {
+                          return current;
+                        }
+
+                        const nextTotalCost = event.target.value;
+                        const synced = syncEntryCostFields({
+                          qty: current.qty,
+                          unitCost: current.unitCost || "",
+                          totalCost: nextTotalCost,
+                          anchor: "total",
+                        });
+
+                        return {
+                          ...current,
+                          totalCost: nextTotalCost,
+                          unitCost: synced.unitCost,
+                          entryCostAnchor: "total",
+                        };
+                      })
+                    }
+                    placeholder="Opcional"
+                  />
+                </label>
+                <label className="grid gap-1.5 text-xs font-black uppercase text-slate-400">
+                  Costo unitario
+                  <input
+                    className={`${inputClass} h-10 text-sm`}
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={movementDraft.unitCost || ""}
+                    onChange={(event) =>
+                      setMovementDraft((current) => {
+                        if (!current) {
+                          return current;
+                        }
+
+                        const nextUnitCost = event.target.value;
+                        const synced = syncEntryCostFields({
+                          qty: current.qty,
+                          unitCost: nextUnitCost,
+                          totalCost: current.totalCost || "",
+                          anchor: "unit",
+                        });
+
+                        return {
+                          ...current,
+                          unitCost: nextUnitCost,
+                          totalCost: synced.totalCost,
+                          entryCostAnchor: "unit",
+                        };
+                      })
+                    }
+                    placeholder="Opcional"
+                  />
+                </label>
+              </div>
+            ) : null}
             <label className="grid gap-1.5 text-xs font-black uppercase text-slate-400">
               Motivo
               <select

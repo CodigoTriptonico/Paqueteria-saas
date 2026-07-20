@@ -73,6 +73,8 @@ import {
   type InventoryStockItem,
 } from "@/lib/inventory-stock";
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
+import { resolveEntryCostForSubmit } from "@/lib/inventory-entry-cost";
+import { defaultReasonCodeForMovementType } from "@/lib/inventory-movement-audit";
 import {
   addInventoryTreeChild,
   categoryDirectItems,
@@ -1199,6 +1201,9 @@ export function InventoryStructureEditor({
       qty: type === "ajuste" ? String(itemContextMenu.stockItem.stock) : "1",
       note: "",
       reasonCode: defaultReasonCodeForMovementType(type),
+      unitCost: "",
+      totalCost: "",
+      entryCostAnchor: "unit",
       context: itemContextMenu,
     });
     setItemContextMenu(null);
@@ -1238,6 +1243,22 @@ export function InventoryStructureEditor({
     setStockSaving(true);
     setStockError("");
 
+    const resolvedCost =
+      movementDraft.type === "entrada"
+        ? resolveEntryCostForSubmit({
+            qty,
+            unitCost: movementDraft.unitCost,
+            totalCost: movementDraft.totalCost,
+          })
+        : { ok: true as const, unitCost: null, totalCost: null };
+
+    if (!resolvedCost.ok) {
+      setStockSaving(false);
+      setStockError(resolvedCost.error);
+      notify.error(resolvedCost.error);
+      return;
+    }
+
     const result = await recordInventoryMovementForLeafAction({
       warehouseId,
       category: movementDraft.context.categoryName,
@@ -1249,6 +1270,8 @@ export function InventoryStructureEditor({
       note: movementDraft.note,
       reasonCode: movementDraft.reasonCode,
       minStock: movementDraft.context.stockItem.minStock,
+      unitCost: resolvedCost.unitCost,
+      totalCost: resolvedCost.totalCost,
     });
 
     setStockSaving(false);

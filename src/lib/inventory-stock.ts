@@ -21,6 +21,7 @@ export type InventoryStockItem = {
   assigned: number;
   unavailable: number;
   minStock: number;
+  avgCost?: number;
   location?: string;
   unit?: string;
   photoUrl?: string;

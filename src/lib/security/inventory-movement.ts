@@ -33,11 +33,14 @@ export type RecordInventoryMovementInput = {
   warehouseTransferId?: string | null;
   reversalOfMovementId?: string | null;
   movementKey?: string | null;
+  unitCost?: number | null;
+  totalCost?: number | null;
 };
 
 export type RecordInventoryMovementResult = {
   movementId: string;
   stock: number;
+  avgCost: number;
 };
 
 export async function recordInventoryMovementAtomic(
@@ -70,13 +73,19 @@ export async function recordInventoryMovementAtomic(
     p_warehouse_transfer_id: input.warehouseTransferId ?? null,
     p_reversal_of_movement_id: input.reversalOfMovementId ?? null,
     p_movement_key: input.movementKey ?? null,
+    p_unit_cost: input.unitCost ?? null,
+    p_total_cost: input.totalCost ?? null,
   });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  const payload = (data || {}) as { movement_id?: string; stock?: number };
+  const payload = (data || {}) as {
+    movement_id?: string;
+    stock?: number;
+    avg_cost?: number;
+  };
 
   if (!payload.movement_id) {
     throw new Error("No se pudo registrar el movimiento");
@@ -85,5 +94,6 @@ export async function recordInventoryMovementAtomic(
   return {
     movementId: payload.movement_id,
     stock: Number(payload.stock) || 0,
+    avgCost: Number(payload.avg_cost) || 0,
   };
 }

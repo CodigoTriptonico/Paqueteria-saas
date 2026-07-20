@@ -27,6 +27,9 @@ export type MovementDraft = {
   qty: string;
   note: string;
   reasonCode: InventoryMovementReasonCode;
+  unitCost?: string;
+  totalCost?: string;
+  entryCostAnchor?: "unit" | "total";
   context: ItemContextMenu;
 };
 

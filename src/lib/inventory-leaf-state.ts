@@ -22,6 +22,7 @@ type InventoryLeafStockRow = {
   assigned: number;
   unavailable: number;
   min_stock: number;
+  avg_cost?: number;
 };
 
 export type InventoryLeafState = {
@@ -54,6 +55,7 @@ export function normalizeInventoryLeafInput(input: InventoryLeafInput) {
 export function inventoryLeafStateToItem(
   state: InventoryLeafState,
   stock = Number(state.stockRow.stock || 0),
+  avgCost = Number(state.stockRow.avg_cost ?? 0),
 ): InventoryStockItem {
   const { categoryName, itemName, kind, subcategory, minStock, itemRow, stockRow } =
     state;
@@ -70,6 +72,7 @@ export function inventoryLeafStateToItem(
     assigned: Number(stockRow.assigned ?? 0),
     unavailable: Number(stockRow.unavailable ?? 0),
     minStock: Number(stockRow.min_stock ?? minStock),
+    avgCost: Number(avgCost ?? stockRow.avg_cost ?? 0),
     location: itemRow.location || undefined,
     unit: itemRow.unit || undefined,
   };
@@ -160,7 +163,7 @@ export async function ensureInventoryLeafState(
 
   const { data: existingStock, error: stockError } = await supabase
     .from("inventory_stock")
-    .select("id, stock, reserved, assigned, unavailable, min_stock")
+    .select("id, stock, reserved, assigned, unavailable, min_stock, avg_cost")
     .eq("warehouse_id", input.warehouseId)
     .eq("item_id", itemRow.id)
     .maybeSingle();
@@ -184,7 +187,7 @@ export async function ensureInventoryLeafState(
         unavailable: 0,
         min_stock: minStock,
       })
-      .select("id, stock, reserved, assigned, unavailable, min_stock")
+      .select("id, stock, reserved, assigned, unavailable, min_stock, avg_cost")
       .single();
 
     if (insertStockError || !insertedStock) {

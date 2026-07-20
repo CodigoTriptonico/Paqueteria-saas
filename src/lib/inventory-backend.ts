@@ -22,6 +22,7 @@ export type DbStockRow = {
   assigned: number;
   unavailable: number;
   min_stock: number;
+  avg_cost?: number;
   inventory_items: {
     id: string;
     name: string;
@@ -61,6 +62,8 @@ export type DbMovementRow = {
   created_by?: string | null;
   assignee_id?: string | null;
   assignment_id?: string | null;
+  unit_cost?: number | null;
+  total_cost?: number | null;
   created_by_profile?: ProfileJoin | ProfileJoin[];
   assignee_profile?: ProfileJoin | ProfileJoin[];
 };
@@ -199,6 +202,7 @@ export type DbStockJoinRow = {
   assigned?: number;
   unavailable?: number;
   min_stock: number;
+  avg_cost?: number;
   inventory_items: DbStockJoinItem | DbStockJoinItem[] | null;
 };
 
@@ -228,6 +232,7 @@ export function inventoryStockJoinToItem(
     assigned: Number(row.assigned ?? 0),
     unavailable: Number(row.unavailable ?? 0),
     minStock: Number(row.min_stock),
+    avgCost: Number(row.avg_cost ?? 0),
     photoUrl: itemRow.photo_url || undefined,
   };
 }
@@ -270,6 +275,7 @@ export function stockRowsToItems(rows: DbStockRow[]): InventoryStockItem[] {
       assigned: Number(row.assigned ?? 0),
       unavailable: Number(row.unavailable ?? 0),
       minStock: Number(row.min_stock),
+      avgCost: Number(row.avg_cost ?? 0),
       photoUrl: item.photo_url || undefined,
     };
   });
@@ -301,6 +307,8 @@ export function movementsFromDb(rows: DbMovementRow[]): InventoryMovement[] {
     assigneeName: profileDisplayName(row.assignee_profile),
     assignmentId: row.assignment_id ?? null,
     warehouseTransferId: row.warehouse_transfer_id ?? null,
+    unitCost: row.unit_cost == null ? null : Number(row.unit_cost),
+    totalCost: row.total_cost == null ? null : Number(row.total_cost),
   }));
 }
 
@@ -329,6 +337,7 @@ export function assignmentsFromDb(rows: DbAssignmentRow[]): InventoryAssignment[
 
 export const MOVEMENT_SELECT = `
   id, item_id, item_name, type, qty, note, reason_code,
+  unit_cost, total_cost,
   from_location_type, from_location_id, from_location_label,
   to_location_type, to_location_id, to_location_label,
   reference_type, reference_id, evidence, reversal_of_movement_id,

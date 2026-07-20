@@ -63,8 +63,11 @@ describe("inventory leaf state", () => {
       assigned: 2,
       unavailable: 3,
       minStock: 4,
+      avgCost: 0,
       location: undefined,
       unit: "pieza",
     });
+
+    assert.equal(inventoryLeafStateToItem(state, 8, 4.5).avgCost, 4.5);
   });
 });
