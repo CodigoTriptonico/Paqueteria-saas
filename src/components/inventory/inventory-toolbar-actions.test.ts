@@ -9,32 +9,40 @@ const editorSource = readFileSync(
   join(componentDir, "..", "inventory-structure-editor.tsx"),
   "utf8",
 );
+const menuSource = readFileSync(
+  join(componentDir, "inventory-structure-options-menu.tsx"),
+  "utf8",
+);
 const custodySource = readFileSync(
   join(componentDir, "inventory-control-menu.tsx"),
   "utf8",
 );
 
 describe("inventory toolbar actions", () => {
-  it("keeps the primary add action separate from the tools panel", () => {
+  it("keeps the primary add action separate from the operation menu", () => {
     assert.match(editorSource, /label="Agregar artículo"/);
-    assert.match(editorSource, /label="Herramientas de inventario"/);
+    assert.match(editorSource, /label="Operación de inventario"/);
     assert.match(editorSource, /ariaHaspopup="menu"/);
     assert.match(editorSource, /w-\[min\(19rem,calc\(100vw-1rem\)\)\]/);
   });
 
-  it("groups operational custody and catalog structure inside the panel", () => {
-    assert.match(editorSource, /Operación/);
-    assert.match(editorSource, /Catálogo/);
-    assert.match(editorSource, /Categorías y subcategorías/);
-    assert.match(editorSource, /Gestionar estructura/);
+  it("routes catalog structure through the pencil and custody through the menu", () => {
+    assert.match(editorSource, /icon=\{Pencil\}/);
+    assert.match(editorSource, /Editar categorías y subcategorías/);
+    assert.match(editorSource, /openStructureMenu\(event\.currentTarget, "create"\)/);
+    assert.doesNotMatch(editorSource, /Categorías y subcategorías/);
+    assert.doesNotMatch(editorSource, /Gestionar estructura/);
+    assert.doesNotMatch(editorSource, /Herramientas de inventario/);
+    assert.doesNotMatch(editorSource, /Control operativo y organización del catálogo/);
+    assert.match(menuSource, /Renombrar categoría/);
     assert.match(custodySource, /Quién tiene cada caja y sus movimientos/);
   });
 
-  it("keeps category editing beside the selector and subcategories below it", () => {
-    assert.match(editorSource, /icon=\{Pencil\}/);
-    assert.match(editorSource, /label="Editar categor/);
-    assert.match(editorSource, /className="flex min-w-0 flex-1 flex-col gap-1\.5"/);
-    assert.match(editorSource, /className="min-w-0 w-full"/);
+  it("keeps category pickers compact beside the pencil", () => {
+    assert.match(editorSource, /inventoryToolbarCatalogGroupClass/);
+    assert.match(editorSource, /inventoryToolbarPickerShellClass/);
+    assert.match(editorSource, /showEmbeddedSubcategoryPicker/);
+    assert.match(editorSource, /inventoryToolbarChevronButtonClass/);
   });
 
   it("blocks duplicate category names in the client before persisting", () => {

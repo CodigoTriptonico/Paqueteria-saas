@@ -23,5 +23,7 @@ describe("inventory deletion safety eval", () => {
     assert.match(source, /normalizeInventoryName\(subcategory.name\)/);
     assert.match(source, /No se pueden crear categorías duplicadas/);
     assert.match(source, /No se pueden crear subcategorías duplicadas/);
+    assert.match(source, /existingByNormalizedName/);
+    assert.match(source, /categoryIdByNormalizedName/);
   });
 });

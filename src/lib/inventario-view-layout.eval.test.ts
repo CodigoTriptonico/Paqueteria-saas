@@ -18,8 +18,9 @@ describe("inventario view layout eval", () => {
   });
 
   it("keeps inventario toolbar controls left and metrics on the right in one row", () => {
-    assert.equal(editorSource.includes('className="ml-auto flex shrink-0 overflow-hidden rounded-xl border border-black bg-[#17201d]"'), true);
-    assert.match(editorSource, /inventoryToolbarFiltersClass\} min-w-0 flex-1/);
+    assert.equal(editorSource.includes('className="flex shrink-0 overflow-hidden rounded-xl border border-black bg-[#17201d]"'), true);
+    assert.match(editorSource, /inventoryToolbarRowClass/);
+    assert.match(editorSource, /inventoryToolbarCatalogGroupClass/);
   });
 
   it("renders row and card inventory item lists", () => {

@@ -16,6 +16,7 @@ import {
   ASSIGNMENT_SELECT,
   assignmentsFromDb,
   categoriesToConfig,
+  categoryIdByNormalizedName,
   movementsFromDb,
   MOVEMENT_SELECT,
   resolveInventoryLeafItem,
@@ -115,12 +116,14 @@ async function loadWarehouseInventoryCore(
   );
 
   if (JSON.stringify(syncedCategoryConfigs) !== JSON.stringify(categoryConfigs)) {
-    const categoryIdByName = new Map(
-      ((categories || []) as DbCategory[]).map((row) => [row.name, row.id]),
+    const categoryIdByName = categoryIdByNormalizedName(
+      (categories || []) as DbCategory[],
     );
 
     for (const category of syncedCategoryConfigs) {
-      const categoryId = categoryIdByName.get(category.name);
+      const categoryId = categoryIdByName.get(
+        normalizeInventoryName(category.name),
+      );
 
       if (!categoryId) {
         continue;
@@ -291,12 +294,14 @@ async function saveInventoryCategoriesAction(
       return fail("No se puede borrar todo el inventario desde un estado vacío");
     }
 
-    const existingByName = new Map(
-      (existing || []).map((row) => [row.name, row.id]),
+    const existingByNormalizedName = new Map(
+      (existing || []).map((row) => [normalizeInventoryName(row.name), row]),
     );
-    const incomingNames = new Set(categoryConfigs.map((cat) => cat.name));
+    const incomingNormalizedNames = new Set(
+      categoryConfigs.map((category) => normalizeInventoryName(category.name)),
+    );
     const toDelete = (existing || []).filter(
-      (row) => !incomingNames.has(row.name),
+      (row) => !incomingNormalizedNames.has(normalizeInventoryName(row.name)),
     );
 
     await assertCategoryDeletionDoesNotBreakHistory(
@@ -312,13 +317,15 @@ async function saveInventoryCategoriesAction(
         tree_data: category.items || [],
       };
 
-      const existingId = existingByName.get(category.name);
+      const existingRow = existingByNormalizedName.get(
+        normalizeInventoryName(category.name),
+      );
 
-      if (existingId) {
+      if (existingRow) {
         const { error } = await supabase
           .from("inventory_categories")
-          .update({ tree_data: payload.tree_data })
-          .eq("id", existingId);
+          .update({ name: category.name, tree_data: payload.tree_data })
+          .eq("id", existingRow.id);
 
         if (error) {
           return fail(error.message);
@@ -599,14 +606,12 @@ async function ensureItemsForWarehouse(
     .select("id, name")
     .eq("organization_id", organizationId);
 
-  const categoryIdByName = new Map(
-    (categories || []).map((row) => [row.name, row.id]),
-  );
+  const categoryIdByName = categoryIdByNormalizedName(categories || []);
 
   for (const leaf of categoryConfigs.flatMap((category) =>
     collectCategoryTreeLeaves(category).map((entry) => ({
       ...entry,
-      categoryId: categoryIdByName.get(category.name),
+      categoryId: categoryIdByName.get(normalizeInventoryName(category.name)),
     })),
   )) {
     if (!leaf.categoryId) {

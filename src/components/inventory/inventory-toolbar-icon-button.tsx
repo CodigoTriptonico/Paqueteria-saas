@@ -6,8 +6,29 @@ import type { MouseEvent, RefObject } from "react";
 export const inventoryToolbarGroupClass =
   "flex shrink-0 items-center gap-1 rounded-lg border border-black bg-[#141a18] p-1";
 
-export const inventoryToolbarFiltersClass =
-  "flex min-w-0 shrink-0 flex-wrap items-center justify-start gap-1.5";
+export const inventoryToolbarRowClass =
+  "flex min-h-11 min-w-0 flex-1 items-center gap-2 overflow-hidden";
+
+export const inventoryToolbarCatalogGroupClass =
+  "flex min-w-0 items-center gap-1 overflow-hidden rounded-lg border border-black bg-[#141a18] p-1";
+
+export const inventoryToolbarDividerClass =
+  "mx-0.5 h-6 w-px shrink-0 bg-black/80";
+
+export const inventoryToolbarPickerShellClass =
+  "box-border inline-flex h-9 min-w-0 max-w-full items-center gap-1.5 rounded-md border-0 bg-[#1a2320] px-2";
+
+export const inventoryToolbarPickerWidthClass =
+  "w-[10.5rem] sm:w-[11.25rem]";
+
+export const inventoryToolbarSubcategoryPickerWidthClass =
+  "w-[11.75rem] sm:w-[12.5rem]";
+
+export const inventoryToolbarChevronButtonClass =
+  "inline-flex h-9 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-[#243029] hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:cursor-default disabled:hover:bg-transparent";
+
+/** @deprecated Use inventoryToolbarRowClass */
+export const inventoryToolbarFiltersClass = inventoryToolbarRowClass;
 
 const baseClass =
   "group relative inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40";

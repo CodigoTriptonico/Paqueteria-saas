@@ -29,11 +29,16 @@ export type InventoryStructureOptionsMenuProps = {
   addCategory: () => void;
   beginAddSubcategory: () => void;
   renderSubcategoryForm: (compact?: boolean) => React.ReactNode;
+  editingCategoryName: string;
+  setEditingCategoryName: (value: string) => void;
+  saveCategory: (oldName: string) => void;
   showStructureDelete?: boolean;
-  selectedCategoryName: string;
   deleteCategory: (name: string) => void;
   deleteSubcategory: (categoryName: string, subcategoryId: string) => void;
 };
+
+const deleteIconButtonClass =
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-red-900/70 bg-red-950/30 text-red-300 transition hover:bg-red-950/50 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50";
 
 const deleteButtonClass =
   "inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-red-900/70 bg-red-950/30 px-2.5 text-xs font-black text-red-300 hover:bg-red-950/50 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50";
@@ -57,8 +62,10 @@ export function InventoryStructureOptionsMenu({
   addCategory,
   beginAddSubcategory,
   renderSubcategoryForm,
+  editingCategoryName,
+  setEditingCategoryName,
+  saveCategory,
   showStructureDelete = false,
-  selectedCategoryName,
   deleteCategory,
   deleteSubcategory,
 }: InventoryStructureOptionsMenuProps) {
@@ -119,8 +126,41 @@ export function InventoryStructureOptionsMenu({
       }}
     >
       <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-500">
-        {mode === "manage" ? "Gestionar estructura" : "Crear estructura"}
+        {mode === "manage" ? "Gestionar estructura" : "Categorías"}
       </p>
+      {mode === "create" && selectedCategoryData ? (
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-black uppercase tracking-wide text-emerald-300">
+            Renombrar categoría
+          </p>
+          <div className="inset-shell flex items-center gap-2 rounded-lg border border-black bg-[#111827] p-2">
+            <input
+              className="h-9 min-w-0 flex-1 bg-transparent px-2 text-sm font-black text-[#f8fafc] outline-none placeholder:text-slate-500"
+              placeholder="Nombre de categoría"
+              value={editingCategoryName}
+              onChange={(event) => setEditingCategoryName(event.target.value)}
+              onBlur={() => saveCategory(selectedCategoryData.name)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+            {showStructureDelete ? (
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={confirmDeleteCategory}
+                className={deleteIconButtonClass}
+                title="Eliminar categoría"
+                aria-label="Eliminar categoría"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       {mode === "create" && addingSubcategoryForSelectedCategory ? (
         <div className="space-y-1.5">
           <p className="text-[11px] font-black uppercase tracking-wide text-emerald-300">
@@ -189,28 +229,20 @@ export function InventoryStructureOptionsMenu({
         </>
       ) : null}
 
-      {showStructureDelete && mode === "manage" ? (
+      {showStructureDelete &&
+      (mode === "manage" || mode === "create") &&
+      selectedSubcategory ? (
         <div className="space-y-2 border-t border-black/70 pt-2">
           <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">
             Eliminar
           </p>
           <button
             type="button"
-            disabled={!selectedSubcategory}
             onClick={confirmDeleteSubcategory}
             className={deleteButtonClass}
           >
             <Trash2 className="h-3.5 w-3.5" />
             Eliminar subcategoría
-          </button>
-          <button
-            type="button"
-            disabled={!selectedCategoryName}
-            onClick={confirmDeleteCategory}
-            className={deleteButtonClass}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Eliminar categoría
           </button>
         </div>
       ) : null}

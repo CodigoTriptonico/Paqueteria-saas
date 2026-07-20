@@ -2,13 +2,13 @@
 
 import {
   Check,
+  ChevronRight,
   Layers3,
   MoreHorizontal,
   Package2,
   Pencil,
   Plus,
   Search,
-  Settings2,
   Sparkles,
   X,
 } from "lucide-react";
@@ -38,8 +38,14 @@ import { InventoryBinPlacementDrawer } from "@/components/inventory/inventory-bi
 import { InventoryItemContextMenu } from "@/components/inventory/inventory-item-context-menu";
 import { InventoryItemGrid } from "@/components/inventory/inventory-item-grid";
 import {
-  inventoryToolbarFiltersClass,
+  inventoryToolbarCatalogGroupClass,
+  inventoryToolbarChevronButtonClass,
+  inventoryToolbarDividerClass,
   inventoryToolbarGroupClass,
+  inventoryToolbarPickerShellClass,
+  inventoryToolbarPickerWidthClass,
+  inventoryToolbarRowClass,
+  inventoryToolbarSubcategoryPickerWidthClass,
   InventoryToolbarIconButton,
 } from "@/components/inventory/inventory-toolbar-icon-button";
 import { InventoryNewItemPopover } from "@/components/inventory/inventory-new-item-popover";
@@ -175,6 +181,7 @@ export function InventoryStructureEditor({
   const emptyCategoryFormRef = useRef<HTMLDivElement>(null);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
+  const [embeddedSubcategoryOpen, setEmbeddedSubcategoryOpen] = useState(false);
   const [newNameByKey, setNewNameByKey] = useState<Record<string, string>>({});
   const [openSubcategoryInput, setOpenSubcategoryInput] = useState("");
   const [editingCategory, setEditingCategory] = useState("");
@@ -622,6 +629,7 @@ export function InventoryStructureEditor({
   function selectCategory(name: string) {
     setSelectedCategory(name);
     setSelectedSubcategoryId("");
+    setEmbeddedSubcategoryOpen(false);
     setCategoryQuery("");
     setShowNewItemForm(false);
     setOpenSubcategoryInput("");
@@ -735,6 +743,12 @@ export function InventoryStructureEditor({
 
     if (!normalizedName) {
       notify.error("Escribe un nombre para la categoría.");
+      setEditingCategoryName(oldName);
+      return;
+    }
+
+    if (normalizeInventoryName(oldName) === normalizedName) {
+      setEditingCategoryName(oldName);
       return;
     }
 
@@ -747,6 +761,7 @@ export function InventoryStructureEditor({
       )
     ) {
       notify.error("Ya existe una categoría con ese nombre.");
+      setEditingCategoryName(oldName);
       return;
     }
 
@@ -772,7 +787,7 @@ export function InventoryStructureEditor({
     }
 
     setEditingCategory("");
-    setEditingCategoryName("");
+    setEditingCategoryName(name);
   }
 
   function deleteCategory(name: string) {
@@ -1465,6 +1480,12 @@ export function InventoryStructureEditor({
     ];
   }, [selectedCategoryData, subcategories, subcategoryStockItems]);
 
+  const hasEmbeddedSubcategories = embeddedSubcategoryOptions.length > 1;
+  const hasSubcategorySelection = Boolean(selectedSubcategoryId);
+  const showEmbeddedSubcategoryPicker =
+    hasEmbeddedSubcategories &&
+    (embeddedSubcategoryOpen || hasSubcategorySelection);
+
   const embeddedItemOptions = useMemo(() => {
     if (!selectedCategoryData) {
       return [];
@@ -1776,110 +1797,157 @@ export function InventoryStructureEditor({
   const sidebarLayout = embedded ? (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black bg-[#25302c] shadow-[0_10px_26px_rgba(0,0,0,0.22)]">
       <div className="flex shrink-0 items-center gap-2 border-b border-black/70 bg-[#1a2320] px-3 py-2 sm:px-4">
-        <div className={`${inventoryToolbarFiltersClass} min-w-0 flex-1`}>
-          {headerSlot}
+        <div className={inventoryToolbarRowClass}>
+          {headerSlot ? (
+            <div className={inventoryToolbarGroupClass}>{headerSlot}</div>
+          ) : null}
           {!truckTabOpen && categoryConfigs.length ? (
-            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-              <div className="flex min-w-0 items-center gap-1.5">
-                {showStructureOptions ? (
-                  <InventoryToolbarIconButton
-                    icon={Pencil}
-                    label="Editar categorías y subcategorías"
-                    tone={
-                      optionsOpen && structureMenuMode === "manage"
-                        ? "active"
-                        : "default"
+            <div className={inventoryToolbarCatalogGroupClass}>
+              {showStructureOptions ? (
+                <InventoryToolbarIconButton
+                  icon={Pencil}
+                  label="Editar categorías y subcategorías"
+                  tone={optionsOpen ? "active" : "default"}
+                  ariaExpanded={optionsOpen}
+                  ariaHaspopup="dialog"
+                  onClick={(event) => {
+                    if (selectedCategoryData) {
+                      setEditingCategoryName(selectedCategoryData.name);
                     }
-                    ariaExpanded={optionsOpen && structureMenuMode === "manage"}
-                    ariaHaspopup="dialog"
-                    onClick={(event) =>
-                      openStructureMenu(event.currentTarget, "manage")
-                    }
-                  />
-                ) : null}
-                <InlineSearchPicker
-                  value={selectedCategory}
-                  onChange={selectCategory}
-                  placeholder="Categoría"
-                  searchPlaceholder="Buscar categoría…"
-                  emptyLabel="Sin categorías"
-                  ariaLabel="Categoría de inventario"
-                  leadingIcon={<Layers3 className="h-4 w-4" aria-hidden />}
-                  options={embeddedCategoryOptions}
-                  className="min-w-0 flex-1"
-                  minWidthClass="min-w-0 w-full sm:min-w-[10rem]"
-                />
-              </div>
-              {selectedCategoryData && embeddedSubcategoryOptions.length > 1 ? (
-                <InlineSearchPicker
-                  value={selectedSubcategoryId}
-                  onChange={(nextId) => {
-                    if (!nextId) {
-                      setSelectedSubcategoryId("");
-                      return;
-                    }
-
-                    selectSubcategory(nextId);
+                    openStructureMenu(event.currentTarget, "create");
                   }}
-                  placeholder="Subcategoría"
-                  searchPlaceholder="Buscar subcategoría…"
-                  emptyLabel="Sin coincidencias"
-                  ariaLabel="Subcategoría"
-                  leadingIcon={<Layers3 className="h-4 w-4" aria-hidden />}
-                  options={embeddedSubcategoryOptions}
-                  className="min-w-0 w-full"
-                  minWidthClass="min-w-0 w-full sm:min-w-[10rem]"
                 />
+              ) : null}
+              {showStructureOptions ? (
+                <span className={inventoryToolbarDividerClass} aria-hidden />
+              ) : null}
+              <InlineSearchPicker
+                value={selectedCategory}
+                onChange={selectCategory}
+                placeholder="Categoría"
+                searchPlaceholder="Buscar categoría…"
+                emptyLabel="Sin categorías"
+                ariaLabel="Categoría de inventario"
+                leadingIcon={<Layers3 className="h-4 w-4" aria-hidden />}
+                options={embeddedCategoryOptions}
+                className="min-w-0 shrink"
+                shellClassName={`${inventoryToolbarPickerShellClass} ${inventoryToolbarPickerWidthClass}`}
+              />
+              {hasEmbeddedSubcategories ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!hasSubcategorySelection) {
+                        setEmbeddedSubcategoryOpen((current) => !current);
+                      }
+                    }}
+                    disabled={hasSubcategorySelection}
+                    aria-expanded={showEmbeddedSubcategoryPicker}
+                    aria-label={
+                      showEmbeddedSubcategoryPicker
+                        ? "Ocultar subcategorías"
+                        : "Mostrar subcategorías"
+                    }
+                    title={
+                      showEmbeddedSubcategoryPicker
+                        ? "Ocultar subcategorías"
+                        : "Mostrar subcategorías"
+                    }
+                    className={`${inventoryToolbarChevronButtonClass} ${
+                      showEmbeddedSubcategoryPicker
+                        ? "text-emerald-300"
+                        : ""
+                    }`}
+                  >
+                    <ChevronRight
+                      className={`h-3.5 w-3.5 transition-transform ${
+                        showEmbeddedSubcategoryPicker ? "rotate-90" : ""
+                      }`}
+                      aria-hidden
+                    />
+                  </button>
+                  {showEmbeddedSubcategoryPicker ? (
+                    <InlineSearchPicker
+                      value={selectedSubcategoryId}
+                      onChange={(nextId) => {
+                        if (!nextId) {
+                          setSelectedSubcategoryId("");
+                          setEmbeddedSubcategoryOpen(false);
+                          return;
+                        }
+
+                        selectSubcategory(nextId);
+                        setEmbeddedSubcategoryOpen(true);
+                      }}
+                      placeholder="Subcategoría"
+                      searchPlaceholder="Buscar subcategoría…"
+                      emptyLabel="Sin coincidencias"
+                      ariaLabel="Subcategoría"
+                      leadingIcon={<Layers3 className="h-4 w-4" aria-hidden />}
+                      options={embeddedSubcategoryOptions}
+                      className="min-w-0 shrink-0"
+                      shellClassName={`${inventoryToolbarPickerShellClass} ${inventoryToolbarSubcategoryPickerWidthClass}`}
+                      openOnMount={
+                        embeddedSubcategoryOpen && !hasSubcategorySelection
+                      }
+                    />
+                  ) : null}
+                </>
               ) : null}
             </div>
           ) : null}
           {!truckTabOpen && selectedCategoryData ? (
-            <InlineSearchCombobox
-              value={itemQuery}
-              onChange={setItemQuery}
-              placeholder={itemSearchPlaceholder}
-              emptyLabel="Sin items"
-              ariaLabel="Buscar items"
-              leadingIcon={<Search className="h-4 w-4" aria-hidden />}
-              options={embeddedItemOptions}
-              className="shrink-0"
-              minWidthClass="w-[8.75rem] sm:w-[10rem]"
-              persistent
-            />
+            <div className={inventoryToolbarGroupClass}>
+              <InlineSearchCombobox
+                value={itemQuery}
+                onChange={setItemQuery}
+                placeholder={itemSearchPlaceholder}
+                emptyLabel="Sin items"
+                ariaLabel="Buscar items"
+                leadingIcon={<Search className="h-4 w-4" aria-hidden />}
+                options={embeddedItemOptions}
+                className="min-w-0"
+                shellClassName={`${inventoryToolbarPickerShellClass} ${inventoryToolbarPickerWidthClass}`}
+                persistent
+              />
+            </div>
           ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
           {!truckTabOpen && showStructureOptions ? (
             <div className={inventoryToolbarGroupClass}>
               <InventoryToolbarIconButton
-                    buttonRef={newItemButtonRef}
-                    icon={Plus}
-                    label="Agregar artículo"
-                    showLabel
-                    visibleLabel="Agregar"
-                    tone={showNewItemForm ? "active" : "primary"}
-                    disabled={!selectedCategoryData}
-                    ariaExpanded={showNewItemForm}
-                    ariaHaspopup="dialog"
-                    onboardingTarget={ONBOARDING_TARGETS.INVENTORY_STRUCTURE_MENU}
-                    onClick={() => {
-                      if (showNewItemForm) {
-                        setShowNewItemForm(false);
-                        return;
-                      }
+                buttonRef={newItemButtonRef}
+                icon={Plus}
+                label="Agregar artículo"
+                showLabel
+                visibleLabel="Agregar"
+                tone={showNewItemForm ? "active" : "primary"}
+                disabled={!selectedCategoryData}
+                ariaExpanded={showNewItemForm}
+                ariaHaspopup="dialog"
+                onboardingTarget={ONBOARDING_TARGETS.INVENTORY_STRUCTURE_MENU}
+                onClick={() => {
+                  if (showNewItemForm) {
+                    setShowNewItemForm(false);
+                    return;
+                  }
 
-                      beginAddItem();
-                    }}
-                  />
+                  beginAddItem();
+                }}
+              />
               <div className="relative">
                 <InventoryToolbarIconButton
                   buttonRef={toolbarMenuButtonRef}
                   icon={MoreHorizontal}
-                  label="Herramientas de inventario"
+                  label="Operación de inventario"
                   tone={toolbarMenuOpen ? "active" : "default"}
                   ariaExpanded={toolbarMenuOpen}
                   ariaHaspopup="menu"
                   onClick={() => setToolbarMenuOpen((current) => !current)}
                 />
-                {toolbarMenuOpen ? (
+                {toolbarMenuOpen && toolbarEndSlot ? (
                   <div
                     ref={toolbarMenuRef}
                     role="menu"
@@ -1892,82 +1960,16 @@ export function InventoryStructureEditor({
                         setToolbarMenuOpen(false);
                       }
                     }}
-                    aria-label="Herramientas de inventario"
+                    aria-label="Operación de inventario"
                     className="absolute right-0 top-[calc(100%+0.5rem)] z-[120] w-[min(19rem,calc(100vw-1rem))] rounded-xl border border-black bg-[#101820] p-2 shadow-[0_18px_45px_rgba(0,0,0,0.5)]"
                   >
-                    <div className="mb-2 flex items-center gap-2 rounded-lg bg-[#17201d] px-2.5 py-2">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-400/10 text-emerald-300">
-                        <Settings2 className="h-4 w-4" aria-hidden />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-black text-slate-100">
-                          Herramientas de inventario
-                        </p>
-                        <p className="mt-0.5 text-[10px] font-bold text-slate-500">
-                          Control operativo y organización del catálogo
-                        </p>
-                      </div>
-                    </div>
-
-                    {toolbarEndSlot ? (
-                      <div className="space-y-1">
-                        <p className="px-2.5 pb-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
-                          Operación
-                        </p>
-                        {toolbarEndSlot}
-                      </div>
-                    ) : null}
-
-                    <div className="my-2 border-t border-black/70" />
-                    <p className="px-2.5 pb-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
-                      Catálogo
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setToolbarMenuOpen(false);
-                        setShowNewCategoryInput(false);
-                        setOpenSubcategoryInput("");
-                        openStructureMenu(toolbarMenuButtonRef.current!, "create");
-                      }}
-                      className="flex min-h-11 w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc]"
-                    >
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-surface-inset text-slate-300">
-                        <Layers3 className="h-4 w-4" aria-hidden />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block">Categorías y subcategorías</span>
-                        <span className="mt-0.5 block text-[10px] font-bold text-slate-500">
-                          Crea niveles para ordenar tus artículos
-                        </span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!selectedCategoryData}
-                      onClick={() => {
-                        setToolbarMenuOpen(false);
-                        openStructureMenu(toolbarMenuButtonRef.current!, "manage");
-                      }}
-                      className="flex min-h-11 w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-surface-inset text-slate-300">
-                        <Settings2 className="h-4 w-4" aria-hidden />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block">Gestionar estructura</span>
-                        <span className="mt-0.5 block text-[10px] font-bold text-slate-500">
-                          Edita o elimina niveles existentes
-                        </span>
-                      </span>
-                    </button>
+                    {toolbarEndSlot}
                   </div>
                 ) : null}
               </div>
             </div>
           ) : null}
-        </div>
-        <dl className="ml-auto flex shrink-0 overflow-hidden rounded-xl border border-black bg-[#17201d]">
+          <dl className="flex shrink-0 overflow-hidden rounded-xl border border-black bg-[#17201d]">
           <div className="min-w-[5.5rem] border-r border-black/70 px-2.5 py-2">
             <dt className="text-[9px] font-black uppercase tracking-wider text-slate-500">
               Artículos
@@ -2032,6 +2034,7 @@ export function InventoryStructureEditor({
             </dd>
           </div>
         </dl>
+        </div>
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -2074,8 +2077,10 @@ export function InventoryStructureEditor({
         addCategory={addCategory}
         beginAddSubcategory={beginAddSubcategory}
         renderSubcategoryForm={renderSubcategoryForm}
-        showStructureDelete={showStructureDelete && structureMenuMode === "manage"}
-        selectedCategoryName={selectedCategory}
+        editingCategoryName={editingCategoryName}
+        setEditingCategoryName={setEditingCategoryName}
+        saveCategory={saveCategory}
+        showStructureDelete={showStructureDelete}
         deleteCategory={deleteCategory}
         deleteSubcategory={deleteSubcategory}
       />

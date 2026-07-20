@@ -5,7 +5,11 @@ import type {
   InventoryMovementType,
 } from "@/lib/inventory-types";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
-import type { CategoryConfig, InventoryTreeItem } from "@/lib/inventory-tree";
+import {
+  normalizeInventoryName,
+  type CategoryConfig,
+  type InventoryTreeItem,
+} from "@/lib/inventory-tree";
 
 export type DbCategory = {
   id: string;
@@ -249,8 +253,69 @@ function profileDisplayName(
   return row.full_name?.trim() || row.email;
 }
 
+function categoryRowScore(row: DbCategory) {
+  const treeLength = Array.isArray(row.tree_data) ? row.tree_data.length : 0;
+  const prefersMixedCase = row.name !== row.name.toLowerCase() ? 1 : 0;
+
+  return { treeLength, prefersMixedCase };
+}
+
+export function dedupeInventoryCategoryRows(rows: DbCategory[]): DbCategory[] {
+  const sorted = [...rows].sort((left, right) => {
+    const leftScore = categoryRowScore(left);
+    const rightScore = categoryRowScore(right);
+
+    if (rightScore.treeLength !== leftScore.treeLength) {
+      return rightScore.treeLength - leftScore.treeLength;
+    }
+
+    return rightScore.prefersMixedCase - leftScore.prefersMixedCase;
+  });
+
+  const byKey = new Map<string, DbCategory>();
+
+  for (const row of sorted) {
+    const key = normalizeInventoryName(row.name);
+    const current = byKey.get(key);
+
+    if (!current) {
+      byKey.set(key, {
+        ...row,
+        tree_data: [...((row.tree_data || []) as InventoryTreeItem[])],
+      });
+      continue;
+    }
+
+    const currentTree = (current.tree_data || []) as InventoryTreeItem[];
+    const nextTree = (row.tree_data || []) as InventoryTreeItem[];
+
+    if (!currentTree.length && nextTree.length) {
+      current.tree_data = nextTree;
+    }
+
+    if (
+      row.name !== row.name.toLowerCase() &&
+      current.name === current.name.toLowerCase()
+    ) {
+      current.name = row.name;
+    }
+  }
+
+  return Array.from(byKey.values()).sort((left, right) =>
+    left.name.localeCompare(right.name, "es"),
+  );
+}
+
+export function categoryIdByNormalizedName(
+  rows: Array<{ id: string; name: string }>,
+): Map<string, string> {
+  return new Map(
+    rows.map((row) => [normalizeInventoryName(row.name), row.id]),
+  );
+}
+
 export function categoriesToConfig(rows: DbCategory[]): CategoryConfig[] {
-  return rows.map((row) => ({
+  return dedupeInventoryCategoryRows(rows).map((row) => ({
     name: row.name,
     items: (row.tree_data || []) as InventoryTreeItem[],
   }));

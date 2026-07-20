@@ -50,5 +50,7 @@ describe("inventory history protection", () => {
       source.indexOf("const categoryNames = new Set<string>()", saveStart) <
         existingIndex,
     );
+    assert.match(source, /existingByNormalizedName/);
+    assert.match(source, /incomingNormalizedNames/);
   });
 });

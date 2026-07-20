@@ -15,13 +15,11 @@ const menuSource = readFileSync(
 );
 
 describe("inventory toolbar action separation eval", () => {
-  it("keeps article creation primary and secondary inventory work in one menu", () => {
+  it("keeps article creation primary and operational work in the overflow menu", () => {
     assert.match(editorSource, /label="Agregar artículo"/);
-    assert.match(editorSource, /label="Herramientas de inventario"/);
-    assert.match(editorSource, /aria-label="Herramientas de inventario"/);
-    assert.match(editorSource, /Operación/);
-    assert.match(editorSource, /Catálogo/);
-    assert.match(editorSource, /Categorías y subcategorías/);
+    assert.match(editorSource, /label="Operación de inventario"/);
+    assert.match(editorSource, /aria-label="Operación de inventario"/);
+    assert.match(editorSource, /\{toolbarEndSlot\}/);
     assert.doesNotMatch(editorSource, /Ver tarjetas/);
     assert.doesNotMatch(editorSource, /Ver lista/);
     assert.match(menuSource, /Nueva categoría/);
@@ -29,17 +27,22 @@ describe("inventory toolbar action separation eval", () => {
     assert.doesNotMatch(menuSource, /Nuevo item/);
   });
 
-  it("isolates destructive actions in the manage-structure menu", () => {
-    assert.match(editorSource, /Gestionar estructura/);
-    assert.match(editorSource, /showStructureDelete && structureMenuMode === "manage"/);
-    assert.match(menuSource, /showStructureDelete && mode === "manage"/);
+  it("isolates destructive structure actions in the pencil popover", () => {
+    assert.match(editorSource, /icon=\{Pencil\}/);
+    assert.match(menuSource, /deleteIconButtonClass/);
+    assert.match(menuSource, /onClick=\{confirmDeleteCategory\}/);
+    assert.match(menuSource, /onBlur=\{\(\) => saveCategory\(selectedCategoryData\.name\)\}/);
+    assert.match(menuSource, /Renombrar categoría/);
+    assert.doesNotMatch(menuSource, /Guardar nombre/);
+    assert.doesNotMatch(menuSource, />\s*Eliminar categoría\s*<\/button>/);
   });
 
   it("makes the category hierarchy visible in the compact toolbar", () => {
-    assert.match(editorSource, /icon=\{Pencil\}/);
-    assert.match(editorSource, /Editar categor/);
     assert.match(editorSource, /embeddedSubcategoryOptions\.length > 1/);
     assert.match(editorSource, /placeholder="Subcategor/);
+    assert.match(editorSource, /embeddedSubcategoryOpen/);
+    assert.match(editorSource, /inventoryToolbarSubcategoryPickerWidthClass/);
+    assert.match(editorSource, /ChevronRight/);
   });
 
   it("keeps duplicate names out of the client structure editor", () => {

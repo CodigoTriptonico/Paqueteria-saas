@@ -520,27 +520,6 @@ export function InventoryItemGrid({
         </div>
       ) : null}
       <div className="min-h-full flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-        {embedded && selectedSubcategory && selectedCategoryData ? (
-          <div className="mb-4 flex items-center gap-2 border-b border-black/50 pb-3">
-            <button
-              type="button"
-              onClick={exitSubcategory}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#111827] text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc]"
-              title={`Volver a ${selectedCategoryData.name}`}
-              aria-label={`Volver a ${selectedCategoryData.name}`}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-black capitalize text-[#f8fafc]">
-                {selectedSubcategory.name}
-              </p>
-              <p className="truncate text-xs font-bold text-slate-500">
-                en {selectedCategoryData.name}
-              </p>
-            </div>
-          </div>
-        ) : null}
         {!selectedCategoryData ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-emerald-600/40 bg-emerald-400/10 text-emerald-300">
