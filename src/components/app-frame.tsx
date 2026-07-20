@@ -9,6 +9,7 @@ import { NotificationProvider } from "@/components/notifications/notification-pr
 import { UiSurfacePreferencesProvider } from "@/components/ui/ui-surface-preferences-provider";
 import { isPlatformOnlySession } from "@/lib/auth/permissions";
 import { conductorTasksNavLabel } from "@/lib/conductor-tareas-view";
+import { useHydrated } from "@/hooks/use-hydrated";
 import type { UiSurfaceContextId } from "@/lib/ui-surface-context";
 import { resolveSurfaceContextFromPathname } from "@/lib/ui-surface-route-context";
 import type { AppSession } from "@/lib/auth/types";
@@ -122,6 +123,7 @@ export function AppFrame({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const isHydrated = useHydrated();
   const [config, setConfig] = useState<ShellConfig>({});
   const mergeShellConfig = useCallback((patch: ShellConfig) => {
     setConfig((current) => ({ ...current, ...patch }));
@@ -142,9 +144,10 @@ export function AppFrame({
     };
   }, [pathname, router, session]);
 
-  const contextNavLabel = config.contextNavLabel ?? defaultContextNav?.contextNavLabel;
+  const contextNavLabel =
+    config.contextNavLabel ?? (isHydrated ? defaultContextNav?.contextNavLabel : undefined);
   const onContextNavBack =
-    config.onContextNavBack ?? defaultContextNav?.onContextNavBack;
+    config.onContextNavBack ?? (isHydrated ? defaultContextNav?.onContextNavBack : undefined);
   const surfaceContextId =
     config.surfaceContextId !== undefined
       ? config.surfaceContextId

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { BoxarioBrandHeader } from "@/components/notifications/notifications-center";
 
 const source = readFileSync(
   join(process.cwd(), "src", "components", "notifications", "notifications-center.tsx"),
@@ -23,7 +26,7 @@ describe("BoxarioBrandHeader layout", () => {
     assert.match(source, /min-h-\[4\.75rem\] flex-col/);
     assert.match(source, /<div className="mt-1 h-8 w-full" aria-hidden \/>/);
     assert.doesNotMatch(source, /<House className=/);
-    assert.match(source, /\{onBack && !keepBrand && resolvedTitle !== brandTitle \? \(/);
+    assert.match(source, /\{onBack && !keepBrand && showContextualTitle \? \(/);
   });
 
   it("does not render the old cube mark in the brand header", () => {
@@ -42,9 +45,23 @@ describe("BoxarioBrandHeader layout", () => {
   });
 
   it("keeps context back navigation separate from sidebar collapse", () => {
-    assert.match(source, /\{onBack && !keepBrand \? \([\s\S]*onClick=\{onBack\}/);
-    assert.match(source, /\{onBack && keepBrand \? \([\s\S]*onClick=\{onBack\}/);
+    assert.match(source, /\{isHydrated && onBack && !keepBrand \? \([\s\S]*onClick=\{onBack\}/);
+    assert.match(source, /\{isHydrated && onBack && keepBrand \? \([\s\S]*onClick=\{onBack\}/);
     assert.doesNotMatch(source, /sidebarToggle/);
+  });
+
+  it("keeps the server header identical to the first hydration render", () => {
+    const serverHtml = renderToStaticMarkup(
+      createElement(BoxarioBrandHeader, {
+        session: null,
+        onBack: () => {},
+        title: "Seguimiento",
+      }),
+    );
+
+    assert.match(serverHtml, /<a[^>]+aria-label="Ir al inicio"/);
+    assert.match(serverHtml, /<h1[^>]*>Boxario<\/h1>/);
+    assert.doesNotMatch(serverHtml, /Seguimiento/);
   });
 
   it("uses card-header surface instead of flat card fill", () => {

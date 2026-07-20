@@ -9,10 +9,10 @@ import { OnboardingPanel } from "@/components/onboarding/onboarding-panel";
 import { OnboardingStartPanel } from "@/components/onboarding/onboarding-start-panel";
 import { iconWellEmerald, labelMutedClass } from "@/components/ui-blocks";
 import { useOnboardingProgress } from "@/hooks/use-onboarding-progress";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { isPlatformOnlySession } from "@/lib/auth/permissions";
 import { setOnboardingNotificationsPanelOpen } from "@/lib/onboarding/notifications-panel";
 import {
-  organizationBrandInitials,
   resolveOrganizationBrandingFromSession,
 } from "@/lib/organizations/branding";
 import type { AppSession } from "@/lib/auth/types";
@@ -96,6 +96,7 @@ export function BoxarioBrandHeader({
   keepBrand = false,
   sidebarGroupsToggle,
 }: BoxarioBrandHeaderProps) {
+  const isHydrated = useHydrated();
   const branding = resolveOrganizationBrandingFromSession({
     organizationName: session?.organizationName ?? "",
     organizationShortName: session?.organizationShortName,
@@ -113,12 +114,14 @@ export function BoxarioBrandHeader({
   const expandAllGroupsLabel = sidebarGroupsToggle?.allExpanded
     ? "Contraer todos los grupos del menú"
     : "Expandir todos los grupos del menú";
+  const showContextualTitle =
+    isHydrated && onBack && !keepBrand && resolvedTitle !== brandTitle;
 
   return (
     <div className={shellClass}>
       <div className="flex w-full min-w-0 items-center justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
-          {onBack && !keepBrand ? (
+          {isHydrated && onBack && !keepBrand ? (
             <button
               type="button"
               onClick={onBack}
@@ -130,7 +133,7 @@ export function BoxarioBrandHeader({
               <ArrowLeft className="h-4 w-4" strokeWidth={2.5} />
             </button>
           ) : null}
-          {onBack && !keepBrand && resolvedTitle !== brandTitle ? (
+          {onBack && !keepBrand && showContextualTitle ? (
             <span className={titleClass}>{resolvedTitle}</span>
           ) : (
             <Link href="/" prefetch aria-label="Ir al inicio" title="Ir al inicio" className={homeButtonClass}>
@@ -170,7 +173,7 @@ export function BoxarioBrandHeader({
           {showNotifications ? <NotificationsCenter session={session} variant="brand" /> : null}
         </div>
       </div>
-      {onBack && keepBrand ? (
+      {isHydrated && onBack && keepBrand ? (
         <button
           type="button"
           onClick={onBack}
@@ -183,7 +186,7 @@ export function BoxarioBrandHeader({
           <span className="min-w-0 break-words">{title}</span>
         </button>
       ) : null}
-      {!onBack || !keepBrand ? (
+      {!isHydrated || !onBack || !keepBrand ? (
         <div className="mt-1 h-8 w-full" aria-hidden />
       ) : null}
     </div>
