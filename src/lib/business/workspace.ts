@@ -72,6 +72,25 @@ export function emptyBusinessWorkspace(context: BusinessContext): BusinessWorksp
   };
 }
 
+export function withoutAgencyModuleData(
+  workspace: BusinessWorkspace,
+): BusinessWorkspace {
+  return {
+    ...workspace,
+    agencies: [],
+    requests: [],
+    holds: [],
+    metrics: {
+      ...workspace.metrics,
+      agencyReceivableCents: 0,
+      customerReceivableCents: 0,
+      unappliedAgencyPaymentsCents: 0,
+      activeHolds: 0,
+      openRequests: 0,
+    },
+  };
+}
+
 export function formatUsdCents(amountCents: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",

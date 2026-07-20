@@ -91,13 +91,14 @@ export async function loadCommercialAdminAction(): Promise<ActionResult<Commerci
     ];
     return ok({
       canManage: canManage(session),
+      agencyModuleEnabled: session.agencyModuleEnabled,
       countries: (countries || []).map((country) => ({ code: String(country.code).toUpperCase(), name: country.name, currency: "USD" })),
       catalog,
       countryServices: (services || []).map((row) => ({ id: row.id, destinationCode: row.destination_code, serviceConcept: row.service_concept as "home_delivery" | "home_pickup", amountCents: Number(row.amount_cents), currency: row.currency })),
-      overrides: (overrides || []).map((row) => ({ id: row.id, audience: row.audience as CommercialAudience, entityId: row.entity_id, destinationCode: row.destination_code, productCode: row.product_code, priceKind: row.price_kind as CommercialPriceKind, serviceConcept: row.service_concept as "international_shipping" | "home_delivery" | "home_pickup", amountCents: Number(row.amount_cents), minimumAmountCents: row.minimum_amount_cents === null ? null : Number(row.minimum_amount_cents), currency: row.currency, sourceLevel: row.entity_id ? "entity" : "group" })),
+      overrides: (overrides || []).filter((row) => session.agencyModuleEnabled || row.audience !== "agency").map((row) => ({ id: row.id, audience: row.audience as CommercialAudience, entityId: row.entity_id, destinationCode: row.destination_code, productCode: row.product_code, priceKind: row.price_kind as CommercialPriceKind, serviceConcept: row.service_concept as "international_shipping" | "home_delivery" | "home_pickup", amountCents: Number(row.amount_cents), minimumAmountCents: row.minimum_amount_cents === null ? null : Number(row.minimum_amount_cents), currency: row.currency, sourceLevel: row.entity_id ? "entity" : "group" })),
       entities, routeTemplates: (routes || []).map((row) => ({ id: row.id, name: row.name, weekday: Number(row.weekday) })),
       warehouses: (warehouses || []).map((row) => ({ id: row.id, name: row.name })),
-      audit: (audit || []).map((row) => ({ id: row.id, action: row.action, entityType: row.entity_type, entityId: row.entity_id, actorUserId: row.actor_user_id, occurredAt: row.occurred_at, beforeState: recordValue(row.before_state), afterState: recordValue(row.after_state), metadata: recordValue(row.metadata) })),
+      audit: (audit || []).filter((row) => session.agencyModuleEnabled || (row.entity_type !== "agency" && !String(row.action).startsWith("agency.") && recordValue(row.metadata).audience !== "agency")).map((row) => ({ id: row.id, action: row.action, entityType: row.entity_type, entityId: row.entity_id, actorUserId: row.actor_user_id, occurredAt: row.occurred_at, beforeState: recordValue(row.before_state), afterState: recordValue(row.after_state), metadata: recordValue(row.metadata) })),
     });
   } catch (error) { return fail(actionErrorMessage(error)); }
 }
@@ -115,7 +116,16 @@ export async function saveCommercialOverrideAction(input: { audience: Commercial
 }
 
 export async function restoreCommercialInheritanceAction(overrideId: string): Promise<ActionResult<null>> {
-  try { const session=await requireAppSession(); if(!canManage(session)) throw new Error("FORBIDDEN"); const db=await createScopedSupabase(session); if(!db) throw new Error("Supabase no configurado"); const {error}=await db.rpc("restore_commercial_price_inheritance",{target_override_id:overrideId,idempotency_key:randomUUID()}); if(error) throw new Error(error.message); revalidatePath("/agencias"); revalidatePath("/vendedores"); return ok(null); } catch(error){ return fail(actionErrorMessage(error)); }
+  try {
+    const session=await requireAppSession(); if(!canManage(session)) throw new Error("FORBIDDEN");
+    const db=await createScopedSupabase(session); if(!db) throw new Error("Supabase no configurado");
+    if (!session.agencyModuleEnabled) {
+      const {data: override, error: overrideError}=await db.from("commercial_pricing_overrides").select("audience").eq("id",overrideId).maybeSingle();
+      if (overrideError) throw new Error(overrideError.message);
+      if (override?.audience === "agency") throw new Error("FORBIDDEN");
+    }
+    const {error}=await db.rpc("restore_commercial_price_inheritance",{target_override_id:overrideId,idempotency_key:randomUUID()}); if(error) throw new Error(error.message); revalidatePath("/agencias"); revalidatePath("/vendedores"); return ok(null);
+  } catch(error){ return fail(actionErrorMessage(error)); }
 }
 
 export async function saveCountryCommercialServiceAction(input: { destinationCode: string; serviceConcept: "home_delivery" | "home_pickup"; amountCents: number; currency?: string }): Promise<ActionResult<null>> {

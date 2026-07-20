@@ -585,10 +585,12 @@ export function ConfiguracionClient({
   initialPricing,
   timeClockInitialSnapshot,
   canManageTimeClock = false,
+  agencyModuleEnabled = false,
 }: {
   initialPricing?: PricingConfigPayload;
   timeClockInitialSnapshot?: TimeClockDashboardSnapshot;
   canManageTimeClock?: boolean;
+  agencyModuleEnabled?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1902,7 +1904,10 @@ export function ConfiguracionClient({
                 onChange={updateCountryTime}
               />
               {selectedCountryData?.code ? (
-                <CountryCommercialServiceCosts destinationCode={selectedCountryData.code} />
+                <CountryCommercialServiceCosts
+                  destinationCode={selectedCountryData.code}
+                  agencyModuleEnabled={agencyModuleEnabled}
+                />
               ) : null}
             </div>
           ) : null}

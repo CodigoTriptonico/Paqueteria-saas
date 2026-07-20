@@ -102,6 +102,20 @@ export function movementReasonRequiresDetail(reasonCode: InventoryMovementReason
   return reasonCode === "other" || reasonCode === "physical_count";
 }
 
+export function isAgencyInventoryMovement(input: {
+  reasonCode?: string | null;
+  fromLocationType?: string | null;
+  toLocationType?: string | null;
+  referenceType?: string | null;
+}) {
+  return (
+    input.reasonCode === "agency_delivery" ||
+    input.fromLocationType === "agency" ||
+    input.toLocationType === "agency" ||
+    input.referenceType === "agency_visit"
+  );
+}
+
 export function formatInventoryMovementTrail(input: {
   fromLabel?: string;
   toLabel?: string;

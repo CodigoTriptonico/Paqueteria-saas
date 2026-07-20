@@ -78,6 +78,7 @@ type CommercialAuditEntry = {
 
 export type CommercialAdminData = {
   canManage: boolean;
+  agencyModuleEnabled: boolean;
   countries: Array<{ code: string; name: string; currency: string }>;
   catalog: CommercialCatalogLine[];
   countryServices: CommercialCountryService[];

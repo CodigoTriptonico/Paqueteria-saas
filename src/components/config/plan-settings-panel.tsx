@@ -162,7 +162,7 @@ export function PlanSettingsPanel() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className={`grid gap-4 md:grid-cols-2 ${usage.agenciesEnabled ? "xl:grid-cols-3" : ""}`}>
         <PlanLimitCard
           icon={Building2}
           title="Bodegas"
@@ -187,7 +187,7 @@ export function PlanSettingsPanel() {
           }
         />
 
-        <section className={sectionClass}>
+        {usage.agenciesEnabled ? <section className={sectionClass}>
           <div className={`${sectionHeaderClass} flex items-center gap-3`}>
             <span className={iconBoxClass}>
               <Network className="h-4 w-4" />
@@ -198,16 +198,12 @@ export function PlanSettingsPanel() {
             </div>
           </div>
           <div className="px-4 py-4">
-            <p className={`text-xl font-black ${usage.agenciesEnabled ? "text-emerald-300" : "text-slate-400"}`}>
-              {usage.agenciesEnabled ? "Incluido" : "No incluido"}
-            </p>
+            <p className="text-xl font-black text-emerald-300">Incluido</p>
             <p className="mt-2 text-xs font-bold leading-snug text-slate-500">
-              {usage.agenciesEnabled
-                ? "La creación y operación de agencias está habilitada para esta empresa."
-                : "Agencias no aparece en el menú y sus operaciones permanecen bloqueadas."}
+              La creación y operación de agencias está habilitada para esta empresa.
             </p>
           </div>
-        </section>
+        </section> : null}
       </div>
 
       <section className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-4">

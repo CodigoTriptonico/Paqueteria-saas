@@ -2,7 +2,10 @@
 
 import { actionErrorMessage, fail, ok } from "@/lib/actions/errors";
 import { requireAppSession } from "@/lib/auth/session";
-import type { BusinessWorkspace } from "@/lib/business/workspace";
+import {
+  withoutAgencyModuleData,
+  type BusinessWorkspace,
+} from "@/lib/business/workspace";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function loadBusinessWorkspaceAction() {
@@ -20,7 +23,12 @@ export async function loadBusinessWorkspaceAction() {
       throw new Error(error.message);
     }
 
-    return ok(data as BusinessWorkspace);
+    const workspace = data as BusinessWorkspace;
+    return ok(
+      session.agencyModuleEnabled
+        ? workspace
+        : withoutAgencyModuleData(workspace),
+    );
   } catch (error) {
     return fail<BusinessWorkspace>(actionErrorMessage(error));
   }

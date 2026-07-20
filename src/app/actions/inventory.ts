@@ -33,7 +33,11 @@ import {
   type CategoryConfig,
 } from "@/lib/inventory-tree";
 import { InvalidQuantityError, readPositiveQty } from "@/lib/security/qty";
-import { defaultReasonCodeForMovementType, type InventoryMovementReasonCode } from "@/lib/inventory-movement-audit";
+import {
+  defaultReasonCodeForMovementType,
+  isAgencyInventoryMovement,
+  type InventoryMovementReasonCode,
+} from "@/lib/inventory-movement-audit";
 import { recordInventoryMovementAtomic } from "@/lib/security/inventory-movement";
 import {
   ensureInventoryLeafState,
@@ -147,6 +151,7 @@ async function loadWarehouseInventoryHistory(
   supabase: SupabaseClient,
   organizationId: string,
   warehouseId: string,
+  agencyModuleEnabled: boolean,
 ): Promise<ActionResult<WarehouseInventoryHistoryPayload>> {
   const [{ data: movementRows, error: movError }, { data: assignmentRows, error: assignError }] =
     await Promise.all([
@@ -174,8 +179,12 @@ async function loadWarehouseInventoryHistory(
     return fail(assignError.message);
   }
 
+  const movements = movementsFromDb(movementRows || []);
+
   return ok({
-    movements: movementsFromDb(movementRows || []),
+    movements: agencyModuleEnabled
+      ? movements
+      : movements.filter((movement) => !isAgencyInventoryMovement(movement)),
     assignments: assignmentsFromDb((assignmentRows || []) as DbAssignmentRow[]),
   });
 }
@@ -225,7 +234,12 @@ export async function loadWarehouseInventoryHistoryAction(
       return fail("Supabase no configurado");
     }
 
-    return loadWarehouseInventoryHistory(supabase, session.organizationId, warehouseId);
+    return loadWarehouseInventoryHistory(
+      supabase,
+      session.organizationId,
+      warehouseId,
+      session.agencyModuleEnabled,
+    );
   } catch (error) {
     return fail(actionErrorMessage(error));
   }

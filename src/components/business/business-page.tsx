@@ -30,6 +30,7 @@ export async function BusinessPage({ pathname, surface }: { pathname: string; su
         canManageAgencyTeam={session?.roleSlug === "administrador_agencia"}
         canRequestAgencyOperations={sessionHasPermission(session, "agency.requests.create")}
         canCloseAgencyDay={sessionHasPermission(session, "agency.daily_close.view") || sessionHasPermission(session, "agency.daily_close.prepare") || sessionHasPermission(session, "agency.daily_close.finalize")}
+        agencyModuleEnabled={session?.agencyModuleEnabled ?? false}
       />
     </>
   );

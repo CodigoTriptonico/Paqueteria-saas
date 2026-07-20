@@ -28,6 +28,7 @@ import type {
   InventoryMovementFilters,
 } from "@/lib/inventory-types";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
+import { isAgencyInventoryMovement } from "@/lib/inventory-movement-audit";
 
 async function fetchMovementById(
   supabase: NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>,
@@ -123,7 +124,12 @@ export async function listInventoryMovementsAction(
       return fail(error.message);
     }
 
-    return ok(movementsFromDb((data || []) as DbMovementRow[]));
+    const movements = movementsFromDb((data || []) as DbMovementRow[]);
+    return ok(
+      session.agencyModuleEnabled
+        ? movements
+        : movements.filter((movement) => !isAgencyInventoryMovement(movement)),
+    );
   } catch (error) {
     return fail(actionErrorMessage(error));
   }

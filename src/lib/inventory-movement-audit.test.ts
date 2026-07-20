@@ -4,6 +4,7 @@ import {
   defaultReasonCodeForMovementType,
   formatInventoryMovementReference,
   formatInventoryMovementTrail,
+  isAgencyInventoryMovement,
   movementReasonRequiresDetail,
   readInventoryMovementEvidencePhotos,
 } from "./inventory-movement-audit";
@@ -49,6 +50,21 @@ describe("inventory-movement-audit", () => {
         referenceLabel: "SCG-1042",
       }),
       "Envío: SCG-1042",
+    );
+  });
+
+  it("identifies every agency-specific inventory trail", () => {
+    assert.equal(isAgencyInventoryMovement({ reasonCode: "agency_delivery" }), true);
+    assert.equal(isAgencyInventoryMovement({ fromLocationType: "agency" }), true);
+    assert.equal(isAgencyInventoryMovement({ toLocationType: "agency" }), true);
+    assert.equal(isAgencyInventoryMovement({ referenceType: "agency_visit" }), true);
+    assert.equal(
+      isAgencyInventoryMovement({
+        reasonCode: "manual_entry",
+        toLocationType: "warehouse",
+        referenceType: "physical_count",
+      }),
+      false,
     );
   });
 });

@@ -48,6 +48,7 @@ export default async function ConfiguracionPage({
       initialPricing={initialPricing}
       timeClockInitialSnapshot={timeClockInitialSnapshot}
       canManageTimeClock={canManageTimeClock}
+      agencyModuleEnabled={session?.agencyModuleEnabled ?? false}
     />
   );
 }

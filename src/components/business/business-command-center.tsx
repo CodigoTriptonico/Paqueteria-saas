@@ -112,7 +112,27 @@ function Operations({ workspace }: { workspace: BusinessWorkspace }) {
   );
 }
 
-function Finance({ workspace }: { workspace: BusinessWorkspace }) {
+function Finance({
+  workspace,
+  agencyModuleEnabled,
+}: {
+  workspace: BusinessWorkspace;
+  agencyModuleEnabled: boolean;
+}) {
+  if (!agencyModuleEnabled) {
+    return (
+      <div className="space-y-4">
+        <section className="grid gap-3 sm:grid-cols-2">
+          <StatCard label="Efectivo en tránsito" value={formatUsdCents(workspace.metrics.driverCashInTransitCents)} tone="text-slate-100" />
+          <StatCard label="Asientos desbalanceados" value={String(workspace.metrics.unbalancedJournalEntries)} tone={workspace.metrics.unbalancedJournalEntries ? "text-red-300" : "text-emerald-300"} />
+        </section>
+        <Panel title="Control contable" action={<ShieldCheck className="h-5 w-5 text-emerald-300" />}>
+          <EmptyRows text="No hay movimientos contables pendientes." />
+        </Panel>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -160,7 +180,7 @@ function Agency({ workspace, canManageTeam, canRequest, canCloseDay }: { workspa
   );
 }
 
-export function BusinessCommandCenter({ surface, workspace, canManageAgencyTeam = false, canRequestAgencyOperations = false, canCloseAgencyDay = false }: { surface: BusinessSurface; workspace: BusinessWorkspace; canManageAgencyTeam?: boolean; canRequestAgencyOperations?: boolean; canCloseAgencyDay?: boolean }) {
+export function BusinessCommandCenter({ surface, workspace, canManageAgencyTeam = false, canRequestAgencyOperations = false, canCloseAgencyDay = false, agencyModuleEnabled = false }: { surface: BusinessSurface; workspace: BusinessWorkspace; canManageAgencyTeam?: boolean; canRequestAgencyOperations?: boolean; canCloseAgencyDay?: boolean; agencyModuleEnabled?: boolean }) {
   const title = surface === "network" ? "Red de agencias" : surface === "agency" ? "Mi agencia" : surface === "captor" ? "Agencias a mi cargo" : surface === "operations" ? "Solicitudes" : "Contabilidad";
   const description = surface === "finance"
     ? "Cargos, pagos, aplicaciones, efectivo en tránsito y liberaciones en una sola vista."
@@ -181,7 +201,7 @@ export function BusinessCommandCenter({ surface, workspace, canManageAgencyTeam 
           <div className="min-w-0"><h1 className="text-2xl font-black tracking-tight text-slate-50 sm:text-3xl">{title}</h1><p className="mt-1 max-w-3xl text-sm font-bold text-slate-300">{description}</p></div>
         </div>
       </header>
-      {surface === "network" ? <Network workspace={workspace} /> : surface === "captor" ? <Network workspace={workspace} captorOnly /> : surface === "agency" ? <Agency workspace={workspace} canManageTeam={canManageAgencyTeam} canRequest={canRequestAgencyOperations} canCloseDay={canCloseAgencyDay} /> : surface === "operations" ? <Operations workspace={workspace} /> : <Finance workspace={workspace} />}
+      {surface === "network" ? <Network workspace={workspace} /> : surface === "captor" ? <Network workspace={workspace} captorOnly /> : surface === "agency" ? <Agency workspace={workspace} canManageTeam={canManageAgencyTeam} canRequest={canRequestAgencyOperations} canCloseDay={canCloseAgencyDay} /> : surface === "operations" ? <Operations workspace={workspace} /> : <Finance workspace={workspace} agencyModuleEnabled={agencyModuleEnabled} />}
     </div>
   );
 }
