@@ -5,6 +5,7 @@ import { requireAppSession } from "@/lib/auth/session";
 import { sessionHasPermission } from "@/lib/auth/permissions";
 import { canAccessWarehouse } from "@/lib/auth/permissions";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   actionErrorMessage,
   fail,
@@ -38,6 +39,17 @@ import {
   mergeOrphanItemsIntoCategoryConfigs,
   mergeTreeIntoInventoryItems,
 } from "@/lib/inventory-stock";
+import {
+  buildInventoryItemPhotoPath,
+  INVENTORY_ITEM_PHOTO_BUCKET,
+  normalizeInventoryItemPhotoPath,
+  resolveInventoryItemPhotoUrl,
+  validateInventoryItemPhoto,
+} from "@/lib/inventory-photos";
+import {
+  DEFAULT_INVENTORY_UNIT,
+  normalizeInventoryUnit,
+} from "@/lib/inventory-units";
 
 export type WarehouseInventoryCorePayload = {
   categoryConfigs: CategoryConfig[];
@@ -65,7 +77,7 @@ async function loadWarehouseInventoryCore(
       supabase
         .from("inventory_stock")
         .select(
-          "id, item_id, warehouse_id, stock, reserved, assigned, unavailable, min_stock, inventory_items(id, name, kind, subcategory, size, location, unit, category_id, inventory_categories(name))",
+          "id, item_id, warehouse_id, stock, reserved, assigned, unavailable, min_stock, inventory_items(id, name, kind, subcategory, size, location, unit, photo_url, category_id, inventory_categories(name))",
         )
         .eq("warehouse_id", warehouseId)
         .eq("organization_id", organizationId),
@@ -81,6 +93,15 @@ async function loadWarehouseInventoryCore(
 
   const categoryConfigs = categoriesToConfig((categories || []) as DbCategory[]);
   let items = stockRowsToItems((stockRows || []) as unknown as DbStockRow[]);
+  const admin = createSupabaseAdminClient();
+  items = await Promise.all(
+    items.map(async (item) => ({
+      ...item,
+      photoUrl: item.photoUrl
+        ? await resolveInventoryItemPhotoUrl(admin, item.photoUrl)
+        : undefined,
+    })),
+  );
   items = mergeTreeIntoInventoryItems(categoryConfigs, items);
 
   const syncedCategoryConfigs = mergeOrphanItemsIntoCategoryConfigs(
@@ -513,6 +534,7 @@ async function ensureItemsForWarehouse(
     );
 
     let itemId = match?.id;
+    const stockItem = items.find((item) => item.id === match?.id) || match;
 
     if (!itemId || itemId.startsWith("inv-") || itemId.startsWith("virtual-")) {
       const { data: existingItem, error: existingItemError } =
@@ -539,6 +561,10 @@ async function ensureItemsForWarehouse(
             name: leaf.name,
             kind: leaf.kind,
             subcategory: leaf.subcategory || null,
+            unit: normalizeInventoryUnit(stockItem?.unit) || DEFAULT_INVENTORY_UNIT,
+            photo_url: stockItem?.photoUrl
+              ? normalizeInventoryItemPhotoPath(stockItem.photoUrl)
+              : "",
           })
           .select("id")
           .single();
@@ -555,7 +581,25 @@ async function ensureItemsForWarehouse(
       throw new Error("No se pudo resolver item de inventario");
     }
 
-    const stockItem = items.find((item) => item.id === match?.id) || match;
+    const photoPath = stockItem?.photoUrl
+      ? normalizeInventoryItemPhotoPath(stockItem.photoUrl)
+      : "";
+    const unit = normalizeInventoryUnit(stockItem?.unit) || DEFAULT_INVENTORY_UNIT;
+    const itemUpdates: { photo_url?: string; unit: string } = { unit };
+
+    if (photoPath) {
+      itemUpdates.photo_url = photoPath;
+    }
+
+    const { error: itemUpdateError } = await supabase
+      .from("inventory_items")
+      .update(itemUpdates)
+      .eq("id", itemId)
+      .eq("organization_id", organizationId);
+
+    if (itemUpdateError) {
+      throw new Error(itemUpdateError.message);
+    }
 
     const { data: stockRow } = await supabase
       .from("inventory_stock")
@@ -782,6 +826,188 @@ export async function recordInventoryMovementForLeafAction(input: {
     if (error instanceof InvalidQuantityError) {
       return fail(error.message);
     }
+    return fail(actionErrorMessage(error));
+  }
+}
+
+function isPersistedInventoryItemId(itemId: string) {
+  return Boolean(itemId) && !itemId.startsWith("inv-") && !itemId.startsWith("virtual-");
+}
+
+export async function uploadInventoryItemPhotoAction(
+  formData: FormData,
+): Promise<ActionResult<{ path: string; previewUrl: string }>> {
+  try {
+    const session = await requireAppSession();
+
+    if (
+      !sessionHasPermission(session, "inventory.adjust") &&
+      !sessionHasPermission(session, "sales.manage")
+    ) {
+      return fail("Sin permiso para actualizar inventario");
+    }
+
+    const admin = createSupabaseAdminClient();
+
+    if (!admin) {
+      return fail("Supabase no configurado");
+    }
+
+    const file = formData.get("photo");
+
+    if (!(file instanceof File) || !file.name) {
+      return fail("Foto requerida");
+    }
+
+    const validation = validateInventoryItemPhoto(file);
+
+    if (!validation.ok) {
+      return fail(validation.error);
+    }
+
+    const path = buildInventoryItemPhotoPath(session.organizationId, file.name);
+    const { error } = await admin.storage.from(INVENTORY_ITEM_PHOTO_BUCKET).upload(path, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+
+    if (error) {
+      return fail(error.message);
+    }
+
+    const previewUrl = await resolveInventoryItemPhotoUrl(admin, path);
+    const itemId = String(formData.get("itemId") || "").trim();
+
+    if (isPersistedInventoryItemId(itemId)) {
+      const { error: updateError } = await admin
+        .from("inventory_items")
+        .update({ photo_url: path })
+        .eq("id", itemId)
+        .eq("organization_id", session.organizationId);
+
+      if (updateError) {
+        return fail(updateError.message);
+      }
+    }
+
+    return ok({ path, previewUrl });
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function clearInventoryItemPhotoAction(
+  itemId: string,
+): Promise<ActionResult<null>> {
+  try {
+    const session = await requireAppSession();
+
+    if (
+      !sessionHasPermission(session, "inventory.adjust") &&
+      !sessionHasPermission(session, "sales.manage")
+    ) {
+      return fail("Sin permiso para actualizar inventario");
+    }
+
+    if (!isPersistedInventoryItemId(itemId)) {
+      return ok(null);
+    }
+
+    const admin = createSupabaseAdminClient();
+
+    if (!admin) {
+      return fail("Supabase no configurado");
+    }
+
+    const { error } = await admin
+      .from("inventory_items")
+      .update({ photo_url: "" })
+      .eq("id", itemId)
+      .eq("organization_id", session.organizationId);
+
+    if (error) {
+      return fail(error.message);
+    }
+
+    return ok(null);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function updateInventoryItemUnitAction(input: {
+  itemId: string;
+  unit: string;
+  warehouseId?: string;
+  category?: string;
+  kind?: string;
+  subcategory?: string;
+  itemName?: string;
+}): Promise<ActionResult<{ unit: string; itemId: string }>> {
+  try {
+    const session = await requireAppSession();
+
+    if (
+      !sessionHasPermission(session, "inventory.adjust") &&
+      !sessionHasPermission(session, "sales.manage")
+    ) {
+      return fail("Sin permiso para actualizar inventario");
+    }
+
+    const unit = normalizeInventoryUnit(input.unit);
+
+    if (!unit) {
+      return fail("Unidad de medida requerida");
+    }
+
+    const supabase = await createScopedSupabase(session);
+
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    let itemId = input.itemId.trim();
+
+    if (!isPersistedInventoryItemId(itemId)) {
+      if (
+        !input.warehouseId ||
+        !input.category?.trim() ||
+        !input.kind?.trim()
+      ) {
+        return ok({ unit, itemId });
+      }
+
+      const leafResult = await ensureInventoryLeafState(
+        supabase,
+        session.organizationId,
+        {
+          warehouseId: input.warehouseId,
+          category: input.category,
+          kind: input.kind,
+          subcategory: input.subcategory,
+          itemName: input.itemName || input.kind,
+        },
+      );
+
+      if (!leafResult.ok) {
+        return fail(leafResult.error);
+      }
+
+      itemId = leafResult.data.itemRow.id;
+    }
+
+    const { error } = await supabase
+      .from("inventory_items")
+      .update({ unit })
+      .eq("id", itemId)
+      .eq("organization_id", session.organizationId);
+
+    if (error) {
+      return fail(error.message);
+    }
+
+    return ok({ unit, itemId });
+  } catch (error) {
     return fail(actionErrorMessage(error));
   }
 }

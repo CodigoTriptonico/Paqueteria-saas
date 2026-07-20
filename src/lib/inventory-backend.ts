@@ -30,6 +30,7 @@ export type DbStockRow = {
     size: string | null;
     location: string | null;
     unit: string | null;
+    photo_url: string | null;
     category_id: string;
     inventory_categories: { name: string };
   };
@@ -81,6 +82,7 @@ export type DbInventoryItemRow = {
   size: string | null;
   location: string | null;
   unit: string | null;
+  photo_url?: string | null;
   created_at?: string;
 };
 
@@ -98,7 +100,7 @@ export async function resolveInventoryLeafItem(
 
   let query = supabase
     .from("inventory_items")
-    .select("id, name, kind, subcategory, size, location, unit, created_at")
+    .select("id, name, kind, subcategory, size, location, unit, photo_url, created_at")
     .eq("organization_id", input.organizationId)
     .eq("category_id", input.categoryId)
     .eq("kind", input.kind);
@@ -175,6 +177,7 @@ type DbStockJoinItem = {
   size: string | null;
   location: string | null;
   unit: string | null;
+  photo_url?: string | null;
   inventory_categories: { name: string } | { name: string }[] | null;
 };
 
@@ -213,6 +216,7 @@ export function inventoryStockJoinToItem(
     assigned: Number(row.assigned ?? 0),
     unavailable: Number(row.unavailable ?? 0),
     minStock: Number(row.min_stock),
+    photoUrl: itemRow.photo_url || undefined,
   };
 }
 
@@ -254,6 +258,7 @@ export function stockRowsToItems(rows: DbStockRow[]): InventoryStockItem[] {
       assigned: Number(row.assigned ?? 0),
       unavailable: Number(row.unavailable ?? 0),
       minStock: Number(row.min_stock),
+      photoUrl: item.photo_url || undefined,
     };
   });
 }

@@ -97,7 +97,20 @@ import {
   assertSameOrgRecipientIds,
   assertSameOrgWarehouseIds,
 } from "@/lib/security/org-scope";
+import {
+  matchEmptyBoxQuoteLinesToStock,
+  readEmptyBoxQuoteLinesFromPlan,
+  shouldReserveEmptyBoxStockOnSale,
+  withEmptyBoxStockDeductedPlan,
+  withEmptyBoxStockReservedPlan,
+  emptyBoxStockReserved,
+} from "@/lib/inventory-empty-box-stock";
 import { recordInventoryMovementAtomic } from "@/lib/security/inventory-movement";
+import {
+  fulfillInventorySaleStock,
+  releaseInventorySaleStock,
+  reserveInventorySaleStock,
+} from "@/lib/security/inventory-sale-reservation";
 import { readPositiveIntegerQty } from "@/lib/security/qty";
 import type { AppSession, RoleSlug } from "@/lib/auth/types";
 
@@ -1242,7 +1255,7 @@ export async function createShipmentAction(input: {
       input.accountingStatus || (invoiceStatus === "paid" ? "exportable" : "not_exportable");
     const paymentMethod = readPaymentMethod(input.paymentMethod);
     const paymentNote = cleanPaymentNote(input.paymentNote);
-    const logisticsPlan = { ...(input.logisticsPlan || {}) };
+    let logisticsPlan = { ...(input.logisticsPlan || {}) };
     const logisticsTasks = input.logisticsTasks || [];
     const initialStatus = resolveInitialShipmentStatus({
       saleKind,
@@ -1355,6 +1368,36 @@ export async function createShipmentAction(input: {
       shouldReloadShipment = true;
     }
 
+    if (shouldReserveEmptyBoxStockOnSale(logisticsPlan) && !emptyBoxStockReserved(logisticsPlan)) {
+      try {
+        const reserveResult = await reserveEmptyBoxStockForShipment({
+          session,
+          shipment,
+          warehouseId: logisticsTasks[0]?.warehouseId || null,
+        });
+
+        if (reserveResult) {
+          const reservedPlan = withEmptyBoxStockReservedPlan(logisticsPlan, reserveResult);
+          const { error: reservePlanError } = await supabase
+            .from("shipments")
+            .update({ logistics_plan: reservedPlan })
+            .eq("id", shipment.id)
+            .eq("organization_id", session.organizationId);
+
+          if (reservePlanError) {
+            throw new Error(reservePlanError.message);
+          }
+
+          logisticsPlan = reservedPlan;
+          shipment.logistics_plan = reservedPlan;
+          shouldReloadShipment = true;
+        }
+      } catch (reserveError) {
+        await deleteShipmentWithTasks(supabase, session, shipment.id, shipment.code);
+        return fail(actionErrorMessage(reserveError));
+      }
+    }
+
     if (shouldDeductCounterHandingStock(logisticsPlan)) {
       try {
         const stockResult = await deductEmptyBoxStock({
@@ -1364,15 +1407,7 @@ export async function createShipmentAction(input: {
           assigneeId: session.userId,
         });
 
-        const emptyBox = asRecord(logisticsPlan.emptyBox);
-        const nextPlan = {
-          ...logisticsPlan,
-          emptyBox: {
-            ...emptyBox,
-            stockDeductedAt: stockResult.deductedAt,
-            warehouseId: stockResult.warehouseId,
-          },
-        };
+        const nextPlan = withEmptyBoxStockDeductedPlan(logisticsPlan, stockResult);
 
         const { error: planError } = await supabase
           .from("shipments")
@@ -1874,6 +1909,95 @@ function shouldDeductCounterHandingStock(plan: Record<string, unknown>) {
   return String(emptyBox.mode || "") === "Cliente recoge caja vacia en oficina";
 }
 
+async function reserveEmptyBoxStockForShipment(input: {
+  session: AppSession;
+  shipment: ShipmentRow;
+  warehouseId?: string | null;
+}) {
+  const plan = asRecord(input.shipment.logistics_plan);
+
+  if (!shouldReserveEmptyBoxStockOnSale(plan) || emptyBoxStockReserved(plan)) {
+    return null;
+  }
+
+  const quoteLines = readEmptyBoxQuoteLinesFromPlan(plan);
+
+  if (!quoteLines.length) {
+    return null;
+  }
+
+  const { admin, warehouseId } = await resolveTaskWarehouse(
+    input.session,
+    input.warehouseId || null,
+  );
+  const { data: stockRows, error: stockError } = await admin
+    .from("inventory_stock")
+    .select("id, item_id, stock, reserved, inventory_items(id, name, kind)")
+    .eq("warehouse_id", warehouseId)
+    .eq("organization_id", input.session.organizationId);
+
+  if (stockError) {
+    throw new Error(stockError.message);
+  }
+
+  const deductions = matchEmptyBoxQuoteLinesToStock(quoteLines, stockRows || []);
+
+  for (const deduction of deductions) {
+    await reserveInventorySaleStock(admin, {
+      organizationId: input.session.organizationId,
+      shipmentId: input.shipment.id,
+      warehouseId,
+      itemId: deduction.itemId,
+      itemName: deduction.itemName,
+      qty: deduction.quantity,
+      createdBy: input.session.userId,
+    });
+  }
+
+  return { warehouseId, reservedAt: new Date().toISOString() };
+}
+
+async function deductEmptyBoxStockLegacySalida(input: {
+  session: AppSession;
+  shipment: ShipmentRow;
+  warehouseId: string;
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
+  movementNote: string;
+  assigneeId?: string | null;
+}) {
+  const quoteLines = readEmptyBoxQuoteLinesFromPlan(input.shipment.logistics_plan);
+
+  if (!quoteLines.length) {
+    throw new Error("Este invoice no tiene caja guardada en el plan logistico");
+  }
+
+  const { data: stockRows, error: stockError } = await input.admin
+    .from("inventory_stock")
+    .select("id, item_id, stock, reserved, inventory_items(id, name, kind)")
+    .eq("warehouse_id", input.warehouseId)
+    .eq("organization_id", input.session.organizationId);
+
+  if (stockError) {
+    throw new Error(stockError.message);
+  }
+
+  const deductions = matchEmptyBoxQuoteLinesToStock(quoteLines, stockRows || []);
+
+  for (const deduction of deductions) {
+    await recordInventoryMovementAtomic(input.admin, {
+      organizationId: input.session.organizationId,
+      warehouseId: input.warehouseId,
+      itemId: deduction.itemId,
+      itemName: deduction.itemName,
+      type: "salida",
+      qty: deduction.quantity,
+      note: input.movementNote,
+      createdBy: input.session.userId,
+      assigneeId: input.assigneeId || input.session.userId,
+    });
+  }
+}
+
 async function deductEmptyBoxStock(input: {
   session: AppSession;
   shipment: ShipmentRow;
@@ -1886,7 +2010,7 @@ async function deductEmptyBoxStock(input: {
     throw new Error("El stock de caja vacia ya fue descontado para este envio");
   }
 
-  const quoteLines = readQuoteLinesFromPlan(input.shipment.logistics_plan);
+  const quoteLines = readEmptyBoxQuoteLinesFromPlan(input.shipment.logistics_plan);
   if (!quoteLines.length) {
     throw new Error("Este invoice no tiene caja guardada en el plan logistico");
   }
@@ -1895,64 +2019,22 @@ async function deductEmptyBoxStock(input: {
     input.session,
     input.warehouseId || null,
   );
-  const { data: stockRows, error: stockError } = await admin
-    .from("inventory_stock")
-    .select("id, item_id, stock, inventory_items(id, name, kind)")
-    .eq("warehouse_id", warehouseId)
-    .eq("organization_id", input.session.organizationId);
-
-  if (stockError) {
-    throw new Error(stockError.message);
-  }
-
-  const deductions = quoteLines.map((quote) => {
-    const normalizedBox = normalizeInventoryText(quote.label);
-    const match = (stockRows || []).find((row) => {
-      const itemRow = row.inventory_items as
-        | { id: string; name: string; kind: string }
-        | { id: string; name: string; kind: string }[]
-        | null;
-      const item = Array.isArray(itemRow) ? itemRow[0] : itemRow;
-      if (!item) {
-        return false;
-      }
-
-      return [item.kind, item.name, `Caja ${item.kind}`, `Caja ${item.name}`].some((value) => {
-        const normalized = normalizeInventoryText(value || "");
-        return normalized.includes(normalizedBox) || normalizedBox.includes(normalized);
-      });
-    });
-
-    if (!match) {
-      throw new Error(`No hay stock registrado para la caja ${quote.label}`);
-    }
-
-    if (Number(match.stock) < quote.quantity) {
-      throw new Error(`Stock insuficiente para ${quote.label}`);
-    }
-
-    const itemRow = match.inventory_items as
-      | { id: string; name: string; kind: string }
-      | { id: string; name: string; kind: string }[];
-    const item = Array.isArray(itemRow) ? itemRow[0] : itemRow;
-
-    return { quote, match, item };
+  const fulfillment = await fulfillInventorySaleStock(admin, {
+    organizationId: input.session.organizationId,
+    shipmentId: input.shipment.id,
+    note: input.movementNote,
+    createdBy: input.session.userId,
+    assigneeId: input.assigneeId || input.session.userId,
   });
 
-  for (const deduction of deductions) {
-    const { quote, item } = deduction;
-    const qty = readPositiveIntegerQty(quote.quantity);
-
-    await recordInventoryMovementAtomic(admin, {
-      organizationId: input.session.organizationId,
+  if ((fulfillment.fulfilled_count || 0) === 0) {
+    await deductEmptyBoxStockLegacySalida({
+      session: input.session,
+      shipment: input.shipment,
       warehouseId,
-      itemId: item.id,
-      itemName: item.name || item.kind,
-      type: "salida",
-      qty,
-      note: input.movementNote,
-      createdBy: input.session.userId,
-      assigneeId: input.assigneeId || input.session.userId,
+      admin,
+      movementNote: input.movementNote,
+      assigneeId: input.assigneeId,
     });
   }
 
@@ -2024,8 +2106,15 @@ async function deleteShipmentWithTasks(
     .eq("shipment_id", shipmentId)
     .eq("organization_id", session.organizationId);
 
-  if (admin && shipmentCode) {
-    await reverseInventorySalidasForShipment(admin, session, shipmentCode);
+  if (admin) {
+    await releaseInventorySaleStock(admin, {
+      organizationId: session.organizationId,
+      shipmentId,
+    });
+
+    if (shipmentCode) {
+      await reverseInventorySalidasForShipment(admin, session, shipmentCode);
+    }
   }
 
   await supabase

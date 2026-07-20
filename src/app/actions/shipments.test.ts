@@ -15,7 +15,8 @@ describe("listShipmentsAction org scoping", () => {
     assert.match(shipmentsSource, /\.range\(offset, offset \+ limit - 1\)/);
   });
 
-  it("rollback deletes payments and reverses inventory salidas", () => {
+  it("rollback deletes payments, releases reservations and reverses inventory salidas", () => {
+    assert.match(shipmentsSource, /releaseInventorySaleStock/);
     assert.match(shipmentsSource, /reverseInventorySalidasForShipment/);
     assert.match(shipmentsSource, /from\("shipment_payments"\)/);
   });

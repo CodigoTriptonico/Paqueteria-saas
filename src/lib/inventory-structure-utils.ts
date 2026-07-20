@@ -10,6 +10,7 @@ import {
   type CategoryConfig,
   type InventoryTreeItem,
 } from "@/lib/inventory-tree";
+import { DEFAULT_INVENTORY_UNIT } from "@/lib/inventory-units";
 
 export type ItemContextMenu = {
   x: number;
@@ -110,6 +111,7 @@ export function stockItemForTreeItem(
     assigned: 0,
     unavailable: 0,
     minStock: 2,
+    unit: DEFAULT_INVENTORY_UNIT,
   };
 }
 

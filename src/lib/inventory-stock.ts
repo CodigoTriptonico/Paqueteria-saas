@@ -7,6 +7,7 @@ import {
   type CategoryConfig,
   type InventoryTreeItem,
 } from "@/lib/inventory-tree";
+import { DEFAULT_INVENTORY_UNIT } from "@/lib/inventory-units";
 
 export type InventoryStockItem = {
   id: string;
@@ -22,6 +23,7 @@ export type InventoryStockItem = {
   minStock: number;
   location?: string;
   unit?: string;
+  photoUrl?: string;
 };
 
 export type StockLevel = "ok" | "low" | "empty" | "neutral";
@@ -422,6 +424,7 @@ export function mergeTreeIntoInventoryItems(
         assigned: 0,
         unavailable: 0,
         minStock: 2,
+        unit: DEFAULT_INVENTORY_UNIT,
       });
       existing.add(key);
     }
@@ -451,6 +454,7 @@ export function resolveCategoryStockItems(
     assigned: 0,
     unavailable: 0,
     minStock: 2,
+    unit: DEFAULT_INVENTORY_UNIT,
   }));
 }
 
@@ -488,6 +492,7 @@ export function resolveSubcategoryStockItems(
       assigned: 0,
       unavailable: 0,
       minStock: 2,
+      unit: DEFAULT_INVENTORY_UNIT,
     }));
 }
 

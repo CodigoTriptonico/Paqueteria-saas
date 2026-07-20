@@ -4,6 +4,7 @@ import {
   type DbInventoryItemRow,
 } from "@/lib/inventory-backend";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
+import { DEFAULT_INVENTORY_UNIT } from "@/lib/inventory-units";
 
 export type InventoryLeafInput = {
   warehouseId: string;
@@ -142,6 +143,7 @@ export async function ensureInventoryLeafState(
         name: itemName,
         kind,
         subcategory,
+        unit: DEFAULT_INVENTORY_UNIT,
       })
       .select("id, name, kind, subcategory, size, location, unit")
       .single();

@@ -11,8 +11,9 @@ test("leaf ensure and movement actions share the same persistence helper", async
   const movementStart = source.indexOf(
     "export async function recordInventoryMovementForLeafAction",
   );
+  const photoStart = source.indexOf("export async function uploadInventoryItemPhotoAction");
   const ensureAction = source.slice(ensureStart, movementStart);
-  const movementAction = source.slice(movementStart);
+  const movementAction = source.slice(movementStart, photoStart);
 
   assert.match(ensureAction, /ensureInventoryLeafState\(/);
   assert.match(movementAction, /ensureInventoryLeafState\(/);

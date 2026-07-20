@@ -21,7 +21,12 @@ import {
   useState,
   type MouseEvent,
 } from "react";
-import { recordInventoryMovementForLeafAction } from "@/app/actions/inventory";
+import {
+  clearInventoryItemPhotoAction,
+  recordInventoryMovementForLeafAction,
+  updateInventoryItemUnitAction,
+  uploadInventoryItemPhotoAction,
+} from "@/app/actions/inventory";
 import { useSetShellConfig } from "@/components/app-frame";
 import {
   InlineSearchCombobox,
@@ -172,6 +177,8 @@ export function InventoryStructureEditor({
   const [editingSubcategoryId, setEditingSubcategoryId] = useState("");
   const [editingSubcategoryName, setEditingSubcategoryName] = useState("");
   const [editingItemId, setEditingItemId] = useState("");
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [unitSaving, setUnitSaving] = useState(false);
   const [editingItemName, setEditingItemName] = useState("");
   const [showNewItemForm, setShowNewItemForm] = useState(false);
   const [itemContextMenu, setItemContextMenu] =
@@ -1062,6 +1069,122 @@ export function InventoryStructureEditor({
     });
   }
 
+  function updateLeafPhoto(
+    context: ItemContextMenu,
+    photoUrl: string | undefined,
+  ) {
+    onInventoryItemsChange?.(
+      inventoryItems.map((item) => {
+        const leafMatches = inventoryItemsForLeaf(
+          inventoryItems,
+          context.categoryName,
+          context.treeItem.name,
+          context.subcategoryName,
+        ).some((match) => match.id === item.id);
+
+        if (!leafMatches) {
+          return item;
+        }
+
+        return {
+          ...item,
+          photoUrl,
+        };
+      }),
+    );
+  }
+
+  async function handleUploadItemPhoto(context: ItemContextMenu, file: File) {
+    setPhotoUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.set("photo", file);
+      formData.set("itemId", context.stockItem.id);
+
+      const result = await uploadInventoryItemPhotoAction(formData);
+
+      if (!result.ok) {
+        notify.error(result.error);
+        return;
+      }
+
+      updateLeafPhoto(context, result.data.previewUrl);
+      notify.success("Foto del producto actualizada");
+      setItemContextMenu(null);
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
+
+  async function handleClearItemPhoto(context: ItemContextMenu) {
+    setPhotoUploading(true);
+
+    try {
+      const result = await clearInventoryItemPhotoAction(context.stockItem.id);
+
+      if (!result.ok) {
+        notify.error(result.error);
+        return;
+      }
+
+      updateLeafPhoto(context, undefined);
+      notify.success("Foto del producto eliminada");
+      setItemContextMenu(null);
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
+
+  function updateLeafUnit(context: ItemContextMenu, unit: string) {
+    onInventoryItemsChange?.(
+      inventoryItems.map((item) => {
+        const leafMatches = inventoryItemsForLeaf(
+          inventoryItems,
+          context.categoryName,
+          context.treeItem.name,
+          context.subcategoryName,
+        ).some((match) => match.id === item.id);
+
+        if (!leafMatches) {
+          return item;
+        }
+
+        return {
+          ...item,
+          unit,
+        };
+      }),
+    );
+  }
+
+  async function handleUpdateItemUnit(context: ItemContextMenu, unit: string) {
+    setUnitSaving(true);
+
+    try {
+      const result = await updateInventoryItemUnitAction({
+        itemId: context.stockItem.id,
+        unit,
+        warehouseId,
+        category: context.categoryName,
+        kind: context.treeItem.name,
+        subcategory: context.subcategoryName,
+        itemName: context.treeItem.name,
+      });
+
+      if (!result.ok) {
+        notify.error(result.error);
+        return false;
+      }
+
+      updateLeafUnit(context, result.data.unit);
+      notify.success("Unidad de medida actualizada");
+      return true;
+    } finally {
+      setUnitSaving(false);
+    }
+  }
+
   function beginMovement(type: MovementDraft["type"]) {
     if (!itemContextMenu) {
       return;
@@ -1425,6 +1548,11 @@ export function InventoryStructureEditor({
         setEditingItemId(itemId);
         setEditingItemName(itemName);
       }}
+      onUploadItemPhoto={handleUploadItemPhoto}
+      onClearItemPhoto={handleClearItemPhoto}
+      photoUploading={photoUploading}
+      onUpdateItemUnit={handleUpdateItemUnit}
+      unitSaving={unitSaving}
     />
   );
 

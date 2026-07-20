@@ -1,12 +1,18 @@
 "use client";
 
-import { History, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { History, ImagePlus, Loader2, Ruler } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { InventoryMovementsSidePanel } from "@/components/inventory-movements-panel";
 import { inputClass } from "@/components/ui-blocks";
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
 import type { ItemContextMenu, MovementDraft } from "@/lib/inventory-structure-utils";
+import {
+  formatInventoryStockLabel,
+  INVENTORY_UNIT_PRESETS,
+  normalizeInventoryUnit,
+  resolveInventoryItemUnit,
+} from "@/lib/inventory-units";
 
 const INVENTORY_ITEM_CONTEXT_MENU_ATTR = "data-inventory-item-context-menu";
 
@@ -34,6 +40,14 @@ export type InventoryItemContextMenuProps = {
   onSubmitMovement: () => void | Promise<void>;
   onDeleteItem: (categoryName: string, itemId: string) => void;
   onBeginEditItem: (itemId: string, itemName: string) => void;
+  onUploadItemPhoto?: (context: ItemContextMenu, file: File) => void | Promise<void>;
+  onClearItemPhoto?: (context: ItemContextMenu) => void | Promise<void>;
+  photoUploading?: boolean;
+  onUpdateItemUnit?: (
+    context: ItemContextMenu,
+    unit: string,
+  ) => boolean | Promise<boolean>;
+  unitSaving?: boolean;
 };
 
 export function InventoryItemContextMenu({
@@ -60,8 +74,18 @@ export function InventoryItemContextMenu({
   onSubmitMovement,
   onDeleteItem,
   onBeginEditItem,
+  onUploadItemPhoto,
+  onClearItemPhoto,
+  photoUploading = false,
+  onUpdateItemUnit,
+  unitSaving = false,
 }: InventoryItemContextMenuProps) {
   const [mounted, setMounted] = useState(false);
+  const [unitEditor, setUnitEditor] = useState<{
+    context: ItemContextMenu;
+    value: string;
+  } | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     queueMicrotask(() => setMounted(true));
@@ -123,7 +147,11 @@ export function InventoryItemContextMenu({
               {itemContextMenu.treeItem.name}
             </p>
             <p className="text-xs font-bold text-slate-400">
-              Stock {itemContextMenu.stockItem.stock}
+              {itemContextMenu.stockItem.stock}{" "}
+              {formatInventoryStockLabel(
+                itemContextMenu.stockItem,
+                itemContextMenu.stockItem.stock,
+              )}
             </p>
           </div>
           <button
@@ -147,6 +175,67 @@ export function InventoryItemContextMenu({
           >
             Ajuste
           </button>
+          {onUploadItemPhoto ? (
+            <>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+
+                  if (file && itemContextMenu) {
+                    void onUploadItemPhoto(itemContextMenu, file);
+                  }
+
+                  event.currentTarget.value = "";
+                }}
+              />
+              <button
+                type="button"
+                disabled={photoUploading}
+                onClick={() => photoInputRef.current?.click()}
+                className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm font-black text-slate-200 hover:bg-surface-card-hover disabled:opacity-50"
+              >
+                {photoUploading ? (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-slate-400" aria-hidden />
+                ) : (
+                  <ImagePlus className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                )}
+                {itemContextMenu.stockItem.photoUrl ? "Cambiar foto" : "Agregar foto"}
+              </button>
+              {itemContextMenu.stockItem.photoUrl && onClearItemPhoto ? (
+                <button
+                  type="button"
+                  disabled={photoUploading}
+                  onClick={() => {
+                    void onClearItemPhoto(itemContextMenu);
+                  }}
+                  className="flex h-9 w-full items-center rounded-md px-2 text-left text-sm font-black text-rose-200 hover:bg-rose-400/10 disabled:opacity-50"
+                >
+                  Quitar foto
+                </button>
+              ) : null}
+            </>
+          ) : null}
+          {onUpdateItemUnit ? (
+            <button
+              type="button"
+              disabled={unitSaving}
+              onClick={() => {
+                setUnitEditor({
+                  context: itemContextMenu,
+                  value: resolveInventoryItemUnit(itemContextMenu.stockItem),
+                });
+                setItemContextMenu(null);
+              }}
+              className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm font-black text-slate-200 hover:bg-surface-card-hover disabled:opacity-50"
+            >
+              <Ruler className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+              Unidad de medida
+            </button>
+          ) : null}
           {warehouseId ? (
             <button
               type="button"
@@ -267,7 +356,8 @@ export function InventoryItemContextMenu({
               </p>
             </div>
             <label className="grid gap-1.5 text-xs font-black uppercase text-slate-400">
-              Cantidad
+              Cantidad (
+              {resolveInventoryItemUnit(movementDraft.context.stockItem)})
               <input
                 className={`${inputClass} h-10 text-sm`}
                 type="number"
@@ -318,6 +408,105 @@ export function InventoryItemContextMenu({
               </button>
             </div>
           </form>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {unitEditor && mounted
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[150] flex items-center justify-center bg-black/45 p-4"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  setUnitEditor(null);
+                }
+              }}
+            >
+              <form
+                className="w-full max-w-sm rounded-xl border border-black bg-[#17211d] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                onSubmit={(event) => {
+                  event.preventDefault();
+
+                  if (!onUpdateItemUnit) {
+                    return;
+                  }
+
+                  void (async () => {
+                    const saved = await onUpdateItemUnit(
+                      unitEditor.context,
+                      normalizeInventoryUnit(unitEditor.value),
+                    );
+
+                    if (saved) {
+                      setUnitEditor(null);
+                    }
+                  })();
+                }}
+              >
+                <div className="mb-3">
+                  <p className="text-lg font-black text-[#f8fafc]">
+                    Unidad de medida
+                  </p>
+                  <p className="truncate text-sm font-bold text-slate-400">
+                    {unitEditor.context.treeItem.name}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {INVENTORY_UNIT_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() =>
+                        setUnitEditor((current) =>
+                          current ? { ...current, value: preset } : current,
+                        )
+                      }
+                      className={`rounded-lg border px-2.5 py-1.5 text-xs font-black capitalize ${
+                        normalizeInventoryUnit(unitEditor.value) === preset
+                          ? "border-emerald-500 bg-emerald-400/10 text-emerald-200"
+                          : "border-black bg-surface-inset text-slate-300 hover:bg-surface-card-hover"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <label className="mt-3 grid gap-1.5 text-xs font-black uppercase text-slate-400">
+                  Personalizada
+                  <input
+                    className={`${inputClass} h-10 text-sm`}
+                    value={unitEditor.value}
+                    onChange={(event) =>
+                      setUnitEditor((current) =>
+                        current
+                          ? { ...current, value: event.target.value }
+                          : current,
+                      )
+                    }
+                    placeholder="ej. pieza, rollo, kg"
+                    maxLength={24}
+                    autoFocus
+                  />
+                </label>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setUnitEditor(null)}
+                    className="h-10 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-slate-300 hover:bg-surface-card-hover"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={unitSaving || !normalizeInventoryUnit(unitEditor.value)}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-400 px-4 text-sm font-black text-slate-950 disabled:opacity-60"
+                  >
+                    {unitSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Guardar
+                  </button>
+                </div>
+              </form>
             </div>,
             document.body,
           )

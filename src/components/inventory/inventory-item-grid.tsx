@@ -23,6 +23,7 @@ import {
   stockValueToneClass,
   type InventoryStockItem,
 } from "@/lib/inventory-stock";
+import { formatInventoryStockLabel } from "@/lib/inventory-units";
 import {
   addBtnClass,
   iconBtnClass,
@@ -86,6 +87,8 @@ function InventoryItemCard({
   );
   const stockLevel = metrics.level;
   const stockQty = metrics.warehouse;
+  const stockUnitLabel = formatInventoryStockLabel(stockItem, stockQty, leafItems);
+  const photoUrl = stockItem.photoUrl || leafItems.find((item) => item.photoUrl)?.photoUrl;
 
   return (
     <article
@@ -98,6 +101,16 @@ function InventoryItemCard({
       className={`group relative flex min-h-[7.75rem] cursor-context-menu overflow-hidden rounded-2xl border p-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_20px_rgba(0,0,0,0.18)] sm:p-3.5 ${stockCardClass[stockLevel]}`}
     >
       <div className="mx-auto flex h-full w-full max-w-[10.5rem] flex-1 flex-col">
+        {photoUrl ? (
+          <div className="mb-2 overflow-hidden rounded-xl border border-black/40 bg-black/20">
+            {/* Supabase inventory photos use signed URLs outside Next static remote hosts. */}
+            <img
+              src={photoUrl}
+              alt={`Foto de ${item.name}`}
+              className="h-16 w-full object-cover"
+            />
+          </div>
+        ) : null}
         <div className="flex items-center gap-2">
           <span className="h-px min-w-0 flex-1 bg-black/35" aria-hidden />
           <div className="min-w-[5.75rem] rounded-xl border border-black/25 bg-black/15 px-2.5 py-1.5 text-center shadow-inner">
@@ -108,7 +121,7 @@ function InventoryItemCard({
               {stockQty}
             </p>
             <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.13em] text-slate-400">
-              en stock
+              {stockUnitLabel}
             </p>
           </div>
           <span className="h-px min-w-0 flex-1 bg-black/35" aria-hidden />
@@ -191,6 +204,7 @@ function InventoryItemRow({
   const metrics = leafStockMetrics(leafItems.length > 0 ? leafItems : [stockItem]);
   const stockLevel = metrics.level;
   const stockQty = metrics.warehouse;
+  const stockUnitLabel = formatInventoryStockLabel(stockItem, stockQty, leafItems);
 
   return (
     <article
@@ -209,7 +223,7 @@ function InventoryItemRow({
           {stockQty}
         </p>
         <p className="mt-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-slate-400">
-          stock
+          {stockUnitLabel}
         </p>
       </div>
 
