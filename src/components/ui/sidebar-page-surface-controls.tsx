@@ -1,7 +1,7 @@
 "use client";
 
-import { Palette } from "lucide-react";
-import { useRef, useState } from "react";
+import { ChevronsDown, ChevronsUp, Palette } from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
 import { SidebarCollapseButton } from "@/components/notifications/notifications-center";
 import { ViewLayoutToggle } from "@/components/view-layout-toggle";
 import { SurfacePalettePicker } from "@/components/ui/surface-palette-picker";
@@ -38,6 +38,51 @@ function footerRowClass(variant: SidebarControlsVariant) {
   }
 
   return "mb-2 flex w-full gap-1";
+}
+
+function CollapsibleControlsRow({
+  variant,
+  children,
+}: {
+  variant: SidebarControlsVariant;
+  children: ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const expandLabel = "Mostrar opciones de vista y apariencia";
+  const collapseLabel = "Ocultar opciones de vista y apariencia";
+
+  if (!expanded) {
+    return (
+      <div className={footerRowClass(variant)}>
+        <button
+          type="button"
+          className={iconButtonClass[variant]}
+          aria-expanded={false}
+          aria-label={expandLabel}
+          title={expandLabel}
+          onClick={() => setExpanded(true)}
+        >
+          <ChevronsUp className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={footerRowClass(variant)}>
+      {children}
+      <button
+        type="button"
+        className={iconButtonClass[variant]}
+        aria-expanded={true}
+        aria-label={collapseLabel}
+        title={collapseLabel}
+        onClick={() => setExpanded(false)}
+      >
+        <ChevronsDown className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+      </button>
+    </div>
+  );
 }
 
 function SidebarPageSurfaceControlsContent({
@@ -115,9 +160,9 @@ export function SidebarPageSurfaceControls({
   variant = "sidebar",
 }: SidebarPageSurfaceControlsProps) {
   return (
-    <div className={footerRowClass(variant)}>
+    <CollapsibleControlsRow variant={variant}>
       <SidebarPageSurfaceControlsContent contextId={contextId} variant={variant} />
-    </div>
+    </CollapsibleControlsRow>
   );
 }
 
@@ -136,7 +181,7 @@ export function SidebarFooterControls({
   onToggleSidebar,
 }: SidebarFooterControlsProps) {
   return (
-    <div className={footerRowClass(variant)}>
+    <CollapsibleControlsRow variant={variant}>
       {contextId ? (
         <SidebarPageSurfaceControlsContent contextId={contextId} variant={variant} />
       ) : null}
@@ -144,6 +189,6 @@ export function SidebarFooterControls({
         collapsed={sidebarCollapsed}
         onToggle={onToggleSidebar}
       />
-    </div>
+    </CollapsibleControlsRow>
   );
 }

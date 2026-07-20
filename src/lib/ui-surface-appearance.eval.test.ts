@@ -89,6 +89,16 @@ describe("ui surface appearance eval", () => {
     assert.match(sidebarControls, /variant === "rail"[\s\S]*flex-col items-center/);
   });
 
+  it("keeps footer surface controls collapsed until the user expands them", () => {
+    const sidebarControls = read("components/ui/sidebar-page-surface-controls.tsx");
+
+    assert.match(sidebarControls, /function CollapsibleControlsRow/);
+    assert.match(sidebarControls, /useState\(false\)/);
+    assert.match(sidebarControls, /Mostrar opciones de vista y apariencia/);
+    assert.match(sidebarControls, /Ocultar opciones de vista y apariencia/);
+    assert.match(sidebarControls, /<CollapsibleControlsRow/);
+  });
+
   it("opens the palette popover upward from the footer trigger", () => {
     const sidebarControls = read("components/ui/sidebar-page-surface-controls.tsx");
 
