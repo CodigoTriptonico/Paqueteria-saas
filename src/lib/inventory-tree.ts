@@ -16,6 +16,9 @@ export const normalizeInventoryText = (value: string) =>
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
 
+export const normalizeInventoryName = (value: string) =>
+  normalizeInventoryText(value).trim().replace(/\s+/g, " ");
+
 export const categoryItems = (category: CategoryConfig) =>
   category.items?.length ? category.items : [];
 
@@ -88,5 +91,7 @@ export function deleteInventoryTreeItem(
 }
 
 export function inventoryTreeItemExists(items: InventoryTreeItem[], name: string) {
-  return items.some((item) => normalizeInventoryText(item.name) === normalizeInventoryText(name));
+  return items.some(
+    (item) => normalizeInventoryName(item.name) === normalizeInventoryName(name),
+  );
 }

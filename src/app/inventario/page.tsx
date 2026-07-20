@@ -31,6 +31,10 @@ export default async function InventarioPage() {
     warehouses.find((warehouse) => warehouse.is_default) ||
     warehouses[0];
   const canManageWarehouses = sessionHasPermission(session, "warehouses.manage");
+  const canManageInventory =
+    sessionHasPermission(session, "settings.manage") ||
+    sessionHasPermission(session, "warehouses.manage") ||
+    sessionHasPermission(session, "inventory.adjust");
   let initialPricing = undefined;
 
   try {
@@ -44,6 +48,7 @@ export default async function InventarioPage() {
       <InventarioClient
         initialTruckBalances={truckBalances}
         initialPricing={initialPricing}
+        canManageInventory={canManageInventory}
         initialData={{
           warehouses,
           warehouseId: "",
@@ -59,21 +64,26 @@ export default async function InventarioPage() {
   }
 
   const inventoryResult = await loadWarehouseInventoryCoreAction(defaultWarehouse.id);
+  const initialData = inventoryResult.ok
+    ? {
+        warehouses,
+        warehouseId: defaultWarehouse.id,
+        multiWarehouse: session.multiWarehouseEnabled,
+        canManageWarehouses,
+        categoryConfigs: inventoryResult.data.categoryConfigs,
+        items: inventoryResult.data.items,
+        movements: [],
+        assignments: [],
+      }
+    : undefined;
 
   return (
     <InventarioClient
       initialTruckBalances={truckBalances}
       initialPricing={initialPricing}
-      initialData={{
-        warehouses,
-        warehouseId: defaultWarehouse.id,
-        multiWarehouse: session.multiWarehouseEnabled,
-        canManageWarehouses,
-        categoryConfigs: inventoryResult.ok ? inventoryResult.data.categoryConfigs : [],
-        items: inventoryResult.ok ? inventoryResult.data.items : [],
-        movements: [],
-        assignments: [],
-      }}
+      canManageInventory={canManageInventory}
+      initialInventoryError={inventoryResult.ok ? undefined : inventoryResult.error}
+      initialData={initialData}
     />
   );
 }

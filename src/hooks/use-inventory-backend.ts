@@ -175,6 +175,15 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
     [clearSaveTimers, persistInventory],
   );
 
+  const persistCategoryConfigs = useCallback(
+    async (nextCategoryConfigs: CategoryConfig[]) => {
+      categoryConfigsRef.current = nextCategoryConfigs;
+      setCategoryConfigs(nextCategoryConfigs);
+      await flushSaves();
+    },
+    [flushSaves],
+  );
+
   const loadRemote = useCallback(async (targetWarehouseId: string) => {
     const coreResult = await loadWarehouseInventoryCoreAction(targetWarehouseId);
 
@@ -377,6 +386,7 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
     setWarehouseId,
     categoryConfigs,
     setCategoryConfigs,
+    persistCategoryConfigs,
     inventoryItems,
     setInventoryItems,
     movements,

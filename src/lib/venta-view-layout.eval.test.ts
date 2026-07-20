@@ -30,7 +30,7 @@ describe("venta view layout eval", () => {
     assert.equal(senderListSource.includes("SalePersonCard"), true);
     assert.equal(senderListSource.includes("flowPersonCardGridClass"), true);
     assert.equal(recipientListSource.includes('viewLayout === "rows"'), true);
-    assert.equal(recipientListSource.includes("SalePersonAddRow"), true);
-    assert.equal(recipientListSource.includes("SalePersonAddCard"), true);
+    assert.equal(recipientListSource.includes("SalePersonAddRow"), false);
+    assert.equal(recipientListSource.includes("SalePersonAddCard"), false);
   });
 });

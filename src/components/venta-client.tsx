@@ -3522,6 +3522,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
               createIcon={<Plus className="h-4 w-4" />}
               createLabel="Nuevo destinatario"
               createShortLabel="Nuevo"
+              createOnboardingTarget={ONBOARDING_TARGETS.VENTA_NEW_RECIPIENT}
               countLabel={recipientCountLabel}
               onCreate={startRecipientCreation}
               search={
@@ -3623,9 +3624,6 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                       x: rect.left,
                       y: rect.bottom + 8,
                     });
-                  }}
-                  onNewRecipient={() => {
-                    startRecipientCreation();
                   }}
                   getCardClass={(recipient) =>
                     contextPersonClass(

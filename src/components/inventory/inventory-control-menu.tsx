@@ -79,7 +79,7 @@ export function InventoryControlMenu({
     (assignments.length || 0) + (movements.length || 0) || undefined;
 
   const menuItemClass =
-    "flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc]";
+    "flex min-h-11 w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc]";
 
   const trigger =
     variant === "menu" ? (
@@ -89,10 +89,17 @@ export function InventoryControlMenu({
         data-inventory-toolbar-menu-action
         className={menuItemClass}
       >
-        <LocateFixed className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-        <span className="min-w-0 flex-1">Custodia</span>
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-400/10 text-emerald-300">
+          <LocateFixed className="h-4 w-4" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block">Custodia</span>
+          <span className="mt-0.5 block text-[10px] font-bold text-slate-500">
+            Quién tiene cada caja y sus movimientos
+          </span>
+        </span>
         {badge ? (
-          <span className="rounded bg-surface-inset px-1.5 py-0.5 text-[10px] tabular-nums text-slate-400">
+          <span className="rounded-md bg-surface-inset px-1.5 py-0.5 text-[10px] tabular-nums text-slate-400">
             {badge}
           </span>
         ) : null}

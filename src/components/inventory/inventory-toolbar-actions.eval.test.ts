@@ -17,7 +17,10 @@ const menuSource = readFileSync(
 describe("inventory toolbar action separation eval", () => {
   it("keeps article creation primary and secondary inventory work in one menu", () => {
     assert.match(editorSource, /label="Agregar artículo"/);
-    assert.match(editorSource, /label="Más acciones de inventario"/);
+    assert.match(editorSource, /label="Herramientas de inventario"/);
+    assert.match(editorSource, /aria-label="Herramientas de inventario"/);
+    assert.match(editorSource, /Operación/);
+    assert.match(editorSource, /Catálogo/);
     assert.match(editorSource, /Categorías y subcategorías/);
     assert.doesNotMatch(editorSource, /Ver tarjetas/);
     assert.doesNotMatch(editorSource, /Ver lista/);
@@ -30,5 +33,18 @@ describe("inventory toolbar action separation eval", () => {
     assert.match(editorSource, /Gestionar estructura/);
     assert.match(editorSource, /showStructureDelete && structureMenuMode === "manage"/);
     assert.match(menuSource, /showStructureDelete && mode === "manage"/);
+  });
+
+  it("makes the category hierarchy visible in the compact toolbar", () => {
+    assert.match(editorSource, /icon=\{Pencil\}/);
+    assert.match(editorSource, /Editar categor/);
+    assert.match(editorSource, /embeddedSubcategoryOptions\.length > 1/);
+    assert.match(editorSource, /placeholder="Subcategor/);
+  });
+
+  it("keeps duplicate names out of the client structure editor", () => {
+    assert.match(editorSource, /categoryNames\.includes\(normalizedName\)/);
+    assert.match(editorSource, /inventoryTreeItemExists\(categoryItems\(categoryData\)/);
+    assert.match(editorSource, /Ya existe una categoría con ese nombre/);
   });
 });

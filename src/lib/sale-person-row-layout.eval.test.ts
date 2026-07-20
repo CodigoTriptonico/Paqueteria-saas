@@ -40,8 +40,8 @@ describe("sale person row layout eval", () => {
     assert.equal(recipientListSource.includes("SalePersonRow"), true);
     assert.equal(recipientListSource.includes("SalePersonCard"), true);
     assert.equal(recipientListSource.includes("flowPersonRowListSlotClass"), true);
-    assert.equal(recipientListSource.includes("SalePersonAddRow"), true);
-    assert.equal(recipientListSource.includes("SalePersonAddCard"), true);
+    assert.equal(recipientListSource.includes("SalePersonAddRow"), false);
+    assert.equal(recipientListSource.includes("SalePersonAddCard"), false);
     assert.equal(recipientListSource.includes('viewLayout === "rows"'), true);
   });
 

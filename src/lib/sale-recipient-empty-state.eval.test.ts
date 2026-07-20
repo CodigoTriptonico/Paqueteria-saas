@@ -18,14 +18,15 @@ const personCardSource = readFileSync(
 );
 
 describe("sale recipient empty state eval", () => {
-  it("explains when the selected sender has no recipients and offers create", () => {
+  it("explains when the selected sender has no recipients", () => {
     assert.equal(recipientListSource.includes("searchActive"), true);
     assert.equal(
       recipientListSource.includes("Este remitente no tiene destinatarios registrados"),
       true,
     );
     assert.equal(recipientListSource.includes("Sin resultados para esa búsqueda"), true);
-    assert.equal(recipientListSource.includes('label="Nuevo destinatario"'), true);
+    assert.equal(recipientListSource.includes("SalePersonAddRow"), false);
+    assert.equal(recipientListSource.includes("SalePersonAddCard"), false);
     assert.equal(recipientListSource.includes("Sin destinatarios"), false);
   });
 
@@ -36,7 +37,7 @@ describe("sale recipient empty state eval", () => {
   it("uses row list shell instead of card grid", () => {
     assert.equal(senderListSource.includes("SalePersonRow"), true);
     assert.equal(recipientListSource.includes("SalePersonRow"), true);
-    assert.equal(recipientListSource.includes("SalePersonAddRow"), true);
+    assert.equal(recipientListSource.includes("SalePersonAddRow"), false);
   });
 
   it("keeps empty-state text readable on dark surfaces", () => {

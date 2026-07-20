@@ -5,6 +5,8 @@ import {
   countCategoryLeafItems,
   deleteInventoryTreeItem,
   isInventoryGroup,
+  inventoryTreeItemExists,
+  normalizeInventoryName,
   updateInventoryTreeItem,
   type CategoryConfig,
   type InventoryTreeItem,
@@ -64,5 +66,13 @@ describe("inventory-tree", () => {
 
     assert.equal(medidas?.children?.length, 1);
     assert.equal(medidas?.children?.[0]?.id, "1");
+  });
+
+  it("normalizes names to prevent case, accent, and whitespace duplicates", () => {
+    assert.equal(normalizeInventoryName("  Cájás  "), "cajas");
+    assert.equal(
+      inventoryTreeItemExists([{ id: "1", name: "Cajas" }], " cajas "),
+      true,
+    );
   });
 });

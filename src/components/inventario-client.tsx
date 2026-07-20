@@ -62,10 +62,14 @@ export function InventarioClient({
   initialData,
   initialPricing,
   initialTruckBalances = [],
+  canManageInventory = false,
+  initialInventoryError,
 }: {
   initialData?: InventoryBackendInitialData;
   initialPricing?: PricingConfigPayload;
   initialTruckBalances?: ConductorTruckBalance[];
+  canManageInventory?: boolean;
+  initialInventoryError?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -82,6 +86,7 @@ export function InventarioClient({
     setWarehouseId,
     categoryConfigs,
     setCategoryConfigs,
+    persistCategoryConfigs,
     inventoryItems,
     setInventoryItems,
     movements,
@@ -219,6 +224,12 @@ export function InventarioClient({
       );
     });
   }, [categoryConfigs, loaded, setInventoryItems]);
+
+  useEffect(() => {
+    if (initialInventoryError) {
+      notify.error(initialInventoryError);
+    }
+  }, [initialInventoryError, notify]);
 
   useEffect(() => {
     if (!error) {
@@ -436,7 +447,7 @@ export function InventarioClient({
         pricingReturnHref={returnTo}
         pricingReturnLabel={returnActionLabel}
         categoryConfigs={categoryConfigs}
-        onCategoryConfigsChange={setCategoryConfigs}
+        onCategoryConfigsChange={persistCategoryConfigs}
         inventoryItems={inventoryItems}
         onInventoryItemsChange={setInventoryItems}
         warehouseId={warehouseId}
@@ -489,8 +500,8 @@ export function InventarioClient({
           );
         }}
         onViewItemAssignments={(itemId) => setAssignmentDrawerItemId(itemId)}
-        showCategoryCreate
-        showStructureDelete
+        showCategoryCreate={canManageInventory}
+        showStructureDelete={canManageInventory}
         truckQty={truckQty}
         truckTabOpen={truckTabOpen}
         onTruckTabChange={setTruckTabOpen}

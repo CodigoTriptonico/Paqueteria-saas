@@ -20,6 +20,9 @@
 # generated browser screenshots
 /output/
 
+# export manual para ChatGPT (regenerar con npm run export:chatgpt)
+/Carpeta para subir a ChatGPT/
+
 # production
 /build
 

@@ -26,7 +26,11 @@ import {
 } from "@/lib/inventory-backend";
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
-import type { CategoryConfig } from "@/lib/inventory-tree";
+import {
+  categorySubcategories,
+  normalizeInventoryName,
+  type CategoryConfig,
+} from "@/lib/inventory-tree";
 import { InvalidQuantityError, readPositiveQty } from "@/lib/security/qty";
 import { defaultReasonCodeForMovementType, type InventoryMovementReasonCode } from "@/lib/inventory-movement-audit";
 import { recordInventoryMovementAtomic } from "@/lib/security/inventory-movement";
@@ -244,6 +248,40 @@ async function saveInventoryCategoriesAction(
       return fail("Supabase no configurado");
     }
 
+    const categoryNames = new Set<string>();
+
+    for (const category of categoryConfigs) {
+      const categoryKey = normalizeInventoryName(category.name);
+
+      if (!categoryKey) {
+        return fail("La categoría no puede estar vacía");
+      }
+
+      if (categoryNames.has(categoryKey)) {
+        return fail("No se pueden crear categorías duplicadas");
+      }
+
+      categoryNames.add(categoryKey);
+
+      const subcategoryNames = new Set<string>();
+
+      for (const subcategory of categorySubcategories(category)) {
+        const subcategoryKey = normalizeInventoryName(subcategory.name);
+
+        if (!subcategoryKey) {
+          return fail("La subcategoría no puede estar vacía");
+        }
+
+        if (subcategoryNames.has(subcategoryKey)) {
+          return fail(
+            `No se pueden crear subcategorías duplicadas en ${category.name}`,
+          );
+        }
+
+        subcategoryNames.add(subcategoryKey);
+      }
+    }
+
     const { data: existing } = await supabase
       .from("inventory_categories")
       .select("id, name")
@@ -257,6 +295,15 @@ async function saveInventoryCategoriesAction(
       (existing || []).map((row) => [row.name, row.id]),
     );
     const incomingNames = new Set(categoryConfigs.map((cat) => cat.name));
+    const toDelete = (existing || []).filter(
+      (row) => !incomingNames.has(row.name),
+    );
+
+    await assertCategoryDeletionDoesNotBreakHistory(
+      supabase,
+      session.organizationId,
+      toDelete.map((row) => row.id),
+    );
 
     for (const category of categoryConfigs) {
       const payload = {
@@ -286,10 +333,6 @@ async function saveInventoryCategoriesAction(
         }
       }
     }
-
-    const toDelete = (existing || []).filter(
-      (row) => !incomingNames.has(row.name),
-    );
 
     if (toDelete.length) {
       const { error } = await supabase
@@ -436,26 +479,69 @@ async function pruneWarehouseItemsNotInTree(
       continue;
     }
 
-    const { count: remainingStockCount, error: remainingStockError } = await supabase
-      .from("inventory_stock")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organizationId)
-      .eq("item_id", row.item_id)
-      .neq("id", row.id);
-
-    if (remainingStockError) {
-      throw new Error(remainingStockError.message);
-    }
-
     await supabase.from("inventory_stock").delete().eq("id", row.id);
 
-    if ((remainingStockCount || 0) === 0) {
-      await supabase
-        .from("inventory_items")
-        .delete()
-        .eq("organization_id", organizationId)
-        .eq("id", row.item_id);
-    }
+    // An item with history is a ledger anchor. Keep inventory_items even when
+    // its current warehouse stock and catalog leaf were removed.
+  }
+}
+
+async function assertCategoryDeletionDoesNotBreakHistory(
+  supabase: SupabaseClient,
+  organizationId: string,
+  categoryIds: string[],
+) {
+  if (!categoryIds.length) {
+    return;
+  }
+
+  const { data: itemRows, error: itemError } = await supabase
+    .from("inventory_items")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .in("category_id", categoryIds);
+
+  if (itemError) {
+    throw new Error(itemError.message);
+  }
+
+  const itemIds = (itemRows || []).map((row) => row.id);
+
+  if (!itemIds.length) {
+    return;
+  }
+
+  // A manager may no longer have access to the warehouse where old history
+  // lives, so the guard must see the whole organization.
+  const auditClient = createSupabaseAdminClient();
+  const [
+    { count: movementCount, error: movementError },
+    { count: assignmentCount, error: assignmentError },
+  ] = await Promise.all([
+    auditClient
+      .from("inventory_movements")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .in("item_id", itemIds),
+    auditClient
+      .from("inventory_assignments")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .in("item_id", itemIds),
+  ]);
+
+  if (movementError) {
+    throw new Error(movementError.message);
+  }
+
+  if (assignmentError) {
+    throw new Error(assignmentError.message);
+  }
+
+  if ((movementCount || 0) > 0 || (assignmentCount || 0) > 0) {
+    throw new Error(
+      "No se puede eliminar una categoría con historial de movimientos o asignaciones. Conserva la categoría y cambia su estructura.",
+    );
   }
 }
 
