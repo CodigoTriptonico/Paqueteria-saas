@@ -71,12 +71,8 @@ function activeFromPath(pathname: string, session: AppSession | null) {
     return "Inventario";
   }
 
-  if (pathname.startsWith("/seguimiento/historial") || pathname.startsWith("/envios/historial")) {
-    return "Historial envíos";
-  }
-
   if (pathname.startsWith("/seguimiento") || pathname.startsWith("/envios")) {
-    return "Seguimiento";
+    return "Seguimiento y envíos";
   }
 
   if (pathname.startsWith("/conductor/inventario-camion")) {
@@ -89,10 +85,6 @@ function activeFromPath(pathname: string, session: AppSession | null) {
 
   if (pathname.startsWith("/logistica")) {
     return "Logistica";
-  }
-
-  if (pathname.startsWith("/auditoria")) {
-    return "Auditoria";
   }
 
   if (pathname.startsWith("/estadisticas") || pathname.startsWith("/vendedores")) {

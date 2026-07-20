@@ -18,7 +18,7 @@ export async function EnviosPageContent({ mode }: EnviosPageContentProps) {
   const session = await requirePathAccess("/seguimiento");
 
   if (!isSupabaseConfigured() || !session) {
-    return <EnviosClient mode={mode} />;
+    return <EnviosClient mode={mode} unified />;
   }
 
   const canManageShipmentOwners = canChangeShipmentSalesOwner(session);
@@ -34,6 +34,7 @@ export async function EnviosPageContent({ mode }: EnviosPageContentProps) {
   return (
     <EnviosClient
       mode={mode}
+      unified
       initialShipments={shipmentsResult.ok ? shipmentsResult.data : []}
       initialRouteMembers={membersResult.ok ? membersResult.data : []}
       initialSalesOwners={ownersResult.ok ? ownersResult.data : []}

@@ -1,5 +1,5 @@
-import { EnviosPageContent } from "@/components/envios-page-content";
+import { redirect } from "next/navigation";
 
-export default async function SeguimientoHistorialPage() {
-  return <EnviosPageContent mode="history" />;
+export default function SeguimientoHistorialPage() {
+  redirect("/seguimiento?view=history");
 }

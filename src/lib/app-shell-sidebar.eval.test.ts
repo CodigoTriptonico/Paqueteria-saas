@@ -35,19 +35,17 @@ describe("app shell sidebar eval", () => {
 
   it("keeps nav items in scan-friendly order", () => {
     const ventaIndex = sourceIndex('{ label: "Nueva venta", href: "/venta"');
-    const seguimientoIndex = sourceIndex('{ label: "Seguimiento", href: "/seguimiento"');
+    const seguimientoIndex = sourceIndex('{ label: "Seguimiento y envíos", href: "/seguimiento"');
     const inventarioIndex = sourceIndex('{ label: "Inventario", href: "/inventario"');
     const logisticaIndex = sourceIndex('{ label: "Logistica", href: "/logistica"');
     const tareasIndex = sourceIndex('{ label: "Tareas conductor", href: "/conductor/tareas"');
     const estadisticasIndex = sourceIndex('{ label: "Estadisticas", href: "/estadisticas"');
-    const auditoriaIndex = sourceIndex('{ label: "Auditoria", href: "/auditoria"');
 
     assert.ok(ventaIndex < seguimientoIndex);
     assert.ok(seguimientoIndex < inventarioIndex);
     assert.ok(inventarioIndex < logisticaIndex);
     assert.ok(logisticaIndex < tareasIndex);
     assert.ok(tareasIndex < estadisticasIndex);
-    assert.ok(estadisticasIndex < auditoriaIndex);
     assert.doesNotMatch(appShellSource, /\{ label: "Inicio", href: "\/"/);
     assert.match(appShellSource, /\{ label: "Nueva venta", href: "\/venta", icon: CreditCard, section: "shipments"/);
   });

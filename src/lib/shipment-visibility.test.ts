@@ -34,6 +34,12 @@ describe("shipment visibility", () => {
     assert.equal(shipmentVisibilityScope(session()), "sales_owner");
   });
 
+  it("lets audit sessions read all shipments for the unified audit workspace", () => {
+    const audit = session({ permissions: ["audit.immutable.view"] });
+
+    assert.equal(shipmentVisibilityScope(audit), "all");
+  });
+
   it("only lets administrador change shipment sales owner", () => {
     const admin = session({ roleSlug: "administrador", permissions: ["all"] });
     const sellerWithAll = session({ roleSlug: "vendedor", permissions: ["all"] });

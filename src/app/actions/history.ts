@@ -35,7 +35,8 @@ function canViewHistory(session: Awaited<ReturnType<typeof requireAppSession>>) 
     sessionHasPermission(session, "customers.manage") ||
     sessionHasPermission(session, "routes.view") ||
     sessionHasPermission(session, "routes.update_status") ||
-    sessionHasPermission(session, "settings.manage")
+    sessionHasPermission(session, "settings.manage") ||
+    sessionHasPermission(session, "audit.immutable.view")
   );
 }
 

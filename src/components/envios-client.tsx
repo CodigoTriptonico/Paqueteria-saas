@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Package, PhoneCall, Search, Star } from "lucide-react";
+import { History, Package, PhoneCall, Search, Star, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import {
   listLogisticsRoutesAction,
@@ -23,6 +23,7 @@ import {
   type ShipmentStatus,
 } from "@/app/actions/shipments";
 import { CountryFlag, CountryName } from "@/components/country-flag";
+import { EstadisticasAuditoriaPanel } from "@/components/estadisticas/auditoria-panel";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
 import { ShipmentCollectDialog } from "@/components/shipment-collect-dialog";
 import {
@@ -102,6 +103,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 type EnviosClientProps = {
   mode?: EnviosClientMode;
+  unified?: boolean;
   initialShipments?: ShipmentRow[];
   initialRouteMembers?: RouteMemberRow[];
   initialSalesOwners?: SalesOwnerRow[];
@@ -129,6 +131,7 @@ function driverCollectionLabel(row: ShipmentRow) {
 
 export function EnviosClient({
   mode = "tracking",
+  unified = false,
   initialShipments,
   initialRouteMembers,
   initialSalesOwners,
@@ -169,14 +172,63 @@ export function EnviosClient({
   const [contactLogShipmentId, setContactLogShipmentId] = useState<string | null>(null);
   const [shipmentMenu, setShipmentMenu] = useState<EnviosShipmentMenuState>(null);
   const [expandedShipmentIds, setExpandedShipmentIds] = useState<Set<string>>(() => new Set());
-
   const isConductor = initialRoleSlug === "conductor";
-  const isHistoryMode = mode === "history";
+  const requestedMode = searchParams.get("view");
+  const activeMode = unified
+    ? requestedMode === "history" || requestedMode === "tracking"
+      ? requestedMode
+      : mode
+    : mode;
+  const selectedAuditShipmentId = unified ? searchParams.get("audit") : null;
+  const isHistoryMode = activeMode === "history";
   const panelTitle = isHistoryMode ? "Historial de envíos" : "Seguimiento";
 
+  useEffect(() => {
+    if (!selectedAuditShipmentId) {
+      return;
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete("audit");
+        const query = params.toString();
+        router.replace(query ? `/seguimiento?${query}` : "/seguimiento", { scroll: false });
+      }
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [router, searchParams, selectedAuditShipmentId]);
+
+  function updateWorkspaceUrl(next: { mode?: EnviosClientMode; audit?: string | null }) {
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (next.mode) {
+      if (next.mode === "history") {
+        params.set("view", "history");
+      } else {
+        params.delete("view");
+      }
+    }
+
+    if (next.audit) {
+      params.set("audit", next.audit);
+    } else if (next.audit === null) {
+      params.delete("audit");
+    }
+
+    const query = params.toString();
+    router.replace(query ? `/seguimiento?${query}` : "/seguimiento", { scroll: false });
+  }
+
+  function selectWorkspaceMode(nextMode: EnviosClientMode) {
+    updateWorkspaceUrl({ mode: nextMode, audit: null });
+  }
+
   const modeShipments = useMemo(
-    () => filterShipmentsForEnviosMode(shipments, mode),
-    [mode, shipments],
+    () => filterShipmentsForEnviosMode(shipments, activeMode),
+    [activeMode, shipments],
   );
 
   useEffect(() => {
@@ -378,7 +430,11 @@ export function EnviosClient({
 
 
   function openShipmentAudit(shipmentId: string) {
-    router.push(`/auditoria?shipment=${shipmentId}`);
+    updateWorkspaceUrl({ audit: shipmentId });
+  }
+
+  function closeShipmentAudit() {
+    updateWorkspaceUrl({ audit: null });
   }
 
   function handleShipmentContextMenu(event: React.MouseEvent, row: ShipmentRow) {
@@ -722,6 +778,15 @@ export function EnviosClient({
       className="flex min-h-0 flex-col lg:flex-1 lg:overflow-hidden"
       contentClassName="flex min-h-0 flex-1 flex-col p-3 sm:p-4"
     >
+      {unified ? (
+        <EnviosWorkspaceTabs
+          activeMode={activeMode}
+          trackingCount={filterShipmentsForEnviosMode(shipments, "tracking").length}
+          historyCount={filterShipmentsForEnviosMode(shipments, "history").length}
+          onModeChange={selectWorkspaceMode}
+        />
+      ) : null}
+
       {!supabaseReady ? (
         <SupabaseRequiredBanner detail="Los envíos se listan desde Supabase. Sin credenciales no hay datos que mostrar." />
       ) : null}
@@ -735,7 +800,7 @@ export function EnviosClient({
       {supabaseReady ? (
         <>
           <EnviosFiltersToolbar
-            mode={mode}
+            mode={activeMode}
             readinessFilter={readinessFilter}
             onReadinessFilterChange={setReadinessFilter}
             totalCount={readinessSummary.totalCount}
@@ -940,7 +1005,96 @@ export function EnviosClient({
         onClose={() => setShipmentMenu(null)}
         onOpenAudit={openShipmentAudit}
       />
+
+      {unified && selectedAuditShipmentId && canAccessAuditoria ? (
+        <div
+          className="fixed inset-0 z-40 flex items-stretch justify-end bg-slate-950/70 p-2 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Auditoría del envío"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeShipmentAudit();
+            }
+          }}
+        >
+          <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-black bg-surface-panel shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-black bg-surface-card-header px-4 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-700/60 bg-emerald-950/40 text-emerald-300">
+                  <History className="h-4 w-4" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-wide text-emerald-300">Auditoría</p>
+                  <p className="truncate text-sm font-black text-[#f8fafc]">
+                    Reconstrucción del invoice y sus movimientos
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeShipmentAudit}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300 hover:bg-surface-card hover:text-[#f8fafc]"
+                aria-label="Cerrar auditoría"
+                title="Cerrar auditoría"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+              <EstadisticasAuditoriaPanel selectedShipmentId={selectedAuditShipmentId} />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </Panel>
+  );
+}
+
+function EnviosWorkspaceTabs({
+  activeMode,
+  trackingCount,
+  historyCount,
+  onModeChange,
+}: {
+  activeMode: EnviosClientMode;
+  trackingCount: number;
+  historyCount: number;
+  onModeChange: (mode: EnviosClientMode) => void;
+}) {
+  return (
+    <div className="mb-3 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-black bg-surface-card-header p-2">
+      <div className="min-w-0">
+        <p className="text-[10px] font-black uppercase tracking-wide text-emerald-300">Operación de envíos</p>
+        <p className="truncate text-sm font-black text-[#f8fafc]">Consulta, seguimiento y trazabilidad en un solo lugar</p>
+      </div>
+      <div className="flex shrink-0 rounded-lg border border-black bg-surface-inset p-0.5" role="tablist" aria-label="Vista de envíos">
+        {([
+          ["tracking", "En curso", trackingCount],
+          ["history", "Entregados", historyCount],
+        ] as const).map(([mode, label, count]) => {
+          const selected = activeMode === mode;
+
+          return (
+            <button
+              key={mode}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => onModeChange(mode)}
+              className={`flex h-8 items-center gap-2 rounded-md px-2.5 text-xs font-black transition ${
+                selected
+                  ? "bg-emerald-400 text-slate-950"
+                  : "text-slate-400 hover:bg-surface-card hover:text-[#f8fafc]"
+              }`}
+            >
+              <span>{label}</span>
+              <span className={`tabular-nums ${selected ? "text-slate-950/70" : "text-slate-500"}`}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

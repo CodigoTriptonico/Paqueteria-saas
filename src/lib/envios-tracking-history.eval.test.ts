@@ -16,14 +16,17 @@ const trackingPageSource = readFileSync(join(root, "app/seguimiento/page.tsx"), 
 describe("envios tracking vs history eval", () => {
   it("wires mode prop and partition helper in EnviosClient", () => {
     assert.match(enviosSource, /mode\?: EnviosClientMode/);
-    assert.match(enviosSource, /filterShipmentsForEnviosMode\(shipments, mode\)/);
+    assert.match(enviosSource, /filterShipmentsForEnviosMode\(shipments, activeMode\)/);
     assert.match(trackingPageSource, /mode="tracking"/);
-    assert.match(historialPageSource, /mode="history"/);
+    assert.match(historialPageSource, /redirect\("\/seguimiento\?view=history"\)/);
   });
 
   it("uses distinct panel titles for tracking and history", () => {
     assert.match(enviosSource, /Historial de envíos/);
     assert.match(enviosSource, /Seguimiento/);
+    assert.match(enviosSource, /EnviosWorkspaceTabs/);
+    assert.match(enviosSource, /En curso/);
+    assert.match(enviosSource, /Entregados/);
   });
 
   it("hides tracking-only status filter in history mode", () => {
@@ -37,6 +40,12 @@ describe("envios tracking vs history eval", () => {
     assert.match(enviosSource, /canManageSales && !isHistoryMode \? \(/);
     assert.match(enviosSource, /EnviosShipmentContextMenu/);
     assert.match(enviosSource, /ShipmentCollectDialog/);
+  });
+
+  it("opens shipment audit inside the unified workspace", () => {
+    assert.match(enviosSource, /EstadisticasAuditoriaPanel/);
+    assert.match(enviosSource, /selectedAuditShipmentId/);
+    assert.match(enviosSource, /role=\"dialog\"/);
   });
 
   it("keeps progress editing enabled in tracking mode", () => {

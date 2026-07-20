@@ -31,7 +31,7 @@ export function EstadisticasClient({
 
     if (view === "auditoria") {
       const shipment = searchParams.get("shipment");
-      router.replace(shipment ? `/auditoria?shipment=${shipment}` : "/auditoria");
+      router.replace(shipment ? `/seguimiento?audit=${shipment}` : "/seguimiento");
       return;
     }
 

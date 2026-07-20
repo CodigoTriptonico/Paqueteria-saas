@@ -6,7 +6,7 @@ const sharedPagePath = new URL("../components/envios-page-content.tsx", import.m
 const trackingPagePath = new URL("../app/seguimiento/page.tsx", import.meta.url);
 const historyPagePath = new URL("../app/seguimiento/historial/page.tsx", import.meta.url);
 
-test("envios routes share one data-loading boundary and preserve their modes", async () => {
+test("envios routes share one data-loading boundary and legacy history redirects", async () => {
   const [sharedPage, trackingPage, historyPage] = await Promise.all([
     readFile(sharedPagePath, "utf8"),
     readFile(trackingPagePath, "utf8"),
@@ -16,7 +16,7 @@ test("envios routes share one data-loading boundary and preserve their modes", a
   assert.match(sharedPage, /Promise\.all\(\[/);
   assert.match(sharedPage, /<EnviosClient[\s\S]*mode=\{mode\}/);
   assert.match(trackingPage, /<EnviosPageContent mode="tracking" \/>/);
-  assert.match(historyPage, /<EnviosPageContent mode="history" \/>/);
+  assert.match(historyPage, /redirect\("\/seguimiento\?view=history"\)/);
   assert.doesNotMatch(trackingPage, /listShipmentsAction/);
   assert.doesNotMatch(historyPage, /listShipmentsAction/);
 });

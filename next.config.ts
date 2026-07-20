@@ -36,7 +36,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/envios/historial",
-        destination: "/seguimiento/historial",
+        destination: "/seguimiento?view=history",
         permanent: true,
       },
       {

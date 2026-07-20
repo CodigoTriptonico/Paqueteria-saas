@@ -17,7 +17,7 @@ const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
   ],
   "/inventario": ["inventory.view"],
   "/venta": ["sales.manage"],
-  "/seguimiento": ["routes.view", "sales.manage"],
+  "/seguimiento": ["routes.view", "sales.manage", "audit.immutable.view"],
   "/logistica": ["routes.view", "routes.update_status"],
   "/ingreso-bodega": ["warehouses.manage", "sales.manage"],
   "/bodega": ["warehouses.manage", "sales.manage"],

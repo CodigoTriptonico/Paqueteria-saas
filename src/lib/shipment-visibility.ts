@@ -28,6 +28,10 @@ export function shipmentVisibilityScope(session: AppSession | null): ShipmentVis
     return "all";
   }
 
+  if (sessionHasPermission(session, "audit.immutable.view")) {
+    return "all";
+  }
+
   if (session.roleSlug === "conductor" && sessionHasPermission(session, "routes.view")) {
     return "driver";
   }
