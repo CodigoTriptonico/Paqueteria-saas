@@ -8,6 +8,7 @@ export type LogisticsCustomerAddressRow = {
   phone?: string | null;
   street?: string | null;
   house_number?: string | null;
+  address_reference?: string | null;
   neighborhood?: string | null;
   city?: string | null;
   state?: string | null;
@@ -65,6 +66,7 @@ export function routeAddressFromCustomer(
   const phones = Array.isArray(row.phones) ? row.phones : [];
   const street = clean(row.street);
   const houseNumber = clean(row.house_number);
+  const addressReference = clean(row.address_reference);
   const neighborhood = clean(row.neighborhood);
   const city = clean(row.city);
   const state = clean(row.state);
@@ -80,6 +82,7 @@ export function routeAddressFromCustomer(
     phone: clean(row.phone || phones[0]),
     street,
     houseNumber,
+    addressReference,
     neighborhood,
     city,
     state,
@@ -98,6 +101,7 @@ export function routeAddressFromRecipientSnapshot(
 ): LogisticsRouteStopAddress {
   const street = clean(snapshot?.street);
   const houseNumber = clean(snapshot?.houseNumber);
+  const addressReference = clean(snapshot?.addressReference);
   const neighborhood = clean(snapshot?.neighborhood);
   const city = clean(snapshot?.city);
   const state = clean(snapshot?.state);
@@ -115,6 +119,7 @@ export function routeAddressFromRecipientSnapshot(
     phone: clean(snapshot?.phone),
     street,
     houseNumber,
+    addressReference,
     neighborhood,
     city,
     state,
@@ -168,6 +173,7 @@ export function buildLogisticsGeoAddressPatch(input: {
   recipientSnapshot?: Record<string, unknown> | null;
   street?: string | null;
   houseNumber?: string | null;
+  addressReference?: string | null;
   neighborhood?: string | null;
   city?: string | null;
   state?: string | null;
@@ -180,6 +186,7 @@ export function buildLogisticsGeoAddressPatch(input: {
 }) {
   const street = clean(input.street);
   const houseNumber = clean(input.houseNumber);
+  const addressReference = clean(input.addressReference);
   const neighborhood = clean(input.neighborhood);
   const city = clean(input.city);
   const state = clean(input.state);
@@ -194,6 +201,7 @@ export function buildLogisticsGeoAddressPatch(input: {
         ...input.recipientSnapshot,
         street,
         houseNumber,
+        addressReference,
         neighborhood,
         city,
         state,
@@ -217,6 +225,7 @@ export function buildLogisticsGeoAddressPatch(input: {
       phone: clean(snapshot?.phone || input.customerPhone),
       street,
       houseNumber,
+      addressReference,
       neighborhood,
       city,
       state,

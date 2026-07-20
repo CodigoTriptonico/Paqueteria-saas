@@ -4,7 +4,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
+  defaultSalePaymentSelection,
   resolveSalePaymentInput,
+  SALE_PAYMENT_UNSET,
   salePaymentChoiceLabel,
 } from "@/lib/sale-payment-choice";
 
@@ -54,6 +56,11 @@ describe("sale payment choice", () => {
     );
   });
 
+  it("defaults office counter sales to cash and driver deliveries to unset", () => {
+    assert.equal(defaultSalePaymentSelection("office"), "cash");
+    assert.equal(defaultSalePaymentSelection("driver"), SALE_PAYMENT_UNSET);
+  });
+
   it("makes pending a conductor collection decision, not an ambiguous payment method", () => {
     assert.equal(salePaymentChoiceLabel("pending"), "Pendiente");
     assert.equal(fieldSource.includes("openPaymentSelect"), true);
@@ -65,7 +72,10 @@ describe("sale payment choice", () => {
     assert.equal(fieldSource.includes("Ya recibido"), false);
     assert.equal(fieldSource.includes("Cobro pendiente del conductor"), true);
     assert.equal(fieldSource.includes("Pago pendiente en oficina"), true);
-    assert.equal(fieldSource.includes("Dejar pendiente"), true);
+    assert.equal(fieldSource.includes("Depósito pendiente"), true);
+    assert.equal(fieldSource.includes('type="checkbox"'), true);
+    assert.equal(fieldSource.includes("Cobro del depósito"), true);
+    assert.equal(fieldSource.includes("Dejar pendiente"), false);
     assert.equal(fieldSource.includes("Se cobra después"), false);
     assert.equal(fieldSource.includes("ActionConfirmDialog"), false);
     assert.equal(fieldSource.includes("pendingConfirmOpen"), false);

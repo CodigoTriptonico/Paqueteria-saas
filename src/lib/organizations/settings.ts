@@ -5,6 +5,8 @@ export type OrganizationSettings = {
   owner_contact_phones?: string[];
   company_phone?: string;
   company_address?: string;
+  company_short_name?: string;
+  company_logo_path?: string;
   currency?: string;
   onboarding_dismissed?: boolean;
   onboarding_started?: boolean;

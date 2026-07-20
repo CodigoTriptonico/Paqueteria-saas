@@ -34,6 +34,7 @@ type SaleClientFormProps = {
     city: string;
     state: string;
     postalCode: string;
+    addressReference: string;
     setFirstName: (value: string) => void;
     setLastName: (value: string) => void;
     setStreet: (value: string) => void;
@@ -42,6 +43,7 @@ type SaleClientFormProps = {
     setCity: (value: string) => void;
     setState: (value: string) => void;
     setPostalCode: (value: string) => void;
+    setAddressReference: (value: string) => void;
   };
   address: {
     search: string;
@@ -335,7 +337,7 @@ export function SaleClientForm({ form, address, actions, meta }: SaleClientFormP
           </div>
         </div>
 
-        <div className="flex h-full min-w-0 flex-col rounded-lg border border-black bg-surface-card">
+        <div className="flex min-w-0 flex-col self-start rounded-lg border border-black bg-surface-card">
           <div className="flex items-center gap-3 border-b border-sky-300/25 bg-[#1f2c28] px-4 py-3">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-sky-300 text-slate-950">
               <MapPin className="h-4 w-4" />
@@ -447,6 +449,22 @@ export function SaleClientForm({ form, address, actions, meta }: SaleClientFormP
               onSelectSuggestion={selectSuggestedAddress}
               onUseUnverified={() => setShowUnverifiedConfirm(true)}
             />
+
+            <label className="grid gap-1.5">
+              <span className={clientFormLabelClass}>Referencias</span>
+              <textarea
+                {...noBrowserAutocomplete}
+                name="boxario-client-address-reference"
+                rows={2}
+                className={`${clientFormInputClass} min-h-[4.5rem] resize-y py-2.5`}
+                placeholder="Ej. segundo piso, casa roja, porton negro, entre calles..."
+                value={form.addressReference ?? ""}
+                onChange={(event) => form.setAddressReference(event.target.value)}
+              />
+              <span className="text-[11px] font-bold leading-snug text-slate-500">
+                Indicaciones extra para encontrar el domicilio. No afectan la verificacion en Google.
+              </span>
+            </label>
           </div>
         </div>
       </form>

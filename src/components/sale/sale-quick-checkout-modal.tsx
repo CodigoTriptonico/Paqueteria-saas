@@ -12,12 +12,13 @@ import {
   senderPhonesLabel,
 } from "@/components/sale/venta-parts";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
-import { saleFinishActionLabel, type InvoiceBillingSnapshot } from "@/lib/invoice-billing";
-import { SALE_PAYMENT_UNSET, type SalePaymentSelection } from "@/lib/sale-payment-choice";
+import type { OrganizationBranding } from "@/lib/organizations/branding";
+import { defaultSalePaymentSelection, type SalePaymentSelection } from "@/lib/sale-payment-choice";
 import { SaleInvoiceConfirmDialog } from "@/components/sale/sale-invoice-confirm-dialog";
 import { useState } from "react";
 
 type SaleQuickCheckoutModalProps = {
+  branding?: OrganizationBranding | null;
   invoiceNumber: string;
   draft: QuickEmptyBoxDraft;
   billing: InvoiceBillingSnapshot | null;
@@ -41,6 +42,7 @@ type SaleQuickCheckoutModalProps = {
 };
 
 export function SaleQuickCheckoutModal({
+  branding,
   invoiceNumber,
   draft,
   billing,
@@ -101,6 +103,7 @@ export function SaleQuickCheckoutModal({
 
             <div className="flex flex-col items-center gap-4">
               <SaleInvoicePaper
+                branding={branding}
                 invoiceNumber={invoiceNumber}
                 sender={draft.sender}
                 box={draft.box}
@@ -172,7 +175,9 @@ export function SaleQuickCheckoutModal({
               <button
                 type="button"
                 onClick={() => {
-                  onPaymentMethodChange(SALE_PAYMENT_UNSET);
+                  const pendingSource =
+                    draft.emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? "office" : "driver";
+                  onPaymentMethodChange(defaultSalePaymentSelection(pendingSource));
                   onPaymentNoteChange("");
                   setConfirmOpen(true);
                 }}

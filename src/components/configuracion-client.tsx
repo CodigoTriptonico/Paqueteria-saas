@@ -142,7 +142,7 @@ const sections = [
   {
     id: "company" as Section,
     title: "Empresa",
-    text: "Nombre, teléfono y dirección.",
+    text: "Nombre, acrónimo, logo y contacto.",
     icon: Building2,
   },
   {
@@ -341,7 +341,7 @@ function TimeRangeSelect({
   const range = parseDeliveryTime(isConfigured ? value : "1 dia");
   const numbers = range.unit === "dias" ? dayOptions : weekOptions;
   const controlSize = large ? "h-12 text-xl" : "h-11 text-lg";
-  const numberWidth = large ? "w-14" : "w-12";
+  const numberButtonClass = large ? "min-w-[4.5rem] px-3" : "min-w-[3.75rem] px-2";
 
   function updateRange(nextRange: Partial<typeof range>) {
     const next = { ...range, ...nextRange };
@@ -467,34 +467,35 @@ function TimeRangeSelect({
     );
   }
 
-  const triggerClass = `flex ${controlSize} items-center justify-center gap-1 rounded-lg border border-black bg-surface-panel px-2 font-black text-[#f8fafc] transition hover:bg-surface-card-hover`;
+  const triggerClass = `flex ${controlSize} shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-black bg-surface-panel px-2 font-black tabular-nums text-[#f8fafc] transition hover:bg-surface-card-hover`;
+  const numberTriggerClass = `${triggerClass} ${numberButtonClass}`;
 
   return (
     <>
-      <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-black bg-[#1a221f] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="inline-flex max-w-full flex-nowrap items-center gap-2 rounded-xl border border-black bg-[#1a221f] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
         <button
           ref={startRef}
           type="button"
           onClick={() => openPickerAt("start")}
-          className={`${triggerClass} ${numberWidth}`}
+          className={numberTriggerClass}
           aria-expanded={openPicker === "start"}
         >
           {range.start}
           <ChevronDown
-            className={`h-3.5 w-3.5 text-slate-400 transition ${openPicker === "start" ? "rotate-180" : ""}`}
+            className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition ${openPicker === "start" ? "rotate-180" : ""}`}
           />
         </button>
-        <span className="px-0.5 text-sm font-black text-slate-500">a</span>
+        <span className="shrink-0 px-0.5 text-sm font-black text-slate-500">a</span>
         <button
           ref={endRef}
           type="button"
           onClick={() => openPickerAt("end")}
-          className={`${triggerClass} ${numberWidth}`}
+          className={numberTriggerClass}
           aria-expanded={openPicker === "end"}
         >
           {range.end}
           <ChevronDown
-            className={`h-3.5 w-3.5 text-slate-400 transition ${openPicker === "end" ? "rotate-180" : ""}`}
+            className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition ${openPicker === "end" ? "rotate-180" : ""}`}
           />
         </button>
         <button

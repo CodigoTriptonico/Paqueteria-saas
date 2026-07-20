@@ -108,6 +108,7 @@ describe("mergeCustomersWithRecipients", () => {
         city: "CDMX",
         state: "CDMX",
         postal_code: "01000",
+        address_reference: "Segundo piso",
         card_style: "amber-warm",
       }),
       {
@@ -124,6 +125,7 @@ describe("mergeCustomersWithRecipients", () => {
         city: "CDMX",
         state: "CDMX",
         postalCode: "01000",
+        addressReference: "Segundo piso",
         cardStyle: "amber-warm",
         placeId: "",
         formattedAddress: "",

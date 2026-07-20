@@ -251,12 +251,17 @@ export function readBillingFromPlan(value: unknown): InvoiceBillingSnapshot | nu
 
 export function saleFinishActionLabel(
   billing: Pick<InvoiceBillingSnapshot, "balanceDue"> | null,
-  options?: { creating?: boolean },
+  options?: { creating?: boolean; phase?: "setup" | "confirm" },
 ) {
   const hasBalanceDue = billing ? parseMoneyValue(billing.balanceDue) > 0 : true;
+  const phase = options?.phase ?? "confirm";
 
   if (options?.creating) {
     return hasBalanceDue ? "Creando invoice..." : "Cerrando venta...";
+  }
+
+  if (phase === "setup") {
+    return hasBalanceDue ? "Configurar pago" : "Confirmar cierre";
   }
 
   return hasBalanceDue ? "Crear invoice" : "Cerrar venta";

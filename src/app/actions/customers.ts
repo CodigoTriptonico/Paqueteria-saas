@@ -91,6 +91,7 @@ export async function createCustomerAction(input: {
   state: string;
   postalCode: string;
   country?: string;
+  addressReference?: string;
   referredByCustomerId?: string;
   placeId?: string;
   formattedAddress?: string;
@@ -137,12 +138,13 @@ export async function createCustomerAction(input: {
         city: input.city.trim(),
         state: input.state.trim(),
         postal_code: input.postalCode.trim(),
+        address_reference: input.addressReference?.trim() || "",
         country: input.country?.trim() || "USA",
         referred_by_customer_id: input.referredByCustomerId || null,
         ...geoAddressPatch(input),
       })
       .select(
-        "id, referred_by_customer_id, first_name, last_name, phones, email, emails, street, house_number, neighborhood, city, state, postal_code, country, card_style, place_id, formatted_address, address_verified, lat, lng",
+        "id, referred_by_customer_id, first_name, last_name, phones, email, emails, street, house_number, neighborhood, city, state, postal_code, country, address_reference, card_style, place_id, formatted_address, address_verified, lat, lng",
       )
       .single();
 
@@ -180,6 +182,7 @@ export async function updateCustomerAction(input: {
   state: string;
   postalCode: string;
   country?: string;
+  addressReference?: string;
   placeId?: string;
   formattedAddress?: string;
   addressVerified?: boolean;
@@ -220,6 +223,7 @@ export async function updateCustomerAction(input: {
         city: input.city.trim(),
         state: input.state.trim(),
         postal_code: input.postalCode.trim(),
+        address_reference: input.addressReference?.trim() || "",
         country: input.country?.trim() || "USA",
         ...geoAddressPatch(input),
         updated_at: new Date().toISOString(),
@@ -242,6 +246,7 @@ export async function updateCustomerAction(input: {
         state,
         postal_code,
         country,
+        address_reference,
         card_style,
         place_id,
         formatted_address,
@@ -262,6 +267,7 @@ export async function updateCustomerAction(input: {
           city,
           state,
           postal_code,
+          address_reference,
           card_style,
           place_id,
           formatted_address,
@@ -426,6 +432,7 @@ export async function createRecipientAction(input: {
   city: string;
   state?: string;
   postalCode: string;
+  addressReference?: string;
   placeId?: string;
   formattedAddress?: string;
   addressVerified?: boolean;
@@ -484,10 +491,11 @@ export async function createRecipientAction(input: {
         city: input.city.trim(),
         state: input.state?.trim() || "",
         postal_code: input.postalCode.trim(),
+        address_reference: input.addressReference?.trim() || "",
         ...geoAddressPatch(input),
       })
       .select(
-        "id, first_name, last_name, phone, email, emails, country, street, house_number, neighborhood, city, state, postal_code, card_style, place_id, formatted_address, address_verified, lat, lng",
+        "id, first_name, last_name, phone, email, emails, country, street, house_number, neighborhood, city, state, postal_code, address_reference, card_style, place_id, formatted_address, address_verified, lat, lng",
       )
       .single();
 
@@ -524,6 +532,7 @@ export async function updateRecipientAction(input: {
   city: string;
   state?: string;
   postalCode: string;
+  addressReference?: string;
   placeId?: string;
   formattedAddress?: string;
   addressVerified?: boolean;
@@ -578,13 +587,14 @@ export async function updateRecipientAction(input: {
         city: input.city.trim(),
         state: input.state?.trim() || "",
         postal_code: input.postalCode.trim(),
+        address_reference: input.addressReference?.trim() || "",
         ...geoAddressPatch(input),
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.recipientId)
       .eq("organization_id", session.organizationId)
       .select(
-        "id, first_name, last_name, phone, email, emails, country, street, house_number, neighborhood, city, state, postal_code, card_style, place_id, formatted_address, address_verified, lat, lng",
+        "id, first_name, last_name, phone, email, emails, country, street, house_number, neighborhood, city, state, postal_code, address_reference, card_style, place_id, formatted_address, address_verified, lat, lng",
       )
       .single();
 

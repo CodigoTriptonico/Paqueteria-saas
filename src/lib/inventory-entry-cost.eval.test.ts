@@ -30,6 +30,8 @@ describe("inventory entry cost eval", () => {
     assert.match(movementModalSource, /Costo unitario/);
     assert.match(movementModalSource, /movementDraft\.type === "entrada"/);
     assert.match(movementModalSource, /syncEntryCostFields/);
+    assert.match(movementModalSource, /movementFieldClass/);
+    assert.doesNotMatch(movementModalSource, /sm:grid-cols-2/);
   });
 
   it("submits resolved entry costs from the inventory editor", () => {

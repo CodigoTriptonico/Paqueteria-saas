@@ -1,7 +1,12 @@
 "use server";
 
-import { requireAppSession } from "@/lib/auth/session";
+import { revalidatePath } from "next/cache";
+import { avatarExtension, validateAvatarUpload } from "@/lib/account/profile-validation";
+import { ORGANIZATION_LOGO_BUCKET } from "@/lib/organizations/branding";
 import { sessionHasPermission } from "@/lib/auth/permissions";
+import { requireAppSession } from "@/lib/auth/session";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createStorageSignedUrl } from "@/lib/supabase/storage-url";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import {
@@ -125,9 +130,9 @@ export async function updateOrganizationSettingsAction(settings: {
 
 export type OrganizationProfile = {
   name: string;
+  shortName: string;
   phone: string;
-  address: string;
-  currency: string;
+  logoUrl: string | null;
   canEdit: boolean;
 };
 
@@ -153,12 +158,16 @@ export async function getOrganizationProfileAction(): Promise<
     }
 
     const settings = (org?.settings || {}) as OrganizationSettings;
+    const logoPath = settings.company_logo_path?.trim() || "";
+    const logoUrl = logoPath
+      ? await createStorageSignedUrl(supabase, ORGANIZATION_LOGO_BUCKET, logoPath)
+      : null;
 
     return ok({
       name: org?.name?.trim() || session.organizationName || "",
+      shortName: settings.company_short_name?.trim() || "",
       phone: settings.company_phone?.trim() || "",
-      address: settings.company_address?.trim() || "",
-      currency: settings.currency?.trim() || "",
+      logoUrl,
       canEdit: sessionHasPermission(session, "settings.manage"),
     });
   } catch (error) {
@@ -168,9 +177,8 @@ export async function getOrganizationProfileAction(): Promise<
 
 export async function updateOrganizationProfileAction(input: {
   name: string;
+  shortName: string;
   phone: string;
-  address: string;
-  currency: string;
 }): Promise<ActionResult<OrganizationProfile>> {
   try {
     const session = await requireAppSession();
@@ -196,14 +204,12 @@ export async function updateOrganizationProfileAction(input: {
       .single();
 
     const phone = input.phone.trim();
-    const address = input.address.trim();
-    const currency = input.currency.trim();
+    const shortName = input.shortName.trim();
 
     const nextSettings: OrganizationSettings = {
       ...((org?.settings || {}) as OrganizationSettings),
       company_phone: phone,
-      company_address: address,
-      currency,
+      company_short_name: shortName,
     };
 
     const { error } = await supabase
@@ -218,13 +224,89 @@ export async function updateOrganizationProfileAction(input: {
       return fail(error.message);
     }
 
+    revalidatePath("/", "layout");
+
+    const logoPath = nextSettings.company_logo_path?.trim() || "";
+    const admin = createSupabaseAdminClient();
+    const logoUrl = logoPath && admin
+      ? await createStorageSignedUrl(admin, ORGANIZATION_LOGO_BUCKET, logoPath)
+      : null;
+
     return ok({
       name,
+      shortName,
       phone,
-      address,
-      currency,
+      logoUrl,
       canEdit: true,
     });
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function uploadOrganizationLogoAction(
+  formData: FormData,
+): Promise<ActionResult<{ logoUrl: string }>> {
+  try {
+    const file = formData.get("logo");
+    if (!(file instanceof File)) {
+      return fail("Elige un logo para subir");
+    }
+
+    const validationError = validateAvatarUpload(file);
+    if (validationError) {
+      return fail(validationError);
+    }
+
+    const session = await requireAppSession();
+
+    if (!sessionHasPermission(session, "settings.manage")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const admin = createSupabaseAdminClient();
+    if (!admin) {
+      return fail("No se pudo conectar con el almacenamiento");
+    }
+
+    const path = `${session.organizationId}/logo.${avatarExtension(file.type)}`;
+    const { error: uploadError } = await admin.storage.from(ORGANIZATION_LOGO_BUCKET).upload(path, file, {
+      cacheControl: "3600",
+      contentType: file.type,
+      upsert: true,
+    });
+    if (uploadError) {
+      return fail(uploadError.message);
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("settings")
+      .eq("id", session.organizationId)
+      .single();
+
+    const nextSettings: OrganizationSettings = {
+      ...((org?.settings || {}) as OrganizationSettings),
+      company_logo_path: path,
+    };
+
+    const { error: updateError } = await supabase
+      .from("organizations")
+      .update({ settings: nextSettings })
+      .eq("id", session.organizationId);
+
+    if (updateError) {
+      return fail(updateError.message);
+    }
+
+    const logoUrl = await createStorageSignedUrl(admin, ORGANIZATION_LOGO_BUCKET, path);
+    revalidatePath("/", "layout");
+    return ok({ logoUrl });
   } catch (error) {
     return fail(actionErrorMessage(error));
   }

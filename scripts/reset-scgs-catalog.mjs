@@ -38,6 +38,28 @@ try {
   ];
 
   for (const [table, label] of tables) {
+    if (table === "pricing_countries") {
+      const result = await client.query(
+        `DELETE FROM public.pricing_countries country
+         WHERE country.organization_id = $1
+           AND NOT EXISTS (
+             SELECT 1
+             FROM public.customer_recipients recipient
+             WHERE recipient.organization_id = $1
+               AND recipient.country_id = country.id
+           )`,
+        [SCGS_ORG_ID],
+      );
+      const kept = await client.query(
+        `SELECT count(*)::int AS count
+         FROM public.pricing_countries
+         WHERE organization_id = $1`,
+        [SCGS_ORG_ID],
+      );
+      console.log(`  ${label}: ${result.rowCount} filas borradas, ${kept.rows[0].count} conservados (destinatarios vinculados)`);
+      continue;
+    }
+
     const result = await client.query(
       `DELETE FROM public.${table} WHERE organization_id = $1`,
       [SCGS_ORG_ID],

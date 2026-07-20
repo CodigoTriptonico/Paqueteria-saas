@@ -21,6 +21,7 @@ export type CustomerRecipientRow = {
   city: string;
   state: string;
   postalCode: string;
+  addressReference: string;
   cardStyle: string;
   placeId: string;
   formattedAddress: string;
@@ -44,6 +45,7 @@ export type CustomerWithRecipientsRow = {
   state: string;
   postalCode: string;
   country: string;
+  addressReference: string;
   cardStyle: string;
   placeId: string;
   formattedAddress: string;
@@ -68,6 +70,7 @@ type CustomerDbRow = {
   state: string;
   postal_code: string;
   country: string;
+  address_reference?: string | null;
   card_style: string | null;
   place_id?: string | null;
   formatted_address?: string | null;
@@ -92,6 +95,7 @@ type RecipientDbRow = {
   city: string;
   state: string;
   postal_code: string;
+  address_reference?: string | null;
   card_style: string | null;
   place_id?: string | null;
   formatted_address?: string | null;
@@ -115,6 +119,7 @@ const RECIPIENT_SELECT_FIELDS = `
   city,
   state,
   postal_code,
+  address_reference,
   card_style,
   place_id,
   formatted_address,
@@ -138,6 +143,7 @@ const CUSTOMER_SELECT_FIELDS = `
   state,
   postal_code,
   country,
+  address_reference,
   card_style,
   place_id,
   formatted_address,
@@ -253,6 +259,7 @@ export function mapRecipientRow(row: RecipientDbRow): CustomerRecipientRow {
     city: row.city,
     state: row.state || "",
     postalCode: row.postal_code,
+    addressReference: row.address_reference || "",
     cardStyle: row.card_style || "amber-warm",
     placeId: row.place_id || "",
     formattedAddress: row.formatted_address || "",
@@ -284,6 +291,7 @@ export function mapCustomerRow(row: CustomerDbRow): CustomerWithRecipientsRow {
     state: row.state,
     postalCode: row.postal_code,
     country: row.country,
+    addressReference: row.address_reference || "",
     cardStyle: row.card_style || "amber-warm",
     placeId: row.place_id || "",
     formattedAddress: row.formatted_address || "",

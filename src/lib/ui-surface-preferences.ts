@@ -40,6 +40,7 @@ const DEFAULT_BY_CONTEXT: Partial<Record<UiSurfaceContextId, UiSurfacePaletteId>
   "timeclock.admin": DEFAULT_LIST_ROW_PALETTE_ID,
   "sale.senderCard": DEFAULT_PERSON_CARD_PALETTE_ID,
   "sale.recipientCard": DEFAULT_PERSON_CARD_PALETTE_ID,
+  "sale.box": DEFAULT_LIST_ROW_PALETTE_ID,
 };
 
 export function defaultUiSurfacePreferences(): UiSurfacePreferences {

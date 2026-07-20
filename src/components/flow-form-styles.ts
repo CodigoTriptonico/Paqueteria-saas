@@ -67,6 +67,10 @@ export const flowToolbarCreateButtonClass =
 export const flowToolbarInlineCreateClass =
   "inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-emerald-300/50 bg-emerald-400 bg-gradient-to-b from-emerald-300 to-emerald-500 px-3.5 text-[11px] font-black text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_10px_22px_rgba(16,185,129,0.22)] transition hover:from-emerald-200 hover:to-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-200 sm:gap-2 sm:px-4 sm:text-xs";
 
+/** Cuerpo con scroll para formularios de persona (remitente / destinatario). */
+export const flowPersonFormShellClass =
+  "flex min-h-0 w-full flex-1 flex-col overflow-y-auto bg-[#1a221f] px-2 py-2 sm:px-3 sm:py-3";
+
 /** Cuerpo compacto para formularios de persona (sin estirar al viewport). */
 export const flowPersonFormSectionClass = "flex w-full flex-col";
 

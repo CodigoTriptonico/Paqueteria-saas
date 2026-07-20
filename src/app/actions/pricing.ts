@@ -59,6 +59,15 @@ export async function savePricingConfigAction(
     });
 
     if (rpcError) {
+      if (rpcError.message.includes("PRICING_COUNTRY_IN_USE")) {
+        const countryName = rpcError.message.split(":").slice(1).join(":").trim();
+        return fail(
+          countryName
+            ? `No puedes quitar ${countryName}: tiene destinatarios vinculados.`
+            : "No puedes quitar un país con destinatarios vinculados.",
+        );
+      }
+
       return fail(rpcError.message);
     }
 

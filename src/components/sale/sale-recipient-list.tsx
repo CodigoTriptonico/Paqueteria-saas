@@ -46,6 +46,7 @@ function recipientContextProps(recipient: Recipient) {
     "data-sale-context-city": recipient.city,
     "data-sale-context-state": recipient.state,
     "data-sale-context-postal-code": recipient.postalCode,
+    "data-sale-context-address-reference": recipient.addressReference,
     "data-sale-context-country": recipient.country,
     "data-sale-context-recipient-id": recipient.id.startsWith("local-r-")
       ? undefined

@@ -59,6 +59,7 @@ describe("ui surface appearance eval", () => {
     assert.equal(venta.includes("surfaceContextId: saleListPaletteContext"), true);
     assert.equal(venta.includes('"sale.senderCard"'), true);
     assert.equal(venta.includes('"sale.recipientCard"'), true);
+    assert.equal(venta.includes('"sale.box"'), true);
     assert.equal(venta.includes("usePageListRowPalette"), false);
     assert.equal(venta.includes("usePageViewLayout(saleListPaletteContext)"), true);
   });

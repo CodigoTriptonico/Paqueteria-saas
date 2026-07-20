@@ -14,6 +14,7 @@ import type { OrganizationSettings } from "@/lib/organizations/settings";
 import { readMaxWarehouses } from "@/lib/organizations/settings";
 import type { AppSession, RoleSlug } from "@/lib/auth/types";
 import { PROFILE_AVATAR_BUCKET } from "@/lib/account/profile-validation";
+import { ORGANIZATION_LOGO_BUCKET } from "@/lib/organizations/branding";
 import { createStorageSignedUrl } from "@/lib/supabase/storage-url";
 
 async function loadIsPlatformAdmin(userId: string, reader?: SupabaseClient | null) {
@@ -85,6 +86,9 @@ async function getDevelopmentPlatformOwnerSession(): Promise<AppSession | null> 
   const avatarUrl = profile.avatar_path
     ? await createStorageSignedUrl(admin, PROFILE_AVATAR_BUCKET, profile.avatar_path)
     : null;
+  const organizationLogoUrl = homeOrg?.settings?.company_logo_path
+    ? await createStorageSignedUrl(admin, ORGANIZATION_LOGO_BUCKET, homeOrg.settings.company_logo_path)
+    : null;
 
   return {
     userId,
@@ -93,6 +97,8 @@ async function getDevelopmentPlatformOwnerSession(): Promise<AppSession | null> 
     avatarUrl,
     organizationId: profile.organization_id,
     organizationName: homeOrg?.name || "Empresa",
+    organizationShortName: homeOrg?.settings?.company_short_name?.trim() || null,
+    organizationLogoUrl,
     multiWarehouseEnabled: Boolean(homeOrg?.settings?.multi_warehouse_enabled),
     maxWarehouses: readMaxWarehouses(homeOrg?.settings),
     roleSlug: role?.slug || "administrador",
@@ -141,7 +147,8 @@ async function resolveAppSessionUncached(): Promise<AppSession | null> {
     | null;
   const homeOrg = Array.isArray(orgRow) ? orgRow[0] : orgRow;
 
-  const [{ data: grantedPerms }, { data: warehouseLinks }, isPlatformAdmin, avatarUrl] = await Promise.all([
+  const [{ data: grantedPerms }, { data: warehouseLinks }, isPlatformAdmin, avatarUrl, organizationLogoUrl] =
+    await Promise.all([
     supabase
       .from("role_permissions")
       .select("permissions(key)")
@@ -151,6 +158,9 @@ async function resolveAppSessionUncached(): Promise<AppSession | null> {
     loadIsPlatformAdmin(userId, supabase),
     profile.avatar_path
       ? createStorageSignedUrl(supabase, PROFILE_AVATAR_BUCKET, profile.avatar_path)
+      : Promise.resolve(null),
+    homeOrg?.settings?.company_logo_path
+      ? createStorageSignedUrl(supabase, ORGANIZATION_LOGO_BUCKET, homeOrg.settings.company_logo_path)
       : Promise.resolve(null),
   ]);
 
@@ -165,6 +175,7 @@ async function resolveAppSessionUncached(): Promise<AppSession | null> {
     roleName: role?.name || "Vendedor",
     homeOrganizationName: homeOrg?.name || "Empresa",
     homeOrganizationSettings: homeOrg?.settings,
+    homeOrganizationLogoUrl: organizationLogoUrl,
     permissions: extractPermissionKeys(grantedPerms),
     warehouseIds: (warehouseLinks || []).map((row) => row.warehouse_id),
     isPlatformAdmin,

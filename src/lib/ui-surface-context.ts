@@ -12,6 +12,7 @@ export const UI_SURFACE_CONTEXT_IDS = [
   "timeclock.admin",
   "sale.senderCard",
   "sale.recipientCard",
+  "sale.box",
 ] as const;
 
 export type UiSurfaceContextId = (typeof UI_SURFACE_CONTEXT_IDS)[number];
@@ -110,6 +111,13 @@ export const UI_SURFACE_CONTEXTS: UiSurfaceContextMeta[] = [
     label: "Venta · destinatario",
     kind: "personCard",
     description: "Color por defecto al crear un destinatario nuevo.",
+    supportsViewLayout: true,
+  },
+  {
+    id: "sale.box",
+    label: "Venta · caja",
+    kind: "listRow",
+    description: "Filas y tarjetas del catálogo de cajas.",
     supportsViewLayout: true,
   },
 ];

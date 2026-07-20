@@ -35,6 +35,12 @@ export function salePaymentChoiceLabel(choice: SalePaymentChoice) {
   return paymentMethodLabel(choice);
 }
 
+export function defaultSalePaymentSelection(
+  pendingPaymentSource: "driver" | "office" = "driver",
+): SalePaymentSelection {
+  return pendingPaymentSource === "office" ? "cash" : SALE_PAYMENT_UNSET;
+}
+
 export function resolveSalePaymentInput(input: {
   choice: SalePaymentChoice;
   payNow: string;

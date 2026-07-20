@@ -6,10 +6,10 @@ describe("business workspace", () => {
   it("starts without invented balances or operational rows", () => {
     const workspace = emptyBusinessWorkspace({
       tenantId: "tenant-1",
-      tenantName: "SCGS",
+      tenantName: "Acme Logística",
       organizationId: "org-1",
-      organizationName: "SCGS",
-      organizationCode: "SCGS",
+      organizationName: "Acme Logística",
+      organizationCode: "ACME",
       organizationType: "matrix",
     });
     assert.equal(workspace.agencies.length, 0);

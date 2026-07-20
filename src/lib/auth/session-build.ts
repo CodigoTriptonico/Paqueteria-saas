@@ -13,6 +13,7 @@ export type ProfileSessionInput = {
   roleName: string;
   homeOrganizationName: string;
   homeOrganizationSettings: OrganizationSettings | null | undefined;
+  homeOrganizationLogoUrl?: string | null;
   permissions: PermissionKey[];
   warehouseIds: string[];
   isPlatformAdmin: boolean;
@@ -44,6 +45,8 @@ export function buildAppSessionFromProfile(
     avatarUrl: home.avatarUrl,
     organizationId: home.organizationId,
     organizationName: home.homeOrganizationName,
+    organizationShortName: home.homeOrganizationSettings?.company_short_name?.trim() || null,
+    organizationLogoUrl: home.homeOrganizationLogoUrl ?? null,
     multiWarehouseEnabled: Boolean(
       home.homeOrganizationSettings?.multi_warehouse_enabled,
     ),

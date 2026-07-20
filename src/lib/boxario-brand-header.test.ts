@@ -12,18 +12,18 @@ describe("BoxarioBrandHeader layout", () => {
   it("aligns brand title and notifications on one horizontal row", () => {
     assert.match(source, /flex w-full min-w-0 items-center justify-between/);
     assert.match(source, /variant="brand"/);
-    assert.match(source, /<h1 className=\{titleClass\}>Boxario<\/h1>/);
+    assert.match(source, /<h1 className=\{titleClass\}>\{brandTitle\}<\/h1>/);
   });
 
   it("keeps the Boxario mark as the home link even with contextual navigation", () => {
     assert.match(source, /import Link from "next\/link"/);
     assert.match(source, /<Link href="\/" prefetch aria-label="Ir al inicio"/);
-    assert.match(source, /<h1 className=\{titleClass\}>Boxario<\/h1>/);
-    assert.match(source, /keepBrand && onBack/);
+    assert.match(source, /<h1 className=\{titleClass\}>\{brandTitle\}<\/h1>/);
+    assert.match(source, /onBack && keepBrand/);
     assert.match(source, /min-h-\[4\.75rem\] flex-col/);
     assert.match(source, /<div className="mt-1 h-8 w-full" aria-hidden \/>/);
     assert.doesNotMatch(source, /<House className=/);
-    assert.match(source, /\{onBack && !keepBrand && title !== "Boxario" \? \(/);
+    assert.match(source, /\{onBack && !keepBrand && resolvedTitle !== brandTitle \? \(/);
   });
 
   it("does not render the old cube mark in the brand header", () => {

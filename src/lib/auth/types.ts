@@ -78,6 +78,8 @@ export type AppSession = {
   /** Org usada para cargar datos (cliente si estás en vista plataforma). */
   organizationId: string;
   organizationName: string;
+  organizationShortName: string | null;
+  organizationLogoUrl: string | null;
   multiWarehouseEnabled: boolean;
   maxWarehouses: number;
   roleSlug: RoleSlug;

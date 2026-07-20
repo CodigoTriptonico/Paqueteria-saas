@@ -13,6 +13,7 @@ export type SaleContextTargetData = {
     state?: string;
     postalCode?: string;
     country?: string;
+    addressReference?: string;
   };
   firstName: string;
   lastName: string;
@@ -52,6 +53,7 @@ export function saleContextTargetData(
       state: dataset.saleContextState,
       postalCode: dataset.saleContextPostalCode,
       country: dataset.saleContextCountry,
+      addressReference: dataset.saleContextAddressReference,
     },
     firstName: dataset.saleContextFirstName || "",
     lastName: dataset.saleContextLastName || "",

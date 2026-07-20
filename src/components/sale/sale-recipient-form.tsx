@@ -49,6 +49,7 @@ type SaleRecipientFormProps = {
     city: string;
     state: string;
     postalCode: string;
+    addressReference: string;
     setFirstName: (value: string) => void;
     setLastName: (value: string) => void;
     setPhone: (value: string) => void;
@@ -59,6 +60,7 @@ type SaleRecipientFormProps = {
     setCity: (value: string) => void;
     setState: (value: string) => void;
     setPostalCode: (value: string) => void;
+    setAddressReference: (value: string) => void;
   };
   address: {
     search: string;
@@ -91,6 +93,7 @@ function clearRecipientAddress(form: SaleRecipientFormProps["form"]) {
   form.setCity("");
   form.setState("");
   form.setPostalCode("");
+  form.setAddressReference("");
 }
 
 export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipientFormProps) {
@@ -590,6 +593,24 @@ export function SaleRecipientForm({ form, address, actions, meta }: SaleRecipien
               }}
               onUseUnverified={() => setShowUnverifiedConfirm(true)}
             />
+
+            <label className="grid gap-1.5">
+              <span className={clientFormLabelClass}>Referencias</span>
+              <textarea
+                {...noBrowserAutocomplete}
+                name="boxario-recipient-address-reference"
+                rows={2}
+                className={`${clientFormInputClass} min-h-[4.5rem] resize-y py-2.5`}
+                placeholder="Ej. segundo piso, casa roja, porton negro, entre calles..."
+                value={form.addressReference ?? ""}
+                disabled={!hasCountry}
+                tabIndex={hasCountry ? 0 : -1}
+                onChange={(event) => form.setAddressReference(event.target.value)}
+              />
+              <span className="text-[11px] font-bold leading-snug text-slate-500">
+                Indicaciones extra para encontrar el domicilio. No afectan la verificacion en Google.
+              </span>
+            </label>
           </div>
         </div>
       </form>

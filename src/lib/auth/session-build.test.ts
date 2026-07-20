@@ -40,6 +40,8 @@ describe("buildAppSessionFromProfile", () => {
     assert.equal(session.userId, "user-1");
     assert.equal(session.organizationId, "org-home");
     assert.equal(session.organizationName, "Home Org");
+    assert.equal(session.organizationShortName, null);
+    assert.equal(session.organizationLogoUrl, null);
     assert.equal(session.roleSlug, "administrador");
     assert.deepEqual(session.warehouseIds, ["wh-1"]);
   });

@@ -31,6 +31,7 @@ import { BoxarioBrandHeader, NotificationsCenter } from "@/components/notificati
 import { canAccessPath, isPlatformOnlySession } from "@/lib/auth/permissions";
 import { conductorTasksNavLabel } from "@/lib/conductor-tareas-view";
 import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
+import { resolveOrganizationBrandingFromSession } from "@/lib/organizations/branding";
 import type { UiSurfaceContextId } from "@/lib/ui-surface-context";
 import type { AppSession } from "@/lib/auth/types";
 
@@ -109,12 +110,12 @@ function hasCompactSidebarContent(content: React.ReactNode) {
   return content !== null && content !== undefined && content !== false;
 }
 
-function shellBrandTitle(active: string, contextNavLabel?: string) {
+function shellBrandTitle(active: string, contextNavLabel: string | undefined, brandTitle: string) {
   if (!contextNavLabel) {
-    return "Boxario";
+    return brandTitle;
   }
 
-  return contextNavLabel === active ? "Boxario" : contextNavLabel;
+  return contextNavLabel === active ? brandTitle : contextNavLabel;
 }
 
 type CompactNavHeaderProps = {
@@ -537,9 +538,14 @@ export function AppShell({
     expandNav();
   }
 
+  const organizationBrandTitle = resolveOrganizationBrandingFromSession({
+    organizationName: session?.organizationName ?? "",
+    organizationShortName: session?.organizationShortName,
+    organizationLogoUrl: session?.organizationLogoUrl,
+  }).brandTitle;
   const compactNavTitle = compactNavLabel ?? activeItem.label;
   const compactNavBackTitle = onCompactNavClick ? "Volver" : "Mostrar menu";
-  const brandTitle = shellBrandTitle(active, contextNavLabel);
+  const brandTitle = shellBrandTitle(active, contextNavLabel, organizationBrandTitle);
 
   function handleNavClick(isActive: boolean, hasSubmenu?: boolean) {
     setMobileMenuOpen(false);

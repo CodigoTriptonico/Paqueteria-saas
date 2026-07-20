@@ -2,7 +2,6 @@
 
 import {
   ChevronRight,
-  Package,
   Plus,
   Printer,
   Search,
@@ -39,12 +38,12 @@ import {
 import { customerRowToSender, recipientRowToSaleRecipient } from "@/lib/customers/mappers";
 import type { UiSurfaceContextId } from "@/lib/ui-surface-context";
 import {
-  flowCardGridClass,
   flowPageShellWideClass,
   flowPanelContentClass,
   flowPanelFlushClass,
   flowStepBodyClass,
   flowPersonListShellClass,
+  flowPersonFormShellClass,
   flowPersonListSectionClass,
   flowPersonFormSectionClass,
   flowPersonToolbarSearchShellClass,
@@ -70,6 +69,7 @@ import {
   SaleCartPanel,
   SaleStepCartTrigger,
 } from "@/components/sale/sale-cart-panel";
+import { SaleBoxPicker } from "@/components/sale/sale-box-picker";
 import { SaleRecipientList } from "@/components/sale/sale-recipient-list";
 import { SalePersonListToolbar } from "@/components/sale/sale-person-list-toolbar";
 import { SaleSenderList } from "@/components/sale/sale-sender-list";
@@ -92,6 +92,10 @@ import {
   type InvoiceBillingSnapshot,
 } from "@/lib/invoice-billing";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
+import {
+  PLATFORM_BRAND_TITLE,
+  resolveOrganizationBranding,
+} from "@/lib/organizations/branding";
 import { invoiceBoxCodes } from "@/lib/invoice-child-codes";
 import type { PricingPromotionConfig } from "@/lib/pricing-promotions";
 import { promotionMatchesCartCatalog } from "@/lib/combo-rules";
@@ -102,6 +106,7 @@ import {
   recordRecentSale,
 } from "@/lib/sale-recent-storage";
 import {
+  defaultSalePaymentSelection,
   isResolvedSalePaymentChoice,
   resolveSalePaymentInput,
   SALE_PAYMENT_UNSET,
@@ -201,7 +206,6 @@ import {
   senderPhonesLabel,
   samePersonName,
   SaleInvoicePaper,
-  SaleBoxCartQtyBadge,
   unselectedDimClass,
   applyAddressSuggestResult,
 } from "@/components/sale/venta-parts";
@@ -396,10 +400,15 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [mode, setMode] = useState<"sale" | "clients" | "history" | "new-client" | "new-recipient">("sale");
   const [activeStep, setActiveStep] = useState<SaleStep>("client");
   const saleListPaletteContext = useMemo<UiSurfaceContextId>(
-    () =>
-      activeStep === "recipient" || mode === "new-recipient"
-        ? "sale.recipientCard"
-        : "sale.senderCard",
+    () => {
+      if (activeStep === "box") {
+        return "sale.box";
+      }
+      if (activeStep === "recipient" || mode === "new-recipient") {
+        return "sale.recipientCard";
+      }
+      return "sale.senderCard";
+    },
     [activeStep, mode],
   );
   const { layout: viewLayout } = usePageViewLayout(saleListPaletteContext);
@@ -437,6 +446,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [logisticsFees] = useState<InvoiceBillingConfig>(
     initialData?.logisticsFees ?? defaultInvoiceBillingConfig,
   );
+  const organizationBranding =
+    initialData?.organizationBranding ??
+    resolveOrganizationBranding({ name: PLATFORM_BRAND_TITLE });
   const [payNowDraft, setPayNowDraft] = useState("");
   const [payNowDraftTouched, setPayNowDraftTouched] = useState(false);
   const [quickPayNowDraft, setQuickPayNowDraft] = useState("");
@@ -489,6 +501,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [newClientCity, setNewClientCity] = useState("");
   const [newClientState, setNewClientState] = useState("");
   const [newClientPostalCode, setNewClientPostalCode] = useState("");
+  const [newClientAddressReference, setNewClientAddressReference] = useState("");
   const [newClientReferredByCustomerId, setNewClientReferredByCustomerId] = useState("");
   const [clientAddressSearch, setClientAddressSearch] = useState("");
   const [clientAddressSuggestions, setClientAddressSuggestions] = useState<AddressSuggestion[]>([]);
@@ -504,6 +517,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [newRecipientCity, setNewRecipientCity] = useState("");
   const [newRecipientState, setNewRecipientState] = useState("");
   const [newRecipientPostalCode, setNewRecipientPostalCode] = useState("");
+  const [newRecipientAddressReference, setNewRecipientAddressReference] = useState("");
   const [recipientAddressSearch, setRecipientAddressSearch] = useState("");
   const [recipientAddressSuggestions, setRecipientAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [recipientAddressSearching, setRecipientAddressSearching] = useState(false);
@@ -1228,6 +1242,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     { label: "Ciudad", value: contextMenu?.address.city },
     { label: "Estado", value: contextMenu?.address.state },
     { label: "CP", value: contextMenu?.address.postalCode },
+    { label: "Referencias", value: contextMenu?.address.addressReference },
     { label: "Pais", value: contextMenu?.address.country },
   ].filter((item) => item.label === "Completa" || item.value);
   const copyGroups = [
@@ -1454,6 +1469,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setNewClientCity("");
     setNewClientState("");
     setNewClientPostalCode("");
+    setNewClientAddressReference("");
     setNewClientReferredByCustomerId("");
     setClientAddressSearch("");
     setClientAddressSuggestions([]);
@@ -1671,6 +1687,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setNewRecipientCity("");
     setNewRecipientState("");
     setNewRecipientPostalCode("");
+    setNewRecipientAddressReference("");
     setRecipientAddressSearch("");
     setRecipientAddressSuggestions([]);
     setRecipientAddressSearching(false);
@@ -2007,6 +2024,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       city: newClientCity.trim(),
       state: newClientState.trim(),
       postalCode: newClientPostalCode.trim(),
+      addressReference: newClientAddressReference.trim(),
       country: "USA",
       referredByCustomerId: editingCustomerId ? "" : newClientReferredByCustomerId,
       placeId: options?.skipAddressVerification ? "" : clientAddressValidation.placeId || "",
@@ -2034,6 +2052,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             city: payload.city,
             state: payload.state,
             postalCode: payload.postalCode,
+            addressReference: payload.addressReference,
             country: payload.country,
             placeId: payload.placeId,
             formattedAddress: payload.formattedAddress,
@@ -2120,6 +2139,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       city: newRecipientCity.trim(),
       state: newRecipientState.trim(),
       postalCode: newRecipientPostalCode.trim(),
+      addressReference: newRecipientAddressReference.trim(),
       placeId: options?.skipAddressVerification ? "" : recipientAddressValidation.placeId || "",
       formattedAddress:
         recipientAddressValidation.formattedAddress ||
@@ -2182,6 +2202,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         city: result.data.city,
         state: result.data.state,
         postalCode: result.data.postalCode,
+        addressReference: result.data.addressReference,
         cardStyle: result.data.cardStyle,
         placeId: result.data.placeId,
         formattedAddress: result.data.formattedAddress,
@@ -2613,6 +2634,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           city: selectedRecipient.city,
           state: selectedRecipient.state,
           postalCode: selectedRecipient.postalCode,
+          addressReference: selectedRecipient.addressReference,
           formattedAddress: selectedRecipient.formattedAddress,
           placeId: selectedRecipient.placeId,
           lat: selectedRecipient.lat,
@@ -3064,6 +3086,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setNewClientCity(sender.city || "");
     setNewClientState(sender.state || "");
     setNewClientPostalCode(sender.postalCode || "");
+    setNewClientAddressReference(sender.addressReference || "");
     setClientAddressSearch(senderAddressSummary(sender));
     setClientAddressSuggestions([]);
     setClientAddressValidation({
@@ -3095,6 +3118,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setNewRecipientCity(recipient.city || "");
     setNewRecipientState(recipient.state || "");
     setNewRecipientPostalCode(recipient.postalCode || "");
+    setNewRecipientAddressReference(recipient.addressReference || "");
     setRecipientAddressSearch(recipientAddressSummary(recipient));
     setRecipientAddressSuggestions([]);
     setRecipientAddressValidation({
@@ -3148,7 +3172,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     }
 
     if (mode === "new-recipient") {
-      return "Nuevo destinatario";
+      return editingRecipientId ? "Editar destinatario" : "Nuevo destinatario";
     }
 
     if (mode === "history") {
@@ -3156,7 +3180,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     }
 
     return null;
-  }, [editingCustomerId, mode]);
+  }, [editingCustomerId, editingRecipientId, mode]);
 
   const handleVentaNavBack = useCallback(() => {
     if (mode === "new-client") {
@@ -3214,7 +3238,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                       : FULL_BOX_DEFERRED_SUMMARY
                     : "Pendiente"
                 : logisticsPlanReady
-                  ? saleFinishActionLabel(invoiceBillingForPayment)
+                  ? saleFinishActionLabel(invoiceBillingForPayment, { phase: "setup" })
                   : "Pendiente";
 
       const detail =
@@ -3363,7 +3387,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         />
         </div>
         {mode === "new-client" || !selectedSender || activeStep === "client" ? (
-        <div ref={clientRef} className={flowPersonListShellClass}>
+        <div
+          ref={clientRef}
+          className={mode === "new-client" ? flowPersonFormShellClass : flowPersonListShellClass}
+        >
               {!isSupabaseConfigured() ? (
                 <div className="mb-3">
                   <SupabaseRequiredBanner detail="Los remitentes no se guardaran hasta configurar Supabase." />
@@ -3388,6 +3415,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     city: newClientCity,
                     state: newClientState,
                     postalCode: newClientPostalCode,
+                    addressReference: newClientAddressReference,
                     setFirstName: setNewClientFirstName,
                     setLastName: setNewClientLastName,
                     setStreet: setNewClientStreet,
@@ -3396,6 +3424,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     setCity: setNewClientCity,
                     setState: setNewClientState,
                     setPostalCode: setNewClientPostalCode,
+                    setAddressReference: setNewClientAddressReference,
                   }}
                   address={{
                     search: clientAddressSearch,
@@ -3485,6 +3514,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                         city: sender.city,
                         state: sender.state,
                         postalCode: sender.postalCode,
+                        addressReference: sender.addressReference,
                         country: "USA",
                       },
                       sender.firstName,
@@ -3506,7 +3536,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           className={
             activeStep === "recipient" || mode === "new-recipient"
               ? mode === "new-recipient"
-                ? `${flowPersonListShellClass} overflow-y-auto py-2 sm:py-2`
+                ? flowPersonFormShellClass
                 : flowPersonListShellClass
               : `${flowPersonListShellClass} !overflow-visible lg:!overflow-hidden border-t border-black/80`
           }
@@ -3571,6 +3601,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   city: newRecipientCity,
                   state: newRecipientState,
                   postalCode: newRecipientPostalCode,
+                  addressReference: newRecipientAddressReference,
                   setFirstName: setNewRecipientFirstName,
                   setLastName: setNewRecipientLastName,
                   setPhone: setNewRecipientPhone,
@@ -3581,6 +3612,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   setCity: setNewRecipientCity,
                   setState: setNewRecipientState,
                   setPostalCode: setNewRecipientPostalCode,
+                  setAddressReference: setNewRecipientAddressReference,
                 }}
                 address={{
                   search: recipientAddressSearch,
@@ -3650,6 +3682,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                         city: recipient.city,
                         state: recipient.state,
                         postalCode: recipient.postalCode,
+                        addressReference: recipient.addressReference,
                         country: recipient.country,
                       },
                       recipient.firstName,
@@ -3741,81 +3774,38 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     ) : null}
                   </div>
                 </div>
-                <div
-                  className={`${flowCardGridClass} min-h-0 flex-1 overflow-y-auto pt-3 pr-1`}
-                >
-                  {boxesForCountry.map((box, boxIndex) => {
-                    const cartLine = selectedBoxLines.find(
-                      (line) => line.id === saleCartLineId(box),
-                    );
-                    const promoCount = selectedRecipient
-                      ? resolveCountryPromotions(
-                          countryPromotions,
-                          selectedRecipient.country,
-                          box,
-                        ).length
-                      : 0;
-
-                    return (
-                    <button
-                      key={box[0]}
-                      type="button"
-                      onClick={() => chooseBox(box)}
-                      data-onboarding-target={
-                        boxIndex === 0 ? ONBOARDING_TARGETS.VENTA_SELECT_PRODUCT : undefined
-                      }
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        removeBoxFromCart(box);
-                      }}
-                      onMouseUp={(event) => {
-                        if (event.button === 2) {
-                          event.preventDefault();
-                          event.stopPropagation();
-                        }
-                      }}
-                      title={`${box[0]}: clic izquierdo agrega, clic derecho quita`}
-                      className={`group flex min-h-[12rem] w-full flex-col items-center justify-between rounded-xl border border-black bg-[#3f4b46] p-4 text-center shadow-[0_8px_18px_rgba(0,0,0,0.26)] transition hover:-translate-y-0.5 hover:bg-[#46544e] ${
-                        contextCardClass(
-                          "caja",
-                          `box:${box[0]}`,
-                          Boolean(cartLine),
-                          boxCardClass,
-                          selectedBoxLines.length > 0,
-                        )
-                      }`}
-                    >
-                      <div className="flex min-w-0 flex-col items-center">
-                        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-400 text-slate-950 shadow-[0_8px_14px_rgba(16,185,129,0.2)]">
-                          <Package className="h-5 w-5" />
-                        </div>
-                        <p className="text-lg font-black leading-tight text-[#f8fafc]">{box[0]}</p>
-                      </div>
-
-                      <div className="my-2 w-full border-y border-white/10 py-2 text-xs font-black text-slate-300">
-                        <span className="block truncate rounded-md bg-[#202926] px-2 py-1.5">
-                          {box[4] || "Tiempo —"}
-                        </span>
-                      </div>
-
-                      <div className="w-full rounded-lg border border-black/70 bg-[#202926] px-3 py-2">
-                        <p className="text-[10px] font-black uppercase text-slate-400">Cobra</p>
-                        <p className="text-lg font-black">{box[1]}</p>
-                        {promoCount > 0 ? (
-                          <p className="mt-1 text-[10px] font-black uppercase text-emerald-300">
-                            {promoCount} promo
-                          </p>
-                        ) : null}
-                        {cartLine ? (
-                          <div className="mt-1 flex justify-center">
-                            <SaleBoxCartQtyBadge quantity={cartLine.quantity} />
-                          </div>
-                        ) : null}
-                      </div>
-                    </button>
-                    );
-                  })}
+                <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
+                  <SaleBoxPicker
+                    boxes={boxesForCountry}
+                    viewLayout={viewLayout}
+                    getCartQuantity={(box) => {
+                      const cartLine = selectedBoxLines.find(
+                        (line) => line.id === saleCartLineId(box),
+                      );
+                      return cartLine?.quantity ?? null;
+                    }}
+                    getPromoCount={(box) =>
+                      selectedRecipient
+                        ? resolveCountryPromotions(
+                            countryPromotions,
+                            selectedRecipient.country,
+                            box,
+                          ).length
+                        : 0
+                    }
+                    getCardClass={(box, selected) =>
+                      contextCardClass(
+                        "caja",
+                        `box:${box[0]}`,
+                        selected,
+                        boxCardClass,
+                        selectedBoxLines.length > 0,
+                      )
+                    }
+                    onChoose={chooseBox}
+                    onRemove={removeBoxFromCart}
+                    firstBoxCoachTarget={ONBOARDING_TARGETS.VENTA_SELECT_PRODUCT}
+                  />
                 </div>
                 </>
               )}
@@ -3909,6 +3899,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   </p>
                 </div>
                 <SaleInvoicePaper
+                  branding={organizationBranding}
                   invoiceNumber={createdInvoice.invoiceNumber}
                   sender={createdInvoice.sender}
                   recipient={createdInvoice.recipient}
@@ -3918,6 +3909,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 />
                 {createdInvoice.boxInvoices.map((boxInvoice) => (
                   <SaleInvoicePaper
+                    branding={organizationBranding}
                     key={boxInvoice.invoiceNumber}
                     className="print:break-before-page"
                     invoiceNumber={boxInvoice.invoiceNumber}
@@ -3957,6 +3949,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             ) : logisticsPlanReady ? (
               <div className="flex w-full flex-col items-center gap-3">
             <SaleInvoicePaper
+              branding={organizationBranding}
               invoiceNumber={nextInvoiceNumber}
               sender={selectedSender}
               recipient={selectedRecipient}
@@ -3983,7 +3976,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             <button
               type="button"
               onClick={() => {
-                setInvoicePaymentMethod(SALE_PAYMENT_UNSET);
+                const pendingSource =
+                  emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? "office" : "driver";
+                setInvoicePaymentMethod(defaultSalePaymentSelection(pendingSource));
                 setInvoicePaymentNote("");
                 setInvoiceConfirmOpen(true);
               }}
@@ -3994,7 +3989,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 ? saleFinishActionLabel(invoiceBillingForPayment, { creating: true })
                 : invoiceBilling?.promotionSelectionRequired
                   ? "Elige promocion"
-                  : saleFinishActionLabel(invoiceBillingForPayment)}
+                  : saleFinishActionLabel(invoiceBillingForPayment, { phase: "setup" })}
             </button>
             </div>
               </div>
@@ -4201,6 +4196,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
       {showQuickCheckout && quickSaleDraft ? (
         <SaleQuickCheckoutModal
+          branding={organizationBranding}
           invoiceNumber={quickInvoiceNumber}
           draft={quickSaleDraft}
           billing={quickInvoiceBilling}
@@ -4229,7 +4225,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
       <SaleInvoiceConfirmDialog
         open={invoiceConfirmOpen}
-        title="¿Crear este invoice?"
+        title="Configurar pago"
         invoiceLabel={`Factura ${nextInvoiceNumber}`}
         lines={
           invoiceBilling

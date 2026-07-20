@@ -7,7 +7,8 @@ import {
   saleLogisticsFeesFromRouteConfig,
   salePricingFromConfig,
 } from "@/lib/pricing/sale-derivatives";
-import type { InvoiceBillingConfig } from "@/lib/invoice-billing";
+import type { OrganizationBranding } from "@/lib/organizations/branding";
+import { resolveOrganizationBrandingFromSession } from "@/lib/organizations/branding";
 import type { PricingPromotionConfig } from "@/lib/pricing-promotions";
 import { listSaleShortcutsForSession, type SaleShortcuts } from "@/lib/sale/shortcuts";
 
@@ -17,6 +18,7 @@ export type VentaBootstrapData = {
   countryBoxes: Record<string, string[][]>;
   countryPromotions: PricingPromotionConfig[];
   logisticsFees: InvoiceBillingConfig;
+  organizationBranding: OrganizationBranding;
 };
 
 export async function loadVentaBootstrap(
@@ -40,5 +42,6 @@ export async function loadVentaBootstrap(
     countryBoxes: salePricing.countryBoxes,
     countryPromotions: salePricing.promotions,
     logisticsFees: saleLogisticsFeesFromRouteConfig(pricingConfig.routeConfig),
+    organizationBranding: resolveOrganizationBrandingFromSession(session),
   };
 }

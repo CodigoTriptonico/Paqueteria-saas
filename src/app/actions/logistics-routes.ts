@@ -230,7 +230,7 @@ async function loadCustomerMap(
   const { data, error } = await supabase
     .from("customers")
     .select(
-      "id, first_name, last_name, phones, street, house_number, neighborhood, city, state, postal_code, country, place_id, formatted_address, lat, lng",
+      "id, first_name, last_name, phones, street, house_number, address_reference, neighborhood, city, state, postal_code, country, place_id, formatted_address, lat, lng",
     )
     .eq("organization_id", session.organizationId)
     .in("id", customerIds);

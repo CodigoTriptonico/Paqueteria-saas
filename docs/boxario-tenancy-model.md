@@ -12,7 +12,7 @@ La meta operativa es `0` accesos entre tenants, `0` membresías activas duplicad
 
 ## Jerarquía
 
-`business_tenants` representa SCGS, Enviamgs y futuros clientes. Boxario sigue siendo `organizations.kind = 'platform'` y mantiene `tenant_id = NULL`.
+`business_tenants` representa cada cliente de la plataforma (por ejemplo, una matriz con varias agencias). Boxario sigue siendo `organizations.kind = 'platform'` y mantiene `tenant_id = NULL`.
 
 Dentro de cada tenant:
 

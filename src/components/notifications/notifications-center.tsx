@@ -11,6 +11,10 @@ import { iconWellEmerald, labelMutedClass } from "@/components/ui-blocks";
 import { useOnboardingProgress } from "@/hooks/use-onboarding-progress";
 import { isPlatformOnlySession } from "@/lib/auth/permissions";
 import { setOnboardingNotificationsPanelOpen } from "@/lib/onboarding/notifications-panel";
+import {
+  organizationBrandInitials,
+  resolveOrganizationBrandingFromSession,
+} from "@/lib/organizations/branding";
 import type { AppSession } from "@/lib/auth/types";
 
 const PANEL_MIN_WIDTH = 320;
@@ -86,12 +90,19 @@ export function BoxarioBrandHeader({
   compact = false,
   className = "",
   onBack,
-  title = "Boxario",
+  title,
   backTitle = "Volver",
   backTarget,
   keepBrand = false,
   sidebarGroupsToggle,
 }: BoxarioBrandHeaderProps) {
+  const branding = resolveOrganizationBrandingFromSession({
+    organizationName: session?.organizationName ?? "",
+    organizationShortName: session?.organizationShortName,
+    organizationLogoUrl: session?.organizationLogoUrl,
+  });
+  const brandTitle = branding.brandTitle;
+  const resolvedTitle = title ?? brandTitle;
   const shellClass = `relative flex min-h-[4.75rem] flex-col overflow-hidden rounded-xl border border-black bg-surface-card-header px-2.5 py-2 text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
     compact ? "" : "px-3"
   } ${className}`;
@@ -119,11 +130,21 @@ export function BoxarioBrandHeader({
               <ArrowLeft className="h-4 w-4" strokeWidth={2.5} />
             </button>
           ) : null}
-          {onBack && !keepBrand && title !== "Boxario" ? (
-            <span className={titleClass}>{title}</span>
+          {onBack && !keepBrand && resolvedTitle !== brandTitle ? (
+            <span className={titleClass}>{resolvedTitle}</span>
           ) : (
             <Link href="/" prefetch aria-label="Ir al inicio" title="Ir al inicio" className={homeButtonClass}>
-              <h1 className={titleClass}>Boxario</h1>
+              <span className="flex min-w-0 items-center gap-2">
+                {branding.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={branding.logoUrl}
+                    alt=""
+                    className="h-8 w-8 shrink-0 rounded-md border border-black/40 object-cover"
+                  />
+                ) : null}
+                <h1 className={titleClass}>{brandTitle}</h1>
+              </span>
             </Link>
           )}
         </div>

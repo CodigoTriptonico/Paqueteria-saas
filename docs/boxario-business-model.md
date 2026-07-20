@@ -2,7 +2,7 @@
 
 ## Jerarquía
 
-Boxario es la plataforma. Cada cliente, por ejemplo SCGS o Enviamgs, vive en `business_tenants`. Un tenant tiene una organización matriz y organizaciones agencia. `tenant_id` y `organization_id` forman la frontera de autorización; el código visible de la agencia nunca autoriza acceso.
+Boxario es la plataforma. Cada cliente vive en `business_tenants`. Un tenant tiene una organización matriz y organizaciones agencia. `tenant_id` y `organization_id` forman la frontera de autorización; el código visible de la agencia nunca autoriza acceso.
 
 Una identidad mantiene una sola `organization_membership` empresarial activa. Captadores, supervisores y soporte trabajan mediante asignaciones o delegaciones con vigencia, sin cambiar la organización de su perfil. Boxario puede actuar dentro de un tenant únicamente con una sesión de plataforma autenticada y cada acción queda auditada.
 

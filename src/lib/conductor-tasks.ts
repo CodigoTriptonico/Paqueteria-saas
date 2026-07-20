@@ -295,7 +295,11 @@ export function buildConductorDriverTasks(input: {
         vehicleLabel: vehicleDisplayLabel(routeVehicle),
         lat: address?.address.lat ?? null,
         lng: address?.address.lng ?? null,
-        addressLine: address?.address.formattedAddress || null,
+        addressLine: address?.address.formattedAddress
+          ? [address.address.formattedAddress, address.address.addressReference]
+              .filter(Boolean)
+              .join(" · ")
+          : null,
         zoneLabel: address?.zoneLabel || null,
         boxLines,
         boxSummary: shipmentBoxLinesTriggerLabel(displayBoxLines) || quote?.label || "",

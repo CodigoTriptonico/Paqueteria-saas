@@ -56,6 +56,8 @@ export type InventoryItemContextMenuProps = {
   onOpenBinPlacement?: (context: ItemContextMenu) => void;
 };
 
+const movementFieldClass = `${inputClass} h-10 w-full min-w-0 text-sm`;
+
 export function InventoryItemContextMenu({
   itemContextMenu,
   setItemContextMenu,
@@ -363,7 +365,7 @@ export function InventoryItemContextMenu({
               }}
             >
           <form
-            className="w-full max-w-sm rounded-xl border border-black bg-[#17211d] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+            className="w-full max-w-md rounded-xl border border-black bg-[#17211d] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
             onSubmit={(event) => {
               event.preventDefault();
               void onSubmitMovement();
@@ -377,11 +379,11 @@ export function InventoryItemContextMenu({
                 {movementDraft.context.treeItem.name}
               </p>
             </div>
-            <label className="grid gap-1.5 text-xs font-black uppercase text-slate-400">
+            <label className="grid min-w-0 gap-1.5 text-xs font-black uppercase text-slate-400">
               Cantidad (
               {resolveInventoryItemUnit(movementDraft.context.stockItem)})
               <input
-                className={`${inputClass} h-10 text-sm`}
+                className={movementFieldClass}
                 type="number"
                 min={movementDraft.type === "ajuste" ? 0 : 1}
                 step="1"
@@ -412,11 +414,11 @@ export function InventoryItemContextMenu({
               />
             </label>
             {movementDraft.type === "entrada" ? (
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1.5 text-xs font-black uppercase text-slate-400">
+              <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 min-[30rem]:grid-cols-2">
+                <label className="grid min-w-0 gap-1.5 text-xs font-black uppercase leading-snug text-slate-400">
                   Costo total del lote
                   <input
-                    className={`${inputClass} h-10 text-sm`}
+                    className={movementFieldClass}
                     type="number"
                     min="0"
                     step="0.01"
@@ -446,10 +448,10 @@ export function InventoryItemContextMenu({
                     placeholder="Opcional"
                   />
                 </label>
-                <label className="grid gap-1.5 text-xs font-black uppercase text-slate-400">
+                <label className="grid min-w-0 gap-1.5 text-xs font-black uppercase leading-snug text-slate-400">
                   Costo unitario
                   <input
-                    className={`${inputClass} h-10 text-sm`}
+                    className={movementFieldClass}
                     type="number"
                     min="0"
                     step="0.0001"
@@ -481,10 +483,10 @@ export function InventoryItemContextMenu({
                 </label>
               </div>
             ) : null}
-            <label className="grid gap-1.5 text-xs font-black uppercase text-slate-400">
+            <label className="mt-3 grid min-w-0 gap-1.5 text-xs font-black uppercase text-slate-400">
               Motivo
               <select
-                className={`${inputClass} h-10 text-sm`}
+                className={movementFieldClass}
                 value={movementDraft.reasonCode}
                 onChange={(event) =>
                   setMovementDraft((current) =>
@@ -504,10 +506,10 @@ export function InventoryItemContextMenu({
                 ))}
               </select>
             </label>
-            <label className="mt-3 grid gap-1.5 text-xs font-black uppercase text-slate-400">
+            <label className="mt-3 grid min-w-0 gap-1.5 text-xs font-black uppercase text-slate-400">
               Detalle
               <input
-                className={`${inputClass} h-10 text-sm`}
+                className={movementFieldClass}
                 value={movementDraft.note}
                 onChange={(event) =>
                   setMovementDraft((current) =>

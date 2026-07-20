@@ -9,6 +9,11 @@ import { CountryFlag } from "@/components/country-flag";
 import { InvoiceQrCode } from "@/components/sale/invoice-qr-code";
 import type { InvoiceBillingSnapshot } from "@/lib/invoice-billing";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
+import type { OrganizationBranding } from "@/lib/organizations/branding";
+import {
+  organizationBrandInitials,
+  PLATFORM_BRAND_TITLE,
+} from "@/lib/organizations/branding";
 import type { SaleRecipient, SaleSender } from "@/lib/customers/mappers";
 import { formatScheduleAtDisplay, scheduleTimeComplete } from "@/lib/sale/schedule-time";
 
@@ -73,6 +78,7 @@ export type ContextMenuState = {
     state?: string;
     postalCode?: string;
     country?: string;
+    addressReference?: string;
   };
 };
 
@@ -309,6 +315,7 @@ export function historyDateLabel(value: string) {
 }
 
 export type SaleInvoicePaperProps = {
+  branding?: OrganizationBranding | null;
   invoiceNumber: string;
   parentInvoiceNumber?: string;
   boxPosition?: number;
@@ -379,6 +386,7 @@ function InvoicePartyCard({
 }
 
 export function SaleInvoicePaper({
+  branding,
   invoiceNumber,
   parentInvoiceNumber,
   boxPosition,
@@ -396,6 +404,10 @@ export function SaleInvoicePaper({
   payNowDraftTouched = false,
   onPayNowDraftChange,
 }: SaleInvoicePaperProps) {
+  const companyName = branding?.name?.trim() || PLATFORM_BRAND_TITLE;
+  const companyBadgeLabel = organizationBrandInitials(
+    branding?.shortName?.trim() || branding?.brandTitle || companyName,
+  );
   const issuedAt = new Date().toLocaleDateString("es-MX", {
     day: "2-digit",
     month: "long",
@@ -463,8 +475,13 @@ export function SaleInvoicePaper({
     >
       <div className="flex flex-1 flex-col px-8 py-7 sm:px-10 sm:py-9">
         <div className="mb-5 grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b-2 border-zinc-950 pb-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-sm border-2 border-zinc-950 bg-white text-[14px] font-black tracking-[-0.04em] shadow-[3px_3px_0_#d4d4d8]">
-            Bx
+          <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-sm border-2 border-zinc-950 bg-white text-[14px] font-black tracking-[-0.04em] shadow-[3px_3px_0_#d4d4d8]">
+            {branding?.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={branding.logoUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              companyBadgeLabel
+            )}
           </div>
           <div className="min-w-0">
             <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-700">
@@ -484,7 +501,7 @@ export function SaleInvoicePaper({
           <div className="relative flex items-start justify-between gap-6">
           <div className="min-w-0">
             <p className="font-serif text-[1.55rem] font-black leading-none tracking-tight text-zinc-950">
-              Boxario
+              {companyName}
             </p>
             <p className="mt-2 max-w-[15rem] text-[10px] font-bold uppercase leading-snug tracking-[0.08em] text-zinc-600">
               Paquetería y envíos internacionales

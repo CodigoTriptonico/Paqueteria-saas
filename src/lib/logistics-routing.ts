@@ -17,6 +17,7 @@ export type LogisticsRouteStopAddress = {
   phone: string;
   street: string;
   houseNumber: string;
+  addressReference: string;
   neighborhood: string;
   city: string;
   state: string;

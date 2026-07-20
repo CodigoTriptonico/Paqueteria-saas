@@ -5,6 +5,7 @@ import {
   computeInvoiceBilling,
   invoiceAccountingStateForPayment,
   readBillingFromPlan,
+  saleFinishActionLabel,
 } from "./invoice-billing";
 import type { PricingPromotionConfig } from "./pricing-promotions";
 import { legacyPromotionToRule } from "./combo-rules";
@@ -340,5 +341,20 @@ describe("invoice-billing", () => {
       totalBefore: 100,
       totalAfter: 100,
     });
+  });
+});
+
+describe("saleFinishActionLabel", () => {
+  const withBalance = { balanceDue: "$50" };
+  const paidInFull = { balanceDue: "$0" };
+
+  it("uses setup labels before opening the payment dialog", () => {
+    assert.equal(saleFinishActionLabel(withBalance, { phase: "setup" }), "Configurar pago");
+    assert.equal(saleFinishActionLabel(paidInFull, { phase: "setup" }), "Confirmar cierre");
+  });
+
+  it("uses confirm labels inside the payment dialog", () => {
+    assert.equal(saleFinishActionLabel(withBalance), "Crear invoice");
+    assert.equal(saleFinishActionLabel(paidInFull), "Cerrar venta");
   });
 });

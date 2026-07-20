@@ -78,6 +78,7 @@ function senderContextProps(sender: Sender) {
     "data-sale-context-city": sender.city,
     "data-sale-context-state": sender.state,
     "data-sale-context-postal-code": sender.postalCode,
+    "data-sale-context-address-reference": sender.addressReference,
     "data-sale-context-country": "USA",
     "data-sale-context-customer-id": sender.id.startsWith("local-") ? undefined : sender.id,
   };

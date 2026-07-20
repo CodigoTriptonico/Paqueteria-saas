@@ -12,6 +12,7 @@ describe("saleContextTargetData", () => {
         saleContextPhones: "5551112222|5553334444",
         saleContextStreet: "Primera",
         saleContextHouse: "42",
+        saleContextAddressReference: "Segundo piso, casa roja",
         saleContextCustomerId: "customer-1",
         saleContextRecipientId: "recipient-1",
       }),
@@ -23,6 +24,7 @@ describe("saleContextTargetData", () => {
         address: {
           street: "Primera",
           houseNumber: "42",
+          addressReference: "Segundo piso, casa roja",
           neighborhood: undefined,
           city: undefined,
           state: undefined,

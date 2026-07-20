@@ -17,6 +17,7 @@ export type SaleRecipient = {
   city: string;
   state?: string;
   postalCode: string;
+  addressReference: string;
   cardStyle: string;
   placeId: string;
   formattedAddress: string;
@@ -39,6 +40,7 @@ export type SaleSender = {
   city: string;
   state: string;
   postalCode: string;
+  addressReference: string;
   cardStyle: string;
   placeId: string;
   formattedAddress: string;
@@ -63,6 +65,7 @@ export function customerRowToSender(row: CustomerWithRecipientsRow): SaleSender 
     city: row.city,
     state: row.state,
     postalCode: row.postalCode,
+    addressReference: row.addressReference,
     cardStyle: row.cardStyle,
     placeId: row.placeId,
     formattedAddress: row.formattedAddress,
@@ -88,6 +91,7 @@ export function recipientRowToSaleRecipient(row: CustomerRecipientRow): SaleReci
     city: row.city,
     state: row.state,
     postalCode: row.postalCode,
+    addressReference: row.addressReference,
     cardStyle: row.cardStyle,
     placeId: row.placeId,
     formattedAddress: row.formattedAddress,
