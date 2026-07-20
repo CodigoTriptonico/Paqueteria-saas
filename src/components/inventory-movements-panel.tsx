@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   BarChart3,
   History,
+  Image as ImageIcon,
   Loader2,
   SlidersHorizontal,
   UserRound,
@@ -31,6 +32,12 @@ import type {
 import { inventoryItemFilterOptions } from "@/lib/inventory-stock";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
 import { summarizeMovements } from "@/lib/inventory-reports";
+import {
+  formatInventoryMovementReference,
+  formatInventoryMovementTrail,
+  inventoryMovementReasonLabel,
+  readInventoryMovementEvidencePhotos,
+} from "@/lib/inventory-movement-audit";
 
 type MovementsTab = "history" | "summary";
 
@@ -131,7 +138,19 @@ function MovementList({
 
   return (
     <ul className="flex flex-col gap-2 p-4">
-      {movements.map((movement) => (
+      {movements.map((movement) => {
+        const trail = formatInventoryMovementTrail({
+          fromLabel: movement.fromLocationLabel,
+          toLabel: movement.toLocationLabel,
+        });
+        const referenceLabel = formatInventoryMovementReference({
+          referenceType: movement.referenceType,
+          referenceId: movement.referenceId,
+          referenceLabel: movement.toLocationType === "shipment" ? movement.toLocationLabel : null,
+        });
+        const evidencePhotos = readInventoryMovementEvidencePhotos(movement.evidence);
+
+        return (
         <li key={movement.id} className="rounded-xl border border-black bg-[#111827] p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -141,6 +160,15 @@ function MovementList({
               <p className="mt-0.5 text-xs font-bold text-slate-500">
                 {formatWhen(movement.createdAt)}
               </p>
+              <p className="mt-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
+                {inventoryMovementReasonLabel[movement.reasonCode] || movement.reasonCode}
+              </p>
+              {trail ? (
+                <p className="mt-1 text-xs font-bold text-cyan-300">{trail}</p>
+              ) : null}
+              {referenceLabel ? (
+                <p className="mt-1 text-xs font-bold text-violet-300">{referenceLabel}</p>
+              ) : null}
               {movement.assigneeName ? (
                 <p className="mt-1 flex items-center gap-1 text-xs font-bold text-sky-300">
                   <UserRound className="h-3 w-3" aria-hidden />
@@ -171,8 +199,25 @@ function MovementList({
               {movement.note}
             </p>
           ) : null}
+          {evidencePhotos.length ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {evidencePhotos.map((url) => (
+                <a
+                  key={url}
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded-md border border-black bg-surface-inset px-2 py-1 text-[10px] font-black uppercase text-slate-300 hover:text-[#f8fafc]"
+                >
+                  <ImageIcon className="h-3 w-3" aria-hidden />
+                  Evidencia
+                </a>
+              ))}
+            </div>
+          ) : null}
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }

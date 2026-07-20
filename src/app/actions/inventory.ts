@@ -28,6 +28,7 @@ import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-typ
 import type { InventoryStockItem } from "@/lib/inventory-stock";
 import type { CategoryConfig } from "@/lib/inventory-tree";
 import { InvalidQuantityError, readPositiveQty } from "@/lib/security/qty";
+import { defaultReasonCodeForMovementType, type InventoryMovementReasonCode } from "@/lib/inventory-movement-audit";
 import { recordInventoryMovementAtomic } from "@/lib/security/inventory-movement";
 import {
   ensureInventoryLeafState,
@@ -755,6 +756,7 @@ export async function recordInventoryMovementForLeafAction(input: {
   type: "entrada" | "salida" | "ajuste";
   qty: number;
   note?: string;
+  reasonCode?: InventoryMovementReasonCode;
   minStock?: number;
 }): Promise<
   ActionResult<{ item: InventoryStockItem; movement: InventoryMovement }>
@@ -805,6 +807,7 @@ export async function recordInventoryMovementForLeafAction(input: {
       type: input.type,
       qty,
       note: input.note,
+      reasonCode: input.reasonCode || defaultReasonCodeForMovementType(input.type),
       createdBy: session.userId,
     });
 

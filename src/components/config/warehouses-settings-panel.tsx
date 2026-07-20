@@ -14,6 +14,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { WarehouseBinsPanel } from "@/components/config/warehouse-bins-panel";
 import { PlanUsageLink, PLAN_CONFIG_HREF } from "@/components/config/plan-usage-link";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
 import {
@@ -723,6 +724,11 @@ export function WarehousesSettingsPanel() {
               ) : null}
             </section>
           ) : null}
+
+          <WarehouseBinsPanel
+            warehouses={warehouses}
+            canManage={canManageWarehouses || canManageSettings}
+          />
         </aside>
       </div>
     </div>

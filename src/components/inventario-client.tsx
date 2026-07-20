@@ -6,6 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createWarehouseAction } from "@/app/actions/warehouses";
 import {
+  loadWarehouseInventoryCoreAction,
+  loadWarehouseInventoryHistoryAction,
+} from "@/app/actions/inventory";
+import {
   assignInventoryItemAction,
   closeInventoryAssignmentAction,
   ensureInventoryItemForLeafAction,
@@ -143,6 +147,27 @@ export function InventarioClient({
 
     router.push("/");
   }, [returnTo, router, showWarehouseSettings]);
+
+  const refreshInventoryData = useCallback(async () => {
+    if (!warehouseId) {
+      return;
+    }
+
+    const [coreResult, historyResult] = await Promise.all([
+      loadWarehouseInventoryCoreAction(warehouseId),
+      loadWarehouseInventoryHistoryAction(warehouseId),
+    ]);
+
+    if (coreResult.ok) {
+      setCategoryConfigs(coreResult.data.categoryConfigs);
+      setInventoryItems(coreResult.data.items);
+    }
+
+    if (historyResult.ok) {
+      setMovements(historyResult.data.movements);
+      setAssignments(historyResult.data.assignments);
+    }
+  }, [setAssignments, setCategoryConfigs, setInventoryItems, setMovements, warehouseId]);
 
   const inventarioNavTitle = useMemo(() => {
     if (!loaded || !enabled) {
@@ -511,6 +536,7 @@ export function InventarioClient({
       <InventoryTrackingDrawer
         warehouseId={warehouseId}
         warehouseName={activeWarehouseName}
+        warehouses={warehouses}
         items={inventoryItems}
         truckBalances={truckBalances}
         assignments={assignments}
@@ -522,6 +548,7 @@ export function InventarioClient({
         onAssignmentsChange={setAssignments}
         onMovementsChange={setMovements}
         onCloseAssignment={handleCloseAssignment}
+        onInventoryRefresh={refreshInventoryData}
         closingAssignmentId={closingAssignmentId}
       />
 

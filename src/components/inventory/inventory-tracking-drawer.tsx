@@ -1,10 +1,11 @@
 "use client";
 
-import { ClipboardList, History, LocateFixed, X } from "lucide-react";
+import { ArrowRightLeft, ClipboardList, History, LocateFixed, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { InventoryAssignmentsDrawer } from "@/components/inventory-assignments-panel";
 import { InventoryCustodyPanel } from "@/components/inventory/inventory-custody-panel";
+import { InventoryTransfersPanel } from "@/components/inventory/inventory-transfers-panel";
 import { InventoryMovementsDrawer } from "@/components/inventory-movements-panel";
 import { AppTabs, type AppTabDefinition } from "@/components/app-tabs";
 import type { CloseAssignmentSubmit } from "@/components/inventory-assignment-modals";
@@ -12,17 +13,24 @@ import type { ConductorTruckBalance } from "@/lib/conductor-truck-inventory";
 import type { InventoryStockItem } from "@/lib/inventory-stock";
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
 
-export type InventoryTrackingTab = "custody" | "assignments" | "history";
+export type InventoryTrackingTab = "custody" | "transfers" | "assignments" | "history";
 
 const trackingTabs: AppTabDefinition<InventoryTrackingTab>[] = [
   { id: "custody", label: "Dónde están", icon: LocateFixed },
+  { id: "transfers", label: "Transferencias", icon: ArrowRightLeft },
   { id: "assignments", label: "Asignaciones", icon: ClipboardList },
   { id: "history", label: "Historial", icon: History },
 ];
 
+type WarehouseOption = {
+  id: string;
+  name: string;
+};
+
 type InventoryTrackingDrawerProps = {
   warehouseId: string;
   warehouseName?: string;
+  warehouses?: WarehouseOption[];
   items: InventoryStockItem[];
   truckBalances: ConductorTruckBalance[];
   assignments: InventoryAssignment[];
@@ -32,6 +40,7 @@ type InventoryTrackingDrawerProps = {
   onAssignmentsChange: (next: InventoryAssignment[]) => void;
   onMovementsChange: (next: InventoryMovement[]) => void;
   onCloseAssignment: (assignmentId: string, input: CloseAssignmentSubmit) => Promise<boolean>;
+  onInventoryRefresh?: () => Promise<void> | void;
   closingAssignmentId?: string;
   controlledOpen?: boolean;
   onControlledOpenChange?: (open: boolean) => void;
@@ -46,9 +55,11 @@ export function InventoryTrackingDrawer({
   movements,
   initialItemId = null,
   initialTab = "custody",
+  warehouses = [],
   onAssignmentsChange,
   onMovementsChange,
   onCloseAssignment,
+  onInventoryRefresh,
   closingAssignmentId = "",
   controlledOpen,
   onControlledOpenChange,
@@ -171,6 +182,15 @@ export function InventoryTrackingDrawer({
                 items={items}
                 truckBalances={truckBalances}
                 active={drawerOpen}
+              />
+            ) : tab === "transfers" ? (
+              <InventoryTransfersPanel
+                warehouseId={warehouseId}
+                warehouseName={warehouseName}
+                warehouses={warehouses}
+                items={items}
+                active={drawerOpen}
+                onInventoryRefresh={onInventoryRefresh}
               />
             ) : tab === "assignments" ? (
               <InventoryAssignmentsDrawer

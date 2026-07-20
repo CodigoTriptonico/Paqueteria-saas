@@ -1,7 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
+import { emptyInventoryMovementAuditFields } from "@/lib/inventory-movement-audit";
 import { summarizeMovements } from "./inventory-reports";
+
+const audit = emptyInventoryMovementAuditFields();
 
 const openAssignments: InventoryAssignment[] = [
   {
@@ -31,6 +34,7 @@ const movements: InventoryMovement[] = [
     type: "consumo",
     qty: 1,
     note: "",
+    ...audit,
     createdAt: "2026-01-02T00:00:00.000Z",
     assigneeId: "user-1",
     assigneeName: "Ana",
@@ -42,6 +46,7 @@ const movements: InventoryMovement[] = [
     type: "dano",
     qty: 1,
     note: "",
+    ...audit,
     createdAt: "2026-01-03T00:00:00.000Z",
     assigneeId: "user-1",
     assigneeName: "Ana",
@@ -53,6 +58,7 @@ const movements: InventoryMovement[] = [
     type: "devolucion",
     qty: 2,
     note: "",
+    ...audit,
     createdAt: "2026-01-04T00:00:00.000Z",
     assigneeId: "user-2",
     assigneeName: "Bruno",
@@ -64,6 +70,7 @@ const movements: InventoryMovement[] = [
     type: "entrada",
     qty: 5,
     note: "",
+    ...audit,
     createdAt: "2026-01-05T00:00:00.000Z",
   },
 ];

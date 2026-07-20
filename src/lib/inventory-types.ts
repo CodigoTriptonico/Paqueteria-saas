@@ -1,3 +1,10 @@
+import type {
+  InventoryMovementEvidence,
+  InventoryMovementLocationType,
+  InventoryMovementReasonCode,
+  InventoryMovementReferenceType,
+} from "@/lib/inventory-movement-audit";
+
 export type InventoryMovementType =
   | "entrada"
   | "salida"
@@ -15,12 +22,24 @@ export type InventoryMovement = {
   type: InventoryMovementType;
   qty: number;
   note: string;
+  reasonCode: InventoryMovementReasonCode;
+  fromLocationType: InventoryMovementLocationType | null;
+  fromLocationId: string | null;
+  fromLocationLabel: string;
+  toLocationType: InventoryMovementLocationType | null;
+  toLocationId: string | null;
+  toLocationLabel: string;
+  referenceType: InventoryMovementReferenceType | null;
+  referenceId: string | null;
+  evidence: InventoryMovementEvidence;
+  reversalOfMovementId: string | null;
   createdAt: string;
   createdBy?: string | null;
   createdByName?: string | null;
   assigneeId?: string | null;
   assigneeName?: string | null;
   assignmentId?: string | null;
+  warehouseTransferId?: string | null;
 };
 
 export type InventoryAssignmentOutcome =

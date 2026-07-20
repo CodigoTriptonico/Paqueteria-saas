@@ -33,6 +33,7 @@ import {
   InlineSearchPicker,
 } from "@/components/inline-search-picker";
 import { InventoryCategorySidebar } from "@/components/inventory/inventory-category-sidebar";
+import { InventoryBinPlacementDrawer } from "@/components/inventory/inventory-bin-placement-drawer";
 import { InventoryItemContextMenu } from "@/components/inventory/inventory-item-context-menu";
 import { InventoryItemGrid } from "@/components/inventory/inventory-item-grid";
 import {
@@ -190,6 +191,9 @@ export function InventoryStructureEditor({
   );
   const [stockSaving, setStockSaving] = useState(false);
   const [stockError, setStockError] = useState("");
+  const [binPlacementOpen, setBinPlacementOpen] = useState(false);
+  const [binPlacementContext, setBinPlacementContext] =
+    useState<ItemContextMenu | null>(null);
 
   const showStructureOptions = showCategoryCreate;
   // Las acciones de una categoría seleccionada no deben depender de que el
@@ -1194,6 +1198,7 @@ export function InventoryStructureEditor({
       type,
       qty: type === "ajuste" ? String(itemContextMenu.stockItem.stock) : "1",
       note: "",
+      reasonCode: defaultReasonCodeForMovementType(type),
       context: itemContextMenu,
     });
     setItemContextMenu(null);
@@ -1242,6 +1247,7 @@ export function InventoryStructureEditor({
       type: movementDraft.type,
       qty,
       note: movementDraft.note,
+      reasonCode: movementDraft.reasonCode,
       minStock: movementDraft.context.stockItem.minStock,
     });
 
@@ -1553,6 +1559,10 @@ export function InventoryStructureEditor({
       photoUploading={photoUploading}
       onUpdateItemUnit={handleUpdateItemUnit}
       unitSaving={unitSaving}
+      onOpenBinPlacement={(context) => {
+        setBinPlacementContext(context);
+        setBinPlacementOpen(true);
+      }}
     />
   );
 
@@ -1957,6 +1967,25 @@ export function InventoryStructureEditor({
         onClose={() => setShowNewItemForm(false)}
         pricingReturnHref={pricingReturnHref}
         pricingReturnLabel={pricingReturnLabel}
+      />
+
+      <InventoryBinPlacementDrawer
+        open={binPlacementOpen}
+        warehouseId={warehouseId}
+        warehouseName={warehouseName}
+        context={
+          binPlacementContext
+            ? {
+                itemId: binPlacementContext.stockItem.id,
+                itemName: binPlacementContext.treeItem.name,
+                stockItem: binPlacementContext.stockItem,
+              }
+            : null
+        }
+        onClose={() => {
+          setBinPlacementOpen(false);
+          setBinPlacementContext(null);
+        }}
       />
     </>
   );

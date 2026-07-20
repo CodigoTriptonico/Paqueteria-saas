@@ -1,3 +1,4 @@
+import type { InventoryMovementReasonCode } from "@/lib/inventory-movement-audit";
 import type { InventoryMovement } from "@/lib/inventory-types";
 import {
   inventoryItemsForLeaf,
@@ -25,6 +26,7 @@ export type MovementDraft = {
   type: "entrada" | "salida" | "ajuste";
   qty: string;
   note: string;
+  reasonCode: InventoryMovementReasonCode;
   context: ItemContextMenu;
 };
 

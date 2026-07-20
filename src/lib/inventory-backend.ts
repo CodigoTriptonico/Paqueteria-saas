@@ -45,6 +45,18 @@ export type DbMovementRow = {
   type: InventoryMovementType;
   qty: number;
   note: string;
+  reason_code?: string | null;
+  from_location_type?: string | null;
+  from_location_id?: string | null;
+  from_location_label?: string | null;
+  to_location_type?: string | null;
+  to_location_id?: string | null;
+  to_location_label?: string | null;
+  reference_type?: string | null;
+  reference_id?: string | null;
+  evidence?: Record<string, unknown> | null;
+  reversal_of_movement_id?: string | null;
+  warehouse_transfer_id?: string | null;
   created_at: string;
   created_by?: string | null;
   assignee_id?: string | null;
@@ -271,12 +283,24 @@ export function movementsFromDb(rows: DbMovementRow[]): InventoryMovement[] {
     type: row.type,
     qty: Number(row.qty),
     note: row.note || "",
+    reasonCode: (row.reason_code || "unspecified") as InventoryMovement["reasonCode"],
+    fromLocationType: (row.from_location_type || null) as InventoryMovement["fromLocationType"],
+    fromLocationId: row.from_location_id ?? null,
+    fromLocationLabel: row.from_location_label || "",
+    toLocationType: (row.to_location_type || null) as InventoryMovement["toLocationType"],
+    toLocationId: row.to_location_id ?? null,
+    toLocationLabel: row.to_location_label || "",
+    referenceType: (row.reference_type || null) as InventoryMovement["referenceType"],
+    referenceId: row.reference_id ?? null,
+    evidence: (row.evidence || {}) as InventoryMovement["evidence"],
+    reversalOfMovementId: row.reversal_of_movement_id ?? null,
     createdAt: row.created_at,
     createdBy: row.created_by ?? null,
     createdByName: profileDisplayName(row.created_by_profile),
     assigneeId: row.assignee_id ?? null,
     assigneeName: profileDisplayName(row.assignee_profile),
     assignmentId: row.assignment_id ?? null,
+    warehouseTransferId: row.warehouse_transfer_id ?? null,
   }));
 }
 
@@ -304,8 +328,12 @@ export function assignmentsFromDb(rows: DbAssignmentRow[]): InventoryAssignment[
 }
 
 export const MOVEMENT_SELECT = `
-  id, item_id, item_name, type, qty, note, created_at, created_by,
-  assignee_id, assignment_id,
+  id, item_id, item_name, type, qty, note, reason_code,
+  from_location_type, from_location_id, from_location_label,
+  to_location_type, to_location_id, to_location_label,
+  reference_type, reference_id, evidence, reversal_of_movement_id,
+  warehouse_transfer_id,
+  created_at, created_by, assignee_id, assignment_id,
   created_by_profile:profiles!inventory_movements_created_by_fkey(full_name, email),
   assignee_profile:profiles!inventory_movements_assignee_id_fkey(full_name, email)
 `;

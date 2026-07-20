@@ -1,11 +1,15 @@
 "use client";
 
-import { History, ImagePlus, Loader2, Ruler } from "lucide-react";
+import { History, ImagePlus, Loader2, MapPin, Ruler } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { InventoryMovementsSidePanel } from "@/components/inventory-movements-panel";
 import { inputClass } from "@/components/ui-blocks";
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
+import {
+  manualMovementReasonOptions,
+  movementReasonRequiresDetail,
+} from "@/lib/inventory-movement-audit";
 import type { ItemContextMenu, MovementDraft } from "@/lib/inventory-structure-utils";
 import {
   formatInventoryStockLabel,
@@ -48,6 +52,7 @@ export type InventoryItemContextMenuProps = {
     unit: string,
   ) => boolean | Promise<boolean>;
   unitSaving?: boolean;
+  onOpenBinPlacement?: (context: ItemContextMenu) => void;
 };
 
 export function InventoryItemContextMenu({
@@ -79,6 +84,7 @@ export function InventoryItemContextMenu({
   photoUploading = false,
   onUpdateItemUnit,
   unitSaving = false,
+  onOpenBinPlacement,
 }: InventoryItemContextMenuProps) {
   const [mounted, setMounted] = useState(false);
   const [unitEditor, setUnitEditor] = useState<{
@@ -236,6 +242,21 @@ export function InventoryItemContextMenu({
               Unidad de medida
             </button>
           ) : null}
+          {warehouseId && onOpenBinPlacement ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (itemContextMenu) {
+                  onOpenBinPlacement(itemContextMenu);
+                  setItemContextMenu(null);
+                }
+              }}
+              className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm font-black text-slate-200 hover:bg-surface-card-hover"
+            >
+              <MapPin className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+              Ubicación en bodega
+            </button>
+          ) : null}
           {warehouseId ? (
             <button
               type="button"
@@ -372,8 +393,31 @@ export function InventoryItemContextMenu({
                 autoFocus
               />
             </label>
+            <label className="grid gap-1.5 text-xs font-black uppercase text-slate-400">
+              Motivo
+              <select
+                className={`${inputClass} h-10 text-sm`}
+                value={movementDraft.reasonCode}
+                onChange={(event) =>
+                  setMovementDraft((current) =>
+                    current
+                      ? {
+                          ...current,
+                          reasonCode: event.target.value as MovementDraft["reasonCode"],
+                        }
+                      : current,
+                  )
+                }
+              >
+                {manualMovementReasonOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="mt-3 grid gap-1.5 text-xs font-black uppercase text-slate-400">
-              Nota
+              Detalle
               <input
                 className={`${inputClass} h-10 text-sm`}
                 value={movementDraft.note}
@@ -382,7 +426,12 @@ export function InventoryItemContextMenu({
                     current ? { ...current, note: event.target.value } : current,
                   )
                 }
-                placeholder="Opcional"
+                placeholder={
+                  movementReasonRequiresDetail(movementDraft.reasonCode)
+                    ? "Requerido"
+                    : "Opcional"
+                }
+                required={movementReasonRequiresDetail(movementDraft.reasonCode)}
               />
             </label>
             {stockError ? (
