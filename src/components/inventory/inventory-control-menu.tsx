@@ -11,11 +11,15 @@ import {
   InventoryToolbarIconButton,
 } from "@/components/inventory/inventory-toolbar-icon-button";
 import type { CloseAssignmentSubmit } from "@/components/inventory-assignment-modals";
+import type { ConductorTruckBalance } from "@/lib/conductor-truck-inventory";
+import type { InventoryStockItem } from "@/lib/inventory-stock";
 import type { InventoryAssignment, InventoryMovement } from "@/lib/inventory-types";
 
 export function InventoryControlMenu({
   warehouseId,
   warehouseName,
+  items,
+  truckBalances,
   assignments,
   movements,
   initialItemId = null,
@@ -25,9 +29,16 @@ export function InventoryControlMenu({
   closingAssignmentId = "",
   bare = false,
   variant = "toolbar",
+  showDrawer = true,
+  trackingOpen,
+  onTrackingOpenChange,
+  trackingTab,
+  onTrackingTabChange,
 }: {
   warehouseId: string;
   warehouseName?: string;
+  items: InventoryStockItem[];
+  truckBalances: ConductorTruckBalance[];
   assignments: InventoryAssignment[];
   movements: InventoryMovement[];
   initialItemId?: string | null;
@@ -37,9 +48,18 @@ export function InventoryControlMenu({
   closingAssignmentId?: string;
   bare?: boolean;
   variant?: "toolbar" | "menu";
+  showDrawer?: boolean;
+  trackingOpen?: boolean;
+  onTrackingOpenChange?: (open: boolean) => void;
+  trackingTab?: InventoryTrackingTab;
+  onTrackingTabChange?: (tab: InventoryTrackingTab) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [initialTab, setInitialTab] = useState<InventoryTrackingTab>("custody");
+  const [internalOpen, setInternalOpen] = useState(false);
+  const [internalTab, setInternalTab] = useState<InventoryTrackingTab>("custody");
+  const open = trackingOpen ?? internalOpen;
+  const setOpen = onTrackingOpenChange ?? setInternalOpen;
+  const initialTab = trackingTab ?? internalTab;
+  const setInitialTab = onTrackingTabChange ?? setInternalTab;
 
   useEffect(() => {
     if (initialItemId) {
@@ -70,7 +90,7 @@ export function InventoryControlMenu({
         className={menuItemClass}
       >
         <LocateFixed className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-        <span className="min-w-0 flex-1">Seguimiento</span>
+        <span className="min-w-0 flex-1">Custodia</span>
         {badge ? (
           <span className="rounded bg-surface-inset px-1.5 py-0.5 text-[10px] tabular-nums text-slate-400">
             {badge}
@@ -80,7 +100,7 @@ export function InventoryControlMenu({
     ) : (
       <InventoryToolbarIconButton
         icon={LocateFixed}
-        label="Seguimiento"
+        label="Custodia"
         badge={badge}
         tone={open ? "active" : "default"}
         onClick={() => openTracking("custody")}
@@ -88,6 +108,25 @@ export function InventoryControlMenu({
         ariaHaspopup="dialog"
       />
     );
+
+  const drawer = showDrawer ? (
+    <InventoryTrackingDrawer
+      warehouseId={warehouseId}
+      warehouseName={warehouseName}
+      items={items}
+      truckBalances={truckBalances}
+      assignments={assignments}
+      movements={movements}
+      initialItemId={initialItemId}
+      initialTab={initialTab}
+      onAssignmentsChange={onAssignmentsChange}
+      onMovementsChange={onMovementsChange}
+      onCloseAssignment={onCloseAssignment}
+      closingAssignmentId={closingAssignmentId}
+      controlledOpen={open}
+      onControlledOpenChange={setOpen}
+    />
+  ) : null;
 
   return (
     <>
@@ -97,20 +136,7 @@ export function InventoryControlMenu({
         <div className={inventoryToolbarGroupClass}>{trigger}</div>
       )}
 
-      <InventoryTrackingDrawer
-        warehouseId={warehouseId}
-        warehouseName={warehouseName}
-        assignments={assignments}
-        movements={movements}
-        initialItemId={initialItemId}
-        initialTab={initialTab}
-        onAssignmentsChange={onAssignmentsChange}
-        onMovementsChange={onMovementsChange}
-        onCloseAssignment={onCloseAssignment}
-        closingAssignmentId={closingAssignmentId}
-        controlledOpen={open}
-        onControlledOpenChange={setOpen}
-      />
+      {drawer}
     </>
   );
 }

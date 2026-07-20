@@ -11,6 +11,7 @@ import {
   resolveSubcategoryStockItems,
   stockBucketCounts,
   stockLevelForItem,
+  inventoryItemFilterOptions,
   worstStockLevel,
   type InventoryStockItem,
 } from "./inventory-stock";
@@ -40,6 +41,7 @@ function stockItem(
     category: overrides.category || "Cajas",
     kind: overrides.kind,
     subcategory: overrides.subcategory,
+    size: overrides.size,
     stock: overrides.stock ?? 10,
     reserved: overrides.reserved ?? 0,
     assigned: overrides.assigned ?? 0,
@@ -166,5 +168,19 @@ describe("inventory-stock", () => {
 
   it("counts inventory articles from the visible tree", () => {
     assert.equal(countInventoryArticles(sampleTree), 2);
+  });
+
+  it("builds deduped inventory item filter options", () => {
+    const options = inventoryItemFilterOptions([
+      stockItem({ id: "a", kind: "Caja M", name: "Caja M", size: "M" }),
+      stockItem({ id: "b", kind: "Caja L", name: "Caja L", size: "L" }),
+      stockItem({ id: "a", kind: "Caja M", name: "Caja M", size: "M" }),
+    ]);
+
+    assert.equal(options.length, 2);
+    assert.deepEqual(
+      options.map((option) => option.label),
+      ["Caja L", "Caja M"],
+    );
   });
 });

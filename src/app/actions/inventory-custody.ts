@@ -1,93 +1,45 @@
 "use server";
 
 import { requireAppSession } from "@/lib/auth/session";
-import { canAccessWarehouse, sessionHasPermission } from "@/lib/auth/permissions";
-import {
-  actionErrorMessage,
-  fail,
-  ok,
-  type ActionResult,
-} from "@/lib/actions/errors";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { sessionHasPermission } from "@/lib/auth/permissions";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import {
-  buildInventoryCustodySnapshot,
-  type InventoryCustodyAgencyLot,
-  type InventoryCustodySnapshot,
-  type InventoryCustodyTruckLine,
+  buildInventoryCustodyFullCounts,
+  type InventoryCustodyAgencyRow,
+  type InventoryCustodyServerSnapshot,
 } from "@/lib/inventory-custody";
-import {
-  buildConductorTruckBalance,
-  type ConductorTruckInventoryEvent,
-} from "@/lib/conductor-truck-inventory";
-import { stockRowsToItems, type DbStockRow } from "@/lib/inventory-backend";
 import type { PhysicalPackageStatus } from "@/lib/physical-packages";
 
-type LotBalanceRow = {
-  inventory_item_id: string | null;
+type AgencyRow = {
+  id: string;
+  organization_id: string;
+  code: string | null;
+};
+
+type OrganizationRow = {
+  id: string;
+  name: string | null;
+};
+
+type AgencyLotBalanceRow = {
+  agency_id: string;
   product_key: string | null;
   box_size: string | null;
-  available_quantity: number | null;
-  allocated_quantity: number | null;
+  available_quantity: number | string | null;
+  allocated_quantity: number | string | null;
+  delivered_quantity: number | string | null;
 };
 
-type PackageStatusRow = {
+type PackageStatusCountRow = {
   status: PhysicalPackageStatus;
+  count: number | string | null;
 };
 
-type TruckEventDbRow = {
-  id: string;
-  vehicle_id: string | null;
-  event_type: ConductorTruckInventoryEvent["eventType"];
-  route_id: string | null;
-  task_id: string | null;
-  shipment_id: string | null;
-  warehouse_id: string | null;
-  item_id: string | null;
-  item_name: string | null;
-  catalog_key: string | null;
-  item_label: string | null;
-  qty: number | null;
-  created_at: string;
-};
-
-function mapTruckEvent(row: TruckEventDbRow): ConductorTruckInventoryEvent {
-  return {
-    id: row.id,
-    eventType: row.event_type,
-    routeId: row.route_id,
-    taskId: row.task_id,
-    shipmentId: row.shipment_id,
-    warehouseId: row.warehouse_id,
-    itemId: row.item_id,
-    itemName: row.item_name || "",
-    catalogKey: row.catalog_key || "",
-    itemLabel: row.item_label || row.item_name || "",
-    qty: Number(row.qty) || 0,
-    createdAt: row.created_at,
-  };
-}
-
-function truckLinesFromBalances(
-  balances: ReturnType<typeof buildConductorTruckBalance>[],
-): InventoryCustodyTruckLine[] {
-  return balances.flatMap((balance) =>
-    balance.lines
-      .filter((line) => line.currentQty > 0)
-      .map((line) => ({
-        itemId: line.itemId,
-        itemName: line.itemName,
-        label: line.label,
-        warehouseId: line.warehouseId,
-        currentQty: line.currentQty,
-      })),
-  );
-}
-
-export async function loadInventoryCustodySnapshotAction(input: {
-  warehouseId: string;
-  warehouseName?: string;
-}): Promise<ActionResult<InventoryCustodySnapshot>> {
+export async function loadInventoryCustodySnapshotAction(): Promise<
+  ActionResult<InventoryCustodyServerSnapshot>
+> {
   try {
     const session = await requireAppSession();
 
@@ -95,172 +47,107 @@ export async function loadInventoryCustodySnapshotAction(input: {
       throw new Error("FORBIDDEN");
     }
 
-    if (!input.warehouseId) {
-      return fail("Selecciona una bodega.");
-    }
-
-    if (!canAccessWarehouse(session, input.warehouseId)) {
-      throw new Error("FORBIDDEN");
-    }
-
     const admin = createSupabaseAdminClient();
-    const scoped = await createScopedSupabase(session);
+    const supabase = await createScopedSupabase(session);
 
-    if (!admin || !scoped) {
+    if (!supabase) {
       return fail("Supabase no configurado");
     }
 
-    const [
-      stockResult,
-      agencyOrgsResult,
-      packageResult,
-      eventResult,
-      vehicleResult,
-      warehouseResult,
-    ] = await Promise.all([
-      scoped
-        .from("inventory_stock")
-        .select(
-          "id, item_id, warehouse_id, stock, reserved, assigned, unavailable, min_stock, inventory_items(id, name, kind, subcategory, size, location, unit, category_id, inventory_categories(name))",
-        )
-        .eq("warehouse_id", input.warehouseId)
-        .eq("organization_id", session.organizationId),
-      admin
+    const agencyRows: InventoryCustodyAgencyRow[] = [];
+
+    if (admin) {
+      const { data: agencies, error: agenciesError } = await admin
         .from("agencies")
-        .select("organization_id")
+        .select("id, organization_id, code")
         .eq("matrix_organization_id", session.organizationId)
-        .is("archived_at", null),
-      admin
-        .from("shipment_packages")
-        .select("status")
-        .eq("organization_id", session.organizationId),
-      admin
-        .from("logistics_truck_inventory_events")
-        .select(
-          "id, vehicle_id, event_type, route_id, task_id, shipment_id, warehouse_id, item_id, item_name, catalog_key, item_label, qty, created_at",
-        )
-        .eq("organization_id", session.organizationId)
-        .order("created_at", { ascending: true }),
-      admin
-        .from("logistics_vehicles")
-        .select("id, name, plate, assigned_driver_id, is_active")
-        .eq("organization_id", session.organizationId)
-        .eq("is_active", true),
-      scoped
-        .from("warehouses")
-        .select("id, name")
-        .eq("id", input.warehouseId)
-        .eq("organization_id", session.organizationId)
-        .maybeSingle(),
-    ]);
+        .is("archived_at", null);
 
-    if (stockResult.error) {
-      return fail(stockResult.error.message);
-    }
-
-    if (agencyOrgsResult.error && agencyOrgsResult.error.code !== "42P01") {
-      return fail(agencyOrgsResult.error.message);
-    }
-
-    if (packageResult.error && packageResult.error.code !== "42P01") {
-      return fail(packageResult.error.message);
-    }
-
-    if (eventResult.error && eventResult.error.code !== "42P01") {
-      return fail(eventResult.error.message);
-    }
-
-    if (vehicleResult.error && vehicleResult.error.code !== "42P01") {
-      return fail(vehicleResult.error.message);
-    }
-
-    const items = stockRowsToItems((stockResult.data || []) as unknown as DbStockRow[]);
-
-    const agencyOrgIds = [
-      ...new Set(
-        (agencyOrgsResult.data || [])
-          .map((row) => row.organization_id)
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ];
-
-    let agencyLots: InventoryCustodyAgencyLot[] = [];
-
-    if (agencyOrgIds.length) {
-      const lotsResult = await admin
-        .from("agency_box_lot_balances")
-        .select(
-          "inventory_item_id, product_key, box_size, available_quantity, allocated_quantity",
-        )
-        .in("organization_id", agencyOrgIds);
-
-      if (lotsResult.error && lotsResult.error.code !== "42P01") {
-        return fail(lotsResult.error.message);
+      if (agenciesError && agenciesError.code !== "42P01") {
+        throw new Error(agenciesError.message);
       }
 
-      agencyLots = ((lotsResult.data || []) as LotBalanceRow[]).map((row) => ({
-        inventoryItemId: row.inventory_item_id,
-        productKey: row.product_key || "",
-        boxSize: row.box_size || "",
-        availableQuantity: Number(row.available_quantity) || 0,
-        allocatedQuantity: Number(row.allocated_quantity) || 0,
-      }));
-    }
+      const agencyNameById = new Map<string, string>();
+      const agencyRowsData = (agencies || []) as AgencyRow[];
+      const organizationIds = [...new Set(agencyRowsData.map((agency) => agency.organization_id))];
 
-    const eventsByVehicle = new Map<string, ConductorTruckInventoryEvent[]>();
-    for (const row of (eventResult.data || []) as TruckEventDbRow[]) {
-      if (!row.vehicle_id) {
-        continue;
+      const { data: organizations, error: organizationsError } = organizationIds.length
+        ? await admin.from("organizations").select("id, name").in("id", organizationIds)
+        : { data: [], error: null };
+
+      if (organizationsError && organizationsError.code !== "42P01") {
+        throw new Error(organizationsError.message);
       }
-      const list = eventsByVehicle.get(row.vehicle_id) || [];
-      list.push(mapTruckEvent(row));
-      eventsByVehicle.set(row.vehicle_id, list);
-    }
 
-    const stockForTruck = items.map((item) => ({
-      itemId: item.id,
-      itemName: item.name,
-      category: item.category,
-      kind: item.kind,
-      subcategory: item.subcategory,
-      warehouseId: input.warehouseId,
-      stock: item.stock,
-    }));
+      const organizationNameById = new Map(
+        ((organizations || []) as OrganizationRow[]).map((organization) => [
+          organization.id,
+          String(organization.name || "").trim(),
+        ]),
+      );
 
-    const balances = (vehicleResult.data || []).map((vehicle) =>
-      buildConductorTruckBalance({
-        vehicleId: vehicle.id,
-        vehicleName: vehicle.name || "",
-        vehiclePlate: vehicle.plate || "",
-        assignedDriverId: vehicle.assigned_driver_id,
-        events: eventsByVehicle.get(vehicle.id) || [],
-        stock: stockForTruck,
-      }),
-    );
-
-    const truckLines = truckLinesFromBalances(balances);
-
-    const fullCountsByStatus: Partial<Record<PhysicalPackageStatus, number>> = {};
-    for (const row of (packageResult.data || []) as PackageStatusRow[]) {
-      if (!row.status) {
-        continue;
+      for (const agency of agencyRowsData) {
+        const organizationName = organizationNameById.get(agency.organization_id);
+        agencyNameById.set(
+          agency.id,
+          organizationName || String(agency.code || "").trim() || "Agencia",
+        );
       }
-      fullCountsByStatus[row.status] = (fullCountsByStatus[row.status] || 0) + 1;
+
+      if (agencyNameById.size) {
+        const { data: lotRows, error: lotError } = await admin
+          .from("agency_box_lot_balances")
+          .select(
+            "agency_id, product_key, box_size, available_quantity, allocated_quantity, delivered_quantity",
+          )
+          .in("agency_id", [...agencyNameById.keys()]);
+
+        if (lotError && lotError.code !== "42P01") {
+          throw new Error(lotError.message);
+        }
+
+        for (const row of (lotRows || []) as AgencyLotBalanceRow[]) {
+          const availableQuantity = Math.max(0, Number(row.available_quantity) || 0);
+          const allocatedQuantity = Math.max(0, Number(row.allocated_quantity) || 0);
+          const deliveredQuantity = Math.max(0, Number(row.delivered_quantity) || 0);
+
+          if (availableQuantity + allocatedQuantity <= 0) {
+            continue;
+          }
+
+          agencyRows.push({
+            agencyId: String(row.agency_id),
+            agencyName: agencyNameById.get(String(row.agency_id)) || "Agencia",
+            productKey: String(row.product_key || "Caja").trim() || "Caja",
+            boxSize: String(row.box_size || "Estándar").trim() || "Estándar",
+            availableQuantity,
+            allocatedQuantity,
+            deliveredQuantity,
+          });
+        }
+      }
     }
 
-    const warehouseName =
-      input.warehouseName?.trim() || warehouseResult.data?.name || "Bodega";
+    const { data: packageRows, error: packageError } = await supabase
+      .from("shipment_packages")
+      .select("status")
+      .eq("organization_id", session.organizationId);
 
-    return ok(
-      buildInventoryCustodySnapshot({
-        warehouseId: input.warehouseId,
-        warehouseName,
-        items,
-        truckLines,
-        agencyLots,
-        fullCountsByStatus,
-      }),
-    );
+    if (packageError && packageError.code !== "42P01") {
+      throw new Error(packageError.message);
+    }
+
+    const counts: Partial<Record<PhysicalPackageStatus, number>> = {};
+
+    for (const row of (packageRows || []) as PackageStatusCountRow[]) {
+      const status = row.status;
+      counts[status] = (counts[status] || 0) + 1;
+    }
+
+    return ok({
+      agencyRows,
+      fullPackageCounts: buildInventoryCustodyFullCounts(counts),
+    });
   } catch (error) {
     return fail(actionErrorMessage(error));
   }

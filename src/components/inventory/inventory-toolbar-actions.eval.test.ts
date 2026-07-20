@@ -31,24 +31,4 @@ describe("inventory toolbar action separation eval", () => {
     assert.match(editorSource, /showStructureDelete && structureMenuMode === "manage"/);
     assert.match(menuSource, /showStructureDelete && mode === "manage"/);
   });
-
-  it("keeps operational tracking as one Seguimiento entry before structure actions", () => {
-    const controlMenu = readFileSync(
-      join(componentDir, "inventory-control-menu.tsx"),
-      "utf8",
-    );
-    assert.match(controlMenu, /Seguimiento/);
-    assert.match(controlMenu, /InventoryTrackingDrawer/);
-    assert.match(editorSource, /toolbarEndSlot/);
-    assert.match(editorSource, /Categorías y subcategorías/);
-  });
-
-  it("keeps the overflow menu mounted so Seguimiento drawers survive dismiss", () => {
-    assert.match(editorSource, /Keep mounted when closed so Seguimiento/);
-    assert.match(editorSource, /hidden=\{!toolbarMenuOpen\}/);
-    assert.doesNotMatch(
-      editorSource,
-      /\{toolbarMenuOpen \? \(\s*<div\s+ref=\{toolbarMenuRef\}/,
-    );
-  });
 });

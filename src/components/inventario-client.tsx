@@ -15,6 +15,10 @@ import {
   type CloseAssignmentSubmit,
 } from "@/components/inventory-assignment-modals";
 import { InventoryControlMenu } from "@/components/inventory/inventory-control-menu";
+import {
+  InventoryTrackingDrawer,
+  type InventoryTrackingTab,
+} from "@/components/inventory/inventory-tracking-drawer";
 import { InventoryTruckPanel } from "@/components/inventory/inventory-truck-panel";
 import { InventoryStructureEditor } from "@/components/inventory-structure-editor";
 import { InventoryWarehouseBar } from "@/components/inventory-warehouse-bar";
@@ -99,6 +103,8 @@ export function InventarioClient({
     useState<InventoryCatalogProduct | null>(null);
   const [truckTabOpen, setTruckTabOpen] = useState(false);
   const [truckBalances, setTruckBalances] = useState(initialTruckBalances);
+  const [trackingOpen, setTrackingOpen] = useState(false);
+  const [trackingTab, setTrackingTab] = useState<InventoryTrackingTab>("custody");
 
   const activeWarehouseName =
     warehouses.find((warehouse) => warehouse.id === warehouseId)?.name || "";
@@ -112,6 +118,17 @@ export function InventarioClient({
     [returnTo],
   );
   const showWarehouseSettings = searchParams.get("bodegas") === "1";
+
+  useEffect(() => {
+    if (!assignmentDrawerItemId) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      setTrackingTab("assignments");
+      setTrackingOpen(true);
+    });
+  }, [assignmentDrawerItemId]);
 
   const handleInventarioNavBack = useCallback(() => {
     if (showWarehouseSettings) {
@@ -471,17 +488,41 @@ export function InventarioClient({
         toolbarEndSlot={
           <InventoryControlMenu
             variant="menu"
+            showDrawer={false}
             warehouseId={warehouseId}
             warehouseName={activeWarehouseName}
+            items={inventoryItems}
+            truckBalances={truckBalances}
             assignments={assignments}
             movements={movements}
             initialItemId={assignmentDrawerItemId}
+            trackingOpen={trackingOpen}
+            onTrackingOpenChange={setTrackingOpen}
+            trackingTab={trackingTab}
+            onTrackingTabChange={setTrackingTab}
             onAssignmentsChange={setAssignments}
             onMovementsChange={setMovements}
             onCloseAssignment={handleCloseAssignment}
             closingAssignmentId={closingAssignmentId}
           />
         }
+      />
+
+      <InventoryTrackingDrawer
+        warehouseId={warehouseId}
+        warehouseName={activeWarehouseName}
+        items={inventoryItems}
+        truckBalances={truckBalances}
+        assignments={assignments}
+        movements={movements}
+        initialItemId={assignmentDrawerItemId}
+        initialTab={trackingTab}
+        controlledOpen={trackingOpen}
+        onControlledOpenChange={setTrackingOpen}
+        onAssignmentsChange={setAssignments}
+        onMovementsChange={setMovements}
+        onCloseAssignment={handleCloseAssignment}
+        closingAssignmentId={closingAssignmentId}
       />
 
       <AssignInventoryModal

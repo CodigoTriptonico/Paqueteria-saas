@@ -10,7 +10,6 @@ import {
 } from "@/app/actions/users";
 import { InventoryToolbarIconButton } from "@/components/inventory/inventory-toolbar-icon-button";
 import {
-  InlineSearchCombobox,
   InlineSearchPicker,
 } from "@/components/inline-search-picker";
 import {
@@ -18,11 +17,15 @@ import {
   type CloseAssignmentSubmit,
 } from "@/components/inventory-assignment-modals";
 import type { InventoryAssignment } from "@/lib/inventory-types";
+import { inventoryItemFilterOptions } from "@/lib/inventory-stock";
+import type { InventoryStockItem } from "@/lib/inventory-stock";
 
 type InventoryAssignmentsDrawerProps = {
   warehouseId: string;
   assignments: InventoryAssignment[];
+  items?: InventoryStockItem[];
   iconOnly?: boolean;
+  embedded?: boolean;
   initialItemId?: string | null;
   onAssignmentsChange: (next: InventoryAssignment[]) => void;
   onCloseAssignment: (
@@ -46,34 +49,47 @@ function formatWhen(value: string) {
   }
 }
 
-export function InventoryAssignmentsPanelBody({
-  active,
+export function InventoryAssignmentsDrawer({
   warehouseId,
   assignments,
+  items = [],
+  iconOnly = false,
+  embedded = false,
   initialItemId = null,
   onAssignmentsChange,
   onCloseAssignment,
   closingAssignmentId = "",
-}: {
-  active: boolean;
-  warehouseId: string;
-  assignments: InventoryAssignment[];
-  initialItemId?: string | null;
-  onAssignmentsChange: (next: InventoryAssignment[]) => void;
-  onCloseAssignment: (
-    assignmentId: string,
-    input: CloseAssignmentSubmit,
-  ) => Promise<boolean>;
-  closingAssignmentId?: string;
-}) {
+  controlledOpen,
+  onControlledOpenChange,
+  hideTrigger = false,
+}: InventoryAssignmentsDrawerProps) {
+  const [open, setOpen] = useState(false);
+  const drawerOpen = embedded ? true : (controlledOpen ?? open);
+  const setDrawerOpen = useCallback(
+    (next: boolean) => {
+      if (controlledOpen === undefined) {
+        setOpen(next);
+      }
+
+      onControlledOpenChange?.(next);
+    },
+    [controlledOpen, onControlledOpenChange],
+  );
+  const [mounted, setMounted] = useState(false);
   const [members, setMembers] = useState<InventoryMemberRow[]>([]);
-  const [itemQuery, setItemQuery] = useState("");
+  const [selectedItemId, setSelectedItemId] = useState("");
   const [selectedAssigneeId, setSelectedAssigneeId] = useState("");
   const [closeTarget, setCloseTarget] = useState<InventoryAssignment | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!active) {
+    queueMicrotask(() => {
+      setMounted(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!drawerOpen) {
       return;
     }
 
@@ -84,7 +100,15 @@ export function InventoryAssignmentsPanelBody({
         }
       });
     });
-  }, [active]);
+  }, [drawerOpen]);
+
+  useEffect(() => {
+    if (initialItemId) {
+      queueMicrotask(() => {
+        setDrawerOpen(true);
+      });
+    }
+  }, [initialItemId, setDrawerOpen]);
 
   const memberOptions = useMemo(
     () =>
@@ -95,14 +119,12 @@ export function InventoryAssignmentsPanelBody({
     [members],
   );
 
-  const itemOptions = useMemo(() => {
-    const names = [...new Set(assignments.map((row) => row.itemName))];
-    return names.map((name) => ({ value: name, label: name }));
-  }, [assignments]);
+  const itemOptions = useMemo(
+    () => [{ value: "", label: "Todos los items" }, ...inventoryItemFilterOptions(items)],
+    [items],
+  );
 
   const filteredAssignments = useMemo(() => {
-    const query = itemQuery.trim().toLowerCase();
-
     return assignments.filter((row) => {
       if (selectedAssigneeId && row.assigneeId !== selectedAssigneeId) {
         return false;
@@ -112,13 +134,13 @@ export function InventoryAssignmentsPanelBody({
         return false;
       }
 
-      if (query && !row.itemName.toLowerCase().includes(query)) {
+      if (selectedItemId && row.itemId !== selectedItemId) {
         return false;
       }
 
       return true;
     });
-  }, [assignments, initialItemId, itemQuery, selectedAssigneeId]);
+  }, [assignments, initialItemId, selectedAssigneeId, selectedItemId]);
 
   const reload = useCallback(async () => {
     if (!warehouseId) {
@@ -140,163 +162,22 @@ export function InventoryAssignmentsPanelBody({
   }, [initialItemId, onAssignmentsChange, selectedAssigneeId, warehouseId]);
 
   useEffect(() => {
-    if (!active) {
+    if (!drawerOpen) {
       return;
     }
 
     queueMicrotask(() => {
       void reload();
     });
-  }, [active, reload]);
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 space-y-2 border-b border-black/70 p-4">
-        <p className="text-xs font-bold text-slate-500">
-          {filteredAssignments.length} abiertas
-        </p>
-        <InlineSearchPicker
-          value={selectedAssigneeId}
-          onChange={setSelectedAssigneeId}
-          options={[{ value: "", label: "Todos los empleados" }, ...memberOptions]}
-          placeholder="Empleado"
-          searchPlaceholder="Buscar empleado…"
-          ariaLabel="Filtrar empleado"
-          className="w-full"
-          minWidthClass="w-full min-w-0"
-        />
-        <InlineSearchCombobox
-          value={itemQuery}
-          onChange={setItemQuery}
-          options={itemOptions}
-          placeholder="Filtrar item"
-          emptyLabel="Sin items"
-          ariaLabel="Filtrar item"
-          className="w-full"
-          minWidthClass="w-full min-w-0"
-          onSelectOption={(option) => setItemQuery(option.label)}
-        />
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {loading ? (
-          <div className="flex justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-          </div>
-        ) : filteredAssignments.length ? (
-          <ul className="space-y-2">
-            {filteredAssignments.map((assignment) => (
-              <li
-                key={assignment.id}
-                className="rounded-xl border border-black bg-[#111827] p-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black text-[#f8fafc]">
-                      {assignment.itemName}
-                    </p>
-                    <p className="mt-0.5 text-xs font-bold text-sky-300">
-                      {assignment.assigneeName}
-                    </p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">
-                      {formatWhen(assignment.assignedAt)}
-                    </p>
-                  </div>
-                  <span className="rounded-lg border border-black bg-surface-inset px-2 py-1 text-sm font-black tabular-nums text-[#f8fafc]">
-                    {assignment.qtyAssigned}
-                  </span>
-                </div>
-                {assignment.note ? (
-                  <p className="mt-2 text-xs font-bold text-slate-400">{assignment.note}</p>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setCloseTarget(assignment)}
-                  className="mt-3 inline-flex h-9 items-center rounded-lg border border-black bg-emerald-400/10 px-3 text-xs font-black text-emerald-200"
-                >
-                  Cerrar asignación
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="py-16 text-center">
-            <p className="text-base font-black text-[#f8fafc]">Sin asignaciones abiertas</p>
-            <p className="mt-1 text-sm font-bold text-slate-500">
-              Las entregas a empleados aparecerán aquí.
-            </p>
-          </div>
-        )}
-      </div>
-
-      <CloseAssignmentModal
-        open={Boolean(closeTarget)}
-        assignment={closeTarget}
-        saving={Boolean(closingAssignmentId)}
-        onClose={() => setCloseTarget(null)}
-        onSubmit={async (input) => {
-          if (!closeTarget) {
-            return;
-          }
-
-          const success = await onCloseAssignment(closeTarget.id, input);
-
-          if (success) {
-            setCloseTarget(null);
-            await reload();
-          }
-        }}
-      />
-    </div>
-  );
-}
-
-export function InventoryAssignmentsDrawer({
-  warehouseId,
-  assignments,
-  iconOnly = false,
-  initialItemId = null,
-  onAssignmentsChange,
-  onCloseAssignment,
-  closingAssignmentId = "",
-  controlledOpen,
-  onControlledOpenChange,
-  hideTrigger = false,
-}: InventoryAssignmentsDrawerProps) {
-  const [open, setOpen] = useState(false);
-  const drawerOpen = controlledOpen ?? open;
-  const setDrawerOpen = useCallback(
-    (next: boolean) => {
-      if (controlledOpen === undefined) {
-        setOpen(next);
-      }
-
-      onControlledOpenChange?.(next);
-    },
-    [controlledOpen, onControlledOpenChange],
-  );
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      setMounted(true);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (initialItemId) {
-      queueMicrotask(() => {
-        setDrawerOpen(true);
-      });
-    }
-  }, [initialItemId, setDrawerOpen]);
+  }, [drawerOpen, reload]);
 
   const closeDrawer = useCallback(() => {
     setDrawerOpen(false);
+    setCloseTarget(null);
   }, [setDrawerOpen]);
 
   useEffect(() => {
-    if (!drawerOpen) {
+    if (!drawerOpen || embedded) {
       return;
     }
 
@@ -314,10 +195,10 @@ export function InventoryAssignmentsDrawer({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [closeDrawer, drawerOpen]);
+  }, [closeDrawer, drawerOpen, embedded]);
 
   const drawer =
-    drawerOpen && mounted ? (
+    drawerOpen && mounted && !embedded ? (
       <div className="fixed inset-0 z-[135] flex justify-end">
         <button
           type="button"
@@ -332,6 +213,9 @@ export function InventoryAssignmentsDrawer({
                 Inventario
               </p>
               <h2 className="text-lg font-black text-[#f8fafc]">Asignaciones activas</h2>
+              <p className="mt-0.5 text-sm font-bold text-slate-400">
+                {filteredAssignments.length} abiertas
+              </p>
             </div>
             <button
               type="button"
@@ -343,16 +227,161 @@ export function InventoryAssignmentsDrawer({
             </button>
           </header>
 
-          <InventoryAssignmentsPanelBody
-            active={drawerOpen}
-            warehouseId={warehouseId}
-            assignments={assignments}
-            initialItemId={initialItemId}
-            onAssignmentsChange={onAssignmentsChange}
-            onCloseAssignment={onCloseAssignment}
-            closingAssignmentId={closingAssignmentId}
-          />
+          <div className="shrink-0 space-y-2 border-b border-black/70 p-4">
+            <InlineSearchPicker
+              value={selectedAssigneeId}
+              onChange={setSelectedAssigneeId}
+              options={[{ value: "", label: "Todos los empleados" }, ...memberOptions]}
+              placeholder="Empleado"
+              searchPlaceholder="Buscar empleado…"
+              ariaLabel="Filtrar empleado"
+              className="w-full"
+              minWidthClass="w-full min-w-0"
+            />
+            <InlineSearchPicker
+              value={selectedItemId}
+              onChange={setSelectedItemId}
+              options={itemOptions}
+              placeholder="Item"
+              searchPlaceholder="Buscar item…"
+              emptyLabel="Sin items"
+              ariaLabel="Filtrar item"
+              className="w-full"
+              minWidthClass="w-full min-w-0"
+            />
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {loading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+              </div>
+            ) : filteredAssignments.length ? (
+              <ul className="space-y-2">
+                {filteredAssignments.map((assignment) => (
+                  <li
+                    key={assignment.id}
+                    className="rounded-xl border border-black bg-[#111827] p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-[#f8fafc]">
+                          {assignment.itemName}
+                        </p>
+                        <p className="mt-0.5 text-xs font-bold text-sky-300">
+                          {assignment.assigneeName}
+                        </p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">
+                          {formatWhen(assignment.assignedAt)}
+                        </p>
+                      </div>
+                      <span className="rounded-lg border border-black bg-surface-inset px-2 py-1 text-sm font-black tabular-nums text-[#f8fafc]">
+                        {assignment.qtyAssigned}
+                      </span>
+                    </div>
+                    {assignment.note ? (
+                      <p className="mt-2 text-xs font-bold text-slate-400">{assignment.note}</p>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setCloseTarget(assignment)}
+                      className="mt-3 inline-flex h-9 items-center rounded-lg border border-black bg-emerald-400/10 px-3 text-xs font-black text-emerald-200"
+                    >
+                      Cerrar asignación
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="py-16 text-center">
+                <p className="text-base font-black text-[#f8fafc]">Sin asignaciones abiertas</p>
+                <p className="mt-1 text-sm font-bold text-slate-500">
+                  Las entregas a empleados aparecerán aquí.
+                </p>
+              </div>
+            )}
+          </div>
         </aside>
+      </div>
+    ) : null;
+
+  const embeddedContent =
+    embedded && drawerOpen ? (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="shrink-0 space-y-2 border-b border-black/70 p-4">
+          <InlineSearchPicker
+            value={selectedAssigneeId}
+            onChange={setSelectedAssigneeId}
+            options={[{ value: "", label: "Todos los empleados" }, ...memberOptions]}
+            placeholder="Empleado"
+            searchPlaceholder="Buscar empleado…"
+            ariaLabel="Filtrar empleado"
+            className="w-full"
+            minWidthClass="w-full min-w-0"
+          />
+          <InlineSearchPicker
+            value={selectedItemId}
+            onChange={setSelectedItemId}
+            options={itemOptions}
+            placeholder="Item"
+            searchPlaceholder="Buscar item…"
+            emptyLabel="Sin items"
+            ariaLabel="Filtrar item"
+            className="w-full"
+            minWidthClass="w-full min-w-0"
+          />
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+            </div>
+          ) : filteredAssignments.length ? (
+            <ul className="space-y-2">
+              {filteredAssignments.map((assignment) => (
+                <li
+                  key={assignment.id}
+                  className="rounded-xl border border-black bg-[#111827] p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-[#f8fafc]">
+                        {assignment.itemName}
+                      </p>
+                      <p className="mt-0.5 text-xs font-bold text-sky-300">
+                        {assignment.assigneeName}
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-slate-500">
+                        {formatWhen(assignment.assignedAt)}
+                      </p>
+                    </div>
+                    <span className="rounded-lg border border-black bg-surface-inset px-2 py-1 text-sm font-black tabular-nums text-[#f8fafc]">
+                      {assignment.qtyAssigned}
+                    </span>
+                  </div>
+                  {assignment.note ? (
+                    <p className="mt-2 text-xs font-bold text-slate-400">{assignment.note}</p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setCloseTarget(assignment)}
+                    className="mt-3 inline-flex h-9 items-center rounded-lg border border-black bg-emerald-400/10 px-3 text-xs font-black text-emerald-200"
+                  >
+                    Cerrar asignación
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="py-16 text-center">
+              <p className="text-base font-black text-[#f8fafc]">Sin asignaciones abiertas</p>
+              <p className="mt-1 text-sm font-bold text-slate-500">
+                Las entregas a empleados aparecerán aquí.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     ) : null;
 
@@ -386,6 +415,26 @@ export function InventoryAssignmentsDrawer({
       )}
 
       {drawer ? createPortal(drawer, document.body) : null}
+      {embeddedContent}
+
+      <CloseAssignmentModal
+        open={Boolean(closeTarget)}
+        assignment={closeTarget}
+        saving={Boolean(closingAssignmentId)}
+        onClose={() => setCloseTarget(null)}
+        onSubmit={async (input) => {
+          if (!closeTarget) {
+            return;
+          }
+
+          const success = await onCloseAssignment(closeTarget.id, input);
+
+          if (success) {
+            setCloseTarget(null);
+            await reload();
+          }
+        }}
+      />
     </>
   );
 }

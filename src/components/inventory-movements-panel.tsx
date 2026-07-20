@@ -19,7 +19,6 @@ import {
   type InventoryMemberRow,
 } from "@/app/actions/users";
 import {
-  InlineSearchCombobox,
   InlineSearchPicker,
 } from "@/components/inline-search-picker";
 import { AppTabs, type AppTabDefinition } from "@/components/app-tabs";
@@ -29,6 +28,8 @@ import type {
   InventoryMovement,
   InventoryMovementType,
 } from "@/lib/inventory-types";
+import { inventoryItemFilterOptions } from "@/lib/inventory-stock";
+import type { InventoryStockItem } from "@/lib/inventory-stock";
 import { summarizeMovements } from "@/lib/inventory-reports";
 
 type MovementsTab = "history" | "summary";
@@ -42,8 +43,10 @@ type InventoryMovementsDrawerProps = {
   warehouseId: string;
   movements: InventoryMovement[];
   assignments: InventoryAssignment[];
+  items?: InventoryStockItem[];
   warehouseName?: string;
   iconOnly?: boolean;
+  embedded?: boolean;
   onMovementsChange?: (next: InventoryMovement[]) => void;
   controlledOpen?: boolean;
   onControlledOpenChange?: (open: boolean) => void;
@@ -222,6 +225,7 @@ type InventoryMovementsSidePanelProps = {
   warehouseId: string;
   movements: InventoryMovement[];
   assignments: InventoryAssignment[];
+  items?: InventoryStockItem[];
   warehouseName?: string;
   title?: string;
   subtitle?: string;
@@ -229,9 +233,8 @@ type InventoryMovementsSidePanelProps = {
   titleId?: string;
   zIndexClass?: string;
   fixedItemId?: string;
-  onMovementsChange?: (next: InventoryMovement[]) => void;
-  /** When true, render filters + list only (parent owns the drawer chrome). */
   embedded?: boolean;
+  onMovementsChange?: (next: InventoryMovement[]) => void;
 };
 
 export function InventoryMovementsSidePanel({
@@ -240,6 +243,7 @@ export function InventoryMovementsSidePanel({
   warehouseId,
   movements,
   assignments,
+  items = [],
   warehouseName,
   title = "Historial de movimientos",
   subtitle,
@@ -247,8 +251,8 @@ export function InventoryMovementsSidePanel({
   titleId = "inventory-movements-title",
   zIndexClass = "z-[130]",
   fixedItemId,
-  onMovementsChange,
   embedded = false,
+  onMovementsChange,
 }: InventoryMovementsSidePanelProps) {
   const [tab, setTab] = useState<MovementsTab>("history");
   const [members, setMembers] = useState<InventoryMemberRow[]>([]);
@@ -257,7 +261,7 @@ export function InventoryMovementsSidePanel({
   const [assigneeId, setAssigneeId] = useState("");
   const [createdBy, setCreatedBy] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
-  const [itemQuery, setItemQuery] = useState("");
+  const [selectedItemId, setSelectedItemId] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -290,10 +294,10 @@ export function InventoryMovementsSidePanel({
     [members],
   );
 
-  const itemOptions = useMemo(() => {
-    const names = [...new Set(movements.map((row) => row.itemName))];
-    return names.map((name) => ({ value: name, label: name }));
-  }, [movements]);
+  const itemOptions = useMemo(
+    () => [{ value: "", label: "Todos los items" }, ...inventoryItemFilterOptions(items)],
+    [items],
+  );
 
   const reload = useCallback(async () => {
     if (!warehouseId) {
@@ -303,7 +307,7 @@ export function InventoryMovementsSidePanel({
     setLoading(true);
     const result = await listInventoryMovementsAction({
       warehouseId,
-      itemId: fixedItemId,
+      itemId: fixedItemId || selectedItemId || undefined,
       assigneeId: assigneeId || undefined,
       createdBy: createdBy || undefined,
       type: (typeFilter as InventoryMovementType) || undefined,
@@ -314,15 +318,8 @@ export function InventoryMovementsSidePanel({
     setLoading(false);
 
     if (result.ok) {
-      let next = result.data;
-
-      if (itemQuery.trim()) {
-        const query = itemQuery.trim().toLowerCase();
-        next = next.filter((row) => row.itemName.toLowerCase().includes(query));
-      }
-
-      setRows(next);
-      onMovementsChange?.(next);
+      setRows(result.data);
+      onMovementsChange?.(result.data);
     }
   }, [
     assigneeId,
@@ -330,8 +327,8 @@ export function InventoryMovementsSidePanel({
     dateFrom,
     dateTo,
     fixedItemId,
-    itemQuery,
     onMovementsChange,
+    selectedItemId,
     typeFilter,
     warehouseId,
   ]);
@@ -371,8 +368,36 @@ export function InventoryMovementsSidePanel({
     return null;
   }
 
-  const body = (
+  const panelBody = (
     <>
+      {!embedded ? (
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-black/70 px-4 py-4">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">
+              Inventario
+            </p>
+            <h2 id={titleId} className="text-lg font-black text-[#f8fafc]">
+              {title}
+            </h2>
+            {subtitle ? (
+              <p className="mt-0.5 truncate text-sm font-bold text-slate-400">{subtitle}</p>
+            ) : warehouseName ? (
+              <p className="mt-0.5 truncate text-sm font-bold text-slate-400">
+                {warehouseName}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#111827] text-slate-300 hover:text-[#f8fafc]"
+            aria-label="Cerrar"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </header>
+      ) : null}
+
       <div className="shrink-0 border-b border-black/70 px-4 py-3">
         <AppTabs
           tabs={movementsTabs}
@@ -385,16 +410,16 @@ export function InventoryMovementsSidePanel({
 
       {tab === "history" ? (
         <div className="shrink-0 space-y-2 border-b border-black/70 p-4">
-          <InlineSearchCombobox
-            value={itemQuery}
-            onChange={setItemQuery}
+          <InlineSearchPicker
+            value={selectedItemId}
+            onChange={setSelectedItemId}
             options={itemOptions}
             placeholder="Item"
+            searchPlaceholder="Buscar item…"
             emptyLabel="Sin items"
             ariaLabel="Filtrar item"
             className="w-full"
             minWidthClass="w-full min-w-0"
-            onSelectOption={(option) => setItemQuery(option.label)}
           />
           <InlineSearchPicker
             value={assigneeId}
@@ -475,7 +500,7 @@ export function InventoryMovementsSidePanel({
   );
 
   if (embedded) {
-    return <div className="flex min-h-0 flex-1 flex-col">{body}</div>;
+    return <div className="flex min-h-0 flex-1 flex-col">{panelBody}</div>;
   }
 
   return (
@@ -492,32 +517,7 @@ export function InventoryMovementsSidePanel({
         aria-modal
         aria-labelledby={titleId}
       >
-        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-black/70 px-4 py-4">
-          <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">
-              Inventario
-            </p>
-            <h2 id={titleId} className="text-lg font-black text-[#f8fafc]">
-              {title}
-            </h2>
-            {subtitle ? (
-              <p className="mt-0.5 truncate text-sm font-bold text-slate-400">{subtitle}</p>
-            ) : warehouseName ? (
-              <p className="mt-0.5 truncate text-sm font-bold text-slate-400">
-                {warehouseName}
-              </p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#111827] text-slate-300 hover:text-[#f8fafc]"
-            aria-label="Cerrar"
-          >
-            <X className="h-4 w-4" aria-hidden />
-          </button>
-        </header>
-        {body}
+        {panelBody}
       </aside>
     </div>
   );
@@ -527,15 +527,17 @@ export function InventoryMovementsDrawer({
   warehouseId,
   movements,
   assignments,
+  items = [],
   warehouseName,
   iconOnly = false,
+  embedded = false,
   onMovementsChange,
   controlledOpen,
   onControlledOpenChange,
   hideTrigger = false,
 }: InventoryMovementsDrawerProps) {
   const [open, setOpen] = useState(false);
-  const drawerOpen = controlledOpen ?? open;
+  const drawerOpen = embedded ? true : (controlledOpen ?? open);
   const setDrawerOpen = useCallback(
     (next: boolean) => {
       if (controlledOpen === undefined) {
@@ -565,10 +567,16 @@ export function InventoryMovementsDrawer({
       warehouseId={warehouseId}
       movements={movements}
       assignments={assignments}
+      items={items}
       warehouseName={warehouseName}
+      embedded={embedded}
       onMovementsChange={onMovementsChange}
     />
   ) : null;
+
+  if (embedded) {
+    return drawer;
+  }
 
   return (
     <>

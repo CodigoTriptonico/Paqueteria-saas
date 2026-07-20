@@ -100,6 +100,36 @@ export type LeafStockMetrics = {
   level: StockLevel;
 };
 
+export function inventoryItemFilterLabel(
+  item: Pick<InventoryStockItem, "name" | "kind" | "subcategory" | "size">,
+) {
+  const base = item.name.trim() || item.subcategory?.trim() || item.kind.trim() || "Item";
+  const size = item.size?.trim();
+
+  return size && !base.toLowerCase().includes(size.toLowerCase())
+    ? `${base} · ${size}`
+    : base;
+}
+
+export function inventoryItemFilterOptions(items: ReadonlyArray<InventoryStockItem>) {
+  const seen = new Set<string>();
+
+  return items
+    .map((item) => ({
+      value: item.id,
+      label: inventoryItemFilterLabel(item),
+    }))
+    .filter((option) => {
+      if (seen.has(option.value)) {
+        return false;
+      }
+
+      seen.add(option.value);
+      return true;
+    })
+    .sort((left, right) => left.label.localeCompare(right.label, "es"));
+}
+
 export function leafStockMetrics(items: InventoryStockItem[]): LeafStockMetrics {
   const warehouse = sumStock(items);
   const assigned = sumAssigned(items);

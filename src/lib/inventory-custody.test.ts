@@ -1,152 +1,156 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { InventoryStockItem } from "@/lib/inventory-stock";
 import {
-  buildEmptyBoxCustodyRows,
-  buildFullBoxCustodyBuckets,
-  buildInventoryCustodySnapshot,
-  emptyRowTrackedTotal,
-  sumEmptyBuckets,
+  buildInventoryCustodyEmptyRows,
+  buildInventoryCustodyFullCounts,
+  inventoryCustodyRowKey,
+  sumInventoryCustodyEmptyRows,
+  sumInventoryCustodyFullCounts,
+  sumTruckQtyByCatalogKey,
 } from "@/lib/inventory-custody";
+import type { InventoryStockItem } from "@/lib/inventory-stock";
 
-function stockItem(
-  overrides: Partial<InventoryStockItem> & Pick<InventoryStockItem, "id" | "name">,
-): InventoryStockItem {
+function stockItem(overrides: Partial<InventoryStockItem> = {}): InventoryStockItem {
   return {
+    id: "item-1",
+    name: "Caja grande",
     category: "Cajas",
-    kind: "Cartón",
-    subcategory: "Grande",
-    size: "L",
-    stock: 0,
-    reserved: 0,
-    assigned: 0,
-    unavailable: 0,
-    minStock: 0,
+    kind: "Caja grande",
+    subcategory: "Caja grande",
+    size: "M",
+    stock: 100,
+    reserved: 10,
+    assigned: 5,
+    unavailable: 2,
+    minStock: 20,
     ...overrides,
   };
 }
 
-describe("inventory custody aggregation", () => {
-  it("merges warehouse, truck, agency and unavailable buckets per item", () => {
-    const rows = buildEmptyBoxCustodyRows({
-      warehouseId: "wh-1",
-      items: [
-        stockItem({
-          id: "item-1",
-          name: "Caja grande L",
-          subcategory: "Grande",
-          size: "L",
-          stock: 100,
-          reserved: 5,
-          assigned: 10,
-          unavailable: 2,
-        }),
-        stockItem({
-          id: "item-2",
-          name: "Cinta",
-          subcategory: "Cinta",
-          size: "1",
-          stock: 0,
-        }),
-      ],
-      truckLines: [
+describe("inventory custody", () => {
+  it("builds empty custody rows across warehouse, truck and agencies", () => {
+    const rows = buildInventoryCustodyEmptyRows({
+      items: [stockItem()],
+      truckBalances: [
         {
-          itemId: "item-1",
-          itemName: "Caja grande L",
-          label: "Caja grande L",
-          warehouseId: "wh-1",
-          currentQty: 12,
-        },
-        {
-          itemId: "item-1",
-          itemName: "Caja grande L",
-          label: "Caja grande L",
-          warehouseId: "wh-other",
-          currentQty: 99,
+          vehicleId: "vehicle-1",
+          vehicleName: "Camión 1",
+          vehiclePlate: "ABC-123",
+          assignedDriverId: "driver-1",
+          assignedDriverName: "Conductor",
+          totalQty: 12,
+          lines: [
+            {
+              key: "catalog:cajas|caja grande|m",
+              catalogKey: "Cajas|Caja grande|M",
+              label: "Caja grande · M",
+              requiredQty: 0,
+              loadedQty: 12,
+              deliveredQty: 0,
+              returnedQty: 0,
+              currentQty: 12,
+              shortageQty: 0,
+            },
+          ],
         },
       ],
-      agencyLots: [
+      agencyRows: [
         {
-          inventoryItemId: "item-1",
-          productKey: "Grande",
-          boxSize: "L",
-          availableQuantity: 40,
-          allocatedQuantity: 15,
+          agencyId: "agency-1",
+          agencyName: "Agencia Norte",
+          productKey: "Caja grande",
+          boxSize: "M",
+          availableQuantity: 30,
+          allocatedQuantity: 8,
+          deliveredQuantity: 38,
         },
       ],
     });
 
     assert.equal(rows.length, 1);
-    assert.deepEqual(rows[0]?.buckets, {
-      warehouse: 100,
-      assigned: 10,
-      reserved: 5,
-      inTruck: 12,
-      agencyAvailable: 40,
-      agencyAllocated: 15,
-      unavailable: 2,
-    });
-    assert.equal(emptyRowTrackedTotal(rows[0]!.buckets), 184);
+    assert.equal(rows[0]?.warehouseAvailable, 90);
+    assert.equal(rows[0]?.reserved, 10);
+    assert.equal(rows[0]?.assigned, 5);
+    assert.equal(rows[0]?.onTruck, 12);
+    assert.equal(rows[0]?.atAgencyAvailable, 30);
+    assert.equal(rows[0]?.atAgencyAllocated, 8);
+    assert.equal(rows[0]?.unavailable, 2);
   });
 
-  it("matches agency lots by product key and size when item id is missing", () => {
-    const rows = buildEmptyBoxCustodyRows({
-      warehouseId: "wh-1",
-      items: [
-        stockItem({
-          id: "item-1",
-          name: "Grande L",
-          subcategory: "Grande",
-          size: "L",
-          stock: 1,
-        }),
-      ],
-      truckLines: [],
-      agencyLots: [
+  it("does not double count truck quantities for duplicate stock rows", () => {
+    const rows = buildInventoryCustodyEmptyRows({
+      items: [stockItem(), stockItem({ id: "item-2", stock: 20 })],
+      truckBalances: [
         {
-          inventoryItemId: null,
-          productKey: "Grande",
-          boxSize: "L",
-          availableQuantity: 7,
-          allocatedQuantity: 3,
+          vehicleId: "vehicle-1",
+          vehicleName: "Camión 1",
+          vehiclePlate: "ABC-123",
+          assignedDriverId: null,
+          assignedDriverName: "",
+          totalQty: 7,
+          lines: [
+            {
+              key: "catalog:cajas|caja grande|m",
+              catalogKey: "Cajas|Caja grande|M",
+              label: "Caja grande · M",
+              requiredQty: 0,
+              loadedQty: 7,
+              deliveredQty: 0,
+              returnedQty: 0,
+              currentQty: 7,
+              shortageQty: 0,
+            },
+          ],
         },
       ],
     });
 
-    assert.equal(rows[0]?.buckets.agencyAvailable, 7);
-    assert.equal(rows[0]?.buckets.agencyAllocated, 3);
+    assert.equal(rows[0]?.onTruck, 7);
+    assert.equal(sumInventoryCustodyEmptyRows(rows).warehouseAvailable, 100);
   });
 
-  it("builds ordered full-box status buckets and snapshot totals", () => {
-    const fullBuckets = buildFullBoxCustodyBuckets({
-      in_truck: 4,
-      in_warehouse: 8,
-      handed_to_carrier: 2,
+  it("normalizes custody keys and full package counts", () => {
+    assert.equal(inventoryCustodyRowKey("Caja Grande", "M"), inventoryCustodyRowKey("caja grande", "m"));
+
+    const fullCounts = buildInventoryCustodyFullCounts({
+      in_warehouse: 4,
+      on_pallet: 2,
+      handed_to_carrier: 1,
+      awaiting_full_box: 0,
     });
 
-    assert.equal(fullBuckets[0]?.status, "awaiting_full_box");
-    assert.equal(fullBuckets.find((row) => row.status === "in_warehouse")?.count, 8);
+    assert.deepEqual(
+      fullCounts.map((row) => row.status),
+      ["in_warehouse", "on_pallet", "handed_to_carrier"],
+    );
+    assert.equal(sumInventoryCustodyFullCounts(fullCounts), 7);
+  });
 
-    const snapshot = buildInventoryCustodySnapshot({
-      warehouseId: "wh-1",
-      warehouseName: "Central",
-      items: [
-        stockItem({
-          id: "item-1",
-          name: "Caja",
-          stock: 10,
-          assigned: 2,
-        }),
-      ],
-      truckLines: [],
-      agencyLots: [],
-      fullCountsByStatus: { in_truck: 4, in_warehouse: 8, handed_to_carrier: 2 },
-    });
+  it("aggregates truck quantities by catalog key", () => {
+    const totals = sumTruckQtyByCatalogKey([
+      {
+        vehicleId: "vehicle-1",
+        vehicleName: "Camión 1",
+        vehiclePlate: "ABC-123",
+        assignedDriverId: null,
+        assignedDriverName: "",
+        totalQty: 5,
+        lines: [
+          {
+            key: "catalog:cajas|caja grande|m",
+            catalogKey: "Cajas|Caja grande|M",
+            label: "Caja grande · M",
+            requiredQty: 0,
+            loadedQty: 5,
+            deliveredQty: 0,
+            returnedQty: 0,
+            currentQty: 5,
+            shortageQty: 0,
+          },
+        ],
+      },
+    ]);
 
-    assert.equal(snapshot.warehouseName, "Central");
-    assert.equal(snapshot.fullTotal, 14);
-    assert.deepEqual(sumEmptyBuckets(snapshot.emptyRows), snapshot.emptyTotals);
-    assert.equal(snapshot.emptyTotals.warehouse, 10);
-    assert.equal(snapshot.emptyTotals.assigned, 2);
+    assert.equal(totals.get("catalog:cajas|caja grande|m"), 5);
   });
 });

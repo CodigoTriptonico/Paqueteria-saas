@@ -9,11 +9,13 @@ const source = readFileSync(
 );
 
 describe("inventory control menu eval", () => {
-  it("opens one Seguimiento entry that hosts custody, assignments and history", () => {
+  it("keeps custody, assignments and history inside one tracking drawer", () => {
     assert.match(source, /InventoryTrackingDrawer/);
-    assert.match(source, /Seguimiento/);
-    assert.doesNotMatch(source, /Asignaciones activas/);
-    assert.doesNotMatch(source, /Historial de movimientos/);
-    assert.match(source, /LocateFixed/);
+    assert.match(source, /label="Custodia"/);
+    assert.match(source, /InventoryToolbarIconButton/);
+    assert.match(source, /controlledOpen/);
+    assert.match(source, /truckBalances/);
+    assert.match(source, /items={items}/);
+    assert.match(source, /showDrawer/);
   });
 });

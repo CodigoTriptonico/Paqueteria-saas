@@ -1,4 +1,4 @@
-const STATIC_CACHE = "boxario-static-v2";
+const STATIC_CACHE = "boxario-static-v1";
 const PRIVATE_CACHE = "boxario-conductor-private-v1";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE_URLS = [OFFLINE_URL, "/app-icon.svg", "/manifest.webmanifest"];
@@ -19,28 +19,12 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     Promise.all([
       caches.keys().then((keys) => Promise.all(
-        keys
-          .filter((key) => key.startsWith("boxario-static-") && key !== STATIC_CACHE)
-          .map((key) => caches.delete(key)),
+        keys.filter((key) => key.startsWith("boxario-static-") && key !== STATIC_CACHE).map((key) => caches.delete(key)),
       )),
       self.clients.claim(),
     ]),
   );
 });
-
-function cacheStaticCopy(request, response) {
-  // Clone synchronously before the page starts reading the body.
-  // Opening the cache is async; delaying clone() races and throws
-  // "Response body is already used".
-  let copy;
-  try {
-    copy = response.clone();
-  } catch {
-    return;
-  }
-
-  void caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy)).catch(() => undefined);
-}
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
@@ -55,7 +39,7 @@ self.addEventListener("fetch", (event) => {
       caches.match(request).then((cached) => {
         const network = fetch(request).then((response) => {
           if (response.ok) {
-            cacheStaticCopy(request, response);
+            caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone()));
           }
           return response;
         });
