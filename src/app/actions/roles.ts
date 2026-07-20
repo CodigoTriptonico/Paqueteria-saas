@@ -33,6 +33,15 @@ function mapRole(row: { id: string; slug: string; name: string; is_system?: bool
   };
 }
 
+const AGENCY_ROLE_SLUGS = new Set([
+  "supervisor_agencias",
+  "captador_agencias",
+  "administrador_agencia",
+  "vendedor_agencia",
+  "caja_agencia",
+  "operador_agencia",
+]);
+
 export async function listRolesAndPermissionsAction(): Promise<
   ActionResult<{
     roles: RoleRow[];
@@ -66,7 +75,14 @@ export async function listRolesAndPermissionsAction(): Promise<
       return fail(rolesError?.message || permsError?.message || "Error al cargar roles");
     }
 
-    const roleIds = (roles || []).map((role) => role.id);
+    const visibleRoles = session.agencyModuleEnabled
+      ? roles || []
+      : (roles || []).filter((role) => !AGENCY_ROLE_SLUGS.has(role.slug));
+    const visiblePermissions = session.agencyModuleEnabled
+      ? permissions || []
+      : (permissions || []).filter((permission) => !String(permission.key).startsWith("agency."));
+    const visiblePermissionIds = new Set(visiblePermissions.map((permission) => permission.id));
+    const roleIds = visibleRoles.map((role) => role.id);
     const { data: rolePermissions, error: rpError } = await supabase
       .from("role_permissions")
       .select("role_id, permission_id, granted, permissions(key)")
@@ -76,7 +92,9 @@ export async function listRolesAndPermissionsAction(): Promise<
       return fail(rpError.message);
     }
 
-    const mapped: RolePermissionState[] = (rolePermissions || []).map((row) => {
+    const mapped: RolePermissionState[] = (rolePermissions || []).filter((row) =>
+      visiblePermissionIds.has(row.permission_id),
+    ).map((row) => {
       const perm = row.permissions as { key: PermissionKey } | { key: PermissionKey }[];
       const key = Array.isArray(perm) ? perm[0]?.key : perm.key;
       return {
@@ -88,8 +106,8 @@ export async function listRolesAndPermissionsAction(): Promise<
     });
 
     return ok({
-      roles: (roles || []).map(mapRole),
-      permissions: (permissions || []) as PermissionRow[],
+      roles: visibleRoles.map(mapRole),
+      permissions: visiblePermissions as PermissionRow[],
       rolePermissions: mapped,
     });
   } catch (error) {

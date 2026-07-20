@@ -13,6 +13,7 @@ import {
 } from "@/components/sale/venta-parts";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import type { OrganizationBranding } from "@/lib/organizations/branding";
+import { saleFinishActionLabel, type InvoiceBillingSnapshot } from "@/lib/invoice-billing";
 import { defaultSalePaymentSelection, type SalePaymentSelection } from "@/lib/sale-payment-choice";
 import { SaleInvoiceConfirmDialog } from "@/components/sale/sale-invoice-confirm-dialog";
 import { useState } from "react";

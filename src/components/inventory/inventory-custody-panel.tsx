@@ -49,9 +49,11 @@ function CustodyMetric({
 function EmptyCustodyTable({
   rows,
   warehouseName,
+  agencyModuleEnabled,
 }: {
   rows: ReturnType<typeof buildInventoryCustodyEmptyRows>;
   warehouseName?: string;
+  agencyModuleEnabled: boolean;
 }) {
   const totals = useMemo(() => sumInventoryCustodyEmptyRows(rows), [rows]);
 
@@ -64,8 +66,8 @@ function EmptyCustodyTable({
         <p className="mt-4 text-base font-black text-[#f8fafc]">Sin cajas vacías en seguimiento</p>
         <p className="mt-1 max-w-xs text-sm font-bold text-slate-500">
           {warehouseName
-            ? `Cuando haya stock, asignaciones, camión o agencias para ${warehouseName}, aparecerán aquí.`
-            : "Cuando haya stock, asignaciones, camión o agencias, aparecerán aquí."}
+            ? `Cuando haya stock, asignaciones o camión${agencyModuleEnabled ? " o agencias" : ""} para ${warehouseName}, aparecerán aquí.`
+            : `Cuando haya stock, asignaciones o camión${agencyModuleEnabled ? " o agencias" : ""}, aparecerán aquí.`}
         </p>
       </div>
     );
@@ -81,8 +83,8 @@ function EmptyCustodyTable({
             <th className="px-2 py-2 text-right">{inventoryCustodyEmptyColumnLabels.reserved}</th>
             <th className="px-2 py-2 text-right">{inventoryCustodyEmptyColumnLabels.assigned}</th>
             <th className="px-2 py-2 text-right">{inventoryCustodyEmptyColumnLabels.onTruck}</th>
-            <th className="px-2 py-2 text-right">{inventoryCustodyEmptyColumnLabels.atAgencyAvailable}</th>
-            <th className="px-2 py-2 text-right">{inventoryCustodyEmptyColumnLabels.atAgencyAllocated}</th>
+            {agencyModuleEnabled ? <th className="px-2 py-2 text-right">{inventoryCustodyEmptyColumnLabels.atAgencyAvailable}</th> : null}
+            {agencyModuleEnabled ? <th className="px-2 py-2 text-right">{inventoryCustodyEmptyColumnLabels.atAgencyAllocated}</th> : null}
             <th className="px-2 py-2 text-right">{inventoryCustodyEmptyColumnLabels.unavailable}</th>
           </tr>
         </thead>
@@ -102,12 +104,12 @@ function EmptyCustodyTable({
               <td className="px-2 py-2.5 text-right font-black tabular-nums text-violet-300">
                 {row.onTruck}
               </td>
-              <td className="px-2 py-2.5 text-right font-black tabular-nums text-cyan-300">
+              {agencyModuleEnabled ? <td className="px-2 py-2.5 text-right font-black tabular-nums text-cyan-300">
                 {row.atAgencyAvailable}
-              </td>
-              <td className="px-2 py-2.5 text-right font-black tabular-nums text-amber-300">
+              </td> : null}
+              {agencyModuleEnabled ? <td className="px-2 py-2.5 text-right font-black tabular-nums text-amber-300">
                 {row.atAgencyAllocated}
-              </td>
+              </td> : null}
               <td className="px-2 py-2.5 text-right font-black tabular-nums text-rose-300">
                 {row.unavailable}
               </td>
@@ -121,8 +123,8 @@ function EmptyCustodyTable({
             <td className="px-2 py-2 text-right tabular-nums">{totals.reserved}</td>
             <td className="px-2 py-2 text-right tabular-nums">{totals.assigned}</td>
             <td className="px-2 py-2 text-right tabular-nums">{totals.onTruck}</td>
-            <td className="px-2 py-2 text-right tabular-nums">{totals.atAgencyAvailable}</td>
-            <td className="px-2 py-2 text-right tabular-nums">{totals.atAgencyAllocated}</td>
+            {agencyModuleEnabled ? <td className="px-2 py-2 text-right tabular-nums">{totals.atAgencyAvailable}</td> : null}
+            {agencyModuleEnabled ? <td className="px-2 py-2 text-right tabular-nums">{totals.atAgencyAllocated}</td> : null}
             <td className="px-2 py-2 text-right tabular-nums">{totals.unavailable}</td>
           </tr>
         </tfoot>
@@ -203,6 +205,7 @@ export function InventoryCustodyPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [agencyRows, setAgencyRows] = useState<InventoryCustodyAgencyRow[]>([]);
+  const [agencyModuleEnabled, setAgencyModuleEnabled] = useState(false);
   const [fullRows, setFullRows] = useState<InventoryCustodyFullCount[]>([]);
 
   useEffect(() => {
@@ -227,6 +230,7 @@ export function InventoryCustodyPanel({
         }
 
         setAgencyRows(result.data.agencyRows);
+        setAgencyModuleEnabled(result.data.agencyModuleEnabled);
         setFullRows(result.data.fullPackageCounts);
       });
     });
@@ -267,7 +271,7 @@ export function InventoryCustodyPanel({
           <p className="text-sm font-bold text-rose-300">{error}</p>
         </div>
       ) : kindTab === "empty" ? (
-        <EmptyCustodyTable rows={emptyRows} warehouseName={warehouseName} />
+        <EmptyCustodyTable rows={emptyRows} warehouseName={warehouseName} agencyModuleEnabled={agencyModuleEnabled} />
       ) : (
         <FullCustodyList rows={fullRows} />
       )}

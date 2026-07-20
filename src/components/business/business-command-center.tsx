@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Building2, CircleDollarSign, ClipboardList, PackageOpen, ShieldCheck, WalletCards } from "lucide-react";
-import { Panel, StatCard, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import { Panel, StatCard, secondaryButtonClass } from "@/components/ui-blocks";
 import { formatUsdCents, type BusinessWorkspace } from "@/lib/business/workspace";
 import { AgencyCaptorCreatePanel } from "@/components/business/agency-captor-create-panel";
 import { AgencyOperationsPanel } from "@/components/business/agency-operations-panel";

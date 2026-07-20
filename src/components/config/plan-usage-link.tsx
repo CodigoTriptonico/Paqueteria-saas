@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const PLAN_CONFIG_HREF = "/configuracion?view=plan";
+export const PLAN_CONFIG_HREF = "/configuracion?view=organization&tab=plan";
 
 export function PlanUsageLink({ className = "" }: { className?: string }) {
   return (

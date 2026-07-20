@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { canAccessPath } from "@/lib/auth/permissions";
+import { canAccessPath, sessionHasPermission } from "@/lib/auth/permissions";
 import type { AppSession } from "@/lib/auth/types";
 
 function sellerSession(): AppSession {
@@ -10,6 +10,7 @@ function sellerSession(): AppSession {
     fullName: "Seller",
     organizationId: "org-1",
     organizationName: "Org",
+    agencyModuleEnabled: false,
     multiWarehouseEnabled: false,
     maxWarehouses: 1,
     roleSlug: "vendedor",
@@ -28,6 +29,7 @@ function adminSession(): AppSession {
     fullName: "Admin",
     organizationId: "org-1",
     organizationName: "Org",
+    agencyModuleEnabled: false,
     multiWarehouseEnabled: false,
     maxWarehouses: 1,
     roleSlug: "administrador",
@@ -46,6 +48,7 @@ function driverSession(): AppSession {
     fullName: "Conductor Test",
     organizationId: "org-1",
     organizationName: "Org",
+    agencyModuleEnabled: false,
     multiWarehouseEnabled: false,
     maxWarehouses: 1,
     roleSlug: "conductor",
@@ -87,6 +90,7 @@ function businessRoleSession(
     roleSlug,
     roleName: roleSlug,
     permissions,
+    agencyModuleEnabled: permissions.some((permission) => permission.startsWith("agency.")),
   };
 }
 
@@ -191,6 +195,18 @@ describe("canAccessPath captor workspace", () => {
 });
 
 describe("canAccessPath business scopes", () => {
+  it("blocks every agency entry point until Boxario enables the module", () => {
+    const admin = adminSession();
+    for (const path of ["/agencia", "/agencias", "/captacion", "/solicitudes"]) {
+      assert.equal(canAccessPath(admin, path), false);
+    }
+    assert.equal(sessionHasPermission(admin, "agency.create"), false);
+
+    const enabled = { ...admin, agencyModuleEnabled: true };
+    assert.equal(canAccessPath(enabled, "/agencias"), true);
+    assert.equal(sessionHasPermission(enabled, "agency.create"), true);
+  });
+
   it("separates agency, finance and logistics surfaces", () => {
     const agencyAdmin = businessRoleSession("administrador_agencia", [
       "agency.sales.view",

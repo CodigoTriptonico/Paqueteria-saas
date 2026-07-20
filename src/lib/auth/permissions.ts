@@ -92,6 +92,10 @@ export function sessionHasPermission(
     return false;
   }
 
+  if (permission.startsWith("agency.") && !session.agencyModuleEnabled) {
+    return false;
+  }
+
   if (session.permissions.includes("all")) {
     return true;
   }
@@ -117,6 +121,15 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
 
   if (pathname === "/perfil" || pathname.startsWith("/perfil/")) {
     return true;
+  }
+
+  if (
+    !session.agencyModuleEnabled &&
+    ["/agencia", "/agencias", "/captacion", "/solicitudes"].some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    )
+  ) {
+    return false;
   }
 
   const base = "/" + (pathname.split("/").filter(Boolean)[0] || "");

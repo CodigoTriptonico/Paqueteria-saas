@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2, MapPin, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   deactivateWarehouseBinAction,
   listWarehouseBinsAction,
@@ -43,19 +43,14 @@ export function WarehouseBinsPanel({
   const [aisle, setAisle] = useState("");
   const [shelf, setShelf] = useState("");
   const [label, setLabel] = useState("");
+  const selectedWarehouseId = warehouseId || activeWarehouses[0]?.id || "";
 
   const previewCode = buildWarehouseBinCode({ zone, aisle, shelf });
   const previewLabel = previewCode
     ? buildWarehouseBinLabel({ zone, aisle, shelf, label, code: previewCode })
     : "";
 
-  useEffect(() => {
-    if (!warehouseId && activeWarehouses[0]?.id) {
-      setWarehouseId(activeWarehouses[0].id);
-    }
-  }, [activeWarehouses, warehouseId]);
-
-  async function reload(nextWarehouseId = warehouseId) {
+  const reload = useCallback(async (nextWarehouseId = selectedWarehouseId) => {
     if (!nextWarehouseId) {
       setBins([]);
       return;
@@ -74,22 +69,22 @@ export function WarehouseBinsPanel({
     }
 
     setBins(result.data);
-  }
+  }, [notify, selectedWarehouseId]);
 
   useEffect(() => {
     queueMicrotask(() => {
       void reload();
     });
-  }, [warehouseId]);
+  }, [reload]);
 
   async function handleCreate() {
-    if (!warehouseId) {
+    if (!selectedWarehouseId) {
       return;
     }
 
     setSaving(true);
     const result = await saveWarehouseBinAction({
-      warehouseId,
+      warehouseId: selectedWarehouseId,
       zone,
       aisle,
       shelf,
@@ -114,7 +109,7 @@ export function WarehouseBinsPanel({
     <section className={sectionClass}>
       <div className={sectionHeaderClass}>
         <div>
-          <p className={settingsSectionTitleClass}>Zonas y estantes</p>
+          <p className={sectionTitleClass}>Zonas y estantes</p>
           <p className="mt-1 text-xs font-bold text-slate-500">
             Define ubicaciones internas para saber dónde está el stock dentro de cada bodega.
           </p>
@@ -125,7 +120,7 @@ export function WarehouseBinsPanel({
         <label className="grid gap-1 text-xs font-black text-slate-300">
           Bodega
           <InlineSearchPicker
-            value={warehouseId}
+            value={selectedWarehouseId}
             onChange={(next) => setWarehouseId(next)}
             options={activeWarehouses.map((warehouse) => ({
               value: warehouse.id,
@@ -232,7 +227,7 @@ export function WarehouseBinsPanel({
                       className={`${secondaryButtonClass} h-9 px-3 text-xs`}
                       onClick={async () => {
                         const result = await deactivateWarehouseBinAction({
-                          warehouseId,
+                          warehouseId: selectedWarehouseId,
                           binId: bin.id,
                         });
 

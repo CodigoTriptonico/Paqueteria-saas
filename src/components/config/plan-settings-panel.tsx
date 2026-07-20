@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Gauge, Mail, Users } from "lucide-react";
+import { Building2, Gauge, Mail, Network, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   getOrganizationPlanLimitsAction,
@@ -162,7 +162,7 @@ export function PlanSettingsPanel() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <PlanLimitCard
           icon={Building2}
           title="Bodegas"
@@ -186,6 +186,28 @@ export function PlanSettingsPanel() {
               : "El dueño no cuenta en el límite de adicionales."
           }
         />
+
+        <section className={sectionClass}>
+          <div className={`${sectionHeaderClass} flex items-center gap-3`}>
+            <span className={iconBoxClass}>
+              <Network className="h-4 w-4" />
+            </span>
+            <div>
+              <p className="text-base font-black text-[#f8fafc]">Módulo Agencias</p>
+              <p className="text-xs font-bold text-slate-400">Capacidad exclusiva del contrato.</p>
+            </div>
+          </div>
+          <div className="px-4 py-4">
+            <p className={`text-xl font-black ${usage.agenciesEnabled ? "text-emerald-300" : "text-slate-400"}`}>
+              {usage.agenciesEnabled ? "Incluido" : "No incluido"}
+            </p>
+            <p className="mt-2 text-xs font-bold leading-snug text-slate-500">
+              {usage.agenciesEnabled
+                ? "La creación y operación de agencias está habilitada para esta empresa."
+                : "Agencias no aparece en el menú y sus operaciones permanecen bloqueadas."}
+            </p>
+          </div>
+        </section>
       </div>
 
       <section className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-4">

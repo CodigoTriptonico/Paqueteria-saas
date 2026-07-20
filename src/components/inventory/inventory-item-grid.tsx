@@ -104,6 +104,7 @@ function InventoryItemCard({
         {photoUrl ? (
           <div className="mb-2 overflow-hidden rounded-xl border border-black/40 bg-black/20">
             {/* Supabase inventory photos use signed URLs outside Next static remote hosts. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={photoUrl}
               alt={`Foto de ${item.name}`}

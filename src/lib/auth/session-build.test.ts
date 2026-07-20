@@ -16,6 +16,7 @@ const baseProfile: ProfileSessionInput = {
   roleName: "Administrador",
   homeOrganizationName: "Home Org",
   homeOrganizationSettings: { multi_warehouse_enabled: true },
+  agencyModuleEnabled: false,
   permissions: ["sales.manage"],
   warehouseIds: ["wh-1"],
   isPlatformAdmin: true,
@@ -42,6 +43,7 @@ describe("buildAppSessionFromProfile", () => {
     assert.equal(session.organizationName, "Home Org");
     assert.equal(session.organizationShortName, null);
     assert.equal(session.organizationLogoUrl, null);
+    assert.equal(session.agencyModuleEnabled, false);
     assert.equal(session.roleSlug, "administrador");
     assert.deepEqual(session.warehouseIds, ["wh-1"]);
   });

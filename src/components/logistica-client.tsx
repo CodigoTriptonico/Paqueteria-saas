@@ -368,6 +368,7 @@ export function LogisticaClient({
   initialTaskAddresses,
   initialRouteCatalog,
   canManageRoutes = false,
+  agencyModuleEnabled = false,
 }: {
   initialShipments?: ShipmentRow[];
   initialRouteMembers?: RouteMemberRow[];
@@ -376,6 +377,7 @@ export function LogisticaClient({
   initialTaskAddresses?: LogisticsTaskAddressRow[];
   initialRouteCatalog?: LogisticsRouteCatalogData;
   canManageRoutes?: boolean;
+  agencyModuleEnabled?: boolean;
 }) {
   const notify = useNotify();
   const { layout: viewLayout } = usePageViewLayout("logistics.tasks");
@@ -2167,7 +2169,7 @@ export function LogisticaClient({
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex h-9 shrink-0 rounded-lg border border-black bg-surface-inset p-0.5 text-xs font-black">
                 <button type="button" className={`rounded-md px-2.5 ${operationScope === "domicilios" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`} onClick={() => setOperationScope("domicilios")}>Domicilios</button>
-                <button type="button" className={`rounded-md px-2.5 ${operationScope === "agencias" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`} onClick={() => setOperationScope("agencias")}>Agencias</button>
+                {agencyModuleEnabled ? <button type="button" className={`rounded-md px-2.5 ${operationScope === "agencias" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`} onClick={() => setOperationScope("agencias")}>Agencias</button> : null}
               </div>
               {operationScope === "domicilios" ? <>
               <InlineSearchCombobox
@@ -2331,7 +2333,7 @@ export function LogisticaClient({
           </div>
 
           <div className={`${panelListScrollClass} pt-3`}>
-            {operationScope === "agencias" ? <AgencyLogisticsPanel /> : visibleInvoiceItems.length ? (
+            {agencyModuleEnabled && operationScope === "agencias" ? <AgencyLogisticsPanel /> : visibleInvoiceItems.length ? (
               viewLayout === "rows" ? (
                 <div className={panelListStackClass}>
                   {visibleInvoiceItems.map((item) => renderInvoiceRow(item))}

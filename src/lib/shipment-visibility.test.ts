@@ -10,6 +10,7 @@ function session(overrides: Partial<AppSession> = {}): AppSession {
     fullName: "User",
     organizationId: "org-1",
     organizationName: "Org",
+    agencyModuleEnabled: false,
     multiWarehouseEnabled: false,
     maxWarehouses: 1,
     roleSlug: "vendedor",

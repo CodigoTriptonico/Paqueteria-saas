@@ -1,4 +1,5 @@
 export type OrganizationSettings = {
+  agencies_enabled?: boolean;
   multi_warehouse_enabled?: boolean;
   max_warehouses?: number | string;
   max_users?: number | string;
@@ -11,6 +12,12 @@ export type OrganizationSettings = {
   onboarding_dismissed?: boolean;
   onboarding_started?: boolean;
 };
+
+export function isAgencyModuleEnabled(
+  settings: OrganizationSettings | null | undefined,
+): boolean {
+  return settings?.agencies_enabled === true;
+}
 
 export function parsePlanLimit(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value) && value >= 1) {

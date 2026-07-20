@@ -98,6 +98,7 @@ export function PlatformConsole() {
   const [editOrgSlug, setEditOrgSlug] = useState("");
   const [editMaxUsers, setEditMaxUsers] = useState(5);
   const [editMaxWarehouses, setEditMaxWarehouses] = useState(5);
+  const [editAgenciesEnabled, setEditAgenciesEnabled] = useState(false);
   const [contextMenu, setContextMenu] =
     useState<OrganizationContextMenu | null>(null);
 
@@ -137,6 +138,7 @@ export function PlatformConsole() {
       setEditOrgSlug(selectedOrg.slug);
       setEditMaxUsers(selectedOrg.max_users ?? 5);
       setEditMaxWarehouses(selectedOrg.max_warehouses ?? 5);
+      setEditAgenciesEnabled(selectedOrg.agencies_enabled);
     });
   }, [selectedOrg]);
 
@@ -224,6 +226,7 @@ export function PlatformConsole() {
     setEditOrgSlug(organization.slug);
     setEditMaxUsers(organization.max_users ?? 5);
     setEditMaxWarehouses(organization.max_warehouses ?? 5);
+    setEditAgenciesEnabled(organization.agencies_enabled);
     setShowArchiveConfirm(false);
     setShowEditOrg(true);
     setContextMenu(null);
@@ -239,6 +242,7 @@ export function PlatformConsole() {
       slug: editOrgSlug,
       maxUsers: editMaxUsers,
       maxWarehouses: editMaxWarehouses,
+      agenciesEnabled: editAgenciesEnabled,
     });
     setSaving(false);
     if (!result.ok) {
@@ -498,7 +502,7 @@ export function PlatformConsole() {
             </div>
           </header>
           <div className="p-4 sm:p-5">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-black bg-surface-card p-4 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
               <p className={labelMutedClass}>Usuarios</p>
               <p className="mt-1 text-3xl font-black tabular-nums text-slate-100">
@@ -506,6 +510,15 @@ export function PlatformConsole() {
               </p>
               <p className="mt-1 text-xs font-bold text-slate-500">
                 Con acceso a esta empresa
+              </p>
+            </div>
+            <div className="rounded-xl border border-black bg-surface-card p-4 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
+              <p className={labelMutedClass}>Módulo Agencias</p>
+              <p className={`mt-1 text-sm font-black ${selectedOrg.agencies_enabled ? "text-emerald-300" : "text-slate-400"}`}>
+                {selectedOrg.agencies_enabled ? "Habilitado" : "No incluido"}
+              </p>
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                Controlado por Boxario
               </p>
             </div>
             <div className="rounded-xl border border-black bg-surface-card p-4 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
@@ -617,6 +630,32 @@ export function PlatformConsole() {
                     className={inputClass}
                   />
                 </label>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={editAgenciesEnabled}
+                  onClick={() => setEditAgenciesEnabled((enabled) => !enabled)}
+                  className={`flex min-h-20 items-center justify-between gap-4 rounded-xl border px-4 text-left sm:col-span-2 ${
+                    editAgenciesEnabled
+                      ? "border-emerald-600 bg-emerald-950/35"
+                      : "border-black bg-surface-inset"
+                  }`}
+                >
+                  <span>
+                    <span className="block text-sm font-black text-slate-100">Módulo Agencias</span>
+                    <span className="mt-1 block text-xs font-bold text-slate-400">
+                      Permite crear agencias y usar sus flujos operativos. Los datos se conservan si se desactiva.
+                    </span>
+                  </span>
+                  <span
+                    aria-hidden
+                    className={`flex h-7 w-12 shrink-0 rounded-full border border-black p-1 transition ${
+                      editAgenciesEnabled ? "justify-end bg-emerald-400" : "justify-start bg-surface-card"
+                    }`}
+                  >
+                    <span className="h-4 w-4 rounded-full bg-slate-950" />
+                  </span>
+                </button>
               </div>
               <div className="flex gap-2">
                 <button

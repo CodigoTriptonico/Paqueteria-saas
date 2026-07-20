@@ -91,6 +91,7 @@ type ConductorTareasClientProps = {
   initialTasks?: ConductorDriverTask[];
   initialCompletedTasks?: ConductorDriverTask[];
   initialTruckSummary?: ConductorTruckInventorySummary | null;
+  agencyModuleEnabled?: boolean;
 };
 
 type TaskListMode = "pending" | "completed";
@@ -567,6 +568,7 @@ export function ConductorTareasClient({
   initialTasks = [],
   initialCompletedTasks = [],
   initialTruckSummary = null,
+  agencyModuleEnabled = false,
 }: ConductorTareasClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1003,7 +1005,7 @@ export function ConductorTareasClient({
 
           <div className="flex h-10 min-w-0 overflow-hidden rounded-md border border-black" role="group" aria-label="Cambiar origen de tareas">
             <button type="button" className={`flex-1 text-xs font-black ${operationScope === "domicilios" ? "bg-emerald-950/35 text-emerald-100" : "bg-surface-card text-slate-300"}`} onClick={() => setOperationScope("domicilios")}>Domicilios</button>
-            <button type="button" className={`flex-1 border-l border-black text-xs font-black ${operationScope === "agencias" ? "bg-emerald-950/35 text-emerald-100" : "bg-surface-card text-slate-300"}`} onClick={() => setOperationScope("agencias")}>Agencias</button>
+            {agencyModuleEnabled ? <button type="button" className={`flex-1 border-l border-black text-xs font-black ${operationScope === "agencias" ? "bg-emerald-950/35 text-emerald-100" : "bg-surface-card text-slate-300"}`} onClick={() => setOperationScope("agencias")}>Agencias</button> : null}
           </div>
 
           {operationScope === "domicilios" ? <><div className="flex h-10 min-w-0 overflow-hidden rounded-md border border-black" role="group" aria-label="Filtrar tareas por tipo">
@@ -1111,7 +1113,7 @@ export function ConductorTareasClient({
           </div>
         ) : null}
 
-        {operationScope === "agencias" && effectiveDriverId ? <AgencyVisitsPanel driverId={effectiveDriverId} /> : filteredTasks.length ? (
+        {agencyModuleEnabled && operationScope === "agencias" && effectiveDriverId ? <AgencyVisitsPanel driverId={effectiveDriverId} /> : filteredTasks.length ? (
           <div className="pr-1 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
             {viewLayout === "rows" ? (
               <div className={`${cardClass} overflow-hidden p-2`}>

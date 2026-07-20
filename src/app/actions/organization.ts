@@ -12,6 +12,7 @@ import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/e
 import {
   canEnableMultiWarehouseHub,
   getConfiguredWarehouseLimit,
+  isAgencyModuleEnabled,
   parsePlanLimit,
   type OrganizationSettings,
 } from "@/lib/organizations/settings";
@@ -22,6 +23,7 @@ export type OrganizationPlanUsage = {
   warehouseCount: number;
   userCount: number;
   extraUserCount: number;
+  agenciesEnabled: boolean;
 };
 
 export async function getOrganizationPlanLimitsAction(): Promise<
@@ -65,6 +67,7 @@ export async function getOrganizationPlanLimitsAction(): Promise<
       warehouseCount: warehouseCount || 0,
       userCount: totalUsers,
       extraUserCount: Math.max(0, totalUsers - 1),
+      agenciesEnabled: isAgencyModuleEnabled(settings),
     });
   } catch (error) {
     return fail(actionErrorMessage(error));

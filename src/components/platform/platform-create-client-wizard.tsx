@@ -173,6 +173,7 @@ export function PlatformCreateClientWizard({
   const [orgSettings, setOrgSettings] = useState({
     maxUsers: initialAdditionalUserLimit,
     maxWarehouses: 5,
+    agenciesEnabled: false,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [stepHint, setStepHint] = useState<string | null>(null);
@@ -186,6 +187,7 @@ export function PlatformCreateClientWizard({
     password: string;
     maxUsers: number;
     maxWarehouses: number;
+    agenciesEnabled: boolean;
   } | null>(null);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const shareMenuRef = useRef<HTMLDivElement>(null);
@@ -329,6 +331,7 @@ export function PlatformCreateClientWizard({
       password,
       maxUsers: orgSettings.maxUsers,
       maxWarehouses: orgSettings.maxWarehouses,
+      agenciesEnabled: orgSettings.agenciesEnabled,
     };
 
     setCreatedOrgId(result.data.organizationId);
@@ -694,6 +697,37 @@ export function PlatformCreateClientWizard({
                       }
                     />
                   </label>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={orgSettings.agenciesEnabled}
+                    onClick={() =>
+                      setOrgSettings((current) => ({
+                        ...current,
+                        agenciesEnabled: !current.agenciesEnabled,
+                      }))
+                    }
+                    className={`flex min-h-20 items-center justify-between gap-3 rounded-lg border px-3 text-left ${
+                      orgSettings.agenciesEnabled
+                        ? "border-emerald-500/60 bg-emerald-950/35"
+                        : "border-white/10 bg-[#26322e]"
+                    }`}
+                  >
+                    <span>
+                      <span className="block text-sm font-black text-slate-100">Módulo Agencias</span>
+                      <span className="mt-1 block text-xs font-bold text-slate-400">
+                        Desactivado por defecto. Solo Boxario puede incluirlo en el plan.
+                      </span>
+                    </span>
+                    <span
+                      aria-hidden
+                      className={`flex h-7 w-12 shrink-0 rounded-full border border-black p-1 ${
+                        orgSettings.agenciesEnabled ? "justify-end bg-emerald-400" : "justify-start bg-surface-card"
+                      }`}
+                    >
+                      <span className="h-4 w-4 rounded-full bg-slate-950" />
+                    </span>
+                  </button>
                 </div>
               </aside>
               </div>
@@ -734,7 +768,8 @@ export function PlatformCreateClientWizard({
                       · {createdCredentials.maxWarehouses}{" "}
                       {createdCredentials.maxWarehouses === 1
                         ? "bodega máxima"
-                        : "bodegas máximas"}
+                        : "bodegas máximas"}{" "}
+                      · Agencias {createdCredentials.agenciesEnabled ? "incluidas" : "no incluidas"}
                     </dd>
                   </div>
                   <div className={flowSummaryItemClass}>

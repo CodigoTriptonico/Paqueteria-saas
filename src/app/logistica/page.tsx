@@ -40,6 +40,7 @@ export default async function LogisticaPage() {
       initialTaskAddresses={taskAddressesResult.ok ? taskAddressesResult.data : []}
       initialRouteCatalog={routeCatalogResult.ok ? routeCatalogResult.data : undefined}
       canManageRoutes={sessionHasPermission(session, "routes.update_status")}
+      agencyModuleEnabled={session.agencyModuleEnabled}
     />
   );
 }

@@ -2,7 +2,7 @@
 
 import { requireAppSession } from "@/lib/auth/session";
 import { sessionHasPermission } from "@/lib/auth/permissions";
-import { createScopedSupabase } from "@/lib/supabase/scoped";
+import { createScopedSupabase as loadScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import {
   buildWarehouseBinCode,
@@ -11,6 +11,14 @@ import {
   type InventoryBinPlacement,
   type WarehouseBin,
 } from "@/lib/inventory-bins";
+
+async function createScopedSupabase(
+  session: Awaited<ReturnType<typeof requireAppSession>>,
+) {
+  const supabase = await loadScopedSupabase(session);
+  if (!supabase) throw new Error("Supabase no configurado");
+  return supabase;
+}
 
 type WarehouseBinRow = {
   id: string;
@@ -31,7 +39,7 @@ type InventoryBinStockRow = {
   warehouse_bins: {
     code: string;
     label: string;
-  } | null;
+  } | { code: string; label: string }[] | null;
 };
 
 function mapWarehouseBin(row: WarehouseBinRow): WarehouseBin {
@@ -49,10 +57,11 @@ function mapWarehouseBin(row: WarehouseBinRow): WarehouseBin {
 }
 
 function mapPlacement(row: InventoryBinStockRow): InventoryBinPlacement {
+  const bin = Array.isArray(row.warehouse_bins) ? row.warehouse_bins[0] : row.warehouse_bins;
   return {
     binId: row.bin_id,
-    binCode: row.warehouse_bins?.code || "—",
-    binLabel: row.warehouse_bins?.label || "—",
+    binCode: bin?.code || "—",
+    binLabel: bin?.label || "—",
     quantity: Number(row.quantity),
   };
 }
@@ -72,6 +81,9 @@ export async function listWarehouseBinsAction(input: {
     }
 
     const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
     let query = supabase
       .from("warehouse_bins")
       .select("id, warehouse_id, zone, aisle, shelf, code, label, is_active, sort_order")

@@ -68,7 +68,7 @@ export function InventoryControlMenu({
         setOpen(true);
       });
     }
-  }, [initialItemId]);
+  }, [initialItemId, setInitialTab, setOpen]);
 
   function openTracking(tab: InventoryTrackingTab = "custody") {
     setInitialTab(tab);

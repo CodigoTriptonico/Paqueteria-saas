@@ -80,6 +80,7 @@ export type AppSession = {
   organizationName: string;
   organizationShortName: string | null;
   organizationLogoUrl: string | null;
+  agencyModuleEnabled: boolean;
   multiWarehouseEnabled: boolean;
   maxWarehouses: number;
   roleSlug: RoleSlug;
@@ -101,6 +102,7 @@ export type PlatformOrganizationRow = {
   warehouse_count: number;
   max_users: number | null;
   max_warehouses: number | null;
+  agencies_enabled: boolean;
 };
 
 export type WarehouseRow = {

@@ -414,14 +414,6 @@ function cleanPaymentNote(value: unknown) {
   return String(value || "").trim().slice(0, 160);
 }
 
-function normalizeInventoryText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replace(/\s+/g, "");
-}
-
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)

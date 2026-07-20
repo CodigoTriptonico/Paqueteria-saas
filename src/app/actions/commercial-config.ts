@@ -51,13 +51,13 @@ export async function loadCommercialAdminAction(): Promise<ActionResult<Commerci
     const [{ data: organization }, { data: countries, error: countryError }, { data: agencies, error: agencyError }, { data: sellers, error: sellerError }, { data: profiles }, { data: overrides }, { data: services }, { data: routes }, { data: assignments }, { data: warehouses }, { data: audit }] = await Promise.all([
       admin.from("organizations").select("tenant_id").eq("id", session.organizationId).single(),
       admin.from("pricing_countries").select("id, code, name, pricing_country_boxes(size, price, cost, catalog_key)").eq("organization_id", session.organizationId).order("sort_order").order("name"),
-      admin.from("agencies").select("id, organization_id, code, status, created_at").eq("matrix_organization_id", session.organizationId).is("archived_at", null).order("created_at", { ascending: false }),
+      session.agencyModuleEnabled ? admin.from("agencies").select("id, organization_id, code, status, created_at").eq("matrix_organization_id", session.organizationId).is("archived_at", null).order("created_at", { ascending: false }) : Promise.resolve({ data: [], error: null }),
       admin.from("profiles").select("id, organization_id, email, full_name, is_active, created_at, roles!inner(slug)").eq("organization_id", session.organizationId).eq("roles.slug", "vendedor").is("archived_at", null).order("full_name"),
       admin.from("commercial_entity_profiles").select("*").eq("matrix_organization_id", session.organizationId),
       admin.from("commercial_pricing_overrides").select("id, audience, entity_id, destination_code, product_code, price_kind, service_concept, amount_cents, minimum_amount_cents, currency").eq("matrix_organization_id", session.organizationId).is("valid_until", null),
       admin.from("country_commercial_service_settings").select("id, destination_code, service_concept, amount_cents, currency").eq("matrix_organization_id", session.organizationId).eq("is_active", true),
       admin.from("logistics_route_templates").select("id, name, weekday").eq("organization_id", session.organizationId).order("weekday").order("name"),
-      admin.from("agency_default_route_assignments").select("agency_id, route_template_id").is("ended_at", null),
+      session.agencyModuleEnabled ? admin.from("agency_default_route_assignments").select("agency_id, route_template_id").is("ended_at", null) : Promise.resolve({ data: [] }),
       admin.from("warehouses").select("id, name").eq("organization_id", session.organizationId).eq("is_active", true).order("name"),
       admin.from("immutable_audit_events").select("id, action, entity_type, entity_id, actor_user_id, occurred_at, before_state, after_state, metadata").eq("organization_id", session.organizationId).in("action", ["commercial.override.changed", "commercial.override.restored", "commercial.country_service.changed", "commercial.profile.changed", "agency.default_route.changed"]).order("occurred_at", { ascending: false }).limit(100),
     ]);
@@ -105,6 +105,7 @@ export async function loadCommercialAdminAction(): Promise<ActionResult<Commerci
 export async function saveCommercialOverrideAction(input: { audience: CommercialAudience; entityId?: string | null; destinationCode: string; productCode: string; priceKind: CommercialPriceKind; serviceConcept: "international_shipping" | "home_delivery" | "home_pickup"; amountCents: number; minimumAmountCents?: number | null; currency?: string }): Promise<ActionResult<{ overrideId: string }>> {
   try {
     const session = await requireAppSession(); if (!canManage(session)) throw new Error("FORBIDDEN");
+    if (input.audience === "agency" && !session.agencyModuleEnabled) throw new Error("FORBIDDEN");
     if (!Number.isSafeInteger(input.amountCents) || input.amountCents < 0) return fail("Ingresa un monto valido");
     if (input.minimumAmountCents !== null && input.minimumAmountCents !== undefined && (!Number.isSafeInteger(input.minimumAmountCents) || input.minimumAmountCents < 0 || input.minimumAmountCents > input.amountCents)) return fail("El precio mínimo debe ser un monto válido y no superar el precio configurado");
     const db = await createScopedSupabase(session); if (!db) throw new Error("Supabase no configurado");
@@ -122,9 +123,9 @@ export async function saveCountryCommercialServiceAction(input: { destinationCod
 }
 
 export async function saveCommercialEntityProfileAction(input: { entityType: "agency" | "seller"; entityId: string; profile: CommercialEntityProfile }): Promise<ActionResult<null>> {
-  try { const session=await requireAppSession(); if(!canManage(session)) throw new Error("FORBIDDEN"); const db=await createScopedSupabase(session); if(!db) throw new Error("Supabase no configurado"); const {error}=await db.rpc("save_commercial_entity_profile",{target_entity_type:input.entityType,target_entity_id:input.entityId,profile_patch:input.profile,idempotency_key:randomUUID()}); if(error) throw new Error(error.message); revalidatePath("/agencias"); revalidatePath("/vendedores"); return ok(null); } catch(error){ return fail(actionErrorMessage(error)); }
+  try { const session=await requireAppSession(); if(!canManage(session) || (input.entityType === "agency" && !session.agencyModuleEnabled)) throw new Error("FORBIDDEN"); const db=await createScopedSupabase(session); if(!db) throw new Error("Supabase no configurado"); const {error}=await db.rpc("save_commercial_entity_profile",{target_entity_type:input.entityType,target_entity_id:input.entityId,profile_patch:input.profile,idempotency_key:randomUUID()}); if(error) throw new Error(error.message); revalidatePath("/agencias"); revalidatePath("/vendedores"); return ok(null); } catch(error){ return fail(actionErrorMessage(error)); }
 }
 
 export async function changeAgencyDefaultRouteAction(input: { agencyId: string; routeTemplateId: string; reason: string }): Promise<ActionResult<null>> {
-  try { const session=await requireAppSession(); if(!canManage(session)&&!sessionHasPermission(session,"agency.edit")) throw new Error("FORBIDDEN"); const db=await createScopedSupabase(session); if(!db) throw new Error("Supabase no configurado"); const {error}=await db.rpc("change_agency_default_route",{target_agency_id:input.agencyId,target_route_template_id:input.routeTemplateId,change_reason:input.reason,idempotency_key:randomUUID()}); if(error) throw new Error(error.message); revalidatePath("/agencias"); return ok(null); } catch(error){ return fail(actionErrorMessage(error)); }
+  try { const session=await requireAppSession(); if(!session.agencyModuleEnabled || (!canManage(session)&&!sessionHasPermission(session,"agency.edit"))) throw new Error("FORBIDDEN"); const db=await createScopedSupabase(session); if(!db) throw new Error("Supabase no configurado"); const {error}=await db.rpc("change_agency_default_route",{target_agency_id:input.agencyId,target_route_template_id:input.routeTemplateId,change_reason:input.reason,idempotency_key:randomUUID()}); if(error) throw new Error(error.message); revalidatePath("/agencias"); return ok(null); } catch(error){ return fail(actionErrorMessage(error)); }
 }

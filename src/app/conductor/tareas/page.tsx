@@ -65,6 +65,7 @@ export default async function ConductorTareasPage({
       initialTasks={initialTasks}
       initialCompletedTasks={initialCompletedTasks}
       initialTruckSummary={initialTruckSummary}
+      agencyModuleEnabled={session?.agencyModuleEnabled ?? false}
     />
   );
 }

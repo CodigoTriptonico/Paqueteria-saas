@@ -3,13 +3,11 @@ import { describe, it } from "node:test";
 import { CONFIG_MENU_GROUPS, CONFIG_MENU_SECTION_IDS } from "./config-menu-groups";
 
 const EXPECTED_SECTIONS = [
-  "plan",
+  "organization",
   "prices",
   "distributors",
   "deliveries",
   "appearance",
-  "company",
-  "users",
   "timeclock",
 ] as const;
 
@@ -22,14 +20,14 @@ describe("config menu groups", () => {
   it("keeps operation and administration balanced for the landing grid", () => {
     assert.equal(CONFIG_MENU_GROUPS.length, 2);
     assert.equal(CONFIG_MENU_GROUPS[0]?.sectionIds.length, 3);
-    assert.equal(CONFIG_MENU_GROUPS[1]?.sectionIds.length, 5);
+    assert.equal(CONFIG_MENU_GROUPS[1]?.sectionIds.length, 3);
   });
 
   it("groups operation settings before administration settings", () => {
     assert.equal(CONFIG_MENU_GROUPS[0]?.id, "operation");
     assert.equal(CONFIG_MENU_GROUPS[1]?.id, "administration");
     assert.ok(CONFIG_MENU_GROUPS[0]?.sectionIds.includes("deliveries"));
-    assert.ok(CONFIG_MENU_GROUPS[1]?.sectionIds.includes("users"));
+    assert.ok(CONFIG_MENU_GROUPS[1]?.sectionIds.includes("organization"));
     assert.ok(CONFIG_MENU_GROUPS[1]?.sectionIds.includes("timeclock"));
   });
 });

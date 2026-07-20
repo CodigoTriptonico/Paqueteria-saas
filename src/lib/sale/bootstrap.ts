@@ -10,6 +10,7 @@ import {
 import type { OrganizationBranding } from "@/lib/organizations/branding";
 import { resolveOrganizationBrandingFromSession } from "@/lib/organizations/branding";
 import type { PricingPromotionConfig } from "@/lib/pricing-promotions";
+import type { InvoiceBillingConfig } from "@/lib/invoice-billing";
 import { listSaleShortcutsForSession, type SaleShortcuts } from "@/lib/sale/shortcuts";
 
 export type VentaBootstrapData = {

@@ -56,7 +56,7 @@ export async function loadInventoryCustodySnapshotAction(): Promise<
 
     const agencyRows: InventoryCustodyAgencyRow[] = [];
 
-    if (admin) {
+    if (admin && session.agencyModuleEnabled) {
       const { data: agencies, error: agenciesError } = await admin
         .from("agencies")
         .select("id, organization_id, code")
@@ -145,6 +145,7 @@ export async function loadInventoryCustodySnapshotAction(): Promise<
     }
 
     return ok({
+      agencyModuleEnabled: session.agencyModuleEnabled,
       agencyRows,
       fullPackageCounts: buildInventoryCustodyFullCounts(counts),
     });

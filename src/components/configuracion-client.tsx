@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Clock,
   DollarSign,
-  Gauge,
   Globe2,
   Package2,
   Palette,
@@ -17,7 +16,6 @@ import {
   Tags,
   Trash2,
   Truck,
-  Users,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -36,10 +34,12 @@ import {
   type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
-import { CompanySettingsPanel } from "@/components/config/company-settings-panel";
 import { CountryCommercialServiceCosts } from "@/components/config/country-commercial-service-costs";
 import { AppearanceSettingsPanel } from "@/components/config/appearance-settings-panel";
-import { PlanSettingsPanel } from "@/components/config/plan-settings-panel";
+import {
+  OrganizationManagementPanel,
+  type OrganizationManagementTab,
+} from "@/components/config/organization-management-panel";
 import { PageLoading } from "@/components/page-loading";
 import { useSetShellConfig } from "@/components/app-frame";
 import { useContextNav } from "@/hooks/use-context-nav";
@@ -88,11 +88,6 @@ const ComboBuilder = dynamic(
   { loading: () => <PageLoading inline /> },
 );
 
-const UsersSettingsPanel = dynamic(
-  () => import("@/components/config/users-settings-panel").then((mod) => mod.UsersSettingsPanel),
-  { loading: () => <PageLoading inline /> },
-);
-
 const TimeClockAdminClient = dynamic(
   () =>
     import("@/components/time-clock/time-clock-admin-client").then((mod) => mod.TimeClockAdminClient),
@@ -106,14 +101,14 @@ const ROUTE_LEAD_TIME_OPTIONS = [
   { value: "1 semana", label: "1 semana" },
 ];
 
-type Section = "menu" | "plan" | "prices" | "distributors" | "deliveries" | "appearance" | "company" | "users" | "timeclock";
+type Section = "menu" | "organization" | "prices" | "distributors" | "deliveries" | "appearance" | "timeclock";
 
 const sections = [
   {
-    id: "plan" as Section,
-    title: "Plan",
-    text: "Límites de bodegas y usuarios del plan.",
-    icon: Gauge,
+    id: "organization" as Section,
+    title: "Empresa y acceso",
+    text: "Identidad, plan, usuarios y permisos en un solo lugar.",
+    icon: Building2,
   },
   {
     id: "prices" as Section,
@@ -138,18 +133,6 @@ const sections = [
     title: "Apariencia",
     text: "Tema visual del sistema.",
     icon: Palette,
-  },
-  {
-    id: "company" as Section,
-    title: "Empresa",
-    text: "Nombre, acrónimo, logo y contacto.",
-    icon: Building2,
-  },
-  {
-    id: "users" as Section,
-    title: "Usuarios",
-    text: "Dueño, equipo y permisos.",
-    icon: Users,
   },
   {
     id: "timeclock" as Section,
@@ -234,13 +217,11 @@ const emptyDistributor = {
 
 const configSections: Section[] = [
   "menu",
-  "plan",
+  "organization",
   "prices",
   "distributors",
   "deliveries",
   "appearance",
-  "company",
-  "users",
   "timeclock",
 ];
 
@@ -250,9 +231,21 @@ function countryOptionKey(country: Pick<CountryOption, "code" | "name">) {
 
 function parseConfigUrl(params: URLSearchParams) {
   const view = params.get("view");
+  const legacyManagementTab = ["company", "plan", "users"].includes(view || "")
+    ? (view as OrganizationManagementTab)
+    : null;
+  const requestedTab = params.get("tab");
+  const managementTab = ["company", "plan", "users"].includes(requestedTab || "")
+    ? (requestedTab as OrganizationManagementTab)
+    : legacyManagementTab || "company";
 
   return {
-    section: configSections.includes(view as Section) ? (view as Section) : ("menu" as Section),
+    section: legacyManagementTab
+      ? ("organization" as Section)
+      : configSections.includes(view as Section)
+        ? (view as Section)
+        : ("menu" as Section),
+    managementTab,
   };
 }
 
@@ -602,7 +595,8 @@ export function ConfiguracionClient({
   const setShellConfig = useSetShellConfig();
   const notify = useNotify();
   const cleanedFromRef = useRef(false);
-  const section = useMemo(() => parseConfigUrl(searchParams).section, [searchParams]);
+  const parsedConfigUrl = useMemo(() => parseConfigUrl(searchParams), [searchParams]);
+  const section = parsedConfigUrl.section;
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [countryQuery, setCountryQuery] = useState("");
   const [pendingCountryToAdd, setPendingCountryToAdd] = useState<CountryOption | null>(null);
@@ -1461,8 +1455,8 @@ export function ConfiguracionClient({
       return undefined;
     }
 
-    if (section === "plan") {
-      return "Plan";
+    if (section === "organization") {
+      return "Empresa y acceso";
     }
 
     if (section === "prices") {
@@ -1491,14 +1485,6 @@ export function ConfiguracionClient({
 
     if (section === "appearance") {
       return "Apariencia";
-    }
-
-    if (section === "company") {
-      return "Empresa";
-    }
-
-    if (section === "users") {
-      return "Usuarios";
     }
 
     if (section === "timeclock") {
@@ -1631,9 +1617,9 @@ export function ConfiguracionClient({
         </div>
       ) : null}
 
-      {section === "plan" ? (
-        <Panel title="Plan" hideHeader={showSidebarNav} {...nestedPanelShell}>
-          <PlanSettingsPanel />
+      {section === "organization" ? (
+        <Panel title="Empresa y acceso" hideHeader={showSidebarNav} {...nestedPanelShell}>
+          <OrganizationManagementPanel initialTab={parsedConfigUrl.managementTab} />
         </Panel>
       ) : null}
 
@@ -2759,14 +2745,6 @@ export function ConfiguracionClient({
           <AppearanceSettingsPanel />
         </Panel>
       ) : null}
-
-      {section === "company" ? (
-        <Panel title="Empresa" hideHeader={showSidebarNav} {...nestedPanelShell}>
-          <CompanySettingsPanel />
-        </Panel>
-      ) : null}
-
-      {section === "users" ? <UsersSettingsPanel /> : null}
 
       {section === "timeclock" ? (
         <TimeClockAdminClient

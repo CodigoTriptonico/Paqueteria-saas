@@ -15,10 +15,10 @@ describe("config menu groups eval", () => {
     for (const sectionId of ["prices", "distributors", "deliveries"] as const) {
       assert.ok(operation?.sectionIds.includes(sectionId));
     }
-    for (const sectionId of ["plan", "company", "users", "timeclock", "appearance"] as const) {
+    for (const sectionId of ["organization", "timeclock", "appearance"] as const) {
       assert.ok(administration?.sectionIds.includes(sectionId));
     }
-    assert.equal(operation?.sectionIds.includes("users"), false);
+    assert.equal(operation?.sectionIds.includes("organization"), false);
     assert.equal(administration?.sectionIds.includes("distributors"), false);
   });
 });

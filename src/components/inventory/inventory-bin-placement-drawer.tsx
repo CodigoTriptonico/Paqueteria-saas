@@ -83,7 +83,7 @@ export function InventoryBinPlacementDrawer({
         placementsResult.data.map((row) => [row.binId, String(row.quantity)]),
       ),
     );
-  }, [context?.itemId, notify, open, warehouseId]);
+  }, [context, notify, open, warehouseId]);
 
   useEffect(() => {
     queueMicrotask(() => setMounted(true));

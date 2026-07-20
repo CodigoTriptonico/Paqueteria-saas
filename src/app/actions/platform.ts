@@ -24,6 +24,7 @@ import { assertPhoneAvailable } from "@/lib/phone/profile-phone";
 import { syncProfileRecoveryPhones } from "@/lib/phone/profile-phones";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
+  isAgencyModuleEnabled,
   parsePlanLimit,
   type OrganizationSettings,
 } from "@/lib/organizations/settings";
@@ -75,6 +76,7 @@ export async function listAllOrganizationsAction(): Promise<
             warehouse_count: warehouseCount.get(org.id) || 0,
             max_users: parsePlanLimit(settings.max_users),
             max_warehouses: parsePlanLimit(settings.max_warehouses),
+            agencies_enabled: isAgencyModuleEnabled(settings),
           };
         }),
     );
@@ -95,7 +97,7 @@ export async function createOrganizationAction(input: {
   adminPassword: string;
   adminFullName?: string;
   adminPhones: string[];
-  settings?: { maxUsers?: number; maxWarehouses?: number };
+  settings?: { maxUsers?: number; maxWarehouses?: number; agenciesEnabled?: boolean };
 }): Promise<ActionResult<{ organizationId: string }>> {
   try {
     await requirePlatformAdmin();
@@ -192,6 +194,7 @@ export async function createOrganizationAction(input: {
           multi_warehouse_enabled: maxWarehouses > 1,
           max_users: maxUsers,
           max_warehouses: maxWarehouses,
+          agencies_enabled: input.settings?.agenciesEnabled === true,
           owner_contact_phones: phones.map(
             (phone) => normalizePhoneE164(phone) || phone,
           ),
@@ -224,6 +227,7 @@ export async function updateOrganizationAction(input: {
   slug?: string;
   maxUsers?: number;
   maxWarehouses?: number;
+  agenciesEnabled?: boolean;
 }): Promise<ActionResult<null>> {
   try {
     await requirePlatformAdmin();
@@ -265,6 +269,9 @@ export async function updateOrganizationAction(input: {
         Math.max(1, Math.min(500, Math.trunc(input.maxUsers))),
       );
       settings.max_users = limit;
+    }
+    if (input.agenciesEnabled !== undefined) {
+      settings.agencies_enabled = input.agenciesEnabled === true;
     }
     const { error } = await admin
       .from("organizations")

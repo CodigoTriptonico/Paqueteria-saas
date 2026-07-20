@@ -12,6 +12,7 @@ import { isDevAuthBypassEnabled } from "@/lib/auth/dev-auth-bypass";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { OrganizationSettings } from "@/lib/organizations/settings";
 import { readMaxWarehouses } from "@/lib/organizations/settings";
+import { isAgencyModuleEnabled } from "@/lib/organizations/settings";
 import type { AppSession, RoleSlug } from "@/lib/auth/types";
 import { PROFILE_AVATAR_BUCKET } from "@/lib/account/profile-validation";
 import { ORGANIZATION_LOGO_BUCKET } from "@/lib/organizations/branding";
@@ -66,7 +67,7 @@ async function getDevelopmentPlatformOwnerSession(): Promise<AppSession | null> 
   const { data: profile, error } = await admin
     .from("profiles")
     .select(
-      "id, email, full_name, avatar_path, organization_id, role_id, is_active, default_warehouse_id, roles(slug, name), organizations(name, settings, kind)",
+      "id, email, full_name, avatar_path, organization_id, role_id, is_active, default_warehouse_id, roles(slug, name), organizations(name, settings, kind, organization_type, matrix_organization_id)",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -78,8 +79,8 @@ async function getDevelopmentPlatformOwnerSession(): Promise<AppSession | null> 
   const roleRow = profile.roles as { slug: RoleSlug; name: string } | { slug: RoleSlug; name: string }[] | null;
   const role = Array.isArray(roleRow) ? roleRow[0] : roleRow;
   const orgRow = profile.organizations as
-    | { name: string; settings: OrganizationSettings; kind: string }
-    | { name: string; settings: OrganizationSettings; kind: string }[]
+    | { name: string; settings: OrganizationSettings; kind: string; organization_type: string | null; matrix_organization_id: string | null }
+    | { name: string; settings: OrganizationSettings; kind: string; organization_type: string | null; matrix_organization_id: string | null }[]
     | null;
   const homeOrg = Array.isArray(orgRow) ? orgRow[0] : orgRow;
   const isPlatformAdmin = await loadIsPlatformAdmin(userId);
@@ -99,6 +100,7 @@ async function getDevelopmentPlatformOwnerSession(): Promise<AppSession | null> 
     organizationName: homeOrg?.name || "Empresa",
     organizationShortName: homeOrg?.settings?.company_short_name?.trim() || null,
     organizationLogoUrl,
+    agencyModuleEnabled: isAgencyModuleEnabled(homeOrg?.settings),
     multiWarehouseEnabled: Boolean(homeOrg?.settings?.multi_warehouse_enabled),
     maxWarehouses: readMaxWarehouses(homeOrg?.settings),
     roleSlug: role?.slug || "administrador",
@@ -130,7 +132,7 @@ async function resolveAppSessionUncached(): Promise<AppSession | null> {
   const { data: profile, error } = await supabase
     .from("profiles")
     .select(
-      "id, email, full_name, avatar_path, organization_id, role_id, is_active, default_warehouse_id, roles(slug, name), organizations(name, settings, kind)",
+      "id, email, full_name, avatar_path, organization_id, role_id, is_active, default_warehouse_id, roles(slug, name), organizations(name, settings, kind, organization_type, matrix_organization_id)",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -142,10 +144,29 @@ async function resolveAppSessionUncached(): Promise<AppSession | null> {
   const roleRow = profile.roles as { slug: RoleSlug; name: string } | { slug: RoleSlug; name: string }[] | null;
   const role = Array.isArray(roleRow) ? roleRow[0] : roleRow;
   const orgRow = profile.organizations as
-    | { name: string; settings: OrganizationSettings; kind: string }
-    | { name: string; settings: OrganizationSettings; kind: string }[]
+    | { name: string; settings: OrganizationSettings; kind: string; organization_type: string | null; matrix_organization_id: string | null }
+    | { name: string; settings: OrganizationSettings; kind: string; organization_type: string | null; matrix_organization_id: string | null }[]
     | null;
   const homeOrg = Array.isArray(orgRow) ? orgRow[0] : orgRow;
+
+  let agencyModuleEnabled = isAgencyModuleEnabled(homeOrg?.settings);
+  if (
+    homeOrg?.organization_type === "agency" &&
+    homeOrg.matrix_organization_id &&
+    homeOrg.matrix_organization_id !== profile.organization_id
+  ) {
+    const admin = createSupabaseAdminClient();
+    const { data: matrixOrganization } = admin
+      ? await admin
+          .from("organizations")
+          .select("settings")
+          .eq("id", homeOrg.matrix_organization_id)
+          .maybeSingle()
+      : { data: null };
+    agencyModuleEnabled = isAgencyModuleEnabled(
+      (matrixOrganization?.settings || {}) as OrganizationSettings,
+    );
+  }
 
   const [{ data: grantedPerms }, { data: warehouseLinks }, isPlatformAdmin, avatarUrl, organizationLogoUrl] =
     await Promise.all([
@@ -176,6 +197,7 @@ async function resolveAppSessionUncached(): Promise<AppSession | null> {
     homeOrganizationName: homeOrg?.name || "Empresa",
     homeOrganizationSettings: homeOrg?.settings,
     homeOrganizationLogoUrl: organizationLogoUrl,
+    agencyModuleEnabled,
     permissions: extractPermissionKeys(grantedPerms),
     warehouseIds: (warehouseLinks || []).map((row) => row.warehouse_id),
     isPlatformAdmin,

@@ -38,6 +38,7 @@ export type InventoryCustodyFullCount = {
 };
 
 export type InventoryCustodyServerSnapshot = {
+  agencyModuleEnabled: boolean;
   agencyRows: InventoryCustodyAgencyRow[];
   fullPackageCounts: InventoryCustodyFullCount[];
 };

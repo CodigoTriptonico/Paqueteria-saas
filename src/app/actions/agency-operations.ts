@@ -3,9 +3,15 @@
 import { randomUUID } from "node:crypto";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { sessionHasPermission } from "@/lib/auth/permissions";
-import { requireAppSession } from "@/lib/auth/session";
+import { requireAppSession as loadAppSession } from "@/lib/auth/session";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+
+async function requireAppSession() {
+  const session = await loadAppSession();
+  if (!session.agencyModuleEnabled) throw new Error("FORBIDDEN");
+  return session;
+}
 
 export type AgencyBoxBalance = {
   id: string;

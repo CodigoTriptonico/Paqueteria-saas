@@ -18,6 +18,13 @@ describe("platform client initial plan eval", () => {
     assert.match(source, /maxUsers: initialAdditionalUserLimit/);
   });
 
+  it("offers the exclusive agency module disabled by default", () => {
+    assert.match(source, /agenciesEnabled: false/);
+    assert.match(source, /role="switch"/);
+    assert.match(source, /Módulo Agencias/);
+    assert.match(source, /Desactivado por defecto/);
+  });
+
   it("stacks the compact password fields and keeps the generator outside them", () => {
     assert.match(source, /const passwordFieldsClass = `max-w-\[34rem\] space-y-3/);
     assert.match(source, /const passwordGeneratorButtonClass =/);

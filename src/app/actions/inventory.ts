@@ -521,6 +521,9 @@ async function assertCategoryDeletionDoesNotBreakHistory(
   // A manager may no longer have access to the warehouse where old history
   // lives, so the guard must see the whole organization.
   const auditClient = createSupabaseAdminClient();
+  if (!auditClient) {
+    throw new Error("Supabase no configurado");
+  }
   const [
     { count: movementCount, error: movementError },
     { count: assignmentCount, error: assignmentError },
