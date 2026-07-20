@@ -19,4 +19,9 @@ describe("service worker static cache eval", () => {
     assert.match(swSource, /if \(cached\) \{\s*return cached;\s*\}/);
     assert.doesNotMatch(swSource, /return cached \|\| network/);
   });
+
+  it("invalidates the previous static cache namespace on worker updates", () => {
+    assert.match(swSource, /const STATIC_CACHE = "boxario-static-v2"/);
+    assert.match(swSource, /key\.startsWith\("boxario-static-"\)/);
+  });
 });

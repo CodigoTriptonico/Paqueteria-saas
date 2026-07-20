@@ -1,4 +1,4 @@
-const STATIC_CACHE = "boxario-static-v1";
+const STATIC_CACHE = "boxario-static-v2";
 const PRIVATE_CACHE = "boxario-conductor-private-v1";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE_URLS = [OFFLINE_URL, "/app-icon.svg", "/manifest.webmanifest"];
