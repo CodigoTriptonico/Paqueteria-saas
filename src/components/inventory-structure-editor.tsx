@@ -1649,50 +1649,50 @@ export function InventoryStructureEditor({
                   ariaHaspopup="menu"
                   onClick={() => setToolbarMenuOpen((current) => !current)}
                 />
-                {toolbarMenuOpen ? (
-                  <div
-                    ref={toolbarMenuRef}
-                    role="menu"
-                    onClick={(event) => {
-                      if (
-                        (event.target as HTMLElement).closest(
-                          "[data-inventory-toolbar-menu-action]",
-                        )
-                      ) {
-                        setToolbarMenuOpen(false);
-                      }
+                {/* Keep mounted when closed so Seguimiento/drawers survive menu dismiss. */}
+                <div
+                  ref={toolbarMenuRef}
+                  role="menu"
+                  hidden={!toolbarMenuOpen}
+                  onClick={(event) => {
+                    if (
+                      (event.target as HTMLElement).closest(
+                        "[data-inventory-toolbar-menu-action]",
+                      )
+                    ) {
+                      setToolbarMenuOpen(false);
+                    }
+                  }}
+                  className="absolute right-0 top-[calc(100%+0.5rem)] z-[120] w-64 rounded-lg border border-black bg-[#101820] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+                >
+                  {toolbarEndSlot}
+                  <div className="my-1.5 border-t border-black/70" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setToolbarMenuOpen(false);
+                      setShowNewCategoryInput(false);
+                      setOpenSubcategoryInput("");
+                      openStructureMenu(toolbarMenuButtonRef.current!, "create");
                     }}
-                    className="absolute right-0 top-[calc(100%+0.5rem)] z-[120] w-64 rounded-lg border border-black bg-[#101820] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+                    className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc]"
                   >
-                    {toolbarEndSlot}
-                    <div className="my-1.5 border-t border-black/70" />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setToolbarMenuOpen(false);
-                        setShowNewCategoryInput(false);
-                        setOpenSubcategoryInput("");
-                        openStructureMenu(toolbarMenuButtonRef.current!, "create");
-                      }}
-                      className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc]"
-                    >
-                      <Layers3 className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-                      Categorías y subcategorías
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!selectedCategoryData}
-                      onClick={() => {
-                        setToolbarMenuOpen(false);
-                        openStructureMenu(toolbarMenuButtonRef.current!, "manage");
-                      }}
-                      className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <Settings2 className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-                      Gestionar estructura
-                    </button>
-                  </div>
-                ) : null}
+                    <Layers3 className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                    Categorías y subcategorías
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selectedCategoryData}
+                    onClick={() => {
+                      setToolbarMenuOpen(false);
+                      openStructureMenu(toolbarMenuButtonRef.current!, "manage");
+                    }}
+                    className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Settings2 className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                    Gestionar estructura
+                  </button>
+                </div>
               </div>
             </div>
           ) : null}

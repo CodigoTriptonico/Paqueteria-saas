@@ -57,6 +57,16 @@ describe("conductor offline-first eval", () => {
     assert.match(workerSource, /BOXARIO_CLEAR_CONDUCTOR_PRIVATE_CACHE/);
   });
 
+  it("clones static responses before returning them to the page", () => {
+    assert.match(workerSource, /function cacheStaticCopy\(request, response\)/);
+    assert.match(workerSource, /copy = response\.clone\(\)/);
+    assert.match(workerSource, /cacheStaticCopy\(request, response\)/);
+    assert.doesNotMatch(
+      workerSource,
+      /caches\.open\(STATIC_CACHE\)\.then\(\(cache\) => cache\.put\(request, response\.clone\(\)\)\)/,
+    );
+  });
+
   it("keeps PWA public files outside authentication and operation ids in the database", () => {
     assert.match(proxySource, /pathname === "\/sw\.js"/);
     assert.match(proxySource, /pathname === "\/manifest\.webmanifest"/);

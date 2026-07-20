@@ -1,13 +1,11 @@
 "use client";
 
-import { ClipboardList, History } from "lucide-react";
-import { useState } from "react";
+import { LocateFixed } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
-  InventoryAssignmentsDrawer,
-} from "@/components/inventory-assignments-panel";
-import {
-  InventoryMovementsDrawer,
-} from "@/components/inventory-movements-panel";
+  InventoryTrackingDrawer,
+  type InventoryTrackingTab,
+} from "@/components/inventory/inventory-tracking-drawer";
 import {
   inventoryToolbarGroupClass,
   InventoryToolbarIconButton,
@@ -40,89 +38,78 @@ export function InventoryControlMenu({
   bare?: boolean;
   variant?: "toolbar" | "menu";
 }) {
-  const [assignmentsOpen, setAssignmentsOpen] = useState(false);
-  const [movementsOpen, setMovementsOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [initialTab, setInitialTab] = useState<InventoryTrackingTab>("custody");
+
+  useEffect(() => {
+    if (initialItemId) {
+      queueMicrotask(() => {
+        setInitialTab("assignments");
+        setOpen(true);
+      });
+    }
+  }, [initialItemId]);
+
+  function openTracking(tab: InventoryTrackingTab = "custody") {
+    setInitialTab(tab);
+    setOpen(true);
+  }
+
+  const badge =
+    (assignments.length || 0) + (movements.length || 0) || undefined;
 
   const menuItemClass =
     "flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs font-black text-slate-300 transition hover:bg-surface-card-hover hover:text-[#f8fafc]";
 
-  const triggerButtons = variant === "menu" ? (
-    <>
+  const trigger =
+    variant === "menu" ? (
       <button
         type="button"
-        onClick={() => setAssignmentsOpen(true)}
+        onClick={() => openTracking("custody")}
         data-inventory-toolbar-menu-action
         className={menuItemClass}
       >
-        <ClipboardList className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-        <span className="min-w-0 flex-1">Asignaciones activas</span>
-        {assignments.length ? (
+        <LocateFixed className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+        <span className="min-w-0 flex-1">Seguimiento</span>
+        {badge ? (
           <span className="rounded bg-surface-inset px-1.5 py-0.5 text-[10px] tabular-nums text-slate-400">
-            {assignments.length}
+            {badge}
           </span>
         ) : null}
       </button>
-      <button
-        type="button"
-        onClick={() => setMovementsOpen(true)}
-        data-inventory-toolbar-menu-action
-        className={menuItemClass}
-      >
-        <History className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-        <span className="min-w-0 flex-1">Historial de movimientos</span>
-      </button>
-    </>
-  ) : (
-    <>
+    ) : (
       <InventoryToolbarIconButton
-        icon={ClipboardList}
-        label="Asignaciones activas"
-        badge={assignments.length || undefined}
-        tone={assignmentsOpen ? "active" : "default"}
-        onClick={() => setAssignmentsOpen(true)}
-        ariaExpanded={assignmentsOpen}
+        icon={LocateFixed}
+        label="Seguimiento"
+        badge={badge}
+        tone={open ? "active" : "default"}
+        onClick={() => openTracking("custody")}
+        ariaExpanded={open}
         ariaHaspopup="dialog"
       />
-      <InventoryToolbarIconButton
-        icon={History}
-        label="Historial de movimientos"
-        badge={movements.length || undefined}
-        tone={movementsOpen ? "active" : "default"}
-        onClick={() => setMovementsOpen(true)}
-        ariaExpanded={movementsOpen}
-        ariaHaspopup="dialog"
-      />
-    </>
-  );
+    );
 
   return (
     <>
       {bare || variant === "menu" ? (
-        triggerButtons
+        trigger
       ) : (
-        <div className={inventoryToolbarGroupClass}>{triggerButtons}</div>
+        <div className={inventoryToolbarGroupClass}>{trigger}</div>
       )}
 
-      <InventoryAssignmentsDrawer
-        warehouseId={warehouseId}
-        assignments={assignments}
-        initialItemId={initialItemId}
-        onAssignmentsChange={onAssignmentsChange}
-        onCloseAssignment={onCloseAssignment}
-        closingAssignmentId={closingAssignmentId}
-        controlledOpen={assignmentsOpen}
-        onControlledOpenChange={setAssignmentsOpen}
-        hideTrigger
-      />
-      <InventoryMovementsDrawer
+      <InventoryTrackingDrawer
         warehouseId={warehouseId}
         warehouseName={warehouseName}
-        movements={movements}
         assignments={assignments}
+        movements={movements}
+        initialItemId={initialItemId}
+        initialTab={initialTab}
+        onAssignmentsChange={onAssignmentsChange}
         onMovementsChange={onMovementsChange}
-        controlledOpen={movementsOpen}
-        onControlledOpenChange={setMovementsOpen}
-        hideTrigger
+        onCloseAssignment={onCloseAssignment}
+        closingAssignmentId={closingAssignmentId}
+        controlledOpen={open}
+        onControlledOpenChange={setOpen}
       />
     </>
   );

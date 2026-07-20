@@ -230,6 +230,8 @@ type InventoryMovementsSidePanelProps = {
   zIndexClass?: string;
   fixedItemId?: string;
   onMovementsChange?: (next: InventoryMovement[]) => void;
+  /** When true, render filters + list only (parent owns the drawer chrome). */
+  embedded?: boolean;
 };
 
 export function InventoryMovementsSidePanel({
@@ -246,6 +248,7 @@ export function InventoryMovementsSidePanel({
   zIndexClass = "z-[130]",
   fixedItemId,
   onMovementsChange,
+  embedded = false,
 }: InventoryMovementsSidePanelProps) {
   const [tab, setTab] = useState<MovementsTab>("history");
   const [members, setMembers] = useState<InventoryMemberRow[]>([]);
@@ -344,7 +347,7 @@ export function InventoryMovementsSidePanel({
   }, [open, reload]);
 
   useEffect(() => {
-    if (!open) {
+    if (!open || embedded) {
       return;
     }
 
@@ -362,10 +365,117 @@ export function InventoryMovementsSidePanel({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onClose, open]);
+  }, [embedded, onClose, open]);
 
   if (!open) {
     return null;
+  }
+
+  const body = (
+    <>
+      <div className="shrink-0 border-b border-black/70 px-4 py-3">
+        <AppTabs
+          tabs={movementsTabs}
+          value={tab}
+          onChange={setTab}
+          size="compact"
+          ariaLabel="Vistas del historial"
+        />
+      </div>
+
+      {tab === "history" ? (
+        <div className="shrink-0 space-y-2 border-b border-black/70 p-4">
+          <InlineSearchCombobox
+            value={itemQuery}
+            onChange={setItemQuery}
+            options={itemOptions}
+            placeholder="Item"
+            emptyLabel="Sin items"
+            ariaLabel="Filtrar item"
+            className="w-full"
+            minWidthClass="w-full min-w-0"
+            onSelectOption={(option) => setItemQuery(option.label)}
+          />
+          <InlineSearchPicker
+            value={assigneeId}
+            onChange={setAssigneeId}
+            options={[{ value: "", label: "Empleado (todos)" }, ...memberOptions]}
+            placeholder="Empleado"
+            searchPlaceholder="Buscar…"
+            ariaLabel="Filtrar empleado"
+            className="w-full"
+            minWidthClass="w-full min-w-0"
+          />
+          <InlineSearchPicker
+            value={createdBy}
+            onChange={setCreatedBy}
+            options={[{ value: "", label: "Responsable (todos)" }, ...memberOptions]}
+            placeholder="Responsable"
+            searchPlaceholder="Buscar…"
+            ariaLabel="Filtrar responsable"
+            className="w-full"
+            minWidthClass="w-full min-w-0"
+          />
+          <InlineSearchPicker
+            value={typeFilter}
+            onChange={setTypeFilter}
+            options={[{ value: "", label: "Tipo (todos)" }, ...TYPE_FILTER_OPTIONS]}
+            placeholder="Tipo"
+            searchPlaceholder="Buscar…"
+            ariaLabel="Filtrar tipo"
+            className="w-full"
+            minWidthClass="w-full min-w-0"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <label className="grid gap-1 text-[11px] font-black uppercase text-slate-400">
+              Desde
+              <DateInput
+                compact={false}
+                value={dateFrom}
+                ariaLabel="Fecha desde"
+                onChange={setDateFrom}
+              />
+            </label>
+            <label className="grid gap-1 text-[11px] font-black uppercase text-slate-400">
+              Hasta
+              <DateInput
+                compact={false}
+                value={dateTo}
+                ariaLabel="Fecha hasta"
+                onChange={setDateTo}
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={() => void reload()}
+            className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-black bg-emerald-400/10 text-sm font-black text-emerald-200"
+          >
+            Aplicar filtros
+          </button>
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+          </div>
+        ) : tab === "summary" ? (
+          <MovementSummaryPanel movements={rows} assignments={assignments} />
+        ) : (
+          <MovementList
+            movements={rows}
+            warehouseName={warehouseName}
+            emptyHint={emptyHint}
+          />
+        )}
+      </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex min-h-0 flex-1 flex-col">{body}</div>;
   }
 
   return (
@@ -407,105 +517,7 @@ export function InventoryMovementsSidePanel({
             <X className="h-4 w-4" aria-hidden />
           </button>
         </header>
-
-        <div className="shrink-0 border-b border-black/70 px-4 py-3">
-          <AppTabs
-            tabs={movementsTabs}
-            value={tab}
-            onChange={setTab}
-            size="compact"
-            ariaLabel="Vistas del historial"
-          />
-        </div>
-
-        {tab === "history" ? (
-          <div className="shrink-0 space-y-2 border-b border-black/70 p-4">
-            <InlineSearchCombobox
-              value={itemQuery}
-              onChange={setItemQuery}
-              options={itemOptions}
-              placeholder="Item"
-              emptyLabel="Sin items"
-              ariaLabel="Filtrar item"
-              className="w-full"
-              minWidthClass="w-full min-w-0"
-              onSelectOption={(option) => setItemQuery(option.label)}
-            />
-            <InlineSearchPicker
-              value={assigneeId}
-              onChange={setAssigneeId}
-              options={[{ value: "", label: "Empleado (todos)" }, ...memberOptions]}
-              placeholder="Empleado"
-              searchPlaceholder="Buscar…"
-              ariaLabel="Filtrar empleado"
-              className="w-full"
-              minWidthClass="w-full min-w-0"
-            />
-            <InlineSearchPicker
-              value={createdBy}
-              onChange={setCreatedBy}
-              options={[{ value: "", label: "Responsable (todos)" }, ...memberOptions]}
-              placeholder="Responsable"
-              searchPlaceholder="Buscar…"
-              ariaLabel="Filtrar responsable"
-              className="w-full"
-              minWidthClass="w-full min-w-0"
-            />
-            <InlineSearchPicker
-              value={typeFilter}
-              onChange={setTypeFilter}
-              options={[{ value: "", label: "Tipo (todos)" }, ...TYPE_FILTER_OPTIONS]}
-              placeholder="Tipo"
-              searchPlaceholder="Buscar…"
-              ariaLabel="Filtrar tipo"
-              className="w-full"
-              minWidthClass="w-full min-w-0"
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <label className="grid gap-1 text-[11px] font-black uppercase text-slate-400">
-                Desde
-                <DateInput
-                  compact={false}
-                  value={dateFrom}
-                  ariaLabel="Fecha desde"
-                  onChange={setDateFrom}
-                />
-              </label>
-              <label className="grid gap-1 text-[11px] font-black uppercase text-slate-400">
-                Hasta
-                <DateInput
-                  compact={false}
-                  value={dateTo}
-                  ariaLabel="Fecha hasta"
-                  onChange={setDateTo}
-                />
-              </label>
-            </div>
-            <button
-              type="button"
-              onClick={() => void reload()}
-              className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-black bg-emerald-400/10 text-sm font-black text-emerald-200"
-            >
-              Aplicar filtros
-            </button>
-          </div>
-        ) : null}
-
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-            </div>
-          ) : tab === "summary" ? (
-            <MovementSummaryPanel movements={rows} assignments={assignments} />
-          ) : (
-            <MovementList
-              movements={rows}
-              warehouseName={warehouseName}
-              emptyHint={emptyHint}
-            />
-          )}
-        </div>
+        {body}
       </aside>
     </div>
   );
