@@ -200,6 +200,37 @@ export function matchesLogisticsRouteTemplateFilter(input: {
   return String(input.routeTemplateId || "").trim() === filter;
 }
 
+/**
+ * Operational route for the toolbar when Día + Ruta + Fecha are set.
+ * Used to assign one driver to every stop on that day's Van Nuys (etc.) run.
+ */
+export function resolveLogisticsToolbarRoute<
+  T extends {
+    status: string;
+    routeDate: string;
+    routeTemplateId?: string | null;
+  },
+>(input: {
+  routes: ReadonlyArray<T>;
+  routeTemplateId: string;
+  routeDate: string;
+}): T | null {
+  const templateId = String(input.routeTemplateId || "").trim();
+  const routeDate = String(input.routeDate || "").trim();
+  if (!templateId || !routeDate) {
+    return null;
+  }
+
+  return (
+    input.routes.find(
+      (route) =>
+        route.status !== "cancelled" &&
+        String(route.routeTemplateId || "").trim() === templateId &&
+        String(route.routeDate || "").trim() === routeDate,
+    ) || null
+  );
+}
+
 /** True when no calendar date is selected, or schedule/route date equals that day. */
 export function matchesLogisticsDateFilter(input: {
   dateFilter: string;

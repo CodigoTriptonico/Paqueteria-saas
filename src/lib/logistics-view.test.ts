@@ -24,6 +24,7 @@ import {
   matchesLogisticsDateFilter,
   matchesLogisticsRouteTemplateFilter,
   matchesLogisticsWeekdayFilter,
+  resolveLogisticsToolbarRoute,
   prioritizeLogisticsTasks,
   prioritizeMissingGeoTasks,
   resolveLogisticsInvoiceStep,
@@ -441,6 +442,63 @@ describe("logistics view", () => {
         onRoute: false,
       }),
       false,
+    );
+  });
+
+  it("resolves the operational route for the toolbar day+route+date filter", () => {
+    const routes = [
+      {
+        id: "r-other",
+        name: "Otra",
+        status: "draft",
+        routeDate: "2026-07-25",
+        routeTemplateId: "tpl-other",
+        assignedTo: null,
+        stops: [{}],
+      },
+      {
+        id: "r-vn",
+        name: "Van Nuys",
+        status: "draft",
+        routeDate: "2026-07-25",
+        routeTemplateId: "tpl-vn",
+        assignedTo: null,
+        stops: [{}, {}],
+      },
+      {
+        id: "r-vn-cancelled",
+        name: "Van Nuys",
+        status: "cancelled",
+        routeDate: "2026-07-25",
+        routeTemplateId: "tpl-vn",
+        assignedTo: null,
+        stops: [],
+      },
+    ];
+
+    assert.equal(
+      resolveLogisticsToolbarRoute({
+        routes,
+        routeTemplateId: "tpl-vn",
+        routeDate: "2026-07-25",
+      })?.id,
+      "r-vn",
+    );
+    assert.equal(
+      resolveLogisticsToolbarRoute({
+        routes,
+        routeTemplateId: "tpl-vn",
+        routeDate: "2026-07-26",
+      }),
+      null,
+    );
+    assert.equal(
+      resolveLogisticsToolbarRoute({
+        routes,
+        routeTemplateId: "",
+        routeDate: "2026-07-25",
+      }),
+      null,
     );
   });
 

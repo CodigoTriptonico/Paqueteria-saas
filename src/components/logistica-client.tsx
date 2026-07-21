@@ -88,6 +88,7 @@ import {
   buildLogisticsDayRouteFilterOptions,
   buildTaskRoutePickerOptions,
   canChangeLogisticsTaskDriver,
+  driverLabel,
   formatLogisticsTaskStatusLabel,
   logisticsScheduleDisplayParts,
   logisticsActionIconWellClass,
@@ -100,6 +101,7 @@ import {
   matchesLogisticsRouteTemplateFilter,
   matchesLogisticsWeekdayFilter,
   resolveLogisticsInvoiceStep,
+  resolveLogisticsToolbarRoute,
   sortLogisticsInvoiceItemsByPriority,
   resolveLogisticsShipmentDeepLink,
   resolveRouteConfirmCopy,
@@ -702,6 +704,18 @@ export function LogisticaClient({
     }
     return selectWeekdayDate(weekdayFilter, todayDate);
   }, [dateFilter, todayDate, weekdayFilter]);
+
+  /** Operational route for the selected Día + Ruta + Fecha — one driver for every guía on that run. */
+  const toolbarRoute = useMemo(() => {
+    if (!routeTemplateFilter) {
+      return null;
+    }
+    return resolveLogisticsToolbarRoute({
+      routes,
+      routeTemplateId: routeTemplateFilter,
+      routeDate: dateFilter || filterAnchorDate,
+    });
+  }, [dateFilter, filterAnchorDate, routeTemplateFilter, routes]);
 
   const weekdayFilterInitializedRef = useRef(false);
 
@@ -1631,6 +1645,19 @@ export function LogisticaClient({
     });
   }
 
+  function requestToolbarRouteDriverChange(nextAssignedTo: string | null) {
+    if (!toolbarRoute || nextAssignedTo === (toolbarRoute.assignedTo || null)) {
+      return;
+    }
+
+    setSelectedRouteId(toolbarRoute.id);
+    setPendingRouteConfirm({
+      kind: "driver",
+      route: toolbarRoute,
+      nextAssignedTo,
+    });
+  }
+
   function requestCancelRoute(route: LogisticsRouteRow) {
     setPendingRouteConfirm({ kind: "cancel", route });
   }
@@ -1725,9 +1752,10 @@ export function LogisticaClient({
     const isFailed = Boolean(task && isLogisticsFailedTask(task));
     const priorityCardClass = logisticsPriorityCardClass(item.shipment.invoice_priority);
     const priorityHeaderClass = logisticsPriorityHeaderClass(item.shipment.invoice_priority);
+    const effectiveDriverId = routeInfo?.route.assignedTo || task?.assignedTo || null;
     const priorityAwaitingDriver = logisticsPriorityAwaitingDriver(
       item.shipment.invoice_priority,
-      task?.assignedTo,
+      effectiveDriverId,
       Boolean(task),
     );
     const invoiceEvidence = invoiceEvidenceLabel(item.shipment);
@@ -1822,11 +1850,11 @@ export function LogisticaClient({
             </div>
 
             <div
-              className={`relative grid gap-1 rounded-md border px-2 py-2 ${invoiceDriverFieldClass(task?.assignedTo, Boolean(task))}`}
+              className={`relative grid gap-1 rounded-md border px-2 py-2 ${invoiceDriverFieldClass(effectiveDriverId, Boolean(task))}`}
             >
               <span
                 className={`inline-flex items-center gap-1 text-[10px] font-black uppercase ${
-                  task && !task.assignedTo ? "text-rose-400" : "opacity-70"
+                  task && !effectiveDriverId ? "text-rose-400" : "opacity-70"
                 }`}
               >
                 <Truck className="h-3.5 w-3.5" />
@@ -1841,13 +1869,20 @@ export function LogisticaClient({
                 >
                   Reprogramar
                 </button>
+              ) : task && routeInfo ? (
+                <p
+                  className="truncate text-sm font-black"
+                  title="El chofer se asigna a toda la ruta con Asignar (barra superior) o en Rutas"
+                >
+                  {driverLabel(routeInfo.route.assignedTo || task.assignedTo, memberById)}
+                </p>
               ) : task ? (
                 <InlineSearchPicker
                   className="w-full min-w-0"
                   minWidthClass="w-full min-w-0"
                   shellClassName={LOGISTICS_CARD_PICKER_SHELL}
                   value={task.assignedTo || ""}
-                  onChange={(nextValue) => requestDriverChange(task, nextValue || null, routeInfo)}
+                  onChange={(nextValue) => requestDriverChange(task, nextValue || null)}
                   options={taskDriverPickerOptions}
                   placeholder="Sin chofer"
                   searchPlaceholder="Buscar chofer…"
@@ -2006,20 +2041,32 @@ export function LogisticaClient({
               </button>
             ) : null}
             {task && !isFailed ? (
-              <InlineSearchPicker
-                className="w-[9rem] shrink-0"
-                minWidthClass="w-full min-w-0"
-                shellClassName={LOGISTICS_CARD_PICKER_SHELL}
-                value={task.assignedTo || ""}
-                onChange={(nextValue) => requestDriverChange(task, nextValue || null, routeInfo)}
-                options={taskDriverPickerOptions}
-                placeholder="Sin chofer"
-                searchPlaceholder="Buscar chofer…"
-                emptyLabel="Sin conductores"
-                ariaLabel={`Chofer de ${item.shipment.code}`}
-                disabled={!canChangeDriver}
-                formatSelectedLabel={(option) => option?.label || "Sin chofer"}
-              />
+              routeInfo ? (
+                <span
+                  className="inline-flex h-8 max-w-[9rem] items-center gap-1 truncate rounded-md border border-black bg-surface-inset px-2 text-[11px] font-black text-slate-300"
+                  title="El chofer se asigna a toda la ruta con Asignar (barra superior) o en Rutas"
+                >
+                  <Truck className="h-3.5 w-3.5 shrink-0 text-emerald-300" aria-hidden />
+                  <span className="truncate">
+                    {driverLabel(routeInfo.route.assignedTo || task.assignedTo, memberById)}
+                  </span>
+                </span>
+              ) : (
+                <InlineSearchPicker
+                  className="w-[9rem] shrink-0"
+                  minWidthClass="w-full min-w-0"
+                  shellClassName={LOGISTICS_CARD_PICKER_SHELL}
+                  value={task.assignedTo || ""}
+                  onChange={(nextValue) => requestDriverChange(task, nextValue || null)}
+                  options={taskDriverPickerOptions}
+                  placeholder="Sin chofer"
+                  searchPlaceholder="Buscar chofer…"
+                  emptyLabel="Sin conductores"
+                  ariaLabel={`Chofer de ${item.shipment.code}`}
+                  disabled={!canChangeDriver}
+                  formatSelectedLabel={(option) => option?.label || "Sin chofer"}
+                />
+              )
             ) : (
               <span className="text-[11px] font-black text-slate-400">Primero entrega</span>
             )}
@@ -2482,6 +2529,39 @@ export function LogisticaClient({
                 <option value="deliver_empty_box">Dejar cajas</option>
                 <option value="pickup_full_box">Recoger cajas</option>
               </select>
+
+              {routeTemplateFilter && toolbarRoute && canManageRoutes ? (
+                <div
+                  className="flex h-9 shrink-0 items-stretch overflow-hidden rounded-lg border border-emerald-500 bg-emerald-950/55 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.15)]"
+                  title={`Asigna un conductor a todas las guías de ${toolbarRoute.name}`}
+                >
+                  <span className="inline-flex items-center gap-1 border-r border-emerald-500/60 bg-emerald-500/15 px-2.5 text-[10px] font-black uppercase tracking-wide text-emerald-200">
+                    <Truck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Asignar
+                  </span>
+                  <InlineSearchPicker
+                    className="w-[11.5rem] shrink-0"
+                    minWidthClass="w-full min-w-0"
+                    shellClassName="box-border inline-flex h-full w-full min-w-0 items-center gap-1.5 rounded-none border-0 bg-transparent px-2"
+                    value={toolbarRoute.assignedTo || ""}
+                    onChange={(nextValue) =>
+                      requestToolbarRouteDriverChange(nextValue || null)
+                    }
+                    options={routeDriverPickerOptions}
+                    placeholder="Conductor…"
+                    searchPlaceholder="Buscar chofer…"
+                    emptyLabel="Sin conductores"
+                    ariaLabel={`Asignar conductor a toda la ruta ${toolbarRoute.name}`}
+                    disabled={
+                      toolbarRoute.status !== "draft" ||
+                      busyId === `driver:${toolbarRoute.id}`
+                    }
+                    formatSelectedLabel={(option) =>
+                      option?.label || "Sin conductor"
+                    }
+                  />
+                </div>
+              ) : null}
 
               {selectedTasks.length ? (
                 <button

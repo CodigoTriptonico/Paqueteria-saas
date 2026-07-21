@@ -115,15 +115,18 @@ describe("logistica single-action invoice card eval", () => {
     assert.equal(componentSource.includes("logisticsActionIconWellClass"), true);
     assert.equal(body.includes("taskTypeIcon(item.step.stepType, \"h-5 w-5\")"), true);
     assert.equal(body.includes("invoiceActionFieldClass()"), true);
-    assert.equal(body.includes("invoiceDriverFieldClass(task?.assignedTo, Boolean(task))"), true);
+    assert.equal(body.includes("invoiceDriverFieldClass(effectiveDriverId, Boolean(task))"), true);
     assert.equal(dateIndex, -1);
     assert.ok(actionIndex >= 0);
     assert.ok(driverIndex > actionIndex);
     assert.equal(body.includes('placeholder="Sin chofer"'), true);
     assert.equal(body.includes("<InlineSearchPicker"), true);
     assert.equal(body.includes('searchPlaceholder="Buscar chofer…"'), true);
-    assert.equal(body.includes("requestDriverChange(task, nextValue || null, routeInfo)"), true);
+    assert.equal(body.includes("task && routeInfo"), true);
+    assert.equal(body.includes("Asignar (barra superior)"), true);
     assert.equal(componentSource.includes("canChangeLogisticsTaskDriver"), true);
+    assert.equal(componentSource.includes("resolveLogisticsToolbarRoute"), true);
+    assert.equal(componentSource.includes("requestToolbarRouteDriverChange"), true);
     assert.equal(componentSource.includes("if (routeInfo) {\n      return false;\n    }"), false);
     assert.equal(body.includes('ariaLabel={`Chofer de ${item.shipment.code}`}'), true);
     assert.equal(header.includes("taskTypeLabel[item.step.stepType]"), false);
@@ -248,6 +251,19 @@ describe("logistica single-action invoice card eval", () => {
     assert.equal(toolbar.includes('role="group"'), false);
     assert.equal(toolbar.includes("logisticsWeekdayFullLabels"), false);
     assert.equal(toolbar.includes('ariaLabel="Filtrar por ruta del día"'), true);
+    assert.equal(toolbar.includes("Asignar"), true);
+    assert.equal(toolbar.includes("requestToolbarRouteDriverChange"), true);
+    assert.equal(toolbar.includes("toolbarRoute"), true);
+    assert.equal(toolbar.includes("Chofer de la ruta"), false);
+    assert.equal(toolbar.includes('ariaLabel="Filtrar por chofer"'), true);
+    assert.ok(
+      toolbar.indexOf('ariaLabel="Filtrar por ruta del día"') <
+        toolbar.indexOf("requestToolbarRouteDriverChange"),
+    );
+    assert.ok(
+      toolbar.indexOf("requestToolbarRouteDriverChange") >
+        toolbar.indexOf('aria-label="Filtrar tareas por acción"'),
+    );
     assert.equal(toolbar.includes('ariaLabel="Filtrar por fecha"'), true);
     assert.equal(toolbar.includes("<DateInput"), true);
     assert.equal(toolbar.includes("dayTones={calendarDayTones}"), true);
