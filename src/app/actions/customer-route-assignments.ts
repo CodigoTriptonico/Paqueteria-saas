@@ -17,6 +17,13 @@ import {
 } from "@/lib/customer-route-verification";
 import { getLogisticsWeekdayIndex } from "@/lib/logistics-route-week";
 import { scheduledAtToLocalDateInput } from "@/lib/schedule-date";
+import { customerRouteReplacementNote } from "@/lib/customer-route-replacement";
+import { routeAddressFromCustomer } from "@/lib/logistics-address";
+import {
+  readBoxLinesFromLogisticsPlan,
+  shipmentBoxLinesDetailLabel,
+  type ShipmentBoxLine,
+} from "@/lib/shipment-display";
 
 type Supabase = NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>;
 
@@ -24,6 +31,9 @@ export type CustomerRouteAssignmentRequestRow = {
   id: string;
   customerId: string;
   customerName: string;
+  customerPhone: string;
+  formattedAddress: string;
+  addressReference: string;
   shipmentId: string;
   shipmentCode: string;
   taskId: string;
@@ -35,6 +45,8 @@ export type CustomerRouteAssignmentRequestRow = {
   driverId: string;
   driverLabel: string;
   zoneKey: string;
+  boxLines: ShipmentBoxLine[];
+  boxSummary: string;
   status: CustomerRouteAssignmentRequestStatus;
   requestedBy: string | null;
   createdAt: string;
@@ -71,8 +83,23 @@ function mapRequestRow(row: {
   requested_by: string | null;
   created_at: string;
   review_note: string;
-  customer?: { first_name?: string | null; last_name?: string | null } | null;
-  shipment?: { code?: string | null } | null;
+  customer?: {
+    first_name?: string | null;
+    last_name?: string | null;
+    phones?: string[] | null;
+    street?: string | null;
+    house_number?: string | null;
+    address_reference?: string | null;
+    neighborhood?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postal_code?: string | null;
+    country?: string | null;
+    formatted_address?: string | null;
+    lat?: number | string | null;
+    lng?: number | string | null;
+  } | null;
+  shipment?: { code?: string | null; logistics_plan?: unknown } | null;
   task?: { task_type?: string | null } | null;
   template?: { name?: string | null; weekday?: number | null } | null;
   driver?: { full_name?: string | null; email?: string | null } | null;
@@ -80,10 +107,24 @@ function mapRequestRow(row: {
   const first = String(row.customer?.first_name || "").trim();
   const last = String(row.customer?.last_name || "").trim();
   const driverId = String(row.driver_id || "").trim();
+  const address = routeAddressFromCustomer(
+    row.customer
+      ? {
+          id: row.customer_id,
+          ...row.customer,
+        }
+      : null,
+  );
+  const boxLines = readBoxLinesFromLogisticsPlan(row.shipment?.logistics_plan);
+  const phones = Array.isArray(row.customer?.phones) ? row.customer.phones : [];
+
   return {
     id: row.id,
     customerId: row.customer_id,
     customerName: [first, last].filter(Boolean).join(" ") || "Remitente",
+    customerPhone: String(address?.phone || phones[0] || "").trim(),
+    formattedAddress: String(address?.formattedAddress || "").trim() || "Sin dirección",
+    addressReference: String(address?.addressReference || "").trim(),
     shipmentId: row.shipment_id,
     shipmentCode: String(row.shipment?.code || "").trim() || "—",
     taskId: row.task_id,
@@ -99,6 +140,8 @@ function mapRequestRow(row: {
         "Conductor"
       : "Sin conductor todavía",
     zoneKey: row.zone_key,
+    boxLines,
+    boxSummary: shipmentBoxLinesDetailLabel(boxLines) || "Sin cajas en el plan",
     status: row.status as CustomerRouteAssignmentRequestStatus,
     requestedBy: row.requested_by,
     createdAt: row.created_at,
@@ -490,8 +533,11 @@ export async function listPendingCustomerRouteAssignmentRequestsAction(): Promis
         requested_by,
         created_at,
         review_note,
-        customer:customers!customer_route_assignment_requests_customer_id_fkey(first_name, last_name),
-        shipment:shipments!customer_route_assignment_requests_shipment_id_fkey(code),
+        customer:customers!customer_route_assignment_requests_customer_id_fkey(
+          first_name, last_name, phones, street, house_number, address_reference,
+          neighborhood, city, state, postal_code, country, formatted_address, lat, lng
+        ),
+        shipment:shipments!customer_route_assignment_requests_shipment_id_fkey(code, logistics_plan),
         task:shipment_logistics_tasks!customer_route_assignment_requests_task_id_fkey(task_type),
         template:logistics_route_templates!customer_route_assignment_requests_route_template_id_fkey(name, weekday),
         driver:profiles!customer_route_assignment_requests_driver_id_fkey(full_name, email)
@@ -688,6 +734,166 @@ export async function reviewCustomerRouteAssignmentRequestAction(input: {
         taskId: request.task_id,
         routeId: assignResult.data.id,
         zoneKey: currentZoneKey,
+      },
+    });
+
+    return ok({ routeId: assignResult.data.id });
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function replaceCustomerRouteAssignmentRequestAction(input: {
+  requestId: string;
+  routeTemplateId: string;
+  scheduledAt: string;
+  driverId?: string | null;
+  note?: string;
+}): Promise<ActionResult<{ routeId: string }>> {
+  try {
+    const session = await requireAppSession();
+    if (!canReviewCustomerRoute(session)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const requestId = String(input.requestId || "").trim();
+    const routeTemplateId = String(input.routeTemplateId || "").trim();
+    let driverId = String(input.driverId || "").trim();
+    const scheduledAt = String(input.scheduledAt || "").trim();
+    const routeDate = scheduledAtToLocalDateInput(scheduledAt);
+
+    if (!requestId || !routeTemplateId || !/^\d{4}-\d{2}-\d{2}$/.test(routeDate)) {
+      return fail("Completa la ruta y la fecha de reemplazo");
+    }
+
+    const { data: request, error: requestError } = await supabase
+      .from("customer_route_assignment_requests")
+      .select(
+        "id, customer_id, shipment_id, task_id, route_template_id, scheduled_at, driver_id, zone_key, status",
+      )
+      .eq("id", requestId)
+      .eq("organization_id", session.organizationId)
+      .maybeSingle();
+
+    if (requestError || !request) {
+      return fail(requestError?.message || "Solicitud no encontrada");
+    }
+    if (request.status !== "pending") {
+      return fail("La solicitud ya fue revisada");
+    }
+
+    const [{ data: oldTemplate }, { data: newTemplate, error: templateError }] = await Promise.all([
+      supabase
+        .from("logistics_route_templates")
+        .select("id, name")
+        .eq("id", request.route_template_id)
+        .eq("organization_id", session.organizationId)
+        .maybeSingle(),
+      supabase
+        .from("logistics_route_templates")
+        .select("id, name, weekday")
+        .eq("id", routeTemplateId)
+        .eq("organization_id", session.organizationId)
+        .maybeSingle(),
+    ]);
+
+    if (templateError || !newTemplate) {
+      return fail(templateError?.message || "Ruta semanal no encontrada");
+    }
+
+    if (Number(newTemplate.weekday) !== getLogisticsWeekdayIndex(routeDate)) {
+      return fail("La ruta de reemplazo no corresponde al día elegido");
+    }
+
+    const { zoneKey: currentZoneKey, zoneInput } = await loadCustomerZone(
+      supabase,
+      session,
+      request.customer_id,
+    );
+    if (!customerHasRouteGeo(zoneInput) || currentZoneKey === "falta-geo") {
+      return fail("El remitente necesita geo antes de cambiar la ruta");
+    }
+    if (currentZoneKey !== request.zone_key) {
+      return fail("La zona del remitente cambió; el vendedor debe volver a proponer la ruta");
+    }
+
+    if (!driverId) {
+      const { data: weekdayDefault } = await supabase
+        .from("logistics_weekday_defaults")
+        .select("default_driver_id")
+        .eq("organization_id", session.organizationId)
+        .eq("weekday", getLogisticsWeekdayIndex(routeDate))
+        .maybeSingle();
+      driverId = String(weekdayDefault?.default_driver_id || "").trim();
+    }
+
+    if (!driverId) {
+      return fail(
+        "No hay conductor para esta ruta. Configúralo en Rutas (predeterminado del día) o crea un conductor.",
+      );
+    }
+
+    const assignResult = await confirmLogisticsTaskScheduleAction({
+      taskId: request.task_id,
+      scheduledAt,
+      driverId,
+      routeTemplateId,
+    });
+    if (!assignResult.ok) {
+      return fail(assignResult.error);
+    }
+
+    await upsertCustomerRouteVerification({
+      supabase,
+      session,
+      customerId: request.customer_id,
+      routeTemplateId,
+      zoneKey: currentZoneKey,
+    });
+
+    const nowIso = new Date().toISOString();
+    const reviewNote =
+      String(input.note || "").trim() ||
+      customerRouteReplacementNote(
+        String(oldTemplate?.name || "propuesta"),
+        String(newTemplate.name || "nueva ruta"),
+      );
+
+    const { error: updateError } = await supabase
+      .from("customer_route_assignment_requests")
+      .update({
+        status: "rejected",
+        reviewed_by: session.userId,
+        reviewed_at: nowIso,
+        review_note: reviewNote,
+        updated_at: nowIso,
+      })
+      .eq("id", requestId)
+      .eq("organization_id", session.organizationId);
+
+    if (updateError) {
+      return fail(updateError.message);
+    }
+
+    await recordActivityHistory(supabase, session, {
+      action: "customer.route_assignment.replaced",
+      entityType: "shipment",
+      entityId: request.shipment_id,
+      title: "Ruta propuesta reemplazada por logística",
+      description: reviewNote,
+      metadata: {
+        requestId,
+        taskId: request.task_id,
+        previousRouteTemplateId: request.route_template_id,
+        routeTemplateId,
+        routeId: assignResult.data.id,
+        zoneKey: currentZoneKey,
+        driverId,
       },
     });
 

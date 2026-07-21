@@ -26,4 +26,19 @@ describe("logistica view layout eval", () => {
     assert.equal(source.includes("listCardShellClass"), true);
     assert.equal(source.includes("listRowBaseClass"), true);
   });
+
+  it("applies the same page layout to seller route proposals", () => {
+    const approval = readFileSync(
+      join(root, "components/logistica/customer-route-approval-panel.tsx"),
+      "utf8",
+    );
+    assert.equal(approval.includes('usePageViewLayout("logistics.tasks")'), true);
+    assert.equal(approval.includes('viewLayout === "rows"'), true);
+    assert.equal(approval.includes("APPROVAL_CARD_GRID_CLASS"), true);
+    assert.equal(approval.includes("lg:flex-row lg:items-center"), true);
+    assert.equal(approval.includes("line-clamp-2"), true);
+    assert.equal(approval.includes("text-base font-black leading-snug sm:text-lg"), true);
+    assert.equal(approval.includes("Aprobar ruta"), true);
+    assert.equal(approval.includes("Cambiar ruta"), true);
+  });
 });

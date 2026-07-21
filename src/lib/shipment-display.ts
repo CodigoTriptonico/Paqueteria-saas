@@ -391,19 +391,27 @@ function readBoxLineEntries(plan: Record<string, unknown>): ShipmentBoxLine[] {
 }
 
 export function readShipmentBoxLines(row: ShipmentRow): ShipmentBoxLine[] {
-  const plan = row.logistics_plan || {};
-  const lines = readBoxLineEntries(plan);
+  return readBoxLinesFromLogisticsPlan(row.logistics_plan);
+}
+
+/** Parse box lines from a raw logistics_plan JSON blob (no full ShipmentRow needed). */
+export function readBoxLinesFromLogisticsPlan(plan: unknown): ShipmentBoxLine[] {
+  const normalized =
+    plan && typeof plan === "object" && !Array.isArray(plan)
+      ? (plan as Record<string, unknown>)
+      : {};
+  const lines = readBoxLineEntries(normalized);
 
   if (lines.length) {
     return lines;
   }
 
   const box =
-    plan.box && typeof plan.box === "object" && !Array.isArray(plan.box)
-      ? (plan.box as Record<string, unknown>)
+    normalized.box && typeof normalized.box === "object" && !Array.isArray(normalized.box)
+      ? (normalized.box as Record<string, unknown>)
       : null;
   const label = String(box?.label || "").trim();
-  const boxCount = Math.max(Number(plan.boxCount) || 1, 1);
+  const boxCount = Math.max(Number(normalized.boxCount) || 1, 1);
 
   if (!label) {
     return [];

@@ -2358,7 +2358,15 @@ export function LogisticaClient({
               <AgencyLogisticsPanel />
             ) : (
               <div className="grid gap-3">
-                {canManageRoutes ? <CustomerRouteApprovalPanel /> : null}
+                {canManageRoutes ? (
+                  <CustomerRouteApprovalPanel
+                    templates={routeCatalog?.templates || []}
+                    defaultDriverByWeekday={
+                      routeCatalog?.defaultDriverByWeekday || Array<string | null>(7).fill(null)
+                    }
+                    routeMembers={routeMembers}
+                  />
+                ) : null}
                 {visibleInvoiceItems.length ? (
                   viewLayout === "rows" ? (
                     <div className={panelListStackClass}>
