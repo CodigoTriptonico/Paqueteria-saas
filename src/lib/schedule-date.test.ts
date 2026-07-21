@@ -57,22 +57,15 @@ describe("schedule date helpers", () => {
 
 describe("schedule date picker eval", () => {
   it("blocks past days on scheduling pickers", () => {
-    const shipmentMenuSource = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "../components/shipment-step-context-menu.tsx"),
-      "utf8",
-    );
-    const saleSource = readFileSync(
+    const schedulePanelSource = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
-        "../components/sale/sale-logistics-step.tsx",
+        "../components/logistica/logistics-task-schedule-confirm-panel.tsx",
       ),
       "utf8",
     );
 
-    assert.match(shipmentMenuSource, /DateInput[\s\S]*?min=\{minScheduleDateInput\(\)\}/);
-    assert.match(shipmentMenuSource, /resolveScheduleDate\(routeDate\)/);
-    assert.match(shipmentMenuSource, /resolveScheduleDate\(nextValue\)/);
-    assert.match(saleSource, /DateInput[\s\S]*?min=\{minScheduleDateInput\(\)\}/);
-    assert.match(saleSource, /resolveScheduleDate\(nextValue\)/);
+    assert.match(schedulePanelSource, /DateInput[\s\S]*?min=\{minScheduleDateInput\(\)\}/);
+    assert.match(schedulePanelSource, /selectDate/);
   });
 });

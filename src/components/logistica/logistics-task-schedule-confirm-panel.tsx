@@ -223,13 +223,6 @@ export function LogisticsTaskScheduleConfirmPanel({
     return () => window.removeEventListener("keydown", closeFromEscape);
   }, [open, saving, onCancel]);
 
-  useEffect(() => {
-    if (showDriverPicker) {
-      return;
-    }
-    setDriverId(defaultDriverByWeekday[weekday] || "");
-  }, [defaultDriverByWeekday, showDriverPicker, weekday]);
-
   function selectRouteTemplate(nextTemplateId: string) {
     setRouteTemplateId(nextTemplateId);
     const template = templates.find((entry) => entry.id === nextTemplateId);

@@ -1750,7 +1750,6 @@ export function LogisticaClient({
     const missingGeo = Boolean(displayTask && !address?.hasGeo);
     const canChangeDriver = task ? canChangeTaskDriver(task, routeInfo) : false;
     const isFailed = Boolean(task && isLogisticsFailedTask(task));
-    const taskDate = task?.scheduledAt || task?.requestedScheduleAt || null;
     const routePendingDay = Boolean(task && !task.scheduledAt && task.requestedScheduleAt);
     const priorityCardClass = logisticsPriorityCardClass(item.shipment.invoice_priority);
     const priorityHeaderClass = logisticsPriorityHeaderClass(item.shipment.invoice_priority);
@@ -1967,6 +1966,7 @@ export function LogisticaClient({
     const missingGeo = Boolean(displayTask && !address?.hasGeo);
     const canChangeDriver = task ? canChangeTaskDriver(task, routeInfo) : false;
     const isFailed = Boolean(task && isLogisticsFailedTask(task));
+    const taskDate = task?.scheduledAt || task?.requestedScheduleAt || null;
     const priorityAwaitingDriver = logisticsPriorityAwaitingDriver(
       item.shipment.invoice_priority,
       task?.assignedTo,
