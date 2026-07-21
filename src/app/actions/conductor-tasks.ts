@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import {
   listLogisticsRoutesAction,
   listLogisticsTaskAddressesAction,
-  tryAutoCompleteLogisticsRoute,
 } from "@/app/actions/logistics-routes";
 import { listLogisticsVehiclesAction } from "@/app/actions/logistics-fleet";
 import { vehicleDisplayLabel } from "@/lib/logistics-route-vehicle";
@@ -95,6 +94,11 @@ import {
   logisticsTaskReactivatePatchPreservingStock,
 } from "@/lib/shipment-logistics-task-timestamps";
 import type { AppSession } from "@/lib/auth/types";
+import {
+  routeIsReadyForArrival,
+  validateConductorRouteArrival,
+  type ConductorRouteArrivalWorkspace,
+} from "@/lib/conductor-route-arrival";
 
 type Supabase = NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>;
 type Admin = NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
