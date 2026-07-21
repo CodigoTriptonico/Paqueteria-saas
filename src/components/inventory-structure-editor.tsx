@@ -791,6 +791,8 @@ export function InventoryStructureEditor({
   }
 
   function deleteCategory(name: string) {
+    // The edit panel has local state. Deleting its active category must
+    // invalidate that state instead of only updating the category list.
     onCategoryConfigsChange(
       categoryConfigs.filter(
         (currentCategory) => currentCategory.name !== name,
@@ -810,6 +812,15 @@ export function InventoryStructureEditor({
         categoryConfigs.find((item) => item.name !== name)?.name || "";
       selectCategory(next);
     }
+
+    setEditingCategory("");
+    setEditingCategoryName("");
+    setEditingSubcategoryId("");
+    setEditingSubcategoryName("");
+    setOpenSubcategoryInput("");
+    setShowNewCategoryInput(false);
+    setShowNewItemForm(false);
+    setOptionsOpen(false);
   }
 
   function addSubcategory(categoryName: string) {
