@@ -1,27 +1,4 @@
--- Driver-confirmed route ending and physical warehouse arrival.
-
-alter table public.logistics_routes
-  add column if not exists arrival_warehouse_id uuid references public.warehouses(id) on delete set null,
-  add column if not exists arrival_reason_code text,
-  add column if not exists arrival_note text not null default '',
-  add column if not exists arrival_reported_at timestamptz,
-  add column if not exists arrival_confirmed_at timestamptz,
-  add column if not exists arrival_confirmed_by uuid references public.profiles(id) on delete set null,
-  add column if not exists arrival_operation_key text;
-
-alter table public.logistics_routes
-  drop constraint if exists logistics_routes_arrival_reason_check;
-
-alter table public.logistics_routes
-  add constraint logistics_routes_arrival_reason_check check (
-    arrival_reason_code is null or arrival_reason_code in (
-      'completed_normally', 'unfinished_stops', 'vehicle_problem', 'other'
-    )
-  );
-
-create unique index if not exists logistics_routes_arrival_operation_uidx
-  on public.logistics_routes(organization_id, arrival_operation_key)
-  where arrival_operation_key is not null and arrival_operation_key <> '';
+-- Prefer the actionable open-stop error even when no stop is closed yet.
 
 create or replace function public.complete_conductor_route_arrival(
   target_route_id uuid,
@@ -90,6 +67,13 @@ begin
     raise exception 'WAREHOUSE_CHANGE_NOTE_REQUIRED';
   end if;
 
+  if exists (
+    select 1 from public.logistics_route_stops stop
+    where stop.route_id = route_row.id and stop.organization_id = organization_value
+      and stop.released_at is null
+      and (stop.outcome is null or stop.outcome not in ('completed', 'failed', 'cancelled'))
+  ) then raise exception 'ROUTE_HAS_OPEN_STOPS'; end if;
+
   select
     count(*)::integer,
     count(*) filter (where stop.outcome is distinct from 'completed')::integer
@@ -100,12 +84,6 @@ begin
     and stop.outcome in ('completed', 'failed', 'cancelled');
 
   if stop_count_value = 0 then raise exception 'ROUTE_WITHOUT_CLOSED_STOPS'; end if;
-  if exists (
-    select 1 from public.logistics_route_stops stop
-    where stop.route_id = route_row.id and stop.organization_id = organization_value
-      and stop.released_at is null
-      and (stop.outcome is null or stop.outcome not in ('completed', 'failed', 'cancelled'))
-  ) then raise exception 'ROUTE_HAS_OPEN_STOPS'; end if;
   if exception_count_value > 0 and $3 = 'completed_normally' then
     raise exception 'ROUTE_HAS_EXCEPTIONS';
   end if;
@@ -159,81 +137,3 @@ end;
 $$;
 
 grant execute on function public.complete_conductor_route_arrival(uuid, uuid, text, text, timestamptz, text) to authenticated;
-
-drop policy if exists logistics_routes_write on public.logistics_routes;
-create policy logistics_routes_write on public.logistics_routes for all
-  using (
-    organization_id = public.current_organization_id()
-    and (
-      (
-        public.current_role_slug() = 'conductor'
-        and assigned_to = auth.uid()
-        and public.user_has_permission('routes.update_status')
-      )
-      or (
-        public.current_role_slug() <> 'conductor'
-        and (
-          public.user_has_permission('routes.update_status')
-          or public.user_has_permission('sales.manage')
-        )
-      )
-    )
-  )
-  with check (
-    organization_id = public.current_organization_id()
-    and (
-      (
-        public.current_role_slug() = 'conductor'
-        and assigned_to = auth.uid()
-        and public.user_has_permission('routes.update_status')
-      )
-      or (
-        public.current_role_slug() <> 'conductor'
-        and (
-          public.user_has_permission('routes.update_status')
-          or public.user_has_permission('sales.manage')
-        )
-      )
-    )
-  );
-
-create or replace function public.mark_route_packages_arrived()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if new.status = 'completed' and old.status <> 'completed' then
-    update public.shipment_packages package set
-      truck_arrived_at = coalesce(package.truck_arrived_at, new.arrival_confirmed_at, new.completed_at, now()),
-      warehouse_id = coalesce(new.arrival_warehouse_id, package.warehouse_id),
-      updated_at = now()
-    where package.organization_id = new.organization_id
-      and package.truck_route_id = new.id and package.status = 'in_truck';
-  end if;
-  return new;
-end;
-$$;
-
-create or replace function public.enforce_intake_arrival_warehouse()
-returns trigger
-language plpgsql
-set search_path = public
-as $$
-declare
-  arrival_warehouse_value uuid;
-begin
-  select route.arrival_warehouse_id into arrival_warehouse_value
-  from public.logistics_routes route where route.id = new.route_id;
-  if arrival_warehouse_value is not null and arrival_warehouse_value <> new.warehouse_id then
-    raise exception 'ARRIVAL_WAREHOUSE_MISMATCH';
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists warehouse_intake_arrival_warehouse_guard on public.warehouse_intake_sessions;
-create trigger warehouse_intake_arrival_warehouse_guard
-before insert on public.warehouse_intake_sessions
-for each row execute function public.enforce_intake_arrival_warehouse();

@@ -201,7 +201,7 @@ export function WarehouseIntakeClient({
   const initialOpen = initialWorkspace.sessions.find(isOpenSession)?.id || "";
   const [activeSessionId, setActiveSessionId] = useState(initialOpen);
   const [selectedTruckId, setSelectedTruckId] = useState(initialTruckArrivals[0]?.routeId || "");
-  const [warehouseId, setWarehouseId] = useState(initialWorkspace.warehouses.find((warehouse) => warehouse.isDefault)?.id || initialWorkspace.warehouses[0]?.id || "");
+  const [warehouseId, setWarehouseId] = useState(initialTruckArrivals[0]?.arrivalWarehouseId || initialWorkspace.warehouses.find((warehouse) => warehouse.isDefault)?.id || initialWorkspace.warehouses[0]?.id || "");
   const [opening, setOpening] = useState(false);
   const [code, setCode] = useState("");
   const [weight, setWeight] = useState("");
@@ -411,17 +411,19 @@ export function WarehouseIntakeClient({
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {trucks.map((truck) => {
                   const selected = truck.routeId === selectedTruckId;
-                  return <button key={truck.routeId} type="button" onClick={() => setSelectedTruckId(truck.routeId)} className={`rounded-xl border p-4 text-left transition-colors ${selected ? "border-emerald-500 bg-emerald-950/35" : "border-black bg-surface-inset hover:bg-surface-card-hover"}`}>
+                  return <button key={truck.routeId} type="button" onClick={() => { setSelectedTruckId(truck.routeId); if (truck.arrivalWarehouseId) setWarehouseId(truck.arrivalWarehouseId); }} className={`rounded-xl border p-4 text-left transition-colors ${selected ? "border-emerald-500 bg-emerald-950/35" : "border-black bg-surface-inset hover:bg-surface-card-hover"}`}>
                     <div className="flex items-start justify-between gap-3"><span className={`flex h-10 w-10 items-center justify-center rounded-lg border border-black ${selected ? "bg-emerald-400 text-slate-950" : "bg-surface-card text-slate-300"}`}><Truck className="h-5 w-5" /></span><span className="text-2xl font-black tabular-nums text-slate-100">{truck.packageCount}</span></div>
                     <p className="mt-3 font-black text-slate-100">{truck.routeName}</p>
                     <p className="mt-1 text-xs font-bold text-slate-400">{truck.vehicleName} · {truck.driverName}</p>
+                    <p className="mt-2 inline-flex items-center gap-1 text-xs font-black text-slate-300"><MapPin className="h-3.5 w-3.5" />{truck.arrivalWarehouseName}</p>
+                    {truck.arrivalReason ? <p className="mt-1 text-xs font-bold leading-4 text-slate-400">Motivo: {truck.arrivalReason}</p> : null}
                     <p className="mt-2 text-xs font-black text-emerald-200">{truck.packageCount} cajas esperadas</p>
                   </button>;
                 })}
               </div>
               {!trucks.length ? <div className="py-12 text-center"><Truck className="mx-auto h-7 w-7 text-slate-600" /><p className="mt-3 font-black text-slate-300">No hay camiones pendientes.</p><p className="mt-1 text-sm font-bold text-slate-500">Una ruta aparece aquí cuando el conductor recoge cajas y la ruta llega a bodega.</p></div> : null}
               {selectedTruck ? <div className="mt-4 grid gap-3 border-t border-black pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                <label className="grid gap-1.5"><span className={labelMutedClass}>Bodega que recibe</span><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className={`${inputClass} h-11 w-full`}>{workspace.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>
+                {selectedTruck.arrivalWarehouseId ? <div className="rounded-xl border border-black bg-surface-inset p-3"><p className={labelMutedClass}>El conductor dejó la ruta en</p><p className="mt-1 flex items-center gap-2 font-black text-slate-100"><Warehouse className="h-4 w-4 text-emerald-300" />{selectedTruck.arrivalWarehouseName}</p></div> : <label className="grid gap-1.5"><span className={labelMutedClass}>Bodega que recibe</span><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className={`${inputClass} h-11 w-full`}>{workspace.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>}
                 <button type="button" disabled={opening || !warehouseId} onClick={() => void openIntake()} className={`${primaryButtonClass} h-11 w-full px-5 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto`}>{opening ? "Abriendo..." : "Abrir ingreso y descargar"}<ChevronRight className="h-4 w-4" /></button>
               </div> : null}
             </section>

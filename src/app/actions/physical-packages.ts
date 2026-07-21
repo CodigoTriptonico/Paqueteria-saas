@@ -220,7 +220,17 @@ export type WarehouseTruckArrival = {
   vehicleName: string;
   driverName: string;
   arrivedAt: string | null;
+  arrivalWarehouseId: string;
+  arrivalWarehouseName: string;
+  arrivalReason: string;
   packageCount: number;
+};
+
+const warehouseArrivalReasonLabel: Record<string, string> = {
+  completed_normally: "Terminó todas las visitas",
+  unfinished_stops: "Regresó con entregas pendientes",
+  vehicle_problem: "Problema con el camión",
+  other: "Otra razón",
 };
 
 export async function listWarehouseTruckArrivalsAction(): Promise<ActionResult<WarehouseTruckArrival[]>> {
@@ -233,10 +243,11 @@ export async function listWarehouseTruckArrivalsAction(): Promise<ActionResult<W
       supabase
         .from("shipment_packages")
         .select(
-          "truck_route_id, truck_arrived_at, logistics_routes(id, name, assigned_to, logistics_vehicles(name), profiles:assigned_to(full_name))",
+          "truck_route_id, truck_arrived_at, logistics_routes(id, name, assigned_to, arrival_warehouse_id, arrival_reason_code, arrival_note, logistics_vehicles(name), profiles:assigned_to(full_name))",
         )
         .eq("organization_id", session.organizationId)
         .eq("status", "in_truck")
+        .not("truck_arrived_at", "is", null)
         .not("truck_route_id", "is", null),
       supabase
         .from("warehouse_intake_sessions")
@@ -246,6 +257,15 @@ export async function listWarehouseTruckArrivalsAction(): Promise<ActionResult<W
     ]);
     if (error) return fail(error.message);
     if (intakeError) return fail(intakeError.message);
+    const arrivalWarehouseIds = [...new Set((data || []).map((row) => {
+      const route = row.logistics_routes as unknown as Record<string, unknown> | null;
+      return String(route?.arrival_warehouse_id || "");
+    }).filter(Boolean))];
+    const warehouseResult = arrivalWarehouseIds.length
+      ? await supabase.from("warehouses").select("id, name").in("id", arrivalWarehouseIds)
+      : { data: [], error: null };
+    if (warehouseResult.error) return fail(warehouseResult.error.message);
+    const warehouseNames = new Map((warehouseResult.data || []).map((warehouse) => [String(warehouse.id), String(warehouse.name || "Bodega")]));
     const routesInIntake = new Set((openIntakes || []).map((row) => String(row.route_id)));
     const arrivals = new Map<string, WarehouseTruckArrival>();
     for (const row of data || []) {
@@ -259,12 +279,17 @@ export async function listWarehouseTruckArrivalsAction(): Promise<ActionResult<W
       }
       const vehicle = route?.logistics_vehicles as Record<string, unknown> | null;
       const driver = route?.profiles as Record<string, unknown> | null;
+      const arrivalWarehouseId = String(route?.arrival_warehouse_id || "");
+      const arrivalReasonCode = String(route?.arrival_reason_code || "");
       arrivals.set(routeId, {
         routeId,
         routeName: String(route?.name || "Ruta finalizada"),
         vehicleName: String(vehicle?.name || "Camión"),
         driverName: String(driver?.full_name || "Sin conductor"),
         arrivedAt: (row.truck_arrived_at as string | null) || null,
+        arrivalWarehouseId,
+        arrivalWarehouseName: warehouseNames.get(arrivalWarehouseId) || "Bodega sin identificar",
+        arrivalReason: String(route?.arrival_note || warehouseArrivalReasonLabel[arrivalReasonCode] || ""),
         packageCount: 1,
       });
     }

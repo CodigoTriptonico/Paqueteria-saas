@@ -80,6 +80,7 @@ function intakeErrorMessage(error: unknown) {
   const mappings: Array<[string, string]> = [
     ["WAREHOUSE_FORBIDDEN", "No tienes acceso a esa bodega."],
     ["WAREHOUSE_NOT_FOUND", "La bodega no está disponible."],
+    ["ARRIVAL_WAREHOUSE_MISMATCH", "Esta ruta debe recibirse en la bodega que confirmó el conductor."],
     ["ROUTE_NOT_READY", "La ruta todavía no ha llegado a bodega."],
     ["ROUTE_WITHOUT_PACKAGES", "Ese camión no tiene cajas listas para ingresar."],
     ["PACKAGE_ALREADY_SCANNED", "Esta caja ya fue escaneada en este ingreso."],

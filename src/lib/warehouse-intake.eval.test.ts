@@ -6,6 +6,8 @@ const component = readFileSync("src/components/warehouse/warehouse-intake-client
 const actions = readFileSync("src/app/actions/warehouse-intake.ts", "utf8");
 const page = readFileSync("src/app/ingreso-bodega/page.tsx", "utf8");
 const migration = readFileSync("supabase/migrations/117_warehouse_intake_sessions.sql", "utf8");
+const arrivalMigration = readFileSync("supabase/migrations/120_conductor_route_arrival.sql", "utf8");
+const custodyOrderingMigration = readFileSync("supabase/migrations/122_fix_current_custody_same_timestamp.sql", "utf8");
 
 test("warehouse intake is a formal manifest with atomic, idempotent scans", () => {
   assert.match(migration, /warehouse_intake_sessions/);
@@ -27,6 +29,11 @@ test("custody moves only on accepted scan and route arrival is connected", () =>
   assert.match(migration, /mark_collected_packages_in_truck/);
   assert.match(migration, /mark_route_packages_arrived/);
   assert.match(migration, /warehouse_location_label/);
+  assert.match(arrivalMigration, /arrival_warehouse_id/);
+  assert.match(arrivalMigration, /ARRIVAL_WAREHOUSE_MISMATCH/);
+  assert.match(component, /El conductor dejó la ruta en/);
+  assert.match(component, /Motivo: \{truck\.arrivalReason\}/);
+  assert.match(custodyOrderingMigration, /event\.package_status = package\.status/);
 });
 
 test("mobile intake keeps scan first, supports Enter and stable overlay details", () => {

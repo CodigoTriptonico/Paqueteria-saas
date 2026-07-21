@@ -75,6 +75,12 @@ export type LogisticsRouteRow = {
   publishedAt?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
+  arrivalWarehouseId?: string | null;
+  arrivalReasonCode?: string | null;
+  arrivalNote?: string;
+  arrivalReportedAt?: string | null;
+  arrivalConfirmedAt?: string | null;
+  arrivalConfirmedBy?: string | null;
   createdAt: string;
   updatedAt: string;
   stops: LogisticsRouteStopRow[];

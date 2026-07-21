@@ -14,7 +14,7 @@ La descarga no transfiere custodia por sí sola. Una caja permanece bajo respons
 ## Flujo
 
 1. Una recolección completa mueve las cajas a `in_truck` y las vincula a ruta, tarea y conductor.
-2. Al completarse la ruta, `truck_arrived_at` registra la llegada a bodega.
+2. El conductor toca `Llegué a bodega`, elige la bodega real y una razón. La confirmación registra `truck_arrived_at` sin transferir custodia.
 3. `open_warehouse_intake` crea `ING-000001`, congela el manifiesto esperado y marca la hora de descarga sin cambiar la custodia.
 4. Cada lectura usa `scan_warehouse_intake_package` dentro de una transacción con bloqueo de fila e idempotencia.
 5. La caja aceptada pasa a `warehouse_intake`, registra encargado, peso, condición, bodega y ubicación.
@@ -83,6 +83,7 @@ npx.cmd tsx --test src/lib/warehouse-intake.eval.test.ts
 npm.cmd run db:check
 npm.cmd run db:apply
 npm.cmd run test:warehouse-db
+npm.cmd run test:route-arrival-db
 ```
 
 La prueba de base de datos usa una transacción local y termina con `ROLLBACK`.

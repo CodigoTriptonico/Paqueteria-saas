@@ -58,6 +58,8 @@ import {
 } from "@/lib/conductor-truck-inventory";
 import { buildMapsNavigationUrl } from "@/lib/logistics-navigation";
 import { AgencyVisitsPanel } from "@/components/conductor/agency-visits-panel";
+import { ConductorRouteArrivalPanel } from "@/components/conductor/conductor-route-arrival-panel";
+import type { ConductorRouteArrivalWorkspace } from "@/lib/conductor-route-arrival";
 import { estimateRouteStopEtaMinutes, formatEtaMinutes } from "@/lib/logistics-eta";
 import { buildLogisticaShipmentDeepLink } from "@/lib/logistics-view";
 import { formatScheduleAtDisplay } from "@/lib/sale/schedule-time";
@@ -94,6 +96,7 @@ type ConductorTareasClientProps = {
   initialTasks?: ConductorDriverTask[];
   initialCompletedTasks?: ConductorDriverTask[];
   initialTruckSummary?: ConductorTruckInventorySummary | null;
+  initialRouteArrival?: ConductorRouteArrivalWorkspace;
   agencyModuleEnabled?: boolean;
 };
 
@@ -571,6 +574,7 @@ export function ConductorTareasClient({
   initialTasks = [],
   initialCompletedTasks = [],
   initialTruckSummary = null,
+  initialRouteArrival = { routes: [], warehouses: [] },
   agencyModuleEnabled = false,
 }: ConductorTareasClientProps) {
   const router = useRouter();
@@ -1114,6 +1118,13 @@ export function ConductorTareasClient({
               Cargar cajas
             </Link>
           </div>
+        ) : null}
+
+        {operationScope === "domicilios" && effectiveDriverId ? (
+          <ConductorRouteArrivalPanel
+            initialWorkspace={initialRouteArrival}
+            driverId={effectiveDriverId}
+          />
         ) : null}
 
         {agencyModuleEnabled && operationScope === "agencias" && effectiveDriverId ? <AgencyVisitsPanel driverId={effectiveDriverId} /> : filteredTasks.length ? (

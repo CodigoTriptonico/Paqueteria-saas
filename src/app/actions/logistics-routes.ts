@@ -31,7 +31,6 @@ import {
 import { listLogisticsVehiclesAction } from "@/app/actions/logistics-fleet";
 import { activeLogisticsRouteTaskIds } from "@/lib/logistics-view";
 import { suggestVehicleIdForDriver } from "@/lib/logistics-route-vehicle";
-import { canAutoCompleteRoute } from "@/lib/logistics-route-completion";
 import {
   isLogisticsWeekdayKey,
   logisticsWeekdayKeys,
@@ -86,6 +85,12 @@ type LogisticsRouteDbRow = {
   published_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  arrival_warehouse_id: string | null;
+  arrival_reason_code: string | null;
+  arrival_note: string | null;
+  arrival_reported_at: string | null;
+  arrival_confirmed_at: string | null;
+  arrival_confirmed_by: string | null;
   created_at: string;
   updated_at: string;
   logistics_route_stops?: LogisticsRouteStopDbRow[] | null;
@@ -127,7 +132,7 @@ type LogisticsWeekdayDefaultDbRow = {
 };
 
 const ROUTE_SELECT = `
-  id, route_date, name, status, assigned_to, vehicle_id, warehouse_id, zone_key, route_template_id, notes, published_at, started_at, completed_at, created_at, updated_at,
+  id, route_date, name, status, assigned_to, vehicle_id, warehouse_id, zone_key, route_template_id, notes, published_at, started_at, completed_at, arrival_warehouse_id, arrival_reason_code, arrival_note, arrival_reported_at, arrival_confirmed_at, arrival_confirmed_by, created_at, updated_at,
   logistics_route_stops (
     id, route_id, task_id, stop_order, address_snapshot, lat, lng, postal_code, city, outcome, outcome_at, released_at, release_reason, created_at
   )
@@ -200,6 +205,12 @@ function mapRoute(row: LogisticsRouteDbRow): LogisticsRouteRow {
     publishedAt: row.published_at,
     startedAt: row.started_at,
     completedAt: row.completed_at,
+    arrivalWarehouseId: row.arrival_warehouse_id,
+    arrivalReasonCode: row.arrival_reason_code,
+    arrivalNote: row.arrival_note || "",
+    arrivalReportedAt: row.arrival_reported_at,
+    arrivalConfirmedAt: row.arrival_confirmed_at,
+    arrivalConfirmedBy: row.arrival_confirmed_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     stops,
@@ -1483,99 +1494,6 @@ export async function assignLogisticsRouteVehicleAction(input: {
   }
 }
 
-
-async function loadRouteTaskStatuses(
-  supabase: Supabase,
-  session: AppSession,
-  taskIds: string[],
-) {
-  if (!taskIds.length) {
-    return [];
-  }
-
-  const { data, error } = await supabase
-    .from("shipment_logistics_tasks")
-    .select("id, status")
-    .eq("organization_id", session.organizationId)
-    .in("id", taskIds);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data || []).map((row) => ({
-    taskId: String(row.id),
-    status: row.status as LogisticsTaskStatus,
-  }));
-}
-
-export async function tryAutoCompleteLogisticsRoute(
-  supabase: Supabase,
-  session: AppSession,
-  routeId: string,
-): Promise<boolean> {
-  const route = await loadRouteById(supabase, session, routeId);
-
-  if (route.status === "completed") {
-    return false;
-  }
-
-  const taskStatuses = await loadRouteTaskStatuses(
-    supabase,
-    session,
-    route.stops.map((stop) => stop.taskId),
-  );
-
-  if (!canAutoCompleteRoute(route, taskStatuses)) {
-    return false;
-  }
-
-  const nowIso = new Date().toISOString();
-  for (const taskStatus of taskStatuses) {
-    await supabase
-      .from("logistics_route_stops")
-      .update({
-        outcome: taskStatus.status === "completed" ? "completed" : "failed",
-        outcome_at: nowIso,
-        updated_at: nowIso,
-      })
-      .eq("route_id", route.id)
-      .eq("task_id", taskStatus.taskId)
-      .is("released_at", null)
-      .eq("organization_id", session.organizationId);
-  }
-
-  const { error } = await supabase
-    .from("logistics_routes")
-    .update({
-      status: "completed",
-      completed_at: nowIso,
-      completed_by: session.userId,
-      updated_at: nowIso,
-    })
-    .eq("id", route.id)
-    .eq("organization_id", session.organizationId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  await recordActivityHistory(supabase, session, {
-    action: "logistics.route_completed",
-    entityType: "logistics_route",
-    entityId: route.id,
-    title: `Ruta completada: ${route.name}`,
-    description: `${route.routeDate} · ${route.stops.length} paradas cerradas`,
-    metadata: {
-      routeDate: route.routeDate,
-      stopCount: route.stops.length,
-      assignedTo: route.assignedTo,
-      autoCompleted: true,
-    },
-  });
-
-  return true;
-}
 
 export async function cancelLogisticsRouteAction(routeId: string): Promise<ActionResult<null>> {
   try {
