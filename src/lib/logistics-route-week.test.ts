@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   getLogisticsWeekdayIndex,
+  nextDateForAvailableWeekdays,
   nextDateForLogisticsWeekday,
   dateMatchesLogisticsWeekday,
   resolveRouteDateForTemplate,
@@ -34,5 +35,14 @@ describe("logistics-route-week", () => {
     assert.equal(nextDateForLogisticsWeekday(6, "2026-07-10"), "2026-07-12");
     assert.equal(dateMatchesLogisticsWeekday("2026-07-13", 0), true);
     assert.equal(dateMatchesLogisticsWeekday("2026-07-14", 0), false);
+  });
+
+  it("skips weekdays without routes when resolving the next available day", () => {
+    // From Monday 2026-07-20, only Sunday (6) available → 2026-07-26
+    assert.equal(nextDateForAvailableWeekdays([6], "2026-07-20"), "2026-07-26");
+    // Already on Sunday with Sunday available → same day
+    assert.equal(nextDateForAvailableWeekdays([6], "2026-07-26"), "2026-07-26");
+    // Monday or Sunday from Tuesday → next Sunday (sooner than next Monday)
+    assert.equal(nextDateForAvailableWeekdays([0, 6], "2026-07-21"), "2026-07-26");
   });
 });

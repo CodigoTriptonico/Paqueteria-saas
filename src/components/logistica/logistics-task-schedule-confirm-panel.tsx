@@ -10,6 +10,7 @@ import { logisticsWeekdayKeys } from "@/lib/logistics-route-catalog";
 import {
   dateMatchesLogisticsWeekday,
   getLogisticsWeekdayIndex,
+  nextDateForAvailableWeekdays,
   nextDateForLogisticsWeekday,
 } from "@/lib/logistics-route-week";
 import { minScheduleDateInput } from "@/lib/schedule-date";
@@ -75,22 +76,46 @@ export function LogisticsTaskScheduleConfirmPanel({
   onConfirmPendingRoute?: () => void | Promise<void>;
 }) {
   const routeFirst = selectionOrder === "route-first";
+  const availableWeekdays = useMemo(
+    () =>
+      [...new Set(templates.map((template) => Number(template.weekday)))]
+        .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+        .sort((a, b) => a - b),
+    [templates],
+  );
   const initialDraft = scheduleDraft(scheduledAt);
   const initialWeekday = getLogisticsWeekdayIndex(initialDraft.date);
   const initialTemplate =
-    templates.find((template) => template.weekday === initialWeekday) || templates[0] || null;
+    templates.find((template) => template.weekday === initialWeekday) ||
+    templates.find((template) => availableWeekdays.includes(Number(template.weekday))) ||
+    templates[0] ||
+    null;
   const [draft, setDraft] = useState(() => {
-    if (!routeFirst || !initialTemplate) {
-      return initialDraft;
+    if (routeFirst) {
+      if (!initialTemplate) {
+        return initialDraft;
+      }
+      return {
+        ...initialDraft,
+        date: dateMatchesLogisticsWeekday(initialDraft.date, initialTemplate.weekday)
+          ? initialDraft.date
+          : nextDateForLogisticsWeekday(initialTemplate.weekday, minScheduleDateInput()),
+      };
     }
+
     return {
       ...initialDraft,
-      date: dateMatchesLogisticsWeekday(initialDraft.date, initialTemplate.weekday)
-        ? initialDraft.date
-        : nextDateForLogisticsWeekday(initialTemplate.weekday, minScheduleDateInput()),
+      date: nextDateForAvailableWeekdays(availableWeekdays, minScheduleDateInput()),
     };
   });
-  const [routeTemplateId, setRouteTemplateId] = useState(initialTemplate?.id || "");
+  const [routeTemplateId, setRouteTemplateId] = useState(() => {
+    if (routeFirst) {
+      return initialTemplate?.id || "";
+    }
+    const startDate = nextDateForAvailableWeekdays(availableWeekdays, minScheduleDateInput());
+    const startWeekday = getLogisticsWeekdayIndex(startDate);
+    return templates.find((template) => Number(template.weekday) === startWeekday)?.id || "";
+  });
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === routeTemplateId) || null,
     [routeTemplateId, templates],
@@ -125,8 +150,16 @@ export function LogisticsTaskScheduleConfirmPanel({
         .map((member) => ({ value: member.id, label: member.label, searchText: member.label })),
     [routeMembers],
   );
-  const allowedWeekdays = selectedTemplate ? [Number(selectedTemplate.weekday)] : undefined;
+  const allowedWeekdays = routeFirst
+    ? selectedTemplate
+      ? [Number(selectedTemplate.weekday)]
+      : undefined
+    : availableWeekdays;
   const weekdayLabel = logisticsWeekdayKeys[weekday] || "";
+  const availableWeekdayLabels = availableWeekdays
+    .map((day) => logisticsWeekdayKeys[day])
+    .filter(Boolean)
+    .join(", ");
 
   useEffect(() => {
     if (!open || saving) {
@@ -242,12 +275,17 @@ export function LogisticsTaskScheduleConfirmPanel({
         <DateInput
           value={draft.date}
           min={minScheduleDateInput()}
-          allowedWeekdays={routeFirst ? allowedWeekdays : undefined}
-          disabled={routeFirst && !selectedTemplate}
+          allowedWeekdays={allowedWeekdays}
+          disabled={routeFirst ? !selectedTemplate : availableWeekdays.length === 0}
           onChange={selectDate}
           ariaLabel={routeFirst ? "Día de la ruta" : "Día de entrega"}
         />
-        {!routeFirst && weekdayLabel ? (
+        {!routeFirst && availableWeekdayLabels ? (
+          <span className="text-[11px] font-bold text-slate-500">
+            Solo días con rutas: {availableWeekdayLabels}
+          </span>
+        ) : null}
+        {routeFirst && weekdayLabel ? (
           <span className="text-[11px] font-bold text-slate-500">{weekdayLabel}</span>
         ) : null}
       </label>

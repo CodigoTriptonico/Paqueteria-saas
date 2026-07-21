@@ -59,3 +59,31 @@ export function dateMatchesLogisticsWeekday(
 ) {
   return getLogisticsWeekdayIndex(date) === Number(weekdayIndex);
 }
+
+/** Soonest date on/after `from` whose weekday is in the allowed set (Mon=0…Sun=6). */
+export function nextDateForAvailableWeekdays(
+  weekdays: Array<LogisticsWeekdayIndex | number>,
+  from: Date | string = new Date(),
+) {
+  const allowed = [...new Set(weekdays.map((day) => Number(day)))].filter(
+    (day) => Number.isInteger(day) && day >= 0 && day <= 6,
+  );
+
+  if (!allowed.length) {
+    return typeof from === "string" ? from : formatScheduleDateInput(from);
+  }
+
+  const base =
+    typeof from === "string"
+      ? new Date(`${from}T12:00:00`)
+      : new Date(from.getFullYear(), from.getMonth(), from.getDate(), 12);
+
+  for (let offset = 0; offset < 7; offset += 1) {
+    const candidate = new Date(base.getFullYear(), base.getMonth(), base.getDate() + offset, 12);
+    if (allowed.includes(getLogisticsWeekdayIndex(candidate))) {
+      return formatScheduleDateInput(candidate);
+    }
+  }
+
+  return formatScheduleDateInput(base);
+}
