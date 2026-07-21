@@ -38,12 +38,19 @@ test("warehouse intake uses the available work area on desktop", () => {
   assert.doesNotMatch(intake, /mx-auto max-w-[56]xl/);
 });
 
-test("warehouse intake does not spend permanent height on secondary explanations", () => {
+test("warehouse intake keeps truck choice compact and scanner-ready", () => {
   assert.match(intake, /function IntakeInfoDisclosure/);
-  assert.match(intake, /ariaLabel="Ver ayuda de apertura de ingreso"/);
   assert.match(intake, /ariaLabel="Ver por qué no hay camiones"/);
-  assert.match(intake, /ariaLabel="Ver ayuda para caja encontrada"/);
-  assert.match(intake, /min-h-16 items-center justify-center/);
+  assert.match(intake, /const \[truckPickerOpen, setTruckPickerOpen\] = useState\(false\)/);
+  assert.match(intake, /aria-labelledby="warehouse-truck-picker-title"/);
+  assert.match(intake, /divide-y divide-black/);
+  assert.doesNotMatch(intake, /mt-4 grid gap-2 sm:grid-cols-2/);
+  assert.match(intake, /placeholder="Escanea o escribe el código"/);
+  assert.match(intake, /const \[foundOpen, setFoundOpen\] = useState\(false\)/);
+  assert.match(intake, /aria-labelledby="warehouse-found-title"/);
+  assert.match(intake, />Caja encontrada<\/button>/);
+  assert.doesNotMatch(intake, /Custodia de bodega/);
+  assert.doesNotMatch(intake, />Abrir ingreso</);
 });
 
 test("warehouse source keeps operational copy in valid UTF-8", () => {

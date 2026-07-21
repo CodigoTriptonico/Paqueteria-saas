@@ -32,7 +32,7 @@ test("custody moves only on accepted scan and route arrival is connected", () =>
   assert.match(migration, /warehouse_location_label/);
   assert.match(arrivalMigration, /arrival_warehouse_id/);
   assert.match(arrivalMigration, /ARRIVAL_WAREHOUSE_MISMATCH/);
-  assert.match(component, /El conductor dejó la ruta en/);
+  assert.match(component, /Descargar en/);
   assert.match(component, /Motivo: \{truck\.arrivalReason\}/);
   assert.match(custodyOrderingMigration, /event\.package_status = package\.status/);
 });
@@ -68,6 +68,8 @@ test("a found box enters without a truck while keeping its source uncertainty tr
   assert.match(foundIntakeMigration, /found_in_warehouse/);
   assert.match(actions, /openFoundWarehouseIntakeAction/);
   assert.match(actions, /scanFoundWarehouseIntakePackageAction/);
-  assert.match(component, /Ingresar caja encontrada/);
+  assert.match(component, /const \[foundOpen, setFoundOpen\] = useState\(false\)/);
+  assert.match(component, /aria-labelledby="warehouse-found-title"/);
+  assert.match(component, />Caja encontrada<\/button>/);
   assert.match(component, /Sin camión/);
 });
