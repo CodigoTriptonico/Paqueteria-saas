@@ -1,4 +1,5 @@
 import { scheduledAtToLocalDateInput } from "@/lib/schedule-date";
+import { getLogisticsWeekdayIndex } from "@/lib/logistics-route-week";
 
 /** Operational day markers for the logistics date filter calendar. */
 export type LogisticsCalendarDayTone = "pending" | "ready" | "assigned" | "attention";
@@ -82,6 +83,35 @@ export function buildLogisticsCalendarDayTones(
   return tones;
 }
 
+/**
+ * Aggregates task statuses into one tone per logistics weekday (Mon=0…Sun=6).
+ * Used by the toolbar day dropdown so Viernes/Sábado show the same palette as the calendar.
+ */
+export function buildLogisticsWeekdayTones(
+  tasks: ReadonlyArray<{
+    scheduledAt?: string | null;
+    status: string;
+    assignedTo?: string | null;
+  }>,
+): Record<number, LogisticsCalendarDayTone> {
+  const tones: Record<number, LogisticsCalendarDayTone> = {};
+
+  for (const task of tasks) {
+    const date = scheduledAtToLocalDateInput(task.scheduledAt || null);
+    if (!date) {
+      continue;
+    }
+    const tone = resolveLogisticsTaskCalendarTone(task);
+    if (!tone) {
+      continue;
+    }
+    const weekday = getLogisticsWeekdayIndex(date);
+    tones[weekday] = mergeLogisticsCalendarDayTone(tones[weekday], tone);
+  }
+
+  return tones;
+}
+
 /** Cell classes when the day is selectable and not the selected value. */
 export function logisticsCalendarDayToneClass(tone: LogisticsCalendarDayTone | null | undefined) {
   switch (tone) {
@@ -94,7 +124,7 @@ export function logisticsCalendarDayToneClass(tone: LogisticsCalendarDayTone | n
     case "attention":
       return "border border-rose-600/70 bg-rose-500/25 text-rose-50 hover:bg-rose-500/35";
     default:
-      return "bg-surface-panel text-[#f8fafc] hover:bg-surface-card-hover";
+      return "border border-black bg-surface-inset text-[#f8fafc] hover:bg-surface-card-hover";
   }
 }
 
@@ -109,4 +139,9 @@ export function logisticsCalendarDayToneDotClass(tone: LogisticsCalendarDayTone)
     case "attention":
       return "bg-rose-400";
   }
+}
+
+/** Selection ring for weekday chips / calendar cells — never a green fill. */
+export function logisticsCalendarDaySelectedClass(selected: boolean) {
+  return selected ? "z-[1] ring-2 ring-white ring-offset-2 ring-offset-[#121816]" : "";
 }

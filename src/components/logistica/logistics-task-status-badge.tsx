@@ -30,7 +30,7 @@ export function LogisticsTaskStatusBadge({
   onDriverChangeRequest,
   statusBadgeClass,
 }: LogisticsTaskStatusBadgeProps) {
-  const showDriverPicker = status === "assigned" || Boolean(assignedTo);
+  const showDriverPicker = status !== "completed" && status !== "cancelled";
   const driverPickerOptions = useMemo(
     () => buildDriverPickerOptions(routeMembers, "Sin asignar"),
     [routeMembers],
@@ -50,7 +50,7 @@ export function LogisticsTaskStatusBadge({
     <InlineSearchPicker
       className="max-w-full"
       minWidthClass="min-w-0 max-w-full"
-      shellClassName={`inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-black ${statusBadgeClass("assigned")}`}
+      shellClassName={`inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-black ${statusBadgeClass(assignedTo ? "assigned" : status)}`}
       value={assignedTo || ""}
       onChange={(nextValue) => {
         const nextAssignedTo = nextValue || null;
@@ -65,10 +65,10 @@ export function LogisticsTaskStatusBadge({
       ariaLabel={`Chofer asignado para ${shipmentCode}`}
       disabled={disabled}
       formatSelectedLabel={(option) => {
-        const driverName = option?.value
-          ? option.label
-          : driverLabel(assignedTo, memberById);
-        return `Asignado a ${driverName}`;
+        if (option?.value) {
+          return option.label;
+        }
+        return driverLabel(assignedTo, memberById);
       }}
     />
   );

@@ -6,6 +6,7 @@ import {
   buildDriverPickerOptions,
   buildLogisticsDayRouteFilterOptions,
   buildTaskRoutePickerOptions,
+  canChangeLogisticsTaskDriver,
   driverChangeDialogCopy,
   driverLabel,
   formatLogisticsTaskStatusLabel,
@@ -99,6 +100,14 @@ describe("logistics view", () => {
     assert.match(driverChangeDialogCopy("driver-1", null).warningMessage, /queda sin chofer/i);
     assert.equal(driverChangeDialogCopy("driver-1", "driver-2").title, "Reemplazar chofer");
     assert.match(driverChangeDialogCopy("driver-1", "driver-2").warningMessage, /cambia el chofer/i);
+    assert.equal(
+      driverChangeDialogCopy(null, "driver-1", { scope: "route" }).title,
+      "Asignar chofer a la ruta",
+    );
+    assert.match(
+      driverChangeDialogCopy(null, "driver-1", { scope: "route" }).warningMessage,
+      /toda la ruta/i,
+    );
     assert.equal(driverLabel(null, new Map()), "Sin asignar");
     assert.equal(driverLabel("driver-1", new Map([["driver-1", "Juan Perez"]])), "Juan Perez");
   });
@@ -384,6 +393,55 @@ describe("logistics view", () => {
     assert.equal(options[0]?.label, "Sin asignar");
     assert.equal(options[1]?.label, "Conductor 1");
     assert.equal(options[2]?.searchText, "Conductor 2");
+  });
+
+  it("allows assigning a driver after the task is already on a draft route", () => {
+    assert.equal(
+      canChangeLogisticsTaskDriver({
+        status: "scheduled",
+        invoiceAllowsDriver: true,
+        onRoute: true,
+        routeStatus: "draft",
+        canManageRoutes: true,
+      }),
+      true,
+    );
+    assert.equal(
+      canChangeLogisticsTaskDriver({
+        status: "scheduled",
+        invoiceAllowsDriver: true,
+        onRoute: true,
+        routeStatus: "planned",
+        canManageRoutes: true,
+      }),
+      false,
+    );
+    assert.equal(
+      canChangeLogisticsTaskDriver({
+        status: "scheduled",
+        invoiceAllowsDriver: true,
+        onRoute: true,
+        routeStatus: "draft",
+        canManageRoutes: false,
+      }),
+      false,
+    );
+    assert.equal(
+      canChangeLogisticsTaskDriver({
+        status: "scheduled",
+        invoiceAllowsDriver: true,
+        onRoute: false,
+      }),
+      true,
+    );
+    assert.equal(
+      canChangeLogisticsTaskDriver({
+        status: "completed",
+        invoiceAllowsDriver: true,
+        onRoute: false,
+      }),
+      false,
+    );
   });
 
   it("matches weekday and route-template filters for the logistics toolbar", () => {

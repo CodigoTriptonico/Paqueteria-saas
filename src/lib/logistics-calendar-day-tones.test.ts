@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildLogisticsCalendarDayTones,
+  buildLogisticsWeekdayTones,
+  logisticsCalendarDaySelectedClass,
   logisticsCalendarDayToneClass,
+  logisticsCalendarDayToneDotClass,
   logisticsCalendarDayToneLegend,
   mergeLogisticsCalendarDayTone,
   resolveLogisticsTaskCalendarTone,
@@ -42,6 +45,17 @@ describe("logistics-calendar-day-tones", () => {
     assert.equal(Object.keys(tones).length, 2);
   });
 
+  it("builds a weekday→tone map for the toolbar day chips", () => {
+    const tones = buildLogisticsWeekdayTones([
+      { scheduledAt: "2026-07-24T17:00:00.000Z", status: "scheduled" },
+      { scheduledAt: "2026-07-24T18:00:00.000Z", status: "pending" },
+      { scheduledAt: "2026-07-25T17:00:00.000Z", status: "assigned", assignedTo: "d1" },
+    ]);
+
+    assert.equal(tones[4], "pending");
+    assert.equal(tones[5], "assigned");
+  });
+
   it("exposes legend labels and tone classes for the calendar UI", () => {
     assert.deepEqual(
       logisticsCalendarDayToneLegend.map((entry) => entry.label),
@@ -51,5 +65,8 @@ describe("logistics-calendar-day-tones", () => {
     assert.match(logisticsCalendarDayToneClass("ready"), /sky/);
     assert.match(logisticsCalendarDayToneClass("assigned"), /emerald/);
     assert.match(logisticsCalendarDayToneClass("attention"), /rose/);
+    assert.match(logisticsCalendarDaySelectedClass(true), /ring-2 ring-white/);
+    assert.equal(logisticsCalendarDaySelectedClass(false), "");
+    assert.match(logisticsCalendarDayToneDotClass("pending"), /amber/);
   });
 });

@@ -10,6 +10,7 @@ import {
   shiftCalendarMonth,
 } from "@/lib/date-picker";
 import {
+  logisticsCalendarDaySelectedClass,
   logisticsCalendarDayToneClass,
   logisticsCalendarDayToneDotClass,
   logisticsCalendarDayToneLegend,
@@ -131,7 +132,7 @@ export function DatePickerCalendar({
 
           if (selected && !disabled) {
             // Selection is a ring only — never a fill — so the status palette stays readable.
-            stateClass = `${stateClass} z-[1] ring-2 ring-white ring-offset-2 ring-offset-[#121816]`;
+            stateClass = `${stateClass} ${logisticsCalendarDaySelectedClass(true)}`;
           }
 
           return (

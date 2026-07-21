@@ -261,11 +261,16 @@ export function buildLogisticsDayRouteFilterOptions(input: {
 export function driverChangeDialogCopy(
   currentAssignedTo: string | null,
   nextAssignedTo: string | null,
+  options?: { scope?: "task" | "route" },
 ) {
+  const routeScope = options?.scope === "route";
+
   if (!currentAssignedTo && nextAssignedTo) {
     return {
-      title: "Asignar chofer",
-      warningMessage: "Este envío quedará asignado al chofer seleccionado.",
+      title: routeScope ? "Asignar chofer a la ruta" : "Asignar chofer",
+      warningMessage: routeScope
+        ? "El chofer queda en toda la ruta (todas las paradas de este día)."
+        : "Este envío quedará asignado al chofer seleccionado.",
       confirmLabel: "Asignar chofer",
       confirmingLabel: "Asignando...",
     };
@@ -273,16 +278,20 @@ export function driverChangeDialogCopy(
 
   if (currentAssignedTo && !nextAssignedTo) {
     return {
-      title: "Quitar chofer",
-      warningMessage: "El envío queda sin chofer.",
+      title: routeScope ? "Quitar chofer de la ruta" : "Quitar chofer",
+      warningMessage: routeScope
+        ? "La ruta y sus paradas quedan sin chofer."
+        : "El envío queda sin chofer.",
       confirmLabel: "Quitar chofer",
       confirmingLabel: "Quitando...",
     };
   }
 
   return {
-    title: "Reemplazar chofer",
-    warningMessage: "Se cambia el chofer asignado a este envío.",
+    title: routeScope ? "Reemplazar chofer de la ruta" : "Reemplazar chofer",
+    warningMessage: routeScope
+      ? "Se cambia el chofer de toda la ruta."
+      : "Se cambia el chofer asignado a este envío.",
     confirmLabel: "Reemplazar chofer",
     confirmingLabel: "Reemplazando...",
   };
@@ -293,6 +302,40 @@ export function shouldConfirmDriverChange(
   nextAssignedTo: string | null,
 ) {
   return currentAssignedTo !== nextAssignedTo;
+}
+
+/**
+ * When a task is already on a route, the driver lives on the route (draft only).
+ * Without a route, the task picker can assign a driver directly.
+ */
+export function canChangeLogisticsTaskDriver(input: {
+  status: LogisticsTaskStatus;
+  invoiceAllowsDriver: boolean;
+  onRoute: boolean;
+  routeStatus?: string | null;
+  busy?: boolean;
+  canManageRoutes?: boolean;
+}) {
+  if (input.status === "completed" || input.status === "cancelled") {
+    return false;
+  }
+
+  if (!input.invoiceAllowsDriver) {
+    return false;
+  }
+
+  if (input.busy) {
+    return false;
+  }
+
+  if (input.onRoute) {
+    if (!input.canManageRoutes) {
+      return false;
+    }
+    return input.routeStatus === "draft";
+  }
+
+  return true;
 }
 
 export function shouldConfirmDriverReplacement(

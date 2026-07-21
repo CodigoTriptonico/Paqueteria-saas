@@ -630,6 +630,10 @@ export function CustomerRouteApprovalPanel({
     );
   }
 
+  if (!requests.length) {
+    return null;
+  }
+
   return (
     <Panel
       title="Rutas propuestas por vendedores"
@@ -640,17 +644,11 @@ export function CustomerRouteApprovalPanel({
         </span>
       }
     >
-      {requests.length ? (
-        viewLayout === "rows" ? (
-          <div className="grid gap-2">{requests.map((request) => renderRequest(request, "rows"))}</div>
-        ) : (
-          <div className={APPROVAL_CARD_GRID_CLASS}>
-            {requests.map((request) => renderRequest(request, "cards"))}
-          </div>
-        )
+      {viewLayout === "rows" ? (
+        <div className="grid gap-2">{requests.map((request) => renderRequest(request, "rows"))}</div>
       ) : (
-        <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center text-sm font-bold text-slate-400">
-          No hay rutas pendientes de aprobación.
+        <div className={APPROVAL_CARD_GRID_CLASS}>
+          {requests.map((request) => renderRequest(request, "cards"))}
         </div>
       )}
     </Panel>

@@ -122,6 +122,9 @@ describe("logistica single-action invoice card eval", () => {
     assert.equal(body.includes('placeholder="Sin chofer"'), true);
     assert.equal(body.includes("<InlineSearchPicker"), true);
     assert.equal(body.includes('searchPlaceholder="Buscar chofer…"'), true);
+    assert.equal(body.includes("requestDriverChange(task, nextValue || null, routeInfo)"), true);
+    assert.equal(componentSource.includes("canChangeLogisticsTaskDriver"), true);
+    assert.equal(componentSource.includes("if (routeInfo) {\n      return false;\n    }"), false);
     assert.equal(body.includes('ariaLabel={`Chofer de ${item.shipment.code}`}'), true);
     assert.equal(header.includes("taskTypeLabel[item.step.stepType]"), false);
     assert.equal(header.includes("Bloqueado"), false);
@@ -237,8 +240,12 @@ describe("logistica single-action invoice card eval", () => {
     const toolbar = logisticsToolbarSource();
 
     assert.equal(toolbar.includes('ariaLabel="Fecha"'), false);
-    assert.equal(toolbar.includes('aria-label="Filtrar por día"'), true);
+    assert.equal(toolbar.includes("<LogisticsWeekdayFilterSelect"), true);
+    assert.equal(toolbar.includes('ariaLabel="Filtrar por día"'), true);
     assert.equal(toolbar.includes("weekdayFilterOptions"), true);
+    assert.equal(toolbar.includes("tones={weekdayTones}"), true);
+    assert.equal(toolbar.includes("min-w-[10.5rem]"), true);
+    assert.equal(toolbar.includes('role="group"'), false);
     assert.equal(toolbar.includes("logisticsWeekdayFullLabels"), false);
     assert.equal(toolbar.includes('ariaLabel="Filtrar por ruta del día"'), true);
     assert.equal(toolbar.includes('ariaLabel="Filtrar por fecha"'), true);
@@ -246,8 +253,8 @@ describe("logistica single-action invoice card eval", () => {
     assert.equal(toolbar.includes("dayTones={calendarDayTones}"), true);
     assert.equal(toolbar.includes("showToneLegend"), true);
     assert.equal(componentSource.includes("buildLogisticsCalendarDayTones"), true);
+    assert.equal(componentSource.includes("buildLogisticsWeekdayTones"), true);
     assert.equal(toolbar.includes("Todos los días"), true);
-    assert.equal(toolbar.includes("min-w-[10.5rem]"), true);
     assert.equal(componentSource.includes("logisticsEnabledWeekdayFilterOptions"), true);
     assert.equal(componentSource.includes("enabledWeekdayIndexes"), true);
     assert.equal(componentSource.includes("matchesLogisticsDateFilter"), true);

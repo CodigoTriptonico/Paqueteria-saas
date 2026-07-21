@@ -65,6 +65,7 @@ import { LogisticsSectionNav } from "@/components/logistica/logistics-section-na
 import { AgencyLogisticsPanel } from "@/components/logistica/agency-logistics-panel";
 import { CustomerRouteApprovalPanel } from "@/components/logistica/customer-route-approval-panel";
 import { LogisticsTaskStatusBadge } from "@/components/logistica/logistics-task-status-badge";
+import { LogisticsWeekdayFilterSelect } from "@/components/logistica/logistics-weekday-filter-select";
 import { InlineSearchCombobox, InlineSearchPicker } from "@/components/inline-search-picker";
 import { PageLoading } from "@/components/page-loading";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
@@ -86,6 +87,7 @@ import {
   buildDriverPickerOptions,
   buildLogisticsDayRouteFilterOptions,
   buildTaskRoutePickerOptions,
+  canChangeLogisticsTaskDriver,
   formatLogisticsTaskStatusLabel,
   logisticsScheduleDisplayParts,
   logisticsActionIconWellClass,
@@ -110,7 +112,7 @@ import { estimateRouteStopEtaMinutes, formatEtaMinutes } from "@/lib/logistics-e
 import { isLogisticsFailedTask } from "@/lib/logistics-reprogram";
 import { LOGISTICS_LIVE_REFRESH_MS, shouldRunLogisticsLiveRefresh } from "@/lib/logistics-live-refresh";
 import { selectWeekdayDate, defaultLogisticsWeekdayFilter, enabledWeekdayIndexes, logisticsEnabledWeekdayFilterOptions } from "@/lib/logistics-day-route";
-import { buildLogisticsCalendarDayTones } from "@/lib/logistics-calendar-day-tones";
+import { buildLogisticsCalendarDayTones, buildLogisticsWeekdayTones } from "@/lib/logistics-calendar-day-tones";
 import { getLogisticsWeekdayIndex } from "@/lib/logistics-route-week";
 import { quoteFromShipment, readShipmentBoxLines, type ShipmentQuote } from "@/lib/shipment-display";
 import { ShipmentBoxLinesTrigger } from "@/components/shipment-box-lines-trigger";
@@ -146,6 +148,8 @@ const LOGISTICS_INVOICE_CARD_GRID_CLASS =
 type PendingDriverChange = {
   task: LogisticsTaskItem;
   nextAssignedTo: string | null;
+  /** When set, the driver change applies to the whole draft route (and syncs its stops). */
+  routeId?: string;
 };
 
 type EditingTaskState = {
@@ -792,6 +796,18 @@ export function LogisticaClient({
     [allTasks],
   );
 
+  const weekdayTones = useMemo(
+    () =>
+      buildLogisticsWeekdayTones(
+        allTasks.map((task) => ({
+          scheduledAt: task.scheduledAt,
+          status: task.status,
+          assignedTo: task.assignedTo,
+        })),
+      ),
+    [allTasks],
+  );
+
   const taskById = useMemo(() => {
     return new Map(allTasks.map((task) => [task.id, task]));
   }, [allTasks]);
@@ -1265,13 +1281,26 @@ export function LogisticaClient({
     notify.success("Tarea confirmada y agregada a la ruta");
   }
 
-  function requestDriverChange(task: LogisticsTaskItem, nextAssignedTo: string | null) {
+  function requestDriverChange(
+    task: LogisticsTaskItem,
+    nextAssignedTo: string | null,
+    routeInfo?: { route: LogisticsRouteRow },
+  ) {
     if (nextAssignedTo === task.assignedTo) {
       return;
     }
 
     if (shouldConfirmDriverChange(task.assignedTo, nextAssignedTo)) {
-      setPendingDriverChange({ task, nextAssignedTo });
+      setPendingDriverChange({
+        task,
+        nextAssignedTo,
+        routeId: routeInfo?.route.id,
+      });
+      return;
+    }
+
+    if (routeInfo) {
+      void assignRoute(routeInfo.route.id, nextAssignedTo);
       return;
     }
 
@@ -1302,7 +1331,23 @@ export function LogisticaClient({
       return;
     }
 
-    const { task, nextAssignedTo } = pendingDriverChange;
+    const { task, nextAssignedTo, routeId } = pendingDriverChange;
+    if (routeId) {
+      setBusyId(`driver:${routeId}`);
+      const result = await assignLogisticsRouteDriverAction({ routeId, assignedTo: nextAssignedTo });
+      setBusyId(null);
+
+      if (!result.ok) {
+        notify.error(result.error);
+        return;
+      }
+
+      await reloadAll();
+      setPendingDriverChange(null);
+      notify.success("Chofer de la ruta actualizado");
+      return;
+    }
+
     const saved = await saveDriverChange(task, nextAssignedTo);
     if (saved) {
       setPendingDriverChange(null);
@@ -1310,7 +1355,10 @@ export function LogisticaClient({
   }
 
   function cancelDriverChange() {
-    if (busyId === pendingDriverChange?.task.id) {
+    if (
+      busyId === pendingDriverChange?.task.id ||
+      (pendingDriverChange?.routeId && busyId === `driver:${pendingDriverChange.routeId}`)
+    ) {
       return;
     }
 
@@ -1318,24 +1366,21 @@ export function LogisticaClient({
   }
 
   function canChangeTaskDriver(task: LogisticsTaskItem, routeInfo?: { route: LogisticsRouteRow }) {
-    if (task.status === "completed" || task.status === "cancelled") {
-      return false;
-    }
-
     const invoiceStep = invoiceStepByTaskId.get(task.id);
-    if (invoiceStep && (invoiceStep.currentTask?.id !== task.id || !invoiceStep.canAssignDriver)) {
-      return false;
-    }
+    const invoiceAllowsDriver =
+      !invoiceStep ||
+      (invoiceStep.currentTask?.id === task.id && invoiceStep.canAssignDriver);
 
-    if (routeInfo) {
-      return false;
-    }
-
-    if (busyId === task.id) {
-      return false;
-    }
-
-    return true;
+    return canChangeLogisticsTaskDriver({
+      status: task.status,
+      invoiceAllowsDriver,
+      onRoute: Boolean(routeInfo),
+      routeStatus: routeInfo?.route.status ?? null,
+      busy:
+        busyId === task.id ||
+        Boolean(routeInfo && busyId === `driver:${routeInfo.route.id}`),
+      canManageRoutes,
+    });
   }
 
   function canChangeTaskRoute(
@@ -1802,7 +1847,7 @@ export function LogisticaClient({
                   minWidthClass="w-full min-w-0"
                   shellClassName={LOGISTICS_CARD_PICKER_SHELL}
                   value={task.assignedTo || ""}
-                  onChange={(nextValue) => requestDriverChange(task, nextValue || null)}
+                  onChange={(nextValue) => requestDriverChange(task, nextValue || null, routeInfo)}
                   options={taskDriverPickerOptions}
                   placeholder="Sin chofer"
                   searchPlaceholder="Buscar chofer…"
@@ -1966,7 +2011,7 @@ export function LogisticaClient({
                 minWidthClass="w-full min-w-0"
                 shellClassName={LOGISTICS_CARD_PICKER_SHELL}
                 value={task.assignedTo || ""}
-                onChange={(nextValue) => requestDriverChange(task, nextValue || null)}
+                onChange={(nextValue) => requestDriverChange(task, nextValue || null, routeInfo)}
                 options={taskDriverPickerOptions}
                 placeholder="Sin chofer"
                 searchPlaceholder="Buscar chofer…"
@@ -2202,7 +2247,7 @@ export function LogisticaClient({
                         disabled={!canChangeTaskDriver(task, { route: selectedRoute })}
                         shipmentCode={task.shipment.code}
                         onDriverChangeRequest={(nextAssignedTo) =>
-                          requestDriverChange(task, nextAssignedTo)
+                          requestDriverChange(task, nextAssignedTo, { route: selectedRoute })
                         }
                         statusBadgeClass={statusBadgeClass}
                       />
@@ -2365,21 +2410,14 @@ export function LogisticaClient({
               <div className="flex shrink-0 items-center gap-1">
                 {weekdayFilter != null ? (
                   <>
-                    <select
-                      className="h-9 min-w-[10.5rem] shrink-0 rounded-lg border border-emerald-500 bg-emerald-950/50 px-2.5 pr-8 text-sm font-black text-emerald-100 outline-none"
-                      value={String(weekdayFilter)}
-                      onChange={(event) => {
-                        const raw = event.target.value;
-                        selectWeekdayFilter(raw === "" ? null : Number(raw));
-                      }}
-                      aria-label="Filtrar por día"
-                    >
-                      {weekdayFilterOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    <LogisticsWeekdayFilterSelect
+                      value={weekdayFilter}
+                      options={weekdayFilterOptions}
+                      tones={weekdayTones}
+                      onChange={selectWeekdayFilter}
+                      ariaLabel="Filtrar por día"
+                      className="min-w-[10.5rem]"
+                    />
                     <InlineSearchPicker
                       className="w-[11rem] shrink-0"
                       minWidthClass="w-full min-w-0"
@@ -2706,8 +2744,15 @@ export function LogisticaClient({
         currentAssignedTo={pendingDriverChange?.task.assignedTo || null}
         nextAssignedTo={pendingDriverChange?.nextAssignedTo ?? null}
         memberById={memberById}
+        routeScope={Boolean(pendingDriverChange?.routeId)}
         confirming={
-          pendingDriverChange ? busyId === pendingDriverChange.task.id : false
+          pendingDriverChange
+            ? busyId === pendingDriverChange.task.id ||
+              Boolean(
+                pendingDriverChange.routeId &&
+                  busyId === `driver:${pendingDriverChange.routeId}`,
+              )
+            : false
         }
         onCancel={cancelDriverChange}
         onConfirm={() => void confirmDriverChange()}

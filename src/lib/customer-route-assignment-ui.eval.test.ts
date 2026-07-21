@@ -71,6 +71,8 @@ test("seguimiento wires program-route into logistics approval flow", () => {
   assert.match(approval, /Cambiar ruta/);
   assert.match(approval, /Asignar esta ruta/);
   assert.match(approval, /replaceCustomerRouteAssignmentRequestAction/);
+  assert.match(approval, /if \(!requests\.length\) \{\s*return null;/);
+  assert.equal(approval.includes("No hay rutas pendientes de aprobación."), false);
   assert.match(approval, /LogisticsWeekdayPicker/);
   assert.match(approval, /selectReplaceWeekday/);
   assert.match(approval, /selectWeekdayDate/);

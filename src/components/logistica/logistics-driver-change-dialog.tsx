@@ -12,6 +12,8 @@ type LogisticsDriverChangeDialogProps = {
   nextAssignedTo: string | null;
   memberById: ReadonlyMap<string, string>;
   confirming?: boolean;
+  /** When true, the change applies to the whole draft route. */
+  routeScope?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -25,6 +27,7 @@ export function LogisticsDriverChangeDialog({
   nextAssignedTo,
   memberById,
   confirming = false,
+  routeScope = false,
   onCancel,
   onConfirm,
 }: LogisticsDriverChangeDialogProps) {
@@ -32,7 +35,9 @@ export function LogisticsDriverChangeDialog({
     return null;
   }
 
-  const copy = driverChangeDialogCopy(currentAssignedTo, nextAssignedTo);
+  const copy = driverChangeDialogCopy(currentAssignedTo, nextAssignedTo, {
+    scope: routeScope ? "route" : "task",
+  });
   const currentLabel = driverLabel(currentAssignedTo, memberById);
   const nextLabel = driverLabel(nextAssignedTo, memberById);
 
