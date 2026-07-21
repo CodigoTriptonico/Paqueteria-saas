@@ -47,6 +47,7 @@ export function LogisticsTaskScheduleConfirmPanel({
   title = "Confirmar y programar",
   confirmLabel = "Confirmar y programar",
   selectionOrder = "date-first",
+  showDriverPicker = true,
   allowPendingRoute = false,
   pendingRouteLabel = "No sé la ruta todavía",
   onCancel,
@@ -65,6 +66,8 @@ export function LogisticsTaskScheduleConfirmPanel({
   title?: string;
   confirmLabel?: string;
   selectionOrder?: SelectionOrder;
+  /** Sellers assign day+route; logistics owns the driver. */
+  showDriverPicker?: boolean;
   allowPendingRoute?: boolean;
   pendingRouteLabel?: string;
   onCancel: () => void;
@@ -92,10 +95,15 @@ export function LogisticsTaskScheduleConfirmPanel({
     () => templates.find((template) => template.id === routeTemplateId) || null,
     [routeTemplateId, templates],
   );
-  const weekday = selectedTemplate
-    ? Number(selectedTemplate.weekday)
+  const weekday = routeFirst
+    ? selectedTemplate
+      ? Number(selectedTemplate.weekday)
+      : getLogisticsWeekdayIndex(draft.date)
     : getLogisticsWeekdayIndex(draft.date);
   const [driverId, setDriverId] = useState(defaultDriverByWeekday[weekday] || "");
+  const resolvedDriverId = showDriverPicker
+    ? driverId
+    : defaultDriverByWeekday[weekday] || "";
 
   const dayTemplates = useMemo(
     () => (routeFirst ? templates : templates.filter((template) => template.weekday === weekday)),
@@ -118,6 +126,7 @@ export function LogisticsTaskScheduleConfirmPanel({
     [routeMembers],
   );
   const allowedWeekdays = selectedTemplate ? [Number(selectedTemplate.weekday)] : undefined;
+  const weekdayLabel = logisticsWeekdayKeys[weekday] || "";
 
   useEffect(() => {
     if (!open || saving) {
@@ -134,6 +143,13 @@ export function LogisticsTaskScheduleConfirmPanel({
     return () => window.removeEventListener("keydown", closeFromEscape);
   }, [open, saving, onCancel]);
 
+  useEffect(() => {
+    if (showDriverPicker) {
+      return;
+    }
+    setDriverId(defaultDriverByWeekday[weekday] || "");
+  }, [defaultDriverByWeekday, showDriverPicker, weekday]);
+
   function selectRouteTemplate(nextTemplateId: string) {
     setRouteTemplateId(nextTemplateId);
     const template = templates.find((entry) => entry.id === nextTemplateId);
@@ -143,12 +159,32 @@ export function LogisticsTaskScheduleConfirmPanel({
 
     const nextWeekday = Number(template.weekday);
     setDriverId(defaultDriverByWeekday[nextWeekday] || "");
-    setDraft((current) => ({
-      ...current,
-      date: dateMatchesLogisticsWeekday(current.date, nextWeekday)
-        ? current.date
-        : nextDateForLogisticsWeekday(nextWeekday, minScheduleDateInput()),
-    }));
+    if (routeFirst) {
+      setDraft((current) => ({
+        ...current,
+        date: dateMatchesLogisticsWeekday(current.date, nextWeekday)
+          ? current.date
+          : nextDateForLogisticsWeekday(nextWeekday, minScheduleDateInput()),
+      }));
+    }
+  }
+
+  function selectDate(date: string) {
+    if (routeFirst) {
+      setDraft((current) => ({ ...current, date }));
+      return;
+    }
+
+    const nextWeekday = getLogisticsWeekdayIndex(date);
+    setDraft((current) => ({ ...current, date }));
+    setDriverId(defaultDriverByWeekday[nextWeekday] || "");
+    const firstForDay = templates.find((template) => template.weekday === nextWeekday);
+    setRouteTemplateId((current) => {
+      const stillValid = templates.some(
+        (template) => template.id === current && template.weekday === nextWeekday,
+      );
+      return stillValid ? current : firstForDay?.id || "";
+    });
   }
 
   if (!open) return null;
@@ -157,23 +193,38 @@ export function LogisticsTaskScheduleConfirmPanel({
   const dateMatchesRoute =
     !selectedTemplate || dateMatchesLogisticsWeekday(draft.date, selectedTemplate.weekday);
   const canConfirm = Boolean(
-    scheduledTimestamp && driverId && routeTemplateId && dayTemplates.length && dateMatchesRoute,
+    scheduledTimestamp &&
+      resolvedDriverId &&
+      routeTemplateId &&
+      dayTemplates.length &&
+      dateMatchesRoute,
   );
 
   const routeField = (
     <label className="grid gap-1">
       <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-slate-500">
-        <Route className="h-3.5 w-3.5" /> {routeFirst ? "Ruta" : "Ruta del dia"}
+        <Route className="h-3.5 w-3.5" /> {routeFirst ? "Ruta" : "Ruta del día"}
       </span>
       <InlineSearchPicker
         value={routeTemplateId}
         onChange={selectRouteTemplate}
         options={templateOptions}
-        placeholder="Selecciona una ruta"
+        placeholder={
+          routeFirst
+            ? "Selecciona una ruta"
+            : dayTemplates.length
+              ? `Rutas de ${weekdayLabel}`
+              : "No hay rutas ese día"
+        }
         searchPlaceholder="Buscar ruta..."
-        emptyLabel={routeFirst ? "No hay rutas semanales" : "No hay rutas para ese dia"}
+        emptyLabel={routeFirst ? "No hay rutas semanales" : `No hay rutas para ${weekdayLabel || "ese día"}`}
         ariaLabel="Ruta semanal"
       />
+      {!routeFirst && weekdayLabel ? (
+        <span className="text-[11px] font-bold text-slate-500">
+          Solo aparecen rutas de {weekdayLabel}.
+        </span>
+      ) : null}
       {routeFirst && selectedTemplate ? (
         <span className="text-[11px] font-bold text-slate-500">
           Solo se pueden elegir fechas de {logisticsWeekdayKeys[selectedTemplate.weekday] || "ese día"}.
@@ -186,25 +237,19 @@ export function LogisticsTaskScheduleConfirmPanel({
     <div className="grid gap-2 sm:grid-cols-2">
       <label className="grid gap-1">
         <span className="text-[10px] font-black uppercase text-slate-500">
-          {routeFirst ? "Qué día de esa ruta" : "Fecha"}
+          {routeFirst ? "Qué día de esa ruta" : "Día"}
         </span>
         <DateInput
           value={draft.date}
           min={minScheduleDateInput()}
           allowedWeekdays={routeFirst ? allowedWeekdays : undefined}
           disabled={routeFirst && !selectedTemplate}
-          onChange={(date) => {
-            if (routeFirst) {
-              setDraft((current) => ({ ...current, date }));
-              return;
-            }
-            const nextWeekday = getLogisticsWeekdayIndex(date);
-            setDraft((current) => ({ ...current, date }));
-            setDriverId(defaultDriverByWeekday[nextWeekday] || "");
-            setRouteTemplateId(templates.find((template) => template.weekday === nextWeekday)?.id || "");
-          }}
-          ariaLabel={routeFirst ? "Día de la ruta" : "Fecha confirmada"}
+          onChange={selectDate}
+          ariaLabel={routeFirst ? "Día de la ruta" : "Día de entrega"}
         />
+        {!routeFirst && weekdayLabel ? (
+          <span className="text-[11px] font-bold text-slate-500">{weekdayLabel}</span>
+        ) : null}
       </label>
       <label className="grid gap-1">
         <span className="text-[10px] font-black uppercase text-slate-500">Hora</span>
@@ -253,25 +298,31 @@ export function LogisticsTaskScheduleConfirmPanel({
             </>
           )}
 
-          <label className="grid gap-1">
-            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-slate-500">
-              <Truck className="h-3.5 w-3.5" /> Conductor
-            </span>
-            <InlineSearchPicker
-              value={driverId}
-              onChange={setDriverId}
-              options={driverOptions}
-              placeholder="Selecciona un conductor"
-              searchPlaceholder="Buscar conductor..."
-              emptyLabel="Sin conductores"
-              ariaLabel="Conductor confirmado"
-            />
-            {defaultDriverByWeekday[weekday] ? (
-              <span className="text-[11px] font-bold text-slate-500">
-                Se seleccionó el conductor predeterminado de este día; puedes cambiarlo.
+          {showDriverPicker ? (
+            <label className="grid gap-1">
+              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-slate-500">
+                <Truck className="h-3.5 w-3.5" /> Conductor
               </span>
-            ) : null}
-          </label>
+              <InlineSearchPicker
+                value={driverId}
+                onChange={setDriverId}
+                options={driverOptions}
+                placeholder="Selecciona un conductor"
+                searchPlaceholder="Buscar conductor..."
+                emptyLabel="Sin conductores"
+                ariaLabel="Conductor confirmado"
+              />
+              {defaultDriverByWeekday[weekday] ? (
+                <span className="text-[11px] font-bold text-slate-500">
+                  Se seleccionó el conductor predeterminado de este día; puedes cambiarlo.
+                </span>
+              ) : null}
+            </label>
+          ) : !resolvedDriverId ? (
+            <p className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] font-bold text-amber-100">
+              Ese día no tiene conductor predeterminado. Logística debe configurarlo en Rutas.
+            </p>
+          ) : null}
         </div>
 
         <div className="mt-5 grid gap-3">
@@ -299,7 +350,12 @@ export function LogisticsTaskScheduleConfirmPanel({
               disabled={saving || !canConfirm}
               onClick={() =>
                 scheduledTimestamp &&
-                void onConfirm({ scheduledAt: scheduledTimestamp, driverId, routeTemplateId })
+                resolvedDriverId &&
+                void onConfirm({
+                  scheduledAt: scheduledTimestamp,
+                  driverId: resolvedDriverId,
+                  routeTemplateId,
+                })
               }
               className={`${primaryButtonClass} h-11 text-sm font-black disabled:opacity-40`}
             >

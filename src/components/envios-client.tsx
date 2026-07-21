@@ -1244,7 +1244,8 @@ export function EnviosClient({
               : FULL_BOX_LEG_LABELS.ready
           }
           confirmLabel="Asignar ruta"
-          selectionOrder="route-first"
+          selectionOrder="date-first"
+          showDriverPicker={false}
           allowPendingRoute
           pendingRouteLabel={
             routeProgramTarget.kind === "empty_box"

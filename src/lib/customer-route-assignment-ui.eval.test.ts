@@ -26,10 +26,14 @@ test("seguimiento wires program-route into logistics approval flow", () => {
   assert.match(envios, /confirmPendingRoute/);
   assert.match(envios, /allowPendingRoute/);
   assert.match(envios, /LogisticsTaskScheduleConfirmPanel/);
-  assert.match(envios, /selectionOrder=\"route-first\"/);
+  assert.match(envios, /selectionOrder=\"date-first\"/);
+  assert.match(envios, /showDriverPicker=\{false\}/);
+  assert.match(envios, /allowPendingRoute/);
+  assert.match(panel, /showDriverPicker/);
   assert.match(panel, /allowPendingRoute/);
   assert.match(panel, /onConfirmPendingRoute/);
-  assert.match(panel, /allowedWeekdays/);
+  assert.match(panel, /Rutas de/);
+  assert.match(panel, /Solo aparecen rutas de/);
   assert.match(logistics, /CustomerRouteApprovalPanel/);
   assert.match(actions, /pending_approval/);
   assert.match(read("src/app/actions/customers.ts"), /revokeCustomerRouteVerificationsForZoneChange/);
