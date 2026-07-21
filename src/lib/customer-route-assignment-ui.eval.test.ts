@@ -12,12 +12,18 @@ function read(rel: string) {
 test("seguimiento wires program-route into logistics approval flow", () => {
   const envios = read("src/components/envios-client.tsx");
   const menu = read("src/components/shipment-step-context-menu.tsx");
+  const panel = read("src/components/logistica/logistics-task-schedule-confirm-panel.tsx");
   const logistics = read("src/components/logistica-client.tsx");
   const actions = read("src/app/actions/customer-route-assignments.ts");
 
   assert.match(menu, /Programar en ruta/);
+  assert.equal(menu.includes("Establecer una fecha"), false);
   assert.match(envios, /requestCustomerRouteAssignmentAction/);
   assert.match(envios, /LogisticsTaskScheduleConfirmPanel/);
+  assert.match(envios, /selectionOrder=\"route-first\"/);
+  assert.match(panel, /selectionOrder/);
+  assert.match(panel, /allowedWeekdays/);
+  assert.match(panel, /nextDateForLogisticsWeekday/);
   assert.match(logistics, /CustomerRouteApprovalPanel/);
   assert.match(logistics, /showRouteHistory/);
   assert.match(actions, /pending_approval/);

@@ -34,3 +34,28 @@ export function resolveRouteDateForTemplate(taskDate: string, templateWeekday: n
   date.setDate(date.getDate() + (templateWeekday - anchorWeekday));
   return formatScheduleDateInput(date);
 }
+
+/** Next calendar date (today or later) that matches a Monday-based logistics weekday. */
+export function nextDateForLogisticsWeekday(
+  weekdayIndex: LogisticsWeekdayIndex | number,
+  from: Date | string = new Date(),
+) {
+  const base =
+    typeof from === "string"
+      ? new Date(`${from}T12:00:00`)
+      : new Date(from.getFullYear(), from.getMonth(), from.getDate(), 12);
+  const current = getLogisticsWeekdayIndex(base);
+  let delta = Number(weekdayIndex) - current;
+  if (delta < 0) {
+    delta += 7;
+  }
+  base.setDate(base.getDate() + delta);
+  return formatScheduleDateInput(base);
+}
+
+export function dateMatchesLogisticsWeekday(
+  date: string,
+  weekdayIndex: LogisticsWeekdayIndex | number,
+) {
+  return getLogisticsWeekdayIndex(date) === Number(weekdayIndex);
+}

@@ -20,6 +20,7 @@ type DatePickerCalendarProps = {
   viewMonth: number;
   min?: string;
   max?: string;
+  allowedWeekdays?: number[];
   onChange: (value: string) => void;
   onViewChange: (year: number, month: number) => void;
 };
@@ -30,6 +31,7 @@ export function DatePickerCalendar({
   viewMonth,
   min,
   max,
+  allowedWeekdays,
   onChange,
   onViewChange,
 }: DatePickerCalendarProps) {
@@ -92,7 +94,7 @@ export function DatePickerCalendar({
       <div className="grid max-h-56 grid-cols-7 gap-1 overflow-y-auto p-2">
         {days.map((cell) => {
           const selected = cell.date === value;
-          const disabled = isDateDisabled(cell.date, min, max);
+          const disabled = isDateDisabled(cell.date, min, max, { allowedWeekdays });
           const isToday = cell.date === today;
 
           return (

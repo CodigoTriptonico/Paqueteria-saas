@@ -1179,6 +1179,7 @@ export function EnviosClient({
           saving={routeProgramSaving}
           title="Programar en ruta"
           confirmLabel="Asignar ruta"
+          selectionOrder="route-first"
           onCancel={() => {
             if (!routeProgramSaving) {
               setRouteProgramTarget(null);

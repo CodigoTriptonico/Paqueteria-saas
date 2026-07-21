@@ -2,8 +2,6 @@
 
 import {
   Building2,
-  CalendarDays,
-  ChevronRight,
   MapPinCheck,
   Plane,
   Route,
@@ -14,9 +12,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { ShipmentStatus } from "@/app/actions/shipments";
 import { ActionConfirmDialog } from "@/components/action-confirm-dialog";
 import { ContextMenuFlyout } from "@/components/context-menu-flyout";
-import { DateInput } from "@/components/date-input";
-import { ScheduleTimeField } from "@/components/sale/schedule-time-field";
-import { formatScheduleAtDisplay, scheduleTimeComplete } from "@/lib/sale/schedule-time";
+import { formatScheduleAtDisplay } from "@/lib/sale/schedule-time";
 import {
   deliverySummary,
   EMPTY_BOX_DRIVER_MODE,
@@ -25,8 +21,6 @@ import {
   FULL_BOX_OFFICE_MODE,
   emptyBoxOfficeSummary,
   fullBoxSummaryLine,
-  minScheduleDateInput,
-  resolveScheduleDate,
 } from "@/components/sale/venta-parts";
 import type { ShipmentProgressKind } from "@/lib/shipment-display";
 import {
@@ -34,12 +28,7 @@ import {
   FULL_BOX_LEG_LABELS,
 } from "@/lib/shipment-leg-labels";
 import type { ShipmentLogisticsEditorState } from "@/lib/shipment-logistics-edit";
-import {
-  applyScheduleChangesCommittedDate,
-  applyScheduleDateChangeCopy,
-  markReadyConflictsWithScheduledDate,
-  markReadyScheduleConflictCopy,
-} from "@/lib/shipment-schedule-confirm";
+import { markReadyConflictsWithScheduledDate, markReadyScheduleConflictCopy } from "@/lib/shipment-schedule-confirm";
 import { logisticsLegCancelCopy } from "@/lib/shipment-leg-cancel-confirm";
 import { shouldSuppressDismissForNativePicker } from "@/lib/native-picker";
 
@@ -73,55 +62,27 @@ export function scheduleApplyButtonLabel(hasExistingSchedule: boolean) {
   return hasExistingSchedule ? "Cambiar fecha" : "Aplicar programación";
 }
 
-const DRIVER_LEG_READY_LABELS = {
-  deliver: EMPTY_BOX_LEG_LABELS.ready,
-  pickup: FULL_BOX_LEG_LABELS.ready,
-  setDate: EMPTY_BOX_LEG_LABELS.setDate,
-} as const;
-
 function DriverLegReadyMenu({
   readyLabel,
   cancelLabel,
-  scheduleAriaLabel,
   scheduleDetail,
   scheduleChanged = false,
-  driverScheduledActive,
-  scheduleCommitted,
-  scheduleDetailFull,
   legOrdered,
   locked,
-  routeDate,
-  routeTime,
-  onRouteDateChange,
-  onRouteTimeChange,
   onMarkReady,
   onCancel,
-  onApplySchedule,
   onProgramRoute,
-  scheduleApplyDisabled,
 }: {
   readyLabel: string;
   cancelLabel: string;
-  scheduleAriaLabel: string;
   scheduleDetail?: string;
   scheduleChanged?: boolean;
-  driverScheduledActive: boolean;
-  scheduleCommitted: boolean;
-  scheduleDetailFull: string;
   legOrdered: boolean;
   locked: boolean;
-  routeDate: string;
-  routeTime: string;
-  onRouteDateChange: (value: string) => void;
-  onRouteTimeChange: (value: string) => void;
   onMarkReady: () => void;
   onCancel: () => void;
-  onApplySchedule: () => void;
   onProgramRoute?: () => void;
-  scheduleApplyDisabled: boolean;
 }) {
-  const [scheduleOpen, setScheduleOpen] = useState(false);
-
   if (legOrdered) {
     return (
       <div className="grid gap-2">
@@ -138,8 +99,16 @@ function DriverLegReadyMenu({
             <span className="min-w-0">
               <span className="block text-sm font-black text-emerald-100">Programar en ruta</span>
               <span className="mt-0.5 block text-[11px] font-bold leading-snug text-slate-400">
-                Primera vez: logística aprueba. Después entra sola.
+                Eliges la ruta (día) y la hora. Primera vez: logística aprueba.
               </span>
+              {scheduleDetail ? (
+                <span className="mt-1 block text-[11px] font-bold text-slate-500">{scheduleDetail}</span>
+              ) : null}
+              {scheduleChanged ? (
+                <span className="mt-1 inline-flex rounded border border-amber-700/50 bg-amber-950/30 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-200">
+                  Fecha modificada
+                </span>
+              ) : null}
             </span>
           </button>
         ) : null}
@@ -172,73 +141,23 @@ function DriverLegReadyMenu({
         <span className="min-w-0 flex-1 text-sm font-black text-[#f8fafc]">{readyLabel}</span>
       </button>
 
-      <button
-        type="button"
-        disabled={locked}
-        aria-expanded={scheduleOpen}
-        onClick={() => setScheduleOpen((open) => !open)}
-        className="flex w-full items-start gap-3 border-t border-black/70 px-3 py-2.5 text-left transition-colors hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <span className="pt-0.5 text-slate-400">
-          <CalendarDays className="h-5 w-5 shrink-0" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-black text-slate-300">
-            {DRIVER_LEG_READY_LABELS.setDate}
-          </span>
-          {scheduleDetail && !scheduleOpen ? (
-            <span className="mt-0.5 block text-[11px] font-bold leading-snug text-slate-500">
-              {scheduleDetail}
-            </span>
-          ) : null}
-          {scheduleChanged ? (
-            <span className="mt-1 inline-flex rounded border border-amber-700/50 bg-amber-950/30 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-200">
-              Fecha modificada
-            </span>
-          ) : null}
-        </span>
-        <ChevronRight
-          className={`mt-0.5 h-4 w-4 shrink-0 text-slate-500 transition-transform ${scheduleOpen ? "rotate-90" : ""}`}
-        />
-      </button>
-
-      {scheduleOpen ? (
-        <div
-          className="grid w-full min-w-0 gap-2 border-t border-black/70 px-3 pb-3 pt-2"
-          onPointerDown={(event) => event.stopPropagation()}
+      {onProgramRoute ? (
+        <button
+          type="button"
+          disabled={locked}
+          onClick={onProgramRoute}
+          className="flex w-full items-start gap-3 border-t border-black/70 px-3 py-2.5 text-left transition-colors hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <DateInput
-            min={minScheduleDateInput()}
-            value={routeDate}
-            ariaLabel={scheduleAriaLabel}
-            onChange={onRouteDateChange}
-          />
-          <ScheduleTimeField value={routeTime} onChange={onRouteTimeChange} />
-          <button
-            type="button"
-            disabled={scheduleApplyDisabled}
-            onClick={onApplySchedule}
-            className="h-9 w-full rounded-lg border border-emerald-700/50 bg-emerald-950/40 text-xs font-black text-emerald-200 hover:bg-emerald-900/50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {scheduleApplyButtonLabel(driverScheduledActive)}
-          </button>
-          {onProgramRoute ? (
-            <button
-              type="button"
-              disabled={locked}
-              onClick={onProgramRoute}
-              className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-emerald-800/50 bg-emerald-950/25 text-xs font-black text-emerald-100 hover:bg-emerald-900/40 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Route className="h-3.5 w-3.5" />
-              Programar en ruta
-            </button>
-          ) : null}
-          {scheduleCommitted ? (
-            <p className="text-[11px] font-bold text-emerald-300/90">
-              En uso: {scheduleDetailFull}
-            </p>
-          ) : null}
-        </div>
+          <span className="pt-0.5 text-emerald-300">
+            <Route className="h-5 w-5 shrink-0" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-black text-emerald-100">Programar en ruta</span>
+            <span className="mt-0.5 block text-[11px] font-bold leading-snug text-slate-400">
+              Eliges la ruta (día), cuál semana y la hora.
+            </span>
+          </span>
+        </button>
       ) : null}
     </div>
   );
@@ -348,8 +267,6 @@ export function ShipmentStepContextMenu({
   onFullBoxReceivedAtOffice,
   onProgramRoute,
 }: ShipmentStepContextMenuProps) {
-  const [routeDate, setRouteDate] = useState("");
-  const [routeTime, setRouteTime] = useState("");
   const [scheduleConfirm, setScheduleConfirm] = useState<{
     title: string;
     message: string;
@@ -363,18 +280,6 @@ export function ShipmentStepContextMenu({
       queueMicrotask(() => setScheduleConfirm(null));
     }
   }, [menu]);
-
-  useEffect(() => {
-    if (!menu) {
-      return;
-    }
-
-    queueMicrotask(() => {
-      const [date = "", timePart = ""] = scheduleAt.split("T");
-      setRouteDate(date);
-      setRouteTime(timePart);
-    });
-  }, [menu, scheduleAt]);
 
   useEffect(() => {
     if (!menu) {
@@ -448,50 +353,6 @@ export function ShipmentStepContextMenu({
 
   const legShortLabel = isEmpty ? EMPTY_BOX_LEG_LABELS.short : FULL_BOX_LEG_LABELS.short;
 
-  function commitDriverScheduled(resolvedDate: string, resolvedTime: string) {
-    const orderedKey = isEmpty ? "emptyBoxDriverTaskOrdered" : "fullBoxDriverTaskOrdered";
-
-    onApply({
-      ...(!isDriverActive
-        ? ({
-            [`${legKey}Mode`]: driverMode,
-            ...(isEmpty ? { emptyBoxHandingNow: false } : {}),
-          } as Partial<ShipmentLogisticsEditorState>)
-        : {}),
-      [orderedKey]: false,
-      [`${legKey}ScheduleMode`]: "scheduled",
-      [`${legKey}ScheduleAt`]: `${resolvedDate}T${resolvedTime}`,
-    } as Partial<ShipmentLogisticsEditorState>);
-    onClose();
-  }
-
-  function requestDriverScheduled() {
-    const resolvedDate = resolveScheduleDate(routeDate);
-    if (!resolvedDate || !scheduleTimeComplete(routeTime)) {
-      return;
-    }
-
-    const resolvedTime = routeTime;
-    const proposedScheduleAt = `${resolvedDate}T${resolvedTime}`;
-
-    if (
-      driverScheduledActive &&
-      applyScheduleChangesCommittedDate(scheduleAt, proposedScheduleAt)
-    ) {
-      const copy = applyScheduleDateChangeCopy(legShortLabel, scheduleAt, proposedScheduleAt);
-      setScheduleConfirm({
-        ...copy,
-        onConfirm: () => {
-          setScheduleConfirm(null);
-          commitDriverScheduled(resolvedDate, resolvedTime);
-        },
-      });
-      return;
-    }
-
-    commitDriverScheduled(resolvedDate, resolvedTime);
-  }
-
   function applyOfficeDelivery() {
     if (isEmpty) {
       onApply({
@@ -517,7 +378,6 @@ export function ShipmentStepContextMenu({
   }
 
   const driverScheduledActive = scheduleMode === "scheduled" && Boolean(scheduleAt);
-  const scheduleCommitted = legOrdered && driverScheduledActive;
 
   function commitMarkDriverReady() {
     const orderedKey = isEmpty ? "emptyBoxDriverTaskOrdered" : "fullBoxDriverTaskOrdered";
@@ -599,8 +459,6 @@ export function ShipmentStepContextMenu({
     });
   }
 
-  const scheduleApplyDisabled = !routeDate || !scheduleTimeComplete(routeTime);
-
   const isContextMenu = menu.trigger === "context_menu";
   const isLeftClickMenu = menu.trigger === "left_click";
 
@@ -672,21 +530,12 @@ export function ShipmentStepContextMenu({
               <DriverLegReadyMenu
                 readyLabel={FULL_BOX_LEG_LABELS.ready}
                 cancelLabel={FULL_BOX_LEG_LABELS.cancel}
-                scheduleAriaLabel={FULL_BOX_LEG_LABELS.scheduleAria}
                 scheduleDetail={driverScheduledActive ? scheduleDetail : undefined}
                 scheduleChanged={scheduleChanged}
-                driverScheduledActive={driverScheduledActive}
-                scheduleCommitted={scheduleCommitted}
-                scheduleDetailFull={scheduleDetail || "Sin fecha"}
                 legOrdered={legOrdered}
                 locked={locked}
-                routeDate={routeDate}
-                routeTime={routeTime}
-                onRouteDateChange={(nextValue) => setRouteDate(resolveScheduleDate(nextValue))}
-                onRouteTimeChange={setRouteTime}
                 onMarkReady={applyMarkForPickup}
                 onCancel={requestCancelPickup}
-                onApplySchedule={requestDriverScheduled}
                 onProgramRoute={
                   onProgramRoute
                     ? () => {
@@ -695,7 +544,6 @@ export function ShipmentStepContextMenu({
                       }
                     : undefined
                 }
-                scheduleApplyDisabled={scheduleApplyDisabled}
               />
             </div>
           ) : isEmpty ? (
@@ -723,21 +571,12 @@ export function ShipmentStepContextMenu({
               <DriverLegReadyMenu
                 readyLabel={EMPTY_BOX_LEG_LABELS.ready}
                 cancelLabel={EMPTY_BOX_LEG_LABELS.cancel}
-                scheduleAriaLabel={EMPTY_BOX_LEG_LABELS.scheduleAria}
                 scheduleDetail={driverScheduledActive ? scheduleDetail : undefined}
                 scheduleChanged={scheduleChanged}
-                driverScheduledActive={driverScheduledActive}
-                scheduleCommitted={scheduleCommitted}
-                scheduleDetailFull={scheduleDetail || "Sin fecha"}
                 legOrdered={legOrdered}
                 locked={locked}
-                routeDate={routeDate}
-                routeTime={routeTime}
-                onRouteDateChange={(nextValue) => setRouteDate(resolveScheduleDate(nextValue))}
-                onRouteTimeChange={setRouteTime}
                 onMarkReady={applyMarkForDelivery}
                 onCancel={requestCancelDelivery}
-                onApplySchedule={requestDriverScheduled}
                 onProgramRoute={
                   onProgramRoute
                     ? () => {
@@ -746,7 +585,6 @@ export function ShipmentStepContextMenu({
                       }
                     : undefined
                 }
-                scheduleApplyDisabled={scheduleApplyDisabled}
               />
             ) : null
           ) : null}

@@ -21,6 +21,7 @@ export type DateInputProps = {
   onBlur?: (value: string) => void;
   min?: string;
   max?: string;
+  allowedWeekdays?: number[];
   disabled?: boolean;
   className?: string;
   ariaLabel: string;
@@ -34,6 +35,7 @@ export function DateInput({
   onBlur,
   min,
   max,
+  allowedWeekdays,
   disabled = false,
   className = "",
   ariaLabel,
@@ -189,6 +191,7 @@ export function DateInput({
             viewMonth={viewMonth}
             min={min}
             max={max}
+            allowedWeekdays={allowedWeekdays}
             onChange={pickDate}
             onViewChange={(year, month) => {
               setViewYear(year);

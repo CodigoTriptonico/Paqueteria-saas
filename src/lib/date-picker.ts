@@ -136,8 +136,23 @@ function isDateAfterMax(date: string, max?: string) {
   return Boolean(max && date > max);
 }
 
-export function isDateDisabled(date: string, min?: string, max?: string) {
-  return isDateBeforeMin(date, min) || isDateAfterMax(date, max);
+export function isDateDisabled(
+  date: string,
+  min?: string,
+  max?: string,
+  options?: { allowedWeekdays?: number[] },
+) {
+  if (isDateBeforeMin(date, min) || isDateAfterMax(date, max)) {
+    return true;
+  }
+
+  const allowed = options?.allowedWeekdays;
+  if (!allowed?.length) {
+    return false;
+  }
+
+  const weekday = (new Date(`${date}T12:00:00`).getDay() + 6) % 7;
+  return !allowed.includes(weekday);
 }
 
 export function resolveCalendarView(value: string, reference = new Date()) {

@@ -39,6 +39,12 @@ describe("date picker", () => {
     assert.equal(isDateDisabled("2026-07-11", undefined, "2026-07-10"), true);
   });
 
+  it("can restrict selectable days to a logistics weekday", () => {
+    // 2026-07-13 is Monday (0), 2026-07-14 is Tuesday
+    assert.equal(isDateDisabled("2026-07-13", undefined, undefined, { allowedWeekdays: [0] }), false);
+    assert.equal(isDateDisabled("2026-07-14", undefined, undefined, { allowedWeekdays: [0] }), true);
+  });
+
   it("resolves the visible month from the selected value", () => {
     assert.deepEqual(resolveCalendarView("2026-03-15"), { year: 2026, month: 3 });
     assert.deepEqual(resolveCalendarView("", new Date("2026-07-10T12:00:00")), {

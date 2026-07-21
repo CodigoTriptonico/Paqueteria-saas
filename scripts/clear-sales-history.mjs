@@ -9,22 +9,6 @@ import { connectPg, loadEnvLocal } from "./lib/db-connection.mjs";
 
 const TARGET_ORG_ID = process.env.SCGS_ORG_ID?.trim() || "";
 
-/** Delete order: RESTRICT children first, then shipments (packages/payments/tasks cascade). */
-const SALES_CLEAR_TABLES = [
-  "package_custody_events",
-  "package_custody_handoffs",
-  "agency_charges",
-  "agency_box_allocations",
-  "agency_shipment_box_sources",
-  "financial_holds",
-  "operational_exceptions",
-  "sales",
-  "logistics_routes",
-  "shipments",
-  "activity_history",
-  "organization_invoice_counters",
-];
-
 async function count(client, sql, params = []) {
   const { rows } = await client.query(sql, params);
   return Number(rows[0]?.count ?? 0);
@@ -43,20 +27,104 @@ async function tableExists(client, table) {
   return rows.length > 0;
 }
 
+async function withDisabledTriggers(client, statements, work) {
+  for (const statement of statements) {
+    await client.query(statement.disable);
+  }
+  try {
+    return await work();
+  } finally {
+    for (const statement of [...statements].reverse()) {
+      await client.query(statement.enable);
+    }
+  }
+}
+
+async function deleteByOrg(client, table, orgId) {
+  if (!(await tableExists(client, table))) {
+    return "skip (missing)";
+  }
+  const result = await client.query(`delete from public.${table} where organization_id = $1`, [orgId]);
+  return result.rowCount ?? 0;
+}
+
+async function deleteByShipmentOrg(client, table, orgId, extraOrgColumns = []) {
+  if (!(await tableExists(client, table))) {
+    return "skip (missing)";
+  }
+
+  const orgPredicates = [
+    `shipment_id in (select id from public.shipments where organization_id = $1)`,
+    ...extraOrgColumns.map((column) => `${column} = $1`),
+  ];
+
+  const result = await client.query(
+    `delete from public.${table} where ${orgPredicates.join(" or ")}`,
+    [orgId],
+  );
+  return result.rowCount ?? 0;
+}
+
 async function clearOrgSalesHistory(client, orgId) {
   const deleted = {};
 
-  for (const table of SALES_CLEAR_TABLES) {
-    if (!(await tableExists(client, table))) {
-      deleted[table] = "skip (missing)";
-      continue;
-    }
+  // Finance rows without organization_id — RESTRICT children of shipments/packages.
+  deleted.financial_holds = await deleteByShipmentOrg(client, "financial_holds", orgId, [
+    "agency_organization_id",
+    "matrix_organization_id",
+  ]);
+  deleted.agency_charges = await deleteByShipmentOrg(client, "agency_charges", orgId, [
+    "agency_organization_id",
+    "matrix_organization_id",
+  ]);
+  deleted.sales = await deleteByShipmentOrg(client, "sales", orgId, [
+    "selling_organization_id",
+    "agency_organization_id",
+    "matrix_organization_id",
+  ]);
 
-    const result = await client.query(`delete from public.${table} where organization_id = $1`, [
-      orgId,
-    ]);
-    deleted[table] = result.rowCount ?? 0;
-  }
+  // Immutable custody facts — disable delete guards only for this admin wipe.
+  deleted.package_custody_events = await withDisabledTriggers(
+    client,
+    [
+      {
+        disable:
+          "alter table public.package_custody_events disable trigger package_custody_events_immutable",
+        enable:
+          "alter table public.package_custody_events enable trigger package_custody_events_immutable",
+      },
+    ],
+    () => deleteByOrg(client, "package_custody_events", orgId),
+  );
+  deleted.package_custody_handoffs = await withDisabledTriggers(
+    client,
+    [
+      {
+        disable:
+          "alter table public.package_custody_handoffs disable trigger package_custody_handoffs_immutable",
+        enable:
+          "alter table public.package_custody_handoffs enable trigger package_custody_handoffs_immutable",
+      },
+    ],
+    () => deleteByOrg(client, "package_custody_handoffs", orgId),
+  );
+
+  deleted.agency_box_allocations = await deleteByOrg(client, "agency_box_allocations", orgId);
+  deleted.agency_shipment_box_sources = await deleteByOrg(
+    client,
+    "agency_shipment_box_sources",
+    orgId,
+  );
+  deleted.operational_exceptions = await deleteByOrg(client, "operational_exceptions", orgId);
+
+  deleted.logistics_routes = await deleteByOrg(client, "logistics_routes", orgId);
+  deleted.shipments = await deleteByOrg(client, "shipments", orgId);
+  deleted.activity_history = await deleteByOrg(client, "activity_history", orgId);
+  deleted.organization_invoice_counters = await deleteByOrg(
+    client,
+    "organization_invoice_counters",
+    orgId,
+  );
 
   return deleted;
 }

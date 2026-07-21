@@ -76,41 +76,33 @@ describe("shipment step context menu", () => {
     assert.equal(logisticsLegActiveChannel("empty_box", state), "driver");
   });
 
-  it("labels schedule apply button based on existing date", () => {
+  it("keeps schedule apply label helper for legacy callers", () => {
     assert.equal(scheduleApplyButtonLabel(false), "Aplicar programación");
     assert.equal(scheduleApplyButtonLabel(true), "Cambiar fecha");
-    assert.match(contextMenuSource, /scheduleApplyButtonLabel\(driverScheduledActive\)/);
   });
 
-  it("combines ready action and schedule row for delivery and pickup", () => {
+  it("schedules driver legs only through Programar en ruta", () => {
     assert.match(contextMenuSource, /EMPTY_BOX_LEG_LABELS\.ready/);
     assert.match(contextMenuSource, /FULL_BOX_LEG_LABELS\.ready/);
-    assert.match(contextMenuSource, /DRIVER_LEG_READY_LABELS\.setDate/);
+    assert.match(contextMenuSource, /Programar en ruta/);
     assert.match(contextMenuSource, /function DriverLegReadyMenu/);
-    assert.match(contextMenuSource, /aria-expanded=\{scheduleOpen\}/);
-    assert.match(contextMenuSource, /CalendarDays/);
-    assert.match(contextMenuSource, /border-t border-black\/70 px-3 pb-3 pt-2/);
-    assert.equal(contextMenuSource.includes("group-hover/date"), false);
-    assert.equal(contextMenuSource.includes("left-[calc(100%-1px)]"), false);
+    assert.equal(contextMenuSource.includes("DRIVER_LEG_READY_LABELS.setDate"), false);
+    assert.equal(contextMenuSource.includes("Establecer una fecha"), false);
+    assert.equal(contextMenuSource.includes("onApplySchedule"), false);
+    assert.equal(contextMenuSource.includes("scheduleOpen"), false);
     assert.equal(EMPTY_BOX_LEG_LABELS.ready, "Listo para dejar");
     assert.equal(EMPTY_BOX_LEG_LABELS.cancel, "No dejar");
     assert.equal(FULL_BOX_LEG_LABELS.cancel, "No recoger");
     assert.match(contextMenuSource, /title="Opciones de dejar"/);
-    assert.equal(contextMenuSource.includes("Marcar para dejar"), false);
-    assert.equal(contextMenuSource.includes("Listo para entregar"), false);
-    assert.equal(contextMenuSource.includes("Cancelar entrega"), false);
     assert.match(contextMenuSource, /function requestMarkDriverReady/);
     assert.match(contextMenuSource, /function requestCancelPickup|function requestCancelDelivery/);
     assert.match(contextMenuSource, /logisticsLegCancelCopy/);
     assert.match(contextMenuSource, /ActionConfirmDialog/);
     assert.match(contextMenuSource, /DriverTaskOrdered/);
-    assert.match(contextMenuSource, /onApplySchedule=\{requestDriverScheduled\}/);
-    assert.match(contextMenuSource, /scheduleApplyDisabled/);
-    assert.match(contextMenuSource, /scheduleTimeComplete\(routeTime\)/);
-    assert.equal(contextMenuSource.includes('useState("10:00")'), false);
+    assert.match(contextMenuSource, /onProgramRoute/);
   });
 
-  it("keeps the schedule flyout open while the native time picker is in use", () => {
+  it("keeps the menu open while native pickers are in use", () => {
     assert.match(contextMenuSource, /shouldSuppressDismissForNativePicker/);
     assert.match(
       contextMenuSource,
