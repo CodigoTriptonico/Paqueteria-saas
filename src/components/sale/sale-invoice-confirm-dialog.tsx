@@ -12,6 +12,7 @@ type SaleInvoiceConfirmDialogProps = {
   confirmLabel: string;
   confirmingLabel?: string;
   confirming?: boolean;
+  errorMessage?: string;
   paymentMethod: SalePaymentSelection;
   paymentNote?: string;
   onPaymentMethodChange: (method: SalePaymentSelection) => void;
@@ -28,6 +29,7 @@ export function SaleInvoiceConfirmDialog({
   confirmLabel,
   confirmingLabel = "Creando...",
   confirming = false,
+  errorMessage = "",
   paymentMethod,
   paymentNote = "",
   onPaymentMethodChange,
@@ -73,6 +75,15 @@ export function SaleInvoiceConfirmDialog({
           onChange={onPaymentMethodChange}
           onNoteChange={onPaymentNoteChange}
         />
+
+        {errorMessage ? (
+          <p
+            className="mt-3 rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200"
+            role="alert"
+          >
+            {errorMessage}
+          </p>
+        ) : null}
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <button

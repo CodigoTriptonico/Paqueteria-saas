@@ -2566,6 +2566,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       !isResolvedSalePaymentChoice(invoicePaymentMethod) ||
       creatingOpenInvoice
     ) {
+      if (!creatingOpenInvoice) {
+        setStockMessage("Completa los datos de la venta antes de crear el invoice.");
+      }
       return;
     }
 
@@ -2664,6 +2667,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       setInvoicePaymentMethod(SALE_PAYMENT_UNSET);
       setInvoicePaymentNote("");
       notify.success(`Invoice ${invoice} creado.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo crear el invoice.";
+      setStockMessage(message);
+      notify.error(message);
     } finally {
       setCreatingOpenInvoice(false);
     }
@@ -3978,6 +3985,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
               onClick={() => {
                 setInvoicePaymentMethod(defaultSalePaymentSelection());
                 setInvoicePaymentNote("");
+                setStockMessage("");
                 setInvoiceConfirmOpen(true);
               }}
               disabled={creatingOpenInvoice || !invoiceBilling || invoiceBilling.promotionSelectionRequired}
@@ -4236,6 +4244,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         }
         confirmLabel={saleFinishActionLabel(invoiceBillingForPayment)}
         confirming={creatingOpenInvoice}
+        errorMessage={stockMessage}
         paymentMethod={invoicePaymentMethod}
         paymentNote={invoicePaymentNote}
         onPaymentMethodChange={setInvoicePaymentMethod}
