@@ -17,6 +17,10 @@ test("intake keeps truck selection in a compact picker and the scanner in the wo
   assert.match(intake, /ariaLabel="Ver por qué no hay camiones"/);
   assert.match(intake, /fixed inset-x-4 top-1\/2/);
   assert.match(intake, /const \[truckPickerOpen, setTruckPickerOpen\] = useState\(false\)/);
+  assert.match(intake, /const \[pendingScanCode, setPendingScanCode\] = useState\(""\)/);
+  assert.match(intake, /function beginInitialScan\(\)/);
+  assert.match(intake, /aria-label="Escanear caja sin ingreso abierto"/);
+  assert.match(intake, /Abrir y escanear/);
   assert.match(intake, /setTruckPickerOpen\(true\)/);
   assert.match(intake, /aria-labelledby="warehouse-truck-picker-title"/);
   assert.match(intake, /divide-y divide-black/);

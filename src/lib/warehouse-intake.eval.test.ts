@@ -32,7 +32,7 @@ test("custody moves only on accepted scan and route arrival is connected", () =>
   assert.match(migration, /warehouse_location_label/);
   assert.match(arrivalMigration, /arrival_warehouse_id/);
   assert.match(arrivalMigration, /ARRIVAL_WAREHOUSE_MISMATCH/);
-  assert.match(component, /Descargar en/);
+  assert.match(component, /cajas por descargar/);
   assert.match(component, /Motivo: \{truck\.arrivalReason\}/);
   assert.match(custodyOrderingMigration, /event\.package_status = package\.status/);
 });

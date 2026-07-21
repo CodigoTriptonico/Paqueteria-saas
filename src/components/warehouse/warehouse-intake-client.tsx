@@ -232,6 +232,7 @@ export function WarehouseIntakeClient({
   const [note, setNote] = useState("");
   const [evidence, setEvidence] = useState<File | null>(null);
   const [evidenceInputKey, setEvidenceInputKey] = useState(0);
+  const [pendingScanCode, setPendingScanCode] = useState("");
   const [truckPickerOpen, setTruckPickerOpen] = useState(false);
   const [foundOpen, setFoundOpen] = useState(false);
   const [issueOpen, setIssueOpen] = useState(false);
@@ -271,6 +272,19 @@ export function WarehouseIntakeClient({
   const weightDifference = selectedPackage?.collectionWeightKg && enteredWeight > 0 ? Math.abs(enteredWeight - selectedPackage.collectionWeightKg) : 0;
   const weightWarning = Boolean(selectedPackage && weightDifference > workspace.toleranceKg);
   const sessionBins = workspace.bins.filter((bin) => bin.warehouseId === activeSession?.warehouseId);
+
+  useEffect(() => {
+    if (!pendingScanCode || !activeSession) return;
+    setPendingScanCode("");
+    requestAnimationFrame(() => {
+      if (isFoundIntake || !selectedPackage) {
+        setCondition("unidentified");
+        setIssueOpen(true);
+        return;
+      }
+      weightRef.current?.focus();
+    });
+  }, [activeSession, isFoundIntake, pendingScanCode, selectedPackage]);
 
   function resetScanner() {
     setCode("");
@@ -336,6 +350,27 @@ export function WarehouseIntakeClient({
     } finally {
       setOpening(false);
     }
+  }
+
+  function beginInitialScan() {
+    const scannedCode = code.trim();
+    if (!scannedCode) {
+      setInlineError("Escanea o escribe el código de la caja.");
+      codeRef.current?.focus();
+      return;
+    }
+    setInlineError("");
+    setPendingScanCode(scannedCode);
+    if (selectedTruck) {
+      void openIntake();
+      return;
+    }
+    setFoundOpen(true);
+  }
+
+  function cancelFoundIntake() {
+    setFoundOpen(false);
+    setPendingScanCode("");
   }
 
   function prepareScannedCode() {
@@ -450,15 +485,9 @@ export function WarehouseIntakeClient({
           <div className="w-full max-w-none">
             {inlineError ? <div role="alert" className="flex items-start gap-3 rounded-xl border border-rose-900 bg-rose-950/35 p-3 text-sm font-bold text-rose-100"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{inlineError}</span></div> : null}
             <section className={`${inlineError ? "mt-3" : ""} border-b border-black pb-4`}>
-              <div className="flex items-center justify-between gap-3">
-                <div><p className={labelMutedClass}>Llegadas listas</p><h2 className="mt-1 text-lg font-black text-slate-100">Selecciona el camión</h2></div>
-                <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setInlineError(""); setTruckPickerOpen(true); }} className={`${secondaryButtonClass} h-9 px-3 text-xs`}><Truck className="h-4 w-4 text-emerald-300" />{selectedTruck ? selectedTruck.routeName : "Elegir camión"}<span className="ml-1 rounded-full bg-slate-950/35 px-1.5 py-0.5 text-[10px] tabular-nums">{trucks.length}</span></button><button type="button" onClick={() => { setInlineError(""); setFoundOpen(true); }} className={`${secondaryButtonClass} h-9 px-3 text-xs`}><PackageCheck className="h-4 w-4 text-amber-300" />Caja encontrada</button><button type="button" onClick={() => setDrawer("history")} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300" aria-label="Ver ingresos cerrados"><History className="h-4 w-4" /></button></div>
-              </div>
-              {!trucks.length ? <div className="mt-3 flex items-center gap-2 px-1 text-sm"><Truck className="h-4 w-4 shrink-0 text-slate-600" /><p className="font-black text-slate-300">No hay camiones pendientes.</p><IntakeInfoDisclosure ariaLabel="Ver por qué no hay camiones">Una ruta aparece aquí cuando el conductor recoge cajas y llega a esta bodega.</IntakeInfoDisclosure></div> : null}
-              {selectedTruck ? <div className="mt-4 grid gap-3 border-t border-black pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                {selectedTruck.arrivalWarehouseId ? <div className="min-w-0"><p className={labelMutedClass}>Descargar en</p><p className="mt-1 flex items-center gap-2 truncate font-black text-slate-100"><Warehouse className="h-4 w-4 shrink-0 text-emerald-300" />{selectedTruck.arrivalWarehouseName}<span className="text-sm font-bold text-slate-500">· {selectedTruck.packageCount} cajas</span></p></div> : <label className="grid gap-1.5"><span className={labelMutedClass}>Bodega que recibe</span><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className={`${inputClass} h-11 w-full`}>{workspace.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>}
-                <button type="button" disabled={opening || !warehouseId} onClick={() => void openIntake()} className={`${primaryButtonClass} h-11 w-full px-5 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto`}>{opening ? "Abriendo..." : "Abrir ingreso y descargar"}<ChevronRight className="h-4 w-4" /></button>
-              </div> : null}
+              <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-emerald-400 text-slate-950"><ScanLine className="h-5 w-5" /></span><div><p className={labelMutedClass}>Entrada rápida</p><h2 className="mt-0.5 text-lg font-black text-slate-100">Escanea una caja</h2></div></div><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setInlineError(""); setTruckPickerOpen(true); }} className={`${secondaryButtonClass} h-9 px-3 text-xs`}><Truck className="h-4 w-4 text-emerald-300" />{selectedTruck ? selectedTruck.routeName : "Elegir camión"}<span className="ml-1 rounded-full bg-slate-950/35 px-1.5 py-0.5 text-[10px] tabular-nums">{trucks.length}</span></button><button type="button" onClick={() => { setPendingScanCode(""); setInlineError(""); setFoundOpen(true); }} className={`${secondaryButtonClass} h-9 px-3 text-xs`}><PackageCheck className="h-4 w-4 text-amber-300" />Caja encontrada</button><button type="button" onClick={() => setDrawer("history")} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300" aria-label="Ver ingresos cerrados"><History className="h-4 w-4" /></button></div></div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"><label className="grid gap-1.5"><span className={labelMutedClass}>Código de caja</span><input ref={codeRef} value={code} onChange={(event) => { setCode(event.target.value); setPendingScanCode(""); setInlineError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); beginInitialScan(); } }} className={`${inputClass} h-12 w-full font-mono text-base font-black`} placeholder="Escanea o escribe el código" autoComplete="off" aria-label="Escanear caja sin ingreso abierto" /></label><button type="button" onClick={beginInitialScan} disabled={opening || !code.trim()} className={`${primaryButtonClass} h-12 w-full px-5 disabled:cursor-not-allowed disabled:opacity-40 lg:w-auto`}>{opening ? "Abriendo..." : selectedTruck ? "Abrir y escanear" : "Continuar"}<ChevronRight className="h-4 w-4" /></button></div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-black pt-3"><div className="flex min-w-0 items-center gap-2 text-sm">{selectedTruck ? <><Warehouse className="h-4 w-4 shrink-0 text-emerald-300" /><p className="truncate font-black text-slate-200">{selectedTruck.arrivalWarehouseName}<span className="font-bold text-slate-500"> · {selectedTruck.packageCount} cajas por descargar</span></p></> : <><Truck className="h-4 w-4 shrink-0 text-slate-600" /><p className="font-black text-slate-300">No hay camiones pendientes.</p><IntakeInfoDisclosure ariaLabel="Ver por qué no hay camiones">Escanea la caja y se abrirá su registro sin manifiesto para documentar dónde la encontraste.</IntakeInfoDisclosure></>}</div>{selectedTruck && !selectedTruck.arrivalWarehouseId ? <label className="flex items-center gap-2"><span className={labelMutedClass}>Bodega</span><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className={`${inputClass} h-9 min-w-48`}>{workspace.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label> : null}</div>
             </section>
           </div>
         ) : (
@@ -513,7 +542,17 @@ export function WarehouseIntakeClient({
 
       {truckPickerOpen ? <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4"><button type="button" aria-label="Cerrar selector de camión" className="absolute inset-0" onClick={() => setTruckPickerOpen(false)} /><section role="dialog" aria-modal="true" aria-labelledby="warehouse-truck-picker-title" className="relative max-h-[88dvh] w-full max-w-xl overflow-y-auto rounded-t-2xl border border-black bg-surface-panel pb-8 shadow-2xl sm:rounded-2xl"><div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-black bg-surface-panel p-4 sm:p-5"><div><p className={labelMutedClass}>Llegadas listas</p><h2 id="warehouse-truck-picker-title" className="mt-0.5 text-xl font-black text-slate-100">Elegir camión</h2></div><button type="button" onClick={() => setTruckPickerOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300" aria-label="Cerrar"><X className="h-4 w-4" /></button></div>{trucks.length ? <div className="divide-y divide-black">{trucks.map((truck) => { const selected = truck.routeId === selectedTruckId; return <button key={truck.routeId} type="button" onClick={() => { setSelectedTruckId(truck.routeId); if (truck.arrivalWarehouseId) setWarehouseId(truck.arrivalWarehouseId); setTruckPickerOpen(false); }} className={`flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-surface-card-hover sm:px-5 ${selected ? "bg-emerald-950/30" : ""}`}><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black ${selected ? "bg-emerald-400 text-slate-950" : "bg-surface-inset text-slate-300"}`}><Truck className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-3"><span className="truncate font-black text-slate-100">{truck.routeName}</span><span className="shrink-0 font-mono text-sm font-black text-emerald-200">{truck.packageCount} cajas</span></span><span className="mt-1 block truncate text-xs font-bold text-slate-400">{truck.vehicleName} · {truck.driverName}</span><span className="mt-1 flex items-center gap-1 truncate text-xs font-black text-slate-300"><MapPin className="h-3.5 w-3.5 shrink-0" />{truck.arrivalWarehouseName}</span>{truck.arrivalReason ? <span className="mt-1 block text-xs font-bold leading-4 text-slate-500">Motivo: {truck.arrivalReason}</span> : null}</span>{selected ? <Check className="h-5 w-5 shrink-0 text-emerald-300" /> : <ChevronRight className="h-4 w-4 shrink-0 text-slate-600" />}</button>; })}</div> : <div className="p-5 text-center"><Truck className="mx-auto h-6 w-6 text-slate-600" /><p className="mt-2 font-black text-slate-200">No hay camiones pendientes.</p><div className="mt-2 flex justify-center"><IntakeInfoDisclosure ariaLabel="Ver por qué no hay camiones">Una ruta aparece aquí cuando el conductor recoge cajas y llega a esta bodega.</IntakeInfoDisclosure></div></div>}</section></div> : null}
 
-      {foundOpen ? <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4"><button type="button" aria-label="Cancelar caja encontrada" className="absolute inset-0" onClick={() => setFoundOpen(false)} disabled={opening} /><section role="dialog" aria-modal="true" aria-labelledby="warehouse-found-title" className="relative w-full max-w-md rounded-t-2xl border border-black bg-surface-panel p-4 pb-8 shadow-2xl sm:rounded-2xl sm:p-5"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-amber-900 bg-amber-950/50 text-amber-300"><PackageCheck className="h-5 w-5" /></span><div><p className={labelMutedClass}>Sin camión</p><h2 id="warehouse-found-title" className="mt-0.5 text-xl font-black text-slate-100">Caja encontrada</h2></div></div><button type="button" onClick={() => setFoundOpen(false)} disabled={opening} className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300" aria-label="Cerrar"><X className="h-4 w-4" /></button></div><label className="mt-5 grid gap-1.5"><span className={labelMutedClass}>Bodega donde la encontré</span><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className={`${inputClass} h-11 w-full`}>{workspace.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>{inlineError ? <p role="alert" className="mt-3 text-sm font-black text-rose-200">{inlineError}</p> : null}<div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setFoundOpen(false)} disabled={opening} className={`${secondaryButtonClass} h-11`}>Cancelar</button><button type="button" disabled={opening || !warehouseId} onClick={() => void openFoundIntake()} className={`${primaryButtonClass} h-11 disabled:opacity-40`}>{opening ? "Abriendo..." : "Abrir ingreso"}</button></div></section></div> : null}
+      {foundOpen ? (
+        <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4">
+          <button type="button" aria-label="Cancelar caja encontrada" className="absolute inset-0" onClick={cancelFoundIntake} disabled={opening} />
+          <section role="dialog" aria-modal="true" aria-labelledby="warehouse-found-title" className="relative w-full max-w-md rounded-t-2xl border border-black bg-surface-panel p-4 pb-8 shadow-2xl sm:rounded-2xl sm:p-5">
+            <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-amber-900 bg-amber-950/50 text-amber-300"><PackageCheck className="h-5 w-5" /></span><div><p className={labelMutedClass}>Sin camión</p><h2 id="warehouse-found-title" className="mt-0.5 text-xl font-black text-slate-100">Caja encontrada</h2></div></div><button type="button" onClick={cancelFoundIntake} disabled={opening} className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300" aria-label="Cerrar"><X className="h-4 w-4" /></button></div>
+            <label className="mt-5 grid gap-1.5"><span className={labelMutedClass}>Bodega donde la encontré</span><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className={`${inputClass} h-11 w-full`}>{workspace.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>
+            {inlineError ? <p role="alert" className="mt-3 text-sm font-black text-rose-200">{inlineError}</p> : null}
+            <div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={cancelFoundIntake} disabled={opening} className={`${secondaryButtonClass} h-11`}>Cancelar</button><button type="button" disabled={opening || !warehouseId} onClick={() => void openFoundIntake()} className={`${primaryButtonClass} h-11 disabled:opacity-40`}>{opening ? "Abriendo..." : "Abrir ingreso"}</button></div>
+          </section>
+        </div>
+      ) : null}
 
       {issueOpen ? <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4"><button type="button" aria-label="Cerrar condición" className="absolute inset-0" onClick={() => setIssueOpen(false)} /><section role="dialog" aria-modal="true" aria-labelledby="warehouse-condition-title" className="relative max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-black bg-surface-panel p-4 pb-8 shadow-2xl sm:rounded-2xl sm:p-5">
         <div className="flex items-start justify-between gap-3"><div><p className={labelMutedClass}>{isFoundIntake ? "Custodia por aclarar" : "Excepción física"}</p><h2 id="warehouse-condition-title" className="mt-1 text-xl font-black text-slate-100">{isFoundIntake ? "Dónde encontraste la caja" : "Cómo llegó la caja"}</h2></div><button type="button" onClick={() => setIssueOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300" aria-label="Cerrar"><X className="h-4 w-4" /></button></div>
