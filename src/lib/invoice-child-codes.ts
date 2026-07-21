@@ -33,3 +33,16 @@ export function invoiceBoxCodes(invoiceCode: string, count: number) {
     (_, index) => invoiceBoxCode(invoiceCode, index),
   );
 }
+
+/**
+ * Extra printed sheets for multi-box sales only.
+ * A single box already has the parent invoice; printing /A is a duplicate paper.
+ * Logistics still stores one child invoice_code per package.
+ */
+export function printableBoxInvoiceCodes(invoiceCode: string, count: number) {
+  const boxCount = Math.max(0, Math.floor(count));
+  if (boxCount <= 1) {
+    return [];
+  }
+  return invoiceBoxCodes(invoiceCode, boxCount);
+}

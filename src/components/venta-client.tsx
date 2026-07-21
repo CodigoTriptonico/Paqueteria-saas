@@ -96,7 +96,7 @@ import {
   PLATFORM_BRAND_TITLE,
   resolveOrganizationBranding,
 } from "@/lib/organizations/branding";
-import { invoiceBoxCodes } from "@/lib/invoice-child-codes";
+import { printableBoxInvoiceCodes } from "@/lib/invoice-child-codes";
 import type { PricingPromotionConfig } from "@/lib/pricing-promotions";
 import { promotionMatchesCartCatalog } from "@/lib/combo-rules";
 import { CountryName } from "@/components/country-flag";
@@ -342,7 +342,8 @@ function boxInvoicesForSale(invoiceNumber: string, lines: SaleBoxCartLine[]) {
   );
   const boxCount = boxes.length;
 
-  return invoiceBoxCodes(invoiceNumber, boxCount).map((childInvoiceNumber, index) => ({
+  // One-box sales print only the parent invoice. Extra /A sheets are for 2+ boxes.
+  return printableBoxInvoiceCodes(invoiceNumber, boxCount).map((childInvoiceNumber, index) => ({
     invoiceNumber: childInvoiceNumber,
     box: boxes[index] || [],
     position: index + 1,

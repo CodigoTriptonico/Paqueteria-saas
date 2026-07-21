@@ -9,23 +9,52 @@ import { connectPg, loadEnvLocal } from "./lib/db-connection.mjs";
 
 const TARGET_ORG_ID = process.env.SCGS_ORG_ID?.trim() || "";
 
+/** Delete order: RESTRICT children first, then shipments (packages/payments/tasks cascade). */
+const SALES_CLEAR_TABLES = [
+  "package_custody_events",
+  "package_custody_handoffs",
+  "agency_charges",
+  "agency_box_allocations",
+  "agency_shipment_box_sources",
+  "financial_holds",
+  "operational_exceptions",
+  "sales",
+  "logistics_routes",
+  "shipments",
+  "activity_history",
+  "organization_invoice_counters",
+];
+
 async function count(client, sql, params = []) {
   const { rows } = await client.query(sql, params);
   return Number(rows[0]?.count ?? 0);
 }
 
-async function clearOrgSalesHistory(client, orgId) {
-  const steps = [
-    ["logistics_routes", "organization_id"],
-    ["shipments", "organization_id"],
-    ["activity_history", "organization_id"],
-    ["organization_invoice_counters", "organization_id"],
-  ];
+async function tableExists(client, table) {
+  const { rows } = await client.query(
+    `
+    select 1
+    from information_schema.tables
+    where table_schema = 'public' and table_name = $1
+    limit 1
+    `,
+    [table],
+  );
+  return rows.length > 0;
+}
 
+async function clearOrgSalesHistory(client, orgId) {
   const deleted = {};
 
-  for (const [table, column] of steps) {
-    const result = await client.query(`delete from public.${table} where ${column} = $1`, [orgId]);
+  for (const table of SALES_CLEAR_TABLES) {
+    if (!(await tableExists(client, table))) {
+      deleted[table] = "skip (missing)";
+      continue;
+    }
+
+    const result = await client.query(`delete from public.${table} where organization_id = $1`, [
+      orgId,
+    ]);
     deleted[table] = result.rowCount ?? 0;
   }
 
@@ -58,6 +87,16 @@ async function main() {
     shipments: await count(
       client,
       "select count(*)::int as count from public.shipments where organization_id = $1",
+      [orgId],
+    ),
+    packages: await count(
+      client,
+      "select count(*)::int as count from public.shipment_packages where organization_id = $1",
+      [orgId],
+    ),
+    custodyEvents: await count(
+      client,
+      "select count(*)::int as count from public.package_custody_events where organization_id = $1",
       [orgId],
     ),
     routes: await count(
@@ -109,6 +148,7 @@ async function main() {
 
     await client.query("commit");
     console.log("\nListo. Remitentes, destinatarios, inventario y precios intactos.");
+    console.log("El contador de invoices arranca de nuevo en INV-000001.");
   } catch (error) {
     await client.query("rollback");
     throw error;
@@ -118,6 +158,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error.message || error);
+  console.error(error);
   process.exit(1);
 });

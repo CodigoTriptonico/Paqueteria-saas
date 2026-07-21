@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { invoiceBoxCode, invoiceBoxCodes, invoiceBoxSuffix } from "./invoice-child-codes";
+import {
+  invoiceBoxCode,
+  invoiceBoxCodes,
+  invoiceBoxSuffix,
+  printableBoxInvoiceCodes,
+} from "./invoice-child-codes";
 
 test("each physical box receives an alphabetic child invoice under its sale invoice", () => {
   assert.equal(invoiceBoxCode("INV-000123", 0), "INV-000123/A");
@@ -17,4 +22,10 @@ test("invoice suffixes remain deterministic past one alphabet", () => {
   assert.equal(invoiceBoxSuffix(27), "AB");
   assert.equal(invoiceBoxSuffix(701), "ZZ");
   assert.equal(invoiceBoxSuffix(702), "AAA");
+});
+
+test("single-box sales do not print a duplicate child invoice sheet", () => {
+  assert.deepEqual(printableBoxInvoiceCodes("INV-000006", 0), []);
+  assert.deepEqual(printableBoxInvoiceCodes("INV-000006", 1), []);
+  assert.deepEqual(printableBoxInvoiceCodes("INV-000006", 2), ["INV-000006/A", "INV-000006/B"]);
 });

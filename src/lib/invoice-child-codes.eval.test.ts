@@ -10,13 +10,14 @@ test("new shipments persist one child invoice per physical box without splitting
   assert.match(source, /invoice_code: invoiceBoxCode/);
 });
 
-test("the completed sale prints the parent invoice and its box invoices", async () => {
+test("the completed sale prints box invoices only when there are two or more boxes", async () => {
   const [saleSource, invoiceSource] = await Promise.all([
     readFile(new URL("../components/venta-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/sale/venta-parts.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(saleSource, /invoiceBoxCodes\(invoiceNumber, boxCount\)/);
+  assert.match(saleSource, /printableBoxInvoiceCodes\(invoiceNumber, boxCount\)/);
+  assert.match(saleSource, /One-box sales print only the parent invoice/);
   assert.match(saleSource, /parentInvoiceNumber=\{createdInvoice\.invoiceNumber\}/);
   assert.match(invoiceSource, /Factura principal/);
 });
