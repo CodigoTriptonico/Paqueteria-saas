@@ -287,7 +287,7 @@ function LogisticsTaskWaitingBanner({
 }
 
 function taskSortValue(task: LogisticsTaskItem) {
-  const value = task.scheduledAt || task.createdAt;
+  const value = task.scheduledAt || task.requestedScheduleAt || task.createdAt;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
@@ -802,7 +802,7 @@ export function LogisticaClient({
     () =>
       buildLogisticsCalendarDayTones(
         allTasks.map((task) => ({
-          scheduledAt: task.scheduledAt,
+          scheduledAt: task.scheduledAt || task.requestedScheduleAt || null,
           status: task.status,
           assignedTo: task.assignedTo,
         })),
@@ -814,7 +814,7 @@ export function LogisticaClient({
     () =>
       buildLogisticsWeekdayTones(
         allTasks.map((task) => ({
-          scheduledAt: task.scheduledAt,
+          scheduledAt: task.scheduledAt || task.requestedScheduleAt || null,
           status: task.status,
           assignedTo: task.assignedTo,
         })),
@@ -921,7 +921,7 @@ export function LogisticaClient({
         const routeInfo = task ? routeByTaskId.get(task.id) : undefined;
         const dateMatches = matchesLogisticsWeekdayFilter({
           weekdayFilter,
-          scheduledAt: task?.scheduledAt,
+          scheduledAt: task?.scheduledAt || task?.requestedScheduleAt || null,
           routeDate: routeInfo?.route.routeDate,
         });
         const routeMatches = matchesLogisticsRouteTemplateFilter({
@@ -930,7 +930,7 @@ export function LogisticaClient({
         });
         const calendarMatches = matchesLogisticsDateFilter({
           dateFilter,
-          scheduledAt: task?.scheduledAt,
+          scheduledAt: task?.scheduledAt || task?.requestedScheduleAt || null,
           routeDate: routeInfo?.route.routeDate,
         });
         const haystack = [
@@ -988,7 +988,7 @@ export function LogisticaClient({
       const routeInfo = routeByTaskId.get(task.id);
       const dateMatches = matchesLogisticsWeekdayFilter({
         weekdayFilter,
-        scheduledAt: task.scheduledAt,
+        scheduledAt: task.scheduledAt || task.requestedScheduleAt || null,
         routeDate: routeInfo?.route.routeDate,
       });
       const routeMatches = matchesLogisticsRouteTemplateFilter({
@@ -997,7 +997,7 @@ export function LogisticaClient({
       });
       const calendarMatches = matchesLogisticsDateFilter({
         dateFilter,
-        scheduledAt: task.scheduledAt,
+        scheduledAt: task.scheduledAt || task.requestedScheduleAt || null,
         routeDate: routeInfo?.route.routeDate,
       });
       const haystack = [
@@ -1437,7 +1437,7 @@ export function LogisticaClient({
       })),
       templates: routeCatalog?.templates || [],
       enabledWeekdays: routeCatalog?.enabledDays || [],
-      taskDate: taskRoutePickerDate(task.scheduledAt, filterAnchorDate),
+      taskDate: taskRoutePickerDate(task.scheduledAt || task.requestedScheduleAt || null, filterAnchorDate),
       driverLabelById: memberById,
     });
   }
@@ -1492,7 +1492,7 @@ export function LogisticaClient({
       taskId: task.id,
       routeId: parsed.routeId,
       routeTemplateId: parsed.routeTemplateId,
-      routeDate: taskRoutePickerDate(task.scheduledAt, filterAnchorDate),
+      routeDate: taskRoutePickerDate(task.scheduledAt || task.requestedScheduleAt || null, filterAnchorDate),
     });
     setBusyId(null);
 
@@ -1750,6 +1750,8 @@ export function LogisticaClient({
     const missingGeo = Boolean(displayTask && !address?.hasGeo);
     const canChangeDriver = task ? canChangeTaskDriver(task, routeInfo) : false;
     const isFailed = Boolean(task && isLogisticsFailedTask(task));
+    const taskDate = task?.scheduledAt || task?.requestedScheduleAt || null;
+    const routePendingDay = Boolean(task && !task.scheduledAt && task.requestedScheduleAt);
     const priorityCardClass = logisticsPriorityCardClass(item.shipment.invoice_priority);
     const priorityHeaderClass = logisticsPriorityHeaderClass(item.shipment.invoice_priority);
     const effectiveDriverId = routeInfo?.route.assignedTo || task?.assignedTo || null;
@@ -1802,6 +1804,12 @@ export function LogisticaClient({
                 <span className="inline-flex items-center gap-1 rounded-md border border-amber-700/70 bg-amber-400/15 px-2 py-0.5 text-[10px] font-black text-amber-100">
                   <AlertTriangle className="h-3 w-3" />
                   Falta geo
+                </span>
+              ) : null}
+              {routePendingDay ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-200">
+                  <Route className="h-3 w-3" />
+                  Ruta pendiente
                 </span>
               ) : null}
               <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-black ${invoiceEvidence.tone}`}>
@@ -2091,12 +2099,12 @@ export function LogisticaClient({
                 onClick={() => setEditingTask({ task })}
               >
                 <CalendarDays className="h-3.5 w-3.5 text-emerald-300" />
-                {formatTaskDate(task.scheduledAt)}
+                {formatTaskDate(taskDate)}
               </button>
             ) : task ? (
               <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-black bg-surface-inset px-2 text-[10px] font-black text-slate-300">
                 <CalendarDays className="h-3.5 w-3.5 text-emerald-300" />
-                {formatTaskDate(task.scheduledAt)}
+                {formatTaskDate(taskDate)}
               </span>
             ) : null}
             {task && (busyId === task.id || busyId === `route:${task.id}`) ? (
@@ -2299,7 +2307,7 @@ export function LogisticaClient({
                         statusBadgeClass={statusBadgeClass}
                       />
                       <span className="rounded-md border border-black bg-surface-inset px-2 py-1 text-[11px] font-black text-slate-400">
-                        {formatSchedule(task.scheduledAt)}
+                        {formatSchedule(task.scheduledAt || task.requestedScheduleAt || null)}
                       </span>
                       {canEditLogisticsTaskFields(task) ? (
                         <button
@@ -2805,6 +2813,7 @@ export function LogisticaClient({
             : ""
         }
         scheduledAt={confirmingScheduleTask?.task.scheduledAt || null}
+        pendingRouteDate={scheduledAtToLocalDateInput(confirmingScheduleTask?.task.requestedScheduleAt)}
         templates={routeCatalog?.templates || []}
         enabledDays={routeCatalog?.enabledDays || []}
         defaultDriverByWeekday={routeCatalog?.defaultDriverByWeekday || Array<string | null>(7).fill(null)}

@@ -21,3 +21,30 @@ export function logisticsScheduleWindowPatch(scheduledAt: string | null | undefi
     window_end_at: null,
   };
 }
+
+/**
+ * Records a requested route day without inventing an appointment time.
+ * Noon local avoids a UTC date rollover while the task remains unconfirmed.
+ */
+export function logisticsRequestedRouteDayPatch(routeDate: string | null | undefined) {
+  const date = routeDate?.trim() || "";
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return logisticsScheduleWindowPatch(null);
+  }
+
+  const requestedAt = new Date(`${date}T12:00:00`);
+
+  if (Number.isNaN(requestedAt.getTime())) {
+    return logisticsScheduleWindowPatch(null);
+  }
+
+  return {
+    scheduled_at: null,
+    requested_schedule_at: requestedAt.toISOString(),
+    schedule_confirmation_status: "pending" as const,
+    schedule_kind: null,
+    window_start_at: null,
+    window_end_at: null,
+  };
+}

@@ -17,8 +17,9 @@ describe("venta mobile flow layout", () => {
     );
   });
 
-  it("gives every sale step enough width instead of compressing contact data", () => {
+  it("keeps mobile steps scrollable and wide enough to contain contact data", () => {
     assert.match(stepBarSource, /snap-x snap-mandatory overflow-x-auto/);
-    assert.match(stepBarSource, /w-\[6\.5rem\] shrink-0 snap-start/);
+    assert.match(stepBarSource, /w-\[8\.5rem\] shrink-0 snap-start/);
+    assert.match(stepBarSource, /lg:min-w-0 lg:w-auto lg:flex-1/);
   });
 });

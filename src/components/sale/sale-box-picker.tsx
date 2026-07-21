@@ -122,24 +122,24 @@ function SaleBoxRow({
     <button
       {...boxInteractionProps(box, onChoose, onRemove)}
       data-onboarding-target={coachTarget}
-      className={`${listRowBaseClass} grid w-full grid-cols-[2rem_minmax(0,1fr)_minmax(0,6rem)_minmax(0,5.5rem)_auto] items-center gap-x-3 px-3 py-2.5 text-left sm:px-4 ${listRowHoverClass}${className ? ` ${className}` : ""}`}
+      className={`${listRowBaseClass} grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-3 text-left sm:px-4 ${listRowHoverClass}${className ? ` ${className}` : ""}`}
     >
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400 text-slate-950">
         <Package className="h-4 w-4" />
       </span>
       <div className="min-w-0">
         <p className="truncate text-sm font-black text-[#f8fafc]">{box[0]}</p>
-        <p className="truncate text-[10px] font-bold text-slate-500">{box[4] || "Tiempo —"}</p>
+        <div className="flex min-w-0 items-center gap-1.5 text-[10px] font-bold">
+          <span className="truncate text-slate-400">{box[4] || "Tiempo —"}</span>
+          {promoCount > 0 ? (
+            <span className="shrink-0 font-black uppercase text-emerald-300">{promoCount} promo</span>
+          ) : null}
+        </div>
       </div>
-      <p className="truncate text-sm font-black text-slate-200">{box[1]}</p>
-      <p className="truncate text-[10px] font-black uppercase text-emerald-300">
-        {promoCount > 0 ? `${promoCount} promo` : "\u00a0"}
-      </p>
-      {cartQuantity ? (
-        <SaleBoxCartQtyBadge quantity={cartQuantity} />
-      ) : (
-        <span className="h-6 w-6" aria-hidden />
-      )}
+      <div className="flex min-w-[4.5rem] flex-col items-end justify-center gap-1 text-right">
+        <p className="whitespace-nowrap text-sm font-black text-slate-200">{box[1]}</p>
+        {cartQuantity ? <SaleBoxCartQtyBadge quantity={cartQuantity} /> : null}
+      </div>
     </button>
   );
 }

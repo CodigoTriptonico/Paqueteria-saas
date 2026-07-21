@@ -173,12 +173,14 @@ describe("sale logistics step copy eval", () => {
     assert.equal(logisticsSource.includes("pulsa Siguiente"), false);
   });
 
-  it("does not create logistics tasks at sale time", () => {
+  it("creates logistics tasks at sale time when a chofer route is selected", () => {
     const ventaSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "../components/venta-client.tsx"),
       "utf8",
     );
 
-    assert.match(ventaSource, /logisticsTasks:\s*\[\]/);
+    assert.match(ventaSource, /logisticsTasks:\s*buildSaleLogisticsTasks\(\)/);
+    assert.match(ventaSource, /taskType: "deliver_empty_box"/);
+    assert.match(ventaSource, /taskType: "pickup_full_box"/);
   });
 });

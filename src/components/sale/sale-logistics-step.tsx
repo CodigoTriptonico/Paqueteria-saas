@@ -7,7 +7,6 @@ import {
 import {
   deliveryModeCardClass,
   deliveryModeIconClass,
-  deliverySegmentClass,
   deliverySummary,
   EMPTY_BOX_DRIVER_MODE,
   EMPTY_BOX_OFFICE_MODE,
@@ -16,13 +15,7 @@ import {
   FULL_BOX_OFFICE_MODE,
   fullBoxSummaryLine,
   logisticsLegComplete,
-  minScheduleDateInput,
-  resolveScheduleDate,
 } from "@/components/sale/venta-parts";
-import { DateInput } from "@/components/date-input";
-import { ScheduleTimeField } from "@/components/sale/schedule-time-field";
-
-type ScheduleMode = "pending" | "scheduled";
 
 type SaleLogisticsStepProps = {
   emptyBoxMode: string;
@@ -31,111 +24,39 @@ type SaleLogisticsStepProps = {
   fullBoxMode: string;
   fullBoxScheduleMode: string;
   fullBoxScheduleAt: string;
-  emptyBoxRouteDate: string;
-  emptyBoxRouteTime: string;
-  fullBoxRouteDate: string;
-  fullBoxRouteTime: string;
+  emptyBoxRouteSummary: string;
+  fullBoxRouteSummary: string;
   onSelectEmptyBoxMode: (mode: string) => void;
-  onSelectEmptyBoxScheduleMode: (mode: ScheduleMode) => void;
-  onUpdateEmptyBoxSchedule: (date?: string, time?: string) => void;
-  onQuickEmptyBoxDate: (daysFromToday: number) => void;
+  onConfigureEmptyBoxRoute: () => void;
   onSelectFullBoxMode: (mode: string) => void;
-  onSelectFullBoxScheduleMode: (mode: ScheduleMode) => void;
-  onUpdateFullBoxSchedule: (date?: string, time?: string) => void;
-  onQuickFullBoxDate: (daysFromToday: number) => void;
+  onConfigureFullBoxRoute: () => void;
   fullBoxPickupExpanded: boolean;
   onExpandFullBoxPickup: () => void;
   onDeferFullBoxPickup: () => void;
 };
 
 function SchedulePanel({
-  scheduleMode,
-  routeDate,
-  routeTime,
-  onSelectScheduleMode,
-  onUpdateSchedule,
-  onQuickDate,
+  routeSummary,
+  onConfigureRoute,
 }: {
-  scheduleMode: string;
-  routeDate: string;
-  routeTime: string;
-  onSelectScheduleMode: (mode: ScheduleMode) => void;
-  onUpdateSchedule: (date?: string, time?: string) => void;
-  onQuickDate: (daysFromToday: number) => void;
+  routeSummary: string;
+  onConfigureRoute: () => void;
 }) {
   return (
     <div className="rounded-xl border border-black/80 bg-[#2e3834] p-3">
       <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">
-        Cuándo va el chofer
+        Ruta del chofer
       </p>
-
-      <div className="grid grid-cols-2 gap-1 rounded-lg bg-surface-panel p-1">
-        <button
-          type="button"
-          onClick={() => onSelectScheduleMode("pending")}
-          className={`h-9 rounded-md text-xs font-black transition ${deliverySegmentClass(
-            scheduleMode === "pending",
-          )}`}
-        >
-          Sin fecha aún
-        </button>
-        <button
-          type="button"
-          onClick={() => onSelectScheduleMode("scheduled")}
-          className={`h-9 rounded-md text-xs font-black transition ${deliverySegmentClass(
-            scheduleMode === "scheduled",
-          )}`}
-        >
-          Con fecha y hora
-        </button>
-      </div>
-
-      {scheduleMode === "pending" ? (
-        <p className="mt-2.5 text-sm font-bold leading-snug text-slate-400">
-          Queda en cola. El despacho asigna ruta después.
-        </p>
-      ) : null}
-
-      {scheduleMode === "scheduled" ? (
-        <div className="mt-3 grid gap-3 border-t border-black/70 pt-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-black text-slate-400">Atajos de fecha</p>
-            <div className="flex gap-1.5">
-              {[
-                ["Hoy", 0],
-                ["Mañana", 1],
-              ].map(([label, days]) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => onQuickDate(Number(days))}
-                  className="h-8 rounded-md border border-black bg-surface-inset px-3 text-xs font-black text-[#f8fafc] hover:bg-surface-card-hover"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <label className="grid gap-1.5">
-            <span className="text-[11px] font-black uppercase text-slate-500">Fecha</span>
-            <DateInput
-              compact={false}
-              min={minScheduleDateInput()}
-              value={routeDate}
-              ariaLabel="Fecha de entrega"
-              onChange={(nextValue) =>
-                onUpdateSchedule(resolveScheduleDate(nextValue), routeTime)
-              }
-            />
-          </label>
-
-          <ScheduleTimeField
-            value={routeTime}
-            onChange={(timePart) => onUpdateSchedule(routeDate, timePart)}
-          />
-        </div>
-      ) : null}
+      <p className="rounded-lg border border-black/70 bg-surface-inset px-3 py-2.5 text-sm font-bold leading-snug text-slate-300">
+        {routeSummary || "Elige el día y la ruta, o deja la ruta pendiente para Logística."}
+      </p>
+      <button
+        type="button"
+        onClick={onConfigureRoute}
+        className="mt-3 h-10 w-full rounded-lg border border-black bg-emerald-400 px-3 text-sm font-black text-slate-950 transition hover:bg-emerald-300"
+      >
+        {routeSummary ? "Cambiar ruta" : "Elegir ruta"}
+      </button>
     </div>
   );
 }
@@ -173,13 +94,9 @@ function MovementCard({
   driverLabel,
   officeDetail,
   driverDetail,
-  scheduleMode,
-  routeDate,
-  routeTime,
+  routeSummary,
   onSelectMode,
-  onSelectScheduleMode,
-  onUpdateSchedule,
-  onQuickDate,
+  onConfigureRoute,
   showOfficeHandingOption = false,
 }: {
   step: 1 | 2;
@@ -194,13 +111,9 @@ function MovementCard({
   driverLabel: string;
   officeDetail: string;
   driverDetail: string;
-  scheduleMode: string;
-  routeDate: string;
-  routeTime: string;
+  routeSummary: string;
   onSelectMode: (mode: string) => void;
-  onSelectScheduleMode: (mode: ScheduleMode) => void;
-  onUpdateSchedule: (date?: string, time?: string) => void;
-  onQuickDate: (daysFromToday: number) => void;
+  onConfigureRoute: () => void;
   showOfficeHandingOption?: boolean;
 }) {
   const officeSelected = mode === officeMode;
@@ -304,12 +217,8 @@ function MovementCard({
       ) : driverSelected ? (
         <div className="mt-3">
           <SchedulePanel
-            scheduleMode={scheduleMode}
-            routeDate={routeDate}
-            routeTime={routeTime}
-            onSelectScheduleMode={onSelectScheduleMode}
-            onUpdateSchedule={onUpdateSchedule}
-            onQuickDate={onQuickDate}
+            routeSummary={routeSummary}
+            onConfigureRoute={onConfigureRoute}
           />
         </div>
       ) : null}
@@ -331,18 +240,12 @@ export function SaleLogisticsStep({
   fullBoxMode,
   fullBoxScheduleMode,
   fullBoxScheduleAt,
-  emptyBoxRouteDate,
-  emptyBoxRouteTime,
-  fullBoxRouteDate,
-  fullBoxRouteTime,
+  emptyBoxRouteSummary,
+  fullBoxRouteSummary,
   onSelectEmptyBoxMode,
-  onSelectEmptyBoxScheduleMode,
-  onUpdateEmptyBoxSchedule,
-  onQuickEmptyBoxDate,
+  onConfigureEmptyBoxRoute,
   onSelectFullBoxMode,
-  onSelectFullBoxScheduleMode,
-  onUpdateFullBoxSchedule,
-  onQuickFullBoxDate,
+  onConfigureFullBoxRoute,
   fullBoxPickupExpanded,
   onExpandFullBoxPickup,
   onDeferFullBoxPickup,
@@ -372,13 +275,9 @@ export function SaleLogisticsStep({
           driverLabel="Chofer entrega"
           officeDetail="Se entrega ahora en mostrador."
           driverDetail="La llevamos a su domicilio."
-          scheduleMode={emptyBoxScheduleMode}
-          routeDate={emptyBoxRouteDate}
-          routeTime={emptyBoxRouteTime}
+          routeSummary={emptyBoxRouteSummary}
           onSelectMode={onSelectEmptyBoxMode}
-          onSelectScheduleMode={onSelectEmptyBoxScheduleMode}
-          onUpdateSchedule={onUpdateEmptyBoxSchedule}
-          onQuickDate={onQuickEmptyBoxDate}
+          onConfigureRoute={onConfigureEmptyBoxRoute}
           showOfficeHandingOption
         />
 
@@ -422,13 +321,9 @@ export function SaleLogisticsStep({
               driverLabel="Chofer recoge"
               officeDetail="La devuelve en la oficina."
               driverDetail="Pasamos a recogerla."
-              scheduleMode={fullBoxScheduleMode}
-              routeDate={fullBoxRouteDate}
-              routeTime={fullBoxRouteTime}
+              routeSummary={fullBoxRouteSummary}
               onSelectMode={onSelectFullBoxMode}
-              onSelectScheduleMode={onSelectFullBoxScheduleMode}
-              onUpdateSchedule={onUpdateFullBoxSchedule}
-              onQuickDate={onQuickFullBoxDate}
+              onConfigureRoute={onConfigureFullBoxRoute}
             />
           </div>
         ) : null}

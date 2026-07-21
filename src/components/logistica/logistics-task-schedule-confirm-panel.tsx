@@ -64,6 +64,8 @@ export function LogisticsTaskScheduleConfirmPanel({
   showDriverPicker = true,
   allowPendingRoute = false,
   pendingRouteLabel = "No sé la ruta todavía",
+  pendingRouteDate = null,
+  requireExplicitRouteSelection = false,
   onCancel,
   onConfirm,
   onConfirmPendingRoute,
@@ -86,13 +88,15 @@ export function LogisticsTaskScheduleConfirmPanel({
   showDriverPicker?: boolean;
   allowPendingRoute?: boolean;
   pendingRouteLabel?: string;
+  pendingRouteDate?: string | null;
+  requireExplicitRouteSelection?: boolean;
   onCancel: () => void;
   onConfirm: (input: {
     scheduledAt: string;
     driverId: string;
     routeTemplateId: string;
   }) => void | Promise<void>;
-  onConfirmPendingRoute?: () => void | Promise<void>;
+  onConfirmPendingRoute?: (input: { routeDate: string }) => void | Promise<void>;
 }) {
   const notify = useNotify();
   const routeFirst = selectionOrder === "route-first";
@@ -106,7 +110,11 @@ export function LogisticsTaskScheduleConfirmPanel({
       .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
       .sort((a, b) => a - b);
   }, [enabledDays, templates]);
-  const initialDraft = scheduleDraft(scheduledAt);
+  const initialScheduleDraft = scheduleDraft(scheduledAt);
+  const initialDraft =
+    /^\d{4}-\d{2}-\d{2}$/.test(String(pendingRouteDate || ""))
+      ? { ...initialScheduleDraft, date: String(pendingRouteDate) }
+      : initialScheduleDraft;
   const initialWeekday = getLogisticsWeekdayIndex(initialDraft.date);
   const initialTemplate =
     templates.find((template) => Number(template.weekday) === initialWeekday) ||
@@ -126,18 +134,27 @@ export function LogisticsTaskScheduleConfirmPanel({
       };
     }
 
+    const fallbackDate = nextDateForAvailableWeekdays(availableWeekdays, minScheduleDateInput());
     return {
       ...initialDraft,
-      date: nextDateForAvailableWeekdays(availableWeekdays, minScheduleDateInput()),
+      date: availableWeekdays.includes(getLogisticsWeekdayIndex(initialDraft.date))
+        ? initialDraft.date
+        : fallbackDate,
     };
   });
   const [routeTemplateId, setRouteTemplateId] = useState(() => {
     if (routeFirst) {
       return initialTemplate?.id || "";
     }
-    const startDate = nextDateForAvailableWeekdays(availableWeekdays, minScheduleDateInput());
+    const fallbackDate = nextDateForAvailableWeekdays(availableWeekdays, minScheduleDateInput());
+    const startDate = availableWeekdays.includes(getLogisticsWeekdayIndex(initialDraft.date))
+      ? initialDraft.date
+      : fallbackDate;
     const startWeekday = getLogisticsWeekdayIndex(startDate);
-    return resolveDayRouteTemplateId({ weekday: startWeekday, templates });
+    const resolvedTemplateId = resolveDayRouteTemplateId({ weekday: startWeekday, templates });
+    return requireExplicitRouteSelection && !isDayAsRouteTemplateId(resolvedTemplateId)
+      ? ""
+      : resolvedTemplateId;
   });
   const [ensuringDayRoute, setEnsuringDayRoute] = useState(false);
   const selectedTemplate = useMemo(
@@ -232,6 +249,18 @@ export function LogisticsTaskScheduleConfirmPanel({
     }
   }
 
+  function routeTemplateForWeekday(nextWeekday: number, currentTemplateId?: string) {
+    const resolvedTemplateId = resolveDayRouteTemplateId({
+      weekday: nextWeekday,
+      templates,
+      currentTemplateId,
+    });
+
+    return requireExplicitRouteSelection && !isDayAsRouteTemplateId(resolvedTemplateId)
+      ? ""
+      : resolvedTemplateId;
+  }
+
   function selectDate(date: string) {
     if (routeFirst) {
       setDraft((current) => ({ ...current, date }));
@@ -241,26 +270,14 @@ export function LogisticsTaskScheduleConfirmPanel({
     const nextWeekday = getLogisticsWeekdayIndex(date);
     setDraft((current) => ({ ...current, date }));
     setDriverId(defaultDriverByWeekday[nextWeekday] || "");
-    setRouteTemplateId((current) =>
-      resolveDayRouteTemplateId({
-        weekday: nextWeekday,
-        templates,
-        currentTemplateId: current,
-      }),
-    );
+    setRouteTemplateId((current) => routeTemplateForWeekday(nextWeekday, current));
   }
 
   function selectWeekday(nextWeekday: number) {
     const date = selectWeekdayDate(nextWeekday, minScheduleDateInput());
     setDraft((current) => ({ ...current, date }));
     setDriverId(defaultDriverByWeekday[nextWeekday] || "");
-    setRouteTemplateId((current) =>
-      resolveDayRouteTemplateId({
-        weekday: nextWeekday,
-        templates,
-        currentTemplateId: current,
-      }),
-    );
+    setRouteTemplateId((current) => routeTemplateForWeekday(nextWeekday, current));
   }
 
   if (!open) return null;
@@ -276,6 +293,10 @@ export function LogisticsTaskScheduleConfirmPanel({
         : routeTemplateId && dayTemplates.length) &&
       dateMatchesRoute,
   );
+  const canLeavePendingRoute = Boolean(
+    /^\d{4}-\d{2}-\d{2}$/.test(draft.date) && availableWeekdays.includes(weekday),
+  );
+  const showTimeField = Boolean(dayAsRoute || routeTemplateId);
 
   const routeField = (
     <label className="grid gap-1">
@@ -397,7 +418,7 @@ export function LogisticsTaskScheduleConfirmPanel({
             <>
               {dateField}
               {routeField}
-              {timeField}
+              {showTimeField ? timeField : null}
             </>
           )}
 
@@ -432,8 +453,8 @@ export function LogisticsTaskScheduleConfirmPanel({
           {allowPendingRoute && onConfirmPendingRoute ? (
             <button
               type="button"
-              disabled={saving || ensuringDayRoute}
-              onClick={() => void onConfirmPendingRoute()}
+              disabled={saving || ensuringDayRoute || !canLeavePendingRoute}
+              onClick={() => void onConfirmPendingRoute({ routeDate: draft.date })}
               className={`${secondaryButtonClass} h-11 w-full text-sm font-black disabled:opacity-40`}
             >
               {pendingRouteLabel}
@@ -483,7 +504,7 @@ export function LogisticsTaskScheduleConfirmPanel({
           </div>
           {allowPendingRoute ? (
             <p className="text-center text-[11px] font-bold text-slate-500">
-              Sin ruta queda listo para logística, pendiente de asignar día.
+              Ruta pendiente conserva el día; Logística define la ruta y la hora.
             </p>
           ) : null}
         </div>

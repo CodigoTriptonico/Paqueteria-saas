@@ -865,7 +865,7 @@ function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boole
           )}
         </span>
         <span
-          className={`min-w-0 truncate text-[10px] font-black uppercase leading-snug tracking-wide sm:text-[11px] lg:text-xs ${
+          className={`w-full min-w-0 max-w-full truncate text-center text-[10px] font-black uppercase leading-snug tracking-wide sm:text-[11px] lg:text-xs ${
             step.isActive ? "text-emerald-200" : ""
           }`}
         >
@@ -874,12 +874,12 @@ function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boole
         </span>
       </div>
       <span
-        className={`flex min-h-[1.125rem] min-w-0 items-center justify-center sm:min-h-[1.25rem] ${
+        className={`flex min-h-[1.125rem] w-full min-w-0 max-w-full items-center justify-center sm:min-h-[1.25rem] ${
           step.isActive ? "text-emerald-100" : "text-slate-400"
         }`}
       >
         <span
-          className={`min-w-0 truncate leading-snug ${
+          className={`w-full min-w-0 max-w-full truncate text-center leading-snug ${
             step.id === "box"
               ? "text-[11px] font-black sm:text-xs"
               : "text-[11px] font-black sm:text-[11px] lg:text-xs"
@@ -889,7 +889,7 @@ function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boole
         </span>
       </span>
       <span
-        className={`flex min-h-[1.125rem] min-w-0 items-center justify-center gap-1.5 sm:min-h-[1.25rem] ${
+        className={`flex min-h-[1.125rem] w-full min-w-0 max-w-full items-center justify-center gap-1.5 sm:min-h-[1.25rem] ${
           step.country || step.subtitle
             ? step.isActive
               ? "text-emerald-100"
@@ -903,13 +903,13 @@ function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boole
             <Flag country={step.country} />
           </span>
         ) : null}
-        <span className="min-w-0 truncate text-[11px] font-black leading-snug sm:text-[11px] lg:text-xs">
+        <span className="min-w-0 max-w-full truncate text-center text-[11px] font-black leading-snug sm:text-[11px] lg:text-xs">
           {step.country || step.subtitle || "\u00a0"}
         </span>
       </span>
       {options?.hideDetail ? null : (
         <span
-          className={`flex min-h-[1.75rem] w-full items-center justify-center break-words px-1 text-center leading-tight sm:min-h-[1.25rem] ${
+          className={`flex min-h-[1.75rem] w-full min-w-0 max-w-full items-center justify-center overflow-hidden px-1 text-center leading-tight sm:min-h-[1.25rem] ${
             step.detail && (step.isActive || step.isDone)
               ? step.id === "box"
                 ? step.isActive
@@ -922,7 +922,7 @@ function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boole
           }`}
           aria-hidden={!step.detail || !(step.isActive || step.isDone)}
         >
-          {step.detail || "\u00a0"}
+          <span className="line-clamp-2 max-w-full break-words">{step.detail || "\u00a0"}</span>
         </span>
       )}
     </div>
@@ -976,7 +976,7 @@ export function SaleStepBar({
                 : "snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             }`}
           >
-          <ol className="flex min-w-max items-start gap-0 sm:min-w-0 sm:w-full">
+          <ol className="flex min-w-max items-start gap-0 lg:min-w-0 lg:w-full">
           {steps.map((step, index) => {
             const connectorDone =
               index > 0 && (steps[index - 1]?.isDone || steps[index - 1]?.isActive);
@@ -995,7 +995,7 @@ export function SaleStepBar({
                     />
                   </div>
                 ) : null}
-                <li className="relative flex w-[6.5rem] shrink-0 snap-start flex-col sm:min-w-0 sm:w-auto sm:flex-1">
+                <li className="relative flex w-[8.5rem] shrink-0 snap-start flex-col lg:min-w-0 lg:w-auto lg:flex-1">
                   {step.isActive && stepPopovers?.[step.id] ? (
                     <div
                       className={`min-w-0 w-full overflow-hidden rounded-md border text-center transition sm:rounded-lg ${saleStepBarButtonClass(

@@ -7,7 +7,10 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { recordActivityHistory } from "@/lib/activity-history";
-import { logisticsScheduleWindowPatch } from "@/lib/logistics-schedule-window";
+import {
+  logisticsRequestedRouteDayPatch,
+  logisticsScheduleWindowPatch,
+} from "@/lib/logistics-schedule-window";
 import {
   depositStatusForPayment,
   invoicePaymentKindForCurrentDeposit,
@@ -234,6 +237,8 @@ export type CreateLogisticsTaskInput = {
   taskType: LogisticsTaskType;
   status?: LogisticsTaskStatus;
   scheduledAt?: string | null;
+  /** A seller knows the route day, but Logistics still owns the route and time. */
+  requestedRouteDate?: string | null;
   warehouseId?: string | null;
   notes?: string;
 };
@@ -1350,7 +1355,9 @@ export async function createShipmentAction(input: {
           shipment_id: shipment.id,
           task_type: task.taskType,
           status: task.status || (task.scheduledAt ? "scheduled" : "pending"),
-          ...logisticsScheduleWindowPatch(task.scheduledAt),
+          ...(task.scheduledAt
+            ? logisticsScheduleWindowPatch(task.scheduledAt)
+            : logisticsRequestedRouteDayPatch(task.requestedRouteDate)),
           warehouse_id: task.warehouseId || null,
           notes: task.notes || "",
         })),
