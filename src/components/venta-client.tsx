@@ -220,7 +220,7 @@ type CreatedInvoiceSnapshot = {
     box: string[];
     position: number;
   }>;
-  deliveryLine: string;
+  serviceOperation: "deliver_empty_box";
   billing: InvoiceBillingSnapshot;
 };
 
@@ -2657,7 +2657,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         recipient: selectedRecipient,
         box: selectedBox,
         boxInvoices: boxInvoicesForSale(invoice, selectedBoxLines),
-        deliveryLine: currentLogisticsSummary,
+        serviceOperation: "deliver_empty_box",
         billing: recordedBilling,
       });
       setInvoiceConfirmOpen(false);
@@ -3904,7 +3904,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                   sender={createdInvoice.sender}
                   recipient={createdInvoice.recipient}
                   box={createdInvoice.box}
-                  deliveryLine={createdInvoice.deliveryLine}
+                  serviceOperation={createdInvoice.serviceOperation}
                   billing={createdInvoice.billing}
                 />
                 {createdInvoice.boxInvoices.map((boxInvoice) => (
@@ -3919,7 +3919,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     sender={createdInvoice.sender}
                     recipient={createdInvoice.recipient}
                     box={boxInvoice.box}
-                    deliveryLine={createdInvoice.deliveryLine}
+                    serviceOperation={createdInvoice.serviceOperation}
                   />
                 ))}
                 <div className="no-print grid w-full max-w-[210mm] gap-3 sm:grid-cols-3">
@@ -3954,7 +3954,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
               sender={selectedSender}
               recipient={selectedRecipient}
               box={selectedBox}
-              deliveryLine={currentLogisticsSummary}
+              serviceOperation="deliver_empty_box"
               billing={invoiceBilling}
               payNowDraft={payNowDraft}
               payNowDraftTouched={payNowDraftTouched}
@@ -3976,9 +3976,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             <button
               type="button"
               onClick={() => {
-                const pendingSource =
-                  emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? "office" : "driver";
-                setInvoicePaymentMethod(defaultSalePaymentSelection(pendingSource));
+                setInvoicePaymentMethod(defaultSalePaymentSelection());
                 setInvoicePaymentNote("");
                 setInvoiceConfirmOpen(true);
               }}
@@ -4240,7 +4238,6 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         confirming={creatingOpenInvoice}
         paymentMethod={invoicePaymentMethod}
         paymentNote={invoicePaymentNote}
-        pendingPaymentSource={emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? "office" : "driver"}
         onPaymentMethodChange={setInvoicePaymentMethod}
         onPaymentNoteChange={setInvoicePaymentNote}
         onCancel={() => {

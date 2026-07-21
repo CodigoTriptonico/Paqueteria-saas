@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   conductorCollectionAuditDescription,
+  conductorExpectedDepositCollection,
   conductorPaymentChoiceError,
   isConductorPaymentChoice,
   resolveConductorPaymentAmount,
@@ -9,6 +10,36 @@ import {
 } from "@/lib/conductor-driver-payment";
 
 describe("conductor driver payment", () => {
+  it("collects only an outstanding deposit during empty-box delivery", () => {
+    assert.equal(
+      conductorExpectedDepositCollection({
+        result: "completed",
+        taskType: "deliver_empty_box",
+        depositDue: 20,
+        balanceDue: 100,
+      }),
+      20,
+    );
+    assert.equal(
+      conductorExpectedDepositCollection({
+        result: "completed",
+        taskType: "deliver_empty_box",
+        depositDue: 0,
+        balanceDue: 80,
+      }),
+      0,
+    );
+    assert.equal(
+      conductorExpectedDepositCollection({
+        result: "completed",
+        taskType: "pickup_full_box",
+        depositDue: 20,
+        balanceDue: 100,
+      }),
+      0,
+    );
+  });
+
   it("requires an explicit collection outcome and a valid custom amount", () => {
     assert.equal(conductorPaymentChoiceError({ choice: null, expectedAmount: 20, customAmount: 0 }), "Indica si recibiste el depósito.");
     assert.equal(conductorPaymentChoiceError({ choice: "custom", expectedAmount: 20, customAmount: 0 }), "Indica un monto recibido válido.");

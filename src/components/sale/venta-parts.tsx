@@ -8,6 +8,7 @@ import { cardHoverClass, insetShellClass, selectionActiveClass, selectionShellCl
 import { CountryFlag } from "@/components/country-flag";
 import { InvoiceQrCode } from "@/components/sale/invoice-qr-code";
 import type { InvoiceBillingSnapshot } from "@/lib/invoice-billing";
+import type { LogisticsTaskType } from "@/lib/logistics-routing";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
 import type { OrganizationBranding } from "@/lib/organizations/branding";
 import {
@@ -15,6 +16,10 @@ import {
   PLATFORM_BRAND_TITLE,
 } from "@/lib/organizations/branding";
 import type { SaleRecipient, SaleSender } from "@/lib/customers/mappers";
+import {
+  saleInvoiceEtaLabel,
+  saleInvoiceServiceLabel,
+} from "@/lib/sale-invoice-service";
 import { formatScheduleAtDisplay, scheduleTimeComplete } from "@/lib/sale/schedule-time";
 
 export function SaleBoxCartQtyBadge({ quantity }: { quantity: number }) {
@@ -323,7 +328,7 @@ export type SaleInvoicePaperProps = {
   sender: Sender;
   recipient?: Recipient | null;
   box: string[];
-  deliveryLine: string;
+  serviceOperation: LogisticsTaskType;
   className?: string;
   lineAmount?: string;
   totalLabel?: string;
@@ -338,38 +343,23 @@ function invoiceBoxTitle(label: string) {
   return label.replace(/^Caja\s+/i, "").trim() || label;
 }
 
-function invoiceServiceLabel(deliveryLine: string) {
-  const normalized = deliveryLine
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-  const hasDelivery = /entrega|entregada|dejar|deja/.test(normalized);
-  const hasPickup = /recoleccion|recoger|recoge/.test(normalized);
-
-  if (hasPickup) {
-    return "Servicio de recoleccion";
-  }
-
-  if (hasDelivery) {
-    return "Servicio de entrega";
-  }
-
-  return "Servicio logistico";
-}
-
 function InvoicePartyCard({
   label,
   name,
   phone,
   addressLines,
   country,
+  eta,
 }: {
   label: string;
   name: string;
   phone?: string;
   addressLines: string[];
   country?: string;
+  eta?: string;
 }) {
+  const etaLabel = saleInvoiceEtaLabel(eta);
+
   return (
     <div className="relative overflow-hidden rounded-sm border border-zinc-300 bg-white px-4 py-3">
       <p className="text-[8px] font-black uppercase tracking-[0.22em] text-zinc-500">{label}</p>
@@ -380,7 +370,13 @@ function InvoicePartyCard({
           {line}
         </p>
       ))}
-      {country ? <p className="mt-0.5 text-[11px] font-black leading-snug text-zinc-950">{country}</p> : null}
+      {country || etaLabel ? (
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] leading-snug">
+          {country ? <span className="font-black text-zinc-950">{country}</span> : null}
+          {country && etaLabel ? <span className="text-zinc-400">·</span> : null}
+          {etaLabel ? <span className="font-bold text-zinc-600">{etaLabel}</span> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -394,7 +390,7 @@ export function SaleInvoicePaper({
   sender,
   recipient,
   box,
-  deliveryLine,
+  serviceOperation,
   className,
   lineAmount,
   totalLabel,
@@ -416,12 +412,15 @@ export function SaleInvoicePaper({
   const boxTitle = invoiceBoxTitle(box[0] || "Paquete");
   const isBoxInvoice = Boolean(parentInvoiceNumber);
   const deliveryEta = box[4]?.trim();
-  const destinationCountry = recipient?.country?.trim();
   const amountLabel = lineAmount || box[1];
   const isPendingAmount = amountLabel?.toLowerCase() === "pendiente" && !billing;
   const hasBalanceDue = billing ? parseMoneyValue(billing.balanceDue) > 0 : false;
   const depositEditable = Boolean(billing && onPayNowDraftChange);
   const showPaymentSplit = billing && (hasBalanceDue || depositEditable);
+  const depositLabel =
+    !depositEditable && billing?.depositStatus === "pending"
+      ? "Depósito pendiente"
+      : "Depósito";
   const payNowInputValue = payNowDraftTouched
     ? payNowDraft ?? ""
     : payNowDraft || billing?.payNow.replace(/^\$/, "") || "";
@@ -519,7 +518,7 @@ export function SaleInvoicePaper({
           </div>
           <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-[8px] font-black uppercase tracking-[0.2em] text-zinc-600">
             <span className="h-px bg-zinc-400" />
-            <span>{invoiceServiceLabel(deliveryLine)}</span>
+            <span>{saleInvoiceServiceLabel(serviceOperation)}</span>
             <span className="h-px bg-zinc-400" />
           </div>
         </header>
@@ -530,6 +529,7 @@ export function SaleInvoicePaper({
             name={personFullName(sender)}
             phone={senderPhonesLabel(sender)}
             addressLines={salePersonAddressLines(sender)}
+            eta={!recipient ? deliveryEta : undefined}
           />
           {recipient ? (
             <InvoicePartyCard
@@ -538,28 +538,13 @@ export function SaleInvoicePaper({
               phone={recipient.phone.trim() || undefined}
               addressLines={salePersonAddressLines(recipient)}
               country={recipient.country.trim() || undefined}
+              eta={deliveryEta}
             />
           ) : null}
         </section>
 
         <section className="mt-6 flex-1">
           <div className="rounded-sm border border-zinc-300 bg-white px-4 py-4">
-            {(deliveryEta || (destinationCountry && !recipient)) ? (
-              <div className="mb-4 flex flex-wrap gap-2 border-b border-zinc-300 pb-3">
-                {deliveryEta ? (
-                  <span className="inline-flex items-center rounded-sm border border-zinc-400 bg-zinc-100 px-2.5 py-1 text-[10px] font-black text-zinc-800">
-                    Entrega estimada · {deliveryEta}
-                  </span>
-                ) : null}
-                {destinationCountry && !recipient ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-sm border border-zinc-400 bg-zinc-100 px-2.5 py-1 text-[10px] font-black text-zinc-800">
-                    <CountryFlag name={destinationCountry} size="sm" className="h-3.5 w-3.5" />
-                    {destinationCountry}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-
             {isBoxInvoice ? (
               <div className="grid gap-3">
                 <div className="flex items-end justify-between gap-4">
@@ -592,7 +577,7 @@ export function SaleInvoicePaper({
                 {showPaymentSplit ? (
                   <>
                     <div className="col-span-2 my-1 border-t border-zinc-300" />
-                    <p className="text-[11px] font-black text-zinc-900">Depósito</p>
+                    <p className="text-[11px] font-black text-zinc-900">{depositLabel}</p>
                     <div className={invoiceAmountCellClass}>
                       {depositEditable ? (
                         <>
@@ -607,10 +592,10 @@ export function SaleInvoicePaper({
                               aria-label="Depósito"
                             />
                           </label>
-                          <span className="hidden print:inline">{billing?.payNow}</span>
+                          <span className="hidden print:inline">{billing?.depositRequired}</span>
                         </>
                       ) : (
-                        billing?.payNow
+                        billing?.depositRequired
                       )}
                     </div>
                     <p className="text-[11px] font-black text-zinc-900">Pendiente</p>

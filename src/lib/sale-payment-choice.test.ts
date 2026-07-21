@@ -6,7 +6,6 @@ import { describe, it } from "node:test";
 import {
   defaultSalePaymentSelection,
   resolveSalePaymentInput,
-  SALE_PAYMENT_UNSET,
   salePaymentChoiceLabel,
 } from "@/lib/sale-payment-choice";
 
@@ -56,46 +55,32 @@ describe("sale payment choice", () => {
     );
   });
 
-  it("defaults office counter sales to cash and driver deliveries to unset", () => {
-    assert.equal(defaultSalePaymentSelection("office"), "cash");
-    assert.equal(defaultSalePaymentSelection("driver"), SALE_PAYMENT_UNSET);
+  it("defaults every sale to a payment received now", () => {
+    assert.equal(defaultSalePaymentSelection(), "cash");
   });
 
-  it("makes pending a conductor collection decision, not an ambiguous payment method", () => {
+  it("uses one pending-deposit checkbox for every delivery channel", () => {
     assert.equal(salePaymentChoiceLabel("pending"), "Pendiente");
     assert.equal(fieldSource.includes("openPaymentSelect"), true);
     assert.equal(fieldSource.includes("select.showPicker"), true);
-    assert.equal(fieldSource.includes("¿Cómo se cobra el depósito?"), true);
-    assert.equal(fieldSource.includes("Conductor cobra"), true);
-    assert.equal(fieldSource.includes(">Al entregar</span>"), false);
-    assert.equal(fieldSource.includes("Cobrar ahora"), true);
-    assert.equal(fieldSource.includes("Ya recibido"), false);
-    assert.equal(fieldSource.includes("Cobro pendiente del conductor"), true);
-    assert.equal(fieldSource.includes("Pago pendiente en oficina"), true);
+    assert.equal(fieldSource.includes("Cobro del depósito"), true);
+    assert.equal(fieldSource.includes("Conductor cobra"), false);
+    assert.equal(fieldSource.includes("Cobrar ahora"), false);
     assert.equal(fieldSource.includes("Depósito pendiente"), true);
     assert.equal(fieldSource.includes('type="checkbox"'), true);
-    assert.equal(fieldSource.includes("Cobro del depósito"), true);
-    assert.equal(fieldSource.includes("Dejar pendiente"), false);
-    assert.equal(fieldSource.includes("Se cobra después"), false);
-    assert.equal(fieldSource.includes("ActionConfirmDialog"), false);
-    assert.equal(fieldSource.includes("pendingConfirmOpen"), false);
-    assert.equal(fieldSource.includes("onAfterPendingConfirmed"), false);
-    assert.equal(fieldSource.includes("pendingConfirmCreatesInvoice"), false);
-    assert.equal(fieldSource.includes("El invoice impreso llevará el depósito de"), true);
-    assert.equal(fieldSource.includes("no recibido hasta que el conductor registre el cobro"), true);
-    assert.equal(fieldSource.includes("no se registrará en caja"), true);
+    assert.equal(fieldSource.includes("Estado: pendiente"), true);
+    assert.equal(fieldSource.includes("No se registra en caja hasta que se cobre"), true);
+    assert.equal(fieldSource.includes("pendingPaymentSource"), false);
     assert.equal(fieldSource.includes("SALE_PAYMENT_UNSET"), true);
-    assert.equal(fieldSource.includes("counterPaymentSelected"), true);
     assert.equal(fieldSource.includes("paymentUnset"), true);
     assert.equal(confirmDialogSource.includes("paymentSelectionRequired"), true);
     assert.equal(confirmDialogSource.includes("Elige cómo cobrar"), true);
-    assert.equal(fieldSource.includes("setExpanded"), false);
   });
 
   it("shows the collapsed payment field only in the create-invoice confirm dialog", () => {
     assert.equal(confirmDialogSource.includes("SalePaymentMethodField"), true);
     assert.equal(confirmDialogSource.includes("onPaymentMethodChange"), true);
     assert.equal(confirmDialogSource.includes("pendingCollectionAmount"), false);
-    assert.equal(confirmDialogSource.includes("pendingPaymentSource"), true);
+    assert.equal(confirmDialogSource.includes("pendingPaymentSource"), false);
   });
 });

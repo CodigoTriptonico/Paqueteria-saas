@@ -37,7 +37,10 @@ import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provid
 import { useNotify } from "@/hooks/use-notify";
 import { formatMoneyValue } from "@/lib/logistics-fees";
 import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "@/lib/payment-methods";
-import type { ConductorPaymentChoice } from "@/lib/conductor-driver-payment";
+import {
+  conductorExpectedDepositCollection,
+  type ConductorPaymentChoice,
+} from "@/lib/conductor-driver-payment";
 import {
   buildConductorPreviewPickerOptions,
   type ConductorDriverOption,
@@ -666,14 +669,14 @@ export function ConductorTareasClient({
     });
   }, [initialCompletedTasks, offlineSnapshot.operations]);
 
-  const paymentExpectedAmount =
-    dialog?.result === "completed" &&
-    dialog.task.taskType === "deliver_empty_box" &&
-    dialog.task.balanceDue > 0
-      ? dialog.task.depositDue > 0
-        ? dialog.task.depositDue
-        : dialog.task.balanceDue
-      : 0;
+  const paymentExpectedAmount = dialog
+    ? conductorExpectedDepositCollection({
+        result: dialog.result,
+        taskType: dialog.task.taskType,
+        depositDue: dialog.task.depositDue,
+        balanceDue: dialog.task.balanceDue,
+      })
+    : 0;
   const needsPaymentChoice = paymentExpectedAmount > 0;
   const dialogNeedsPhoto = Boolean(
     dialog && (dialog.result === "completed" || failureReason === "Invoice no visible"),

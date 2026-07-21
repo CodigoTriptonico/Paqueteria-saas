@@ -1,4 +1,5 @@
 import { formatMoneyValue } from "@/lib/logistics-fees";
+import type { LogisticsTaskType } from "@/lib/logistics-routing";
 
 export type ConductorPaymentChoice = "expected" | "custom" | "none";
 export type ConductorPaymentOutcome = "collected" | "not_collected" | "not_applicable";
@@ -9,6 +10,19 @@ function money(value: number) {
 
 export function isConductorPaymentChoice(value: unknown): value is ConductorPaymentChoice {
   return value === "expected" || value === "custom" || value === "none";
+}
+
+export function conductorExpectedDepositCollection(input: {
+  result: "completed" | "failed";
+  taskType: LogisticsTaskType;
+  depositDue: number;
+  balanceDue: number;
+}) {
+  if (input.result !== "completed" || input.taskType !== "deliver_empty_box") {
+    return 0;
+  }
+
+  return Math.min(money(input.depositDue), money(input.balanceDue));
 }
 
 export function conductorPaymentChoiceError(input: {

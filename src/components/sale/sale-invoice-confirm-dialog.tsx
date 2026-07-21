@@ -14,7 +14,6 @@ type SaleInvoiceConfirmDialogProps = {
   confirming?: boolean;
   paymentMethod: SalePaymentSelection;
   paymentNote?: string;
-  pendingPaymentSource?: "driver" | "office";
   onPaymentMethodChange: (method: SalePaymentSelection) => void;
   onPaymentNoteChange?: (note: string) => void;
   onCancel: () => void;
@@ -31,7 +30,6 @@ export function SaleInvoiceConfirmDialog({
   confirming = false,
   paymentMethod,
   paymentNote = "",
-  pendingPaymentSource = "driver",
   onPaymentMethodChange,
   onPaymentNoteChange,
   onCancel,
@@ -69,7 +67,6 @@ export function SaleInvoiceConfirmDialog({
           className="mt-4"
           value={paymentMethod}
           note={paymentNote}
-          pendingPaymentSource={pendingPaymentSource}
           pendingPaymentAmount={lines.find((line) => line.label === "Depósito")?.value}
           disabled={confirming}
           confirming={confirming}

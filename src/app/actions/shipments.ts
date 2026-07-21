@@ -8,7 +8,11 @@ import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { recordActivityHistory } from "@/lib/activity-history";
 import { logisticsScheduleWindowPatch } from "@/lib/logistics-schedule-window";
-import { readBillingFromPlan } from "@/lib/invoice-billing";
+import {
+  depositStatusForPayment,
+  invoicePaymentKindForCurrentDeposit,
+  readBillingFromPlan,
+} from "@/lib/invoice-billing";
 import { formatMoneyValue } from "@/lib/logistics-fees";
 import {
   DEFAULT_PAYMENT_METHOD,
@@ -1646,11 +1650,18 @@ export async function finalizeShipmentInvoiceAction(input: {
     const nextInvoiceStatus = isFullPayment ? "paid" : "open";
     const nextAccountingStatus = isFullPayment ? "exportable" : shipment.accounting_status;
     const nextFinalizedAt = isFullPayment ? new Date().toISOString() : shipment.finalized_at;
+    const paymentKind = billing
+      ? invoicePaymentKindForCurrentDeposit({
+          depositRequired: billing.depositRequired,
+          alreadyPaid,
+        })
+      : "balance";
     const nextLogisticsPlan = {
       ...asRecord(shipment.logistics_plan),
       billing: billing
         ? {
             ...billing,
+            depositStatus: depositStatusForPayment(billing.depositRequired, paid),
             payNow: formatMoneyValue(paid),
             balanceDue: formatMoneyValue(nextBalanceDue),
           }
@@ -1673,7 +1684,7 @@ export async function finalizeShipmentInvoiceAction(input: {
       next_logistics_plan: nextLogisticsPlan,
       payment_amount: collectAmount,
       payment_method: paymentMethod,
-      payment_kind: "balance",
+      payment_kind: paymentKind,
       payment_note: paymentNote,
       payment_created_by: session.userId,
     });
@@ -1708,6 +1719,7 @@ export async function finalizeShipmentInvoiceAction(input: {
         invoiceStatus: nextInvoiceStatus,
         accountingStatus: nextAccountingStatus,
         paymentMethod,
+        paymentKind,
         paymentMethodLabel: paymentMethodLabel(paymentMethod),
         paymentNote,
       },

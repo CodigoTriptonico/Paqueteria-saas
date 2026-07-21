@@ -484,7 +484,7 @@ export function depositFromShipment(row: ShipmentRow) {
   const billing = readBillingFromPlan(row.logistics_plan);
 
   if (billing) {
-    return parseMoneyValue(billing.payNow);
+    return parseMoneyValue(billing.depositRequired);
   }
 
   return row.paid;

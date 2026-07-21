@@ -49,6 +49,8 @@ export type InvoiceBillingSnapshot = {
   logisticsSubtotal: string;
   quotedTotal: string;
   minimumDeposit: string;
+  depositRequired: string;
+  depositStatus: "pending" | "paid";
   payNow: string;
   balanceDue: string;
   lastDriverCollection?: {
@@ -137,6 +139,8 @@ export function computeInvoiceBilling(input: {
     logisticsSubtotal: formatMoneyValue(logisticsSubtotal),
     quotedTotal: formatMoneyValue(quotedTotal),
     minimumDeposit: formatMoneyValue(minimumDeposit),
+    depositRequired: formatMoneyValue(payNow),
+    depositStatus: "pending",
     payNow: formatMoneyValue(payNow),
     balanceDue: formatMoneyValue(balanceDue),
   };
@@ -163,9 +167,29 @@ export function billingWithRecordedPayment(
 
   return {
     ...billing,
+    depositStatus: depositStatusForPayment(billing.depositRequired, paidValue),
     payNow: formatMoneyValue(paid),
     balanceDue: formatMoneyValue(Math.max(quotedTotal - paid, 0)),
   };
+}
+
+export function depositStatusForPayment(
+  depositRequiredValue: string | number,
+  paidValue: string | number,
+) {
+  const depositRequired = parseMoneyValue(String(depositRequiredValue));
+  const paid = parseMoneyValue(String(paidValue));
+
+  return paid >= depositRequired ? "paid" as const : "pending" as const;
+}
+
+export function invoicePaymentKindForCurrentDeposit(input: {
+  depositRequired: string | number;
+  alreadyPaid: string | number;
+}) {
+  return depositStatusForPayment(input.depositRequired, input.alreadyPaid) === "pending"
+    ? "deposit" as const
+    : "balance" as const;
 }
 
 export function invoiceAccountingStateForPayment(
@@ -193,6 +217,14 @@ export function readBillingFromPlan(value: unknown): InvoiceBillingSnapshot | nu
   const quotedTotal = String(row.quotedTotal || "");
   const payNow = String(row.payNow || "");
   const balanceDue = String(row.balanceDue || "");
+  const minimumDeposit = String(row.minimumDeposit || "$0");
+  const depositRequired = String(
+    row.depositRequired || (parseMoneyValue(minimumDeposit) > 0 ? minimumDeposit : payNow),
+  );
+  const depositStatus =
+    row.depositStatus === "pending" || row.depositStatus === "paid"
+      ? row.depositStatus
+      : depositStatusForPayment(depositRequired, payNow);
   const driverCollection =
     row.lastDriverCollection &&
     typeof row.lastDriverCollection === "object" &&
@@ -242,7 +274,9 @@ export function readBillingFromPlan(value: unknown): InvoiceBillingSnapshot | nu
     fullBoxPickup: String(row.fullBoxPickup || "$0"),
     logisticsSubtotal: String(row.logisticsSubtotal || "$0"),
     quotedTotal,
-    minimumDeposit: String(row.minimumDeposit || "$0"),
+    minimumDeposit,
+    depositRequired,
+    depositStatus,
     payNow,
     balanceDue: balanceDue || formatMoneyValue(parseMoneyValue(quotedTotal) - parseMoneyValue(payNow)),
     lastDriverCollection,

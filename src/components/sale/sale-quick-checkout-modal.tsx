@@ -6,7 +6,6 @@ import { InvoiceQrCode } from "@/components/sale/invoice-qr-code";
 import type { QuickEmptyBoxDraft } from "@/components/sale/sale-quick-empty-box-modal";
 import { PromotionSelector } from "@/components/sale/promotion-selector";
 import {
-  EMPTY_BOX_OFFICE_MODE,
   personFullName,
   SaleInvoicePaper,
   senderPhonesLabel,
@@ -108,7 +107,7 @@ export function SaleQuickCheckoutModal({
                 invoiceNumber={invoiceNumber}
                 sender={draft.sender}
                 box={draft.box}
-                deliveryLine={draft.deliverySummary}
+                serviceOperation="deliver_empty_box"
                 billing={billing}
                 payNowDraft={completed ? undefined : payNowDraft}
                 payNowDraftTouched={completed ? false : payNowDraftTouched}
@@ -176,9 +175,7 @@ export function SaleQuickCheckoutModal({
               <button
                 type="button"
                 onClick={() => {
-                  const pendingSource =
-                    draft.emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? "office" : "driver";
-                  onPaymentMethodChange(defaultSalePaymentSelection(pendingSource));
+                  onPaymentMethodChange(defaultSalePaymentSelection());
                   onPaymentNoteChange("");
                   setConfirmOpen(true);
                 }}
@@ -210,7 +207,6 @@ export function SaleQuickCheckoutModal({
           confirming={confirming}
           paymentMethod={paymentMethod}
           paymentNote={paymentNote}
-          pendingPaymentSource={draft.emptyBoxMode === EMPTY_BOX_OFFICE_MODE ? "office" : "driver"}
           onPaymentMethodChange={onPaymentMethodChange}
           onPaymentNoteChange={onPaymentNoteChange}
           onCancel={() => {

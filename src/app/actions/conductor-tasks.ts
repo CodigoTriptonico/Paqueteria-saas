@@ -65,9 +65,10 @@ import { recordActivityHistory } from "@/lib/activity-history";
 import { recordInventoryMovementAtomic } from "@/lib/security/inventory-movement";
 import { readPositiveIntegerQty } from "@/lib/security/qty";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
-import { readBillingFromPlan } from "@/lib/invoice-billing";
+import { depositStatusForPayment, readBillingFromPlan } from "@/lib/invoice-billing";
 import {
   conductorCollectionAuditDescription,
+  conductorExpectedDepositCollection,
   conductorPaymentChoiceError,
   isConductorPaymentChoice,
   resolveConductorPaymentAmount,
@@ -677,6 +678,7 @@ async function collectDriverPayment(admin: Admin, session: AppSession, shipment:
       ? {
           ...billing,
           quotedTotal: formatMoneyValue(settlement.adjustedQuotedTotal),
+          depositStatus: depositStatusForPayment(billing.depositRequired, settlement.paid),
           payNow: formatMoneyValue(settlement.paid),
           balanceDue: formatMoneyValue(settlement.balanceDue),
           lastDriverCollection: {
@@ -690,6 +692,9 @@ async function collectDriverPayment(admin: Admin, session: AppSession, shipment:
         }
       : {
           quotedTotal: formatMoneyValue(settlement.adjustedQuotedTotal),
+          minimumDeposit: formatMoneyValue(input.expectedAmount + shipment.paid),
+          depositRequired: formatMoneyValue(input.expectedAmount + shipment.paid),
+          depositStatus: "paid" as const,
           payNow: formatMoneyValue(settlement.paid),
           balanceDue: formatMoneyValue(settlement.balanceDue),
           lastDriverCollection: {
@@ -986,6 +991,9 @@ async function completeTask(admin: Admin, session: AppSession, input: {
           billing: {
             ...(billing || {
               quotedTotal: formatMoneyValue(quotedTotal),
+              minimumDeposit: formatMoneyValue(input.paymentExpectedAmount + input.shipment.paid),
+              depositRequired: formatMoneyValue(input.paymentExpectedAmount + input.shipment.paid),
+              depositStatus: "pending" as const,
               payNow: formatMoneyValue(input.shipment.paid),
               balanceDue: formatMoneyValue(Math.max(quotedTotal - input.shipment.paid, 0)),
             }),
@@ -2031,13 +2039,13 @@ export async function submitConductorTaskResultAction(
       throw new Error("FORBIDDEN");
     }
 
-    const hasDeliveryCollection =
-      result === "completed" && task.taskType === "deliver_empty_box" && task.balanceDue > 0;
-    const expectedPaymentAmount = hasDeliveryCollection
-      ? task.depositDue > 0
-        ? task.depositDue
-        : task.balanceDue
-      : 0;
+    const expectedPaymentAmount = conductorExpectedDepositCollection({
+      result,
+      taskType: task.taskType,
+      depositDue: task.depositDue,
+      balanceDue: task.balanceDue,
+    });
+    const hasDeliveryCollection = expectedPaymentAmount > 0;
     let paymentAmount = 0;
     let paymentOutcome: ConductorPaymentOutcome = "not_applicable";
 

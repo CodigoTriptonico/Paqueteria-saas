@@ -21,7 +21,7 @@ function shipment(partial: Partial<ShipmentRow> & Pick<ShipmentRow, "code">): Sh
     customer_name: partial.customer_name || "Cliente",
     country: partial.country || "Mexico",
     carrier: "",
-    paid: 0,
+    paid: partial.paid ?? 0,
     profit: 0,
     status: "En oficina",
     assigned_to: partial.assigned_to ?? null,
@@ -41,7 +41,7 @@ function shipment(partial: Partial<ShipmentRow> & Pick<ShipmentRow, "code">): Sh
     shipped_at: null,
     delivered_at: null,
     delivery_notes: "",
-    logistics_plan: {},
+    logistics_plan: partial.logistics_plan || {},
     logisticsTasks: partial.logisticsTasks || [],
     payments: [],
   };
@@ -98,6 +98,70 @@ describe("conductor tasks", () => {
     assert.equal(tasks.length, 1);
     assert.equal(tasks[0]?.shipmentCode, "INV-1");
     assert.equal(tasks[0]?.taskType, "deliver_empty_box");
+  });
+
+  it("exposes only the outstanding deposit to the driver", () => {
+    const task = {
+      id: "task-deposit",
+      shipmentId: "ship-deposit",
+      taskType: "deliver_empty_box" as const,
+      status: "assigned" as const,
+      assignedTo: "driver-1",
+      scheduledAt: `${SCOPE_DATE}T15:00:00.000Z`,
+      warehouseId: null,
+      notes: "",
+      stockDeductedAt: null,
+      completedAt: null,
+      orderedAt: null,
+      assignedAt: null,
+      loadedAt: null,
+      createdAt: `${SCOPE_DATE}T10:00:00.000Z`,
+    };
+    const billing = {
+      quotedTotal: "$100",
+      minimumDeposit: "$20",
+      depositRequired: "$25",
+      depositStatus: "pending",
+      payNow: "$0",
+      balanceDue: "$100",
+    };
+    const pendingTasks = buildConductorDriverTasks({
+      driverId: "driver-1",
+      routes: [],
+      taskAddresses: [],
+      scopeDate: SCOPE_DATE,
+      shipments: [
+        shipment({
+          id: "ship-deposit",
+          code: "INV-DEPOSIT-PENDING",
+          paid: 0,
+          logistics_plan: { billing },
+          logisticsTasks: [task],
+        }),
+      ],
+    });
+    const paidTasks = buildConductorDriverTasks({
+      driverId: "driver-1",
+      routes: [],
+      taskAddresses: [],
+      scopeDate: SCOPE_DATE,
+      shipments: [
+        shipment({
+          id: "ship-deposit",
+          code: "INV-DEPOSIT-PAID",
+          paid: 25,
+          logistics_plan: {
+            billing: { ...billing, depositStatus: "paid", payNow: "$25", balanceDue: "$75" },
+          },
+          logisticsTasks: [task],
+        }),
+      ],
+    });
+
+    assert.equal(pendingTasks[0]?.depositDue, 25);
+    assert.equal(pendingTasks[0]?.balanceDue, 100);
+    assert.equal(paidTasks[0]?.depositDue, 0);
+    assert.equal(paidTasks[0]?.balanceDue, 75);
   });
 
   it("maps sender and recipient fields for driver tasks", () => {

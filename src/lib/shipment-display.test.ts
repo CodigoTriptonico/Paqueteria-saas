@@ -31,6 +31,7 @@ import {
   sortShipmentsByInvoicePriority,
   syncShipmentStatusPatch,
   balanceDueFromShipment,
+  depositFromShipment,
   formatBoxQuantityLabel,
   quoteFromShipment,
   readShipmentBoxLines,
@@ -147,6 +148,26 @@ describe("shipmentLogisticsSteps", () => {
     );
 
     assert.equal(pending, 0);
+  });
+
+  it("keeps the required deposit stable when no money was recorded", () => {
+    const pendingDeposit = depositFromShipment(
+      baseShipment({
+        paid: 0,
+        logistics_plan: {
+          billing: {
+            quotedTotal: "$100",
+            minimumDeposit: "$20",
+            depositRequired: "$25",
+            depositStatus: "pending",
+            payNow: "$0",
+            balanceDue: "$100",
+          },
+        },
+      }),
+    );
+
+    assert.equal(pendingDeposit, 25);
   });
 
   it("shows home pickup when full box uses driver collection", () => {

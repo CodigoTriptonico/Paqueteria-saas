@@ -4,6 +4,7 @@ import {
   billingWithRecordedPayment,
   computeInvoiceBilling,
   invoiceAccountingStateForPayment,
+  invoicePaymentKindForCurrentDeposit,
   readBillingFromPlan,
   saleFinishActionLabel,
 } from "./invoice-billing";
@@ -102,6 +103,8 @@ describe("invoice-billing", () => {
     assert.equal(billing.logisticsSubtotal, "$0");
     assert.equal(billing.quotedTotal, "$150");
     assert.equal(billing.payNow, "$20");
+    assert.equal(billing.depositRequired, "$20");
+    assert.equal(billing.depositStatus, "pending");
     assert.equal(billing.balanceDue, "$130");
   });
 
@@ -301,6 +304,8 @@ describe("invoice-billing", () => {
     assert.equal(billing?.boxSubtotalBeforeDiscount, "$100");
     assert.equal(billing?.promotionDiscount, "$0");
     assert.equal(billing?.promotion, null);
+    assert.equal(billing?.depositRequired, "$20");
+    assert.equal(billing?.depositStatus, "paid");
   });
 
   it("records pending and full payments without changing the quote", () => {
@@ -311,10 +316,32 @@ describe("invoice-billing", () => {
       fees,
     });
 
-    assert.equal(billingWithRecordedPayment(billing, "$0").balanceDue, "$100");
-    assert.equal(billingWithRecordedPayment(billing, "$100").balanceDue, "$0");
+    const pending = billingWithRecordedPayment(billing, "$0");
+    const paid = billingWithRecordedPayment(billing, "$100");
+
+    assert.equal(pending.balanceDue, "$100");
+    assert.equal(pending.depositRequired, "$20");
+    assert.equal(pending.depositStatus, "pending");
+    assert.equal(paid.balanceDue, "$0");
+    assert.equal(paid.depositRequired, "$20");
+    assert.equal(paid.depositStatus, "paid");
     assert.deepEqual(invoiceAccountingStateForPayment(billing, "$0"), { invoiceStatus: "open", accountingStatus: "not_exportable" });
     assert.deepEqual(invoiceAccountingStateForPayment(billing, "$100"), { invoiceStatus: "paid", accountingStatus: "exportable" });
+  });
+
+  it("classifies later money as deposit until the required deposit is covered", () => {
+    assert.equal(
+      invoicePaymentKindForCurrentDeposit({ depositRequired: "$25", alreadyPaid: "$0" }),
+      "deposit",
+    );
+    assert.equal(
+      invoicePaymentKindForCurrentDeposit({ depositRequired: "$25", alreadyPaid: "$10" }),
+      "deposit",
+    );
+    assert.equal(
+      invoicePaymentKindForCurrentDeposit({ depositRequired: "$25", alreadyPaid: "$25" }),
+      "balance",
+    );
   });
 
   it("reads the latest driver collection outcome from the billing plan", () => {
