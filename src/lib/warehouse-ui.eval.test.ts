@@ -31,6 +31,21 @@ test("warehouse surfaces keep compact disclosure and shared sidebar layout contr
   assert.match(shell, /Flujo de bodega/);
 });
 
+test("warehouse intake uses the available work area on desktop", () => {
+  assert.match(intake, /useSetShellConfig/);
+  assert.match(intake, /setShellConfig\(\{ contentEdgeToEdge: true \}\)/);
+  assert.match(intake, /className="w-full max-w-none"/);
+  assert.doesNotMatch(intake, /mx-auto max-w-[56]xl/);
+});
+
+test("warehouse intake does not spend permanent height on secondary explanations", () => {
+  assert.match(intake, /function IntakeInfoDisclosure/);
+  assert.match(intake, /ariaLabel="Ver ayuda de apertura de ingreso"/);
+  assert.match(intake, /ariaLabel="Ver por qué no hay camiones"/);
+  assert.match(intake, /ariaLabel="Ver ayuda para caja encontrada"/);
+  assert.match(intake, /min-h-16 items-center justify-center/);
+});
+
 test("warehouse source keeps operational copy in valid UTF-8", () => {
   for (const source of [intake, warehouse, pallets, actions, intakeActions, physicalPackages]) {
     assert.doesNotMatch(source, /[ÃÂâ]/);

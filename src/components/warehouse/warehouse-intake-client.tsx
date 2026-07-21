@@ -16,15 +16,18 @@ import {
   Warehouse,
   X,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { WarehouseTruckArrival } from "@/app/actions/physical-packages";
 import {
   closeWarehouseIntakeAction,
+  openFoundWarehouseIntakeAction,
   openWarehouseIntakeAction,
   reopenWarehouseIntakeAction,
+  scanFoundWarehouseIntakePackageAction,
   scanWarehouseIntakePackageAction,
 } from "@/app/actions/warehouse-intake";
 import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provider";
+import { useSetShellConfig } from "@/components/app-frame";
 import {
   inputClass,
   labelMutedClass,
@@ -37,6 +40,7 @@ import { formatWarehouseDateTime } from "@/lib/warehouse-timing";
 import {
   warehouseIntakeConditionLabel,
   warehouseIntakeConditions,
+  warehouseIntakeNeedsDriverConfirmation,
   type WarehouseIntakeAvailablePackage,
   type WarehouseIntakeCondition,
   type WarehouseIntakeItem,
@@ -69,6 +73,23 @@ function statusLabel(session: WarehouseIntakeSession) {
 function metricTone(value: number, warning = false) {
   if (!value) return "text-slate-500";
   return warning ? "text-amber-300" : "text-slate-100";
+}
+
+function IntakeInfoDisclosure({
+  ariaLabel,
+  children,
+}: {
+  ariaLabel: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="group relative shrink-0">
+      <summary aria-label={ariaLabel} className="flex h-6 w-6 cursor-pointer list-none items-center justify-center rounded-full border border-slate-600 text-xs font-black text-slate-300 transition hover:border-slate-400 hover:bg-surface-inset hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-300 [&::-webkit-details-marker]:hidden">!</summary>
+      <div className="fixed inset-x-4 top-1/2 z-30 max-w-none -translate-y-1/2 rounded-lg border border-black bg-surface-panel px-3 py-2.5 text-sm font-bold leading-snug text-slate-200 shadow-xl sm:absolute sm:left-0 sm:top-full sm:mt-2 sm:w-72 sm:max-w-[calc(100vw-2rem)] sm:translate-y-0">
+        {children}
+      </div>
+    </details>
+  );
 }
 
 function IntakeItemRow({ item }: { item: WarehouseIntakeItem }) {
@@ -196,6 +217,7 @@ export function WarehouseIntakeClient({
   initialError?: string;
 }) {
   const notify = useNotify();
+  const setShellConfig = useSetShellConfig();
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [trucks, setTrucks] = useState(initialTruckArrivals);
   const initialOpen = initialWorkspace.sessions.find(isOpenSession)?.id || "";
@@ -228,10 +250,17 @@ export function WarehouseIntakeClient({
   const codeRef = useRef<HTMLInputElement>(null);
   const weightRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setShellConfig({ contentEdgeToEdge: true });
+    return () => setShellConfig({ contentEdgeToEdge: undefined });
+  }, [setShellConfig]);
+
   const openSessions = workspace.sessions.filter(isOpenSession);
   const activeSession = openSessions.find((session) => session.id === activeSessionId) || openSessions[0] || null;
   const selectedTruck = trucks.find((truck) => truck.routeId === selectedTruckId) || null;
   const selectedPackage = useMemo(() => workspace.availablePackages.find((pkg) => pkg.code.toLowerCase() === code.trim().toLowerCase()) || null, [code, workspace.availablePackages]);
+  const isFoundIntake = activeSession?.intakeKind === "found_in_warehouse";
+  const needsDriverConfirmation = activeSession ? warehouseIntakeNeedsDriverConfirmation(activeSession.intakeKind) : false;
   const expectedReceived = activeSession?.items.filter((item) => item.matchStatus === "expected").length || 0;
   const progress = activeSession?.expectedCount ? Math.min(100, Math.round(expectedReceived / activeSession.expectedCount * 100)) : 0;
   const pendingCount = Math.max(0, (activeSession?.expectedCount || 0) - expectedReceived);
@@ -283,6 +312,29 @@ export function WarehouseIntakeClient({
     }
   }
 
+  async function openFoundIntake() {
+    if (!warehouseId) {
+      setInlineError("Selecciona la bodega donde encontraste la caja.");
+      return;
+    }
+    setOpening(true);
+    setInlineError("");
+    try {
+      const result = await openFoundWarehouseIntakeAction({ warehouseId, operationKey: operationKey() });
+      if (!result.ok) {
+        setInlineError(result.error);
+        return;
+      }
+      const openedSession = result.data.sessions.find((session) => session.intakeKind === "found_in_warehouse" && isOpenSession(session));
+      acceptWorkspace(result.data, openedSession?.id || "");
+      setDriverConfirmed(true);
+      notify.success("Ingreso sin manifiesto abierto. Documenta la caja antes de aceptarla.");
+      requestAnimationFrame(() => codeRef.current?.focus());
+    } finally {
+      setOpening(false);
+    }
+  }
+
   function prepareScannedCode() {
     if (!code.trim()) {
       setInlineError("Escanea o escribe el código de la caja.");
@@ -290,7 +342,7 @@ export function WarehouseIntakeClient({
       return;
     }
     setInlineError("");
-    if (!selectedPackage) {
+    if (isFoundIntake || !selectedPackage) {
       setCondition("unidentified");
       setIssueOpen(true);
       return;
@@ -312,7 +364,9 @@ export function WarehouseIntakeClient({
       form.set("binId", binId);
       form.set("operationKey", operationKey());
       if (evidence) form.set("evidence", evidence);
-      const result = await scanWarehouseIntakePackageAction(form);
+      const result = isFoundIntake
+        ? await scanFoundWarehouseIntakePackageAction(form)
+        : await scanWarehouseIntakePackageAction(form);
       if (!result.ok) {
         setInlineError(result.error);
         return;
@@ -390,20 +444,19 @@ export function WarehouseIntakeClient({
     <Panel title="Ingreso a bodega" hideHeader className="min-h-0" contentClassName="p-0">
       <div className="min-h-full p-3 pb-24 sm:p-5 sm:pb-10">
         {!activeSession ? (
-          <div className="mx-auto max-w-5xl">
-            <header className="rounded-xl border border-black bg-surface-card p-4 shadow-[0_10px_28px_rgba(0,0,0,0.2)] sm:p-5">
+          <div className="w-full max-w-none">
+            <header className="rounded-xl border border-black bg-surface-card p-3 shadow-[0_10px_28px_rgba(0,0,0,0.2)] sm:p-4">
               <div className="flex items-start gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-black bg-surface-inset text-emerald-300"><Warehouse className="h-5 w-5" /></span>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-emerald-300"><Warehouse className="h-5 w-5" /></span>
                 <div className="min-w-0">
                   <p className={labelMutedClass}>Custodia de bodega</p>
-                  <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-100">Abrir ingreso</h1>
-                  <p className="mt-1 text-sm font-bold leading-5 text-slate-400">El conductor conserva la custodia hasta que cada caja sea escaneada y aceptada.</p>
+                  <div className="mt-0.5 flex items-center gap-2"><h1 className="text-xl font-black tracking-tight text-slate-100">Abrir ingreso</h1><IntakeInfoDisclosure ariaLabel="Ver ayuda de apertura de ingreso">Recibe un manifiesto cuando llega un camión o registra una caja encontrada sin camión ni ruta.</IntakeInfoDisclosure></div>
                 </div>
                 <button type="button" onClick={() => setDrawer("history")} className="ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300" aria-label="Ver ingresos cerrados"><History className="h-4 w-4" /></button>
               </div>
             </header>
             {inlineError ? <div role="alert" className="mt-3 flex items-start gap-3 rounded-xl border border-rose-900 bg-rose-950/35 p-3 text-sm font-bold text-rose-100"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{inlineError}</span></div> : null}
-            <section className="mt-3 rounded-xl border border-black bg-surface-card p-4 sm:p-5">
+            <section className="mt-3 rounded-xl border border-black bg-surface-card p-3 sm:p-4">
               <div className="flex items-center justify-between gap-3">
                 <div><p className={labelMutedClass}>Llegadas listas</p><h2 className="mt-1 text-lg font-black text-slate-100">Selecciona el camión</h2></div>
                 <span className="rounded-full bg-surface-inset px-3 py-1 text-xs font-black text-slate-300">{trucks.length}</span>
@@ -421,15 +474,25 @@ export function WarehouseIntakeClient({
                   </button>;
                 })}
               </div>
-              {!trucks.length ? <div className="py-12 text-center"><Truck className="mx-auto h-7 w-7 text-slate-600" /><p className="mt-3 font-black text-slate-300">No hay camiones pendientes.</p><p className="mt-1 text-sm font-bold text-slate-500">Una ruta aparece aquí cuando el conductor recoge cajas y la ruta llega a bodega.</p></div> : null}
+              {!trucks.length ? <div className="mt-3 flex min-h-16 items-center justify-center gap-2 rounded-lg border border-black bg-surface-inset/40 px-3 py-3 text-center"><Truck className="h-5 w-5 shrink-0 text-slate-600" /><p className="font-black text-slate-300">No hay camiones pendientes.</p><IntakeInfoDisclosure ariaLabel="Ver por qué no hay camiones">Una ruta aparece aquí cuando el conductor recoge cajas y llega a esta bodega.</IntakeInfoDisclosure></div> : null}
               {selectedTruck ? <div className="mt-4 grid gap-3 border-t border-black pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                 {selectedTruck.arrivalWarehouseId ? <div className="rounded-xl border border-black bg-surface-inset p-3"><p className={labelMutedClass}>El conductor dejó la ruta en</p><p className="mt-1 flex items-center gap-2 font-black text-slate-100"><Warehouse className="h-4 w-4 text-emerald-300" />{selectedTruck.arrivalWarehouseName}</p></div> : <label className="grid gap-1.5"><span className={labelMutedClass}>Bodega que recibe</span><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className={`${inputClass} h-11 w-full`}>{workspace.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>}
                 <button type="button" disabled={opening || !warehouseId} onClick={() => void openIntake()} className={`${primaryButtonClass} h-11 w-full px-5 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto`}>{opening ? "Abriendo..." : "Abrir ingreso y descargar"}<ChevronRight className="h-4 w-4" /></button>
               </div> : null}
             </section>
+            <section className="mt-2 rounded-xl border border-amber-900/80 bg-amber-950/20 p-3 sm:p-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-900 bg-amber-950/50 text-amber-300"><PackageCheck className="h-4 w-4" /></span>
+                <div className="flex min-w-0 items-center gap-2"><p className={labelMutedClass}>Sin camión</p><h2 className="truncate text-base font-black text-slate-100">Caja encontrada</h2><IntakeInfoDisclosure ariaLabel="Ver ayuda para caja encontrada">Regístrala aunque no sepas de dónde vino. Quedará en Cuarentena hasta aclarar su origen.</IntakeInfoDisclosure></div>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(11rem,1fr)_auto] sm:items-center">
+                <label><span className="sr-only">Bodega donde la encontré</span><select aria-label="Bodega donde la encontré" value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className={`${inputClass} h-11 w-full`}>{workspace.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>
+                <button type="button" disabled={opening || !warehouseId} onClick={() => void openFoundIntake()} className={`${primaryButtonClass} h-11 w-full px-5 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto`}>{opening ? "Abriendo..." : "Ingresar caja encontrada"}<ChevronRight className="h-4 w-4" /></button>
+              </div>
+            </section>
           </div>
         ) : (
-          <div className="mx-auto max-w-6xl">
+          <div className="w-full max-w-none">
             <header className="overflow-hidden rounded-xl border border-black bg-surface-card shadow-[0_10px_28px_rgba(0,0,0,0.2)]">
               <div className="p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
@@ -441,8 +504,8 @@ export function WarehouseIntakeClient({
                   <button type="button" onClick={() => setCloseOpen(true)} className={`${secondaryButtonClass} h-10 shrink-0 px-3 text-xs`}><ClipboardCheck className="h-4 w-4" /><span className="hidden sm:inline">Cerrar ingreso</span><span className="sm:hidden">Cerrar</span></button>
                 </div>
                 {openSessions.length > 1 ? <label className="mt-3 block"><span className="sr-only">Ingreso activo</span><select value={activeSession.id} onChange={(event) => setActiveSessionId(event.target.value)} className={`${inputClass} h-9 w-full text-xs`}>{openSessions.map((session) => <option key={session.id} value={session.id}>{session.code} · {session.routeName}</option>)}</select></label> : null}
-                <div className="mt-4 flex items-end justify-between gap-4"><div><p className="text-3xl font-black tabular-nums text-slate-100">{expectedReceived}<span className="text-lg text-slate-500"> / {activeSession.expectedCount}</span></p><p className="mt-1 text-xs font-black uppercase text-slate-500">Cajas recibidas</p></div><p className="text-2xl font-black tabular-nums text-emerald-300">{progress}%</p></div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-inset"><div className="h-full rounded-full bg-emerald-400 transition-[width] duration-300" style={{ width: `${progress}%` }} /></div>
+                <div className="mt-4 flex items-end justify-between gap-4"><div><p className="text-3xl font-black tabular-nums text-slate-100">{isFoundIntake ? activeSession.items.length : expectedReceived}{isFoundIntake ? null : <span className="text-lg text-slate-500"> / {activeSession.expectedCount}</span>}</p><p className="mt-1 text-xs font-black uppercase text-slate-500">{isFoundIntake ? "Cajas documentadas" : "Cajas recibidas"}</p></div>{isFoundIntake ? <p className="text-xs font-black text-amber-200">Origen por aclarar</p> : <p className="text-2xl font-black tabular-nums text-emerald-300">{progress}%</p>}</div>
+                {!isFoundIntake ? <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-inset"><div className="h-full rounded-full bg-emerald-400 transition-[width] duration-300" style={{ width: `${progress}%` }} /></div> : null}
               </div>
               <div className="grid grid-cols-4 border-t border-black bg-surface-inset/45">
                 <button type="button" onClick={() => setDrawer("pending")} className="border-r border-black px-2 py-3 text-center hover:bg-surface-card-hover"><p className={`text-lg font-black tabular-nums ${metricTone(pendingCount, pendingCount > 0)}`}>{pendingCount}</p><p className="text-[10px] font-black uppercase text-slate-500">Pendientes</p></button>
@@ -457,13 +520,13 @@ export function WarehouseIntakeClient({
               <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_8rem_minmax(0,1fr)_auto] lg:items-end">
                 <label className="grid gap-1.5 lg:col-span-1"><span className={labelMutedClass}>Código de caja</span><input ref={codeRef} autoFocus value={code} onChange={(event) => { setCode(event.target.value); setInlineError(""); setLastReceived(null); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); prepareScannedCode(); } }} className={`${inputClass} h-12 w-full font-mono text-base font-black`} placeholder="Escanea o escribe el código" autoComplete="off" /></label>
                 <label className="grid gap-1.5"><span className={labelMutedClass}>Peso kg</span><input ref={weightRef} value={weight} onChange={(event) => { setWeight(event.target.value); setInlineError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void receive(); } }} className={`${inputClass} h-12 w-full text-base font-black tabular-nums`} inputMode="decimal" placeholder="0.00" /></label>
-                <label className="grid gap-1.5"><span className={labelMutedClass}>Ubicación inicial</span><select value={binId} onChange={(event) => setBinId(event.target.value)} disabled={condition !== "correct" || weightWarning || Boolean(selectedPackage && selectedPackage.truckRouteId !== activeSession.routeId)} className={`${inputClass} h-12 w-full disabled:cursor-not-allowed disabled:opacity-50`}><option value="">Recepción pendiente</option>{sessionBins.map((bin) => <option key={bin.id} value={bin.id}>{bin.code} · {bin.label}</option>)}</select></label>
-                <button type="button" disabled={saving || !code.trim() || (!selectedPackage && condition !== "unidentified") || (Boolean(selectedPackage) && !(enteredWeight > 0)) || (weightWarning && !note.trim())} onClick={() => void receive()} className={`${primaryButtonClass} h-12 w-full px-5 disabled:cursor-not-allowed disabled:opacity-40 lg:w-auto`}>{saving ? "Guardando..." : "Confirmar ingreso"}<Check className="h-4 w-4" /></button>
+                <label className="grid gap-1.5"><span className={labelMutedClass}>Ubicación inicial</span><select value={binId} onChange={(event) => setBinId(event.target.value)} disabled={isFoundIntake || condition !== "correct" || weightWarning || Boolean(selectedPackage && selectedPackage.truckRouteId !== activeSession.routeId)} className={`${inputClass} h-12 w-full disabled:cursor-not-allowed disabled:opacity-50`}><option value="">{isFoundIntake ? "Cuarentena obligatoria" : "Recepción pendiente"}</option>{sessionBins.map((bin) => <option key={bin.id} value={bin.id}>{bin.code} · {bin.label}</option>)}</select></label>
+                <button type="button" disabled={saving || !code.trim() || (!selectedPackage && condition !== "unidentified") || (Boolean(selectedPackage) && !(enteredWeight > 0)) || (weightWarning && !note.trim()) || (isFoundIntake && (!note.trim() || !evidence))} onClick={() => void receive()} className={`${primaryButtonClass} h-12 w-full px-5 disabled:cursor-not-allowed disabled:opacity-40 lg:w-auto`}>{saving ? "Guardando..." : "Confirmar ingreso"}<Check className="h-4 w-4" /></button>
               </div>
 
               {selectedPackage ? <div className="mt-3 rounded-xl border border-black bg-surface-inset/50 p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-mono text-sm font-black text-slate-100">{selectedPackage.code}</p><p className="mt-1 text-xs font-bold text-slate-400">{selectedPackage.recipientName || selectedPackage.customerName} · {selectedPackage.country}</p><p className="mt-1 text-xs font-black text-emerald-200">Factura {selectedPackage.invoiceCode}</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setCondition("correct"); setNote(""); setEvidence(null); }} className={`h-9 rounded-lg border px-3 text-xs font-black ${condition === "correct" ? "border-emerald-500 bg-emerald-400 text-slate-950" : "border-black bg-surface-card text-slate-200"}`}><CheckCircle2 className="mr-1 inline h-4 w-4" />Correcta</button><button type="button" onClick={() => setIssueOpen(true)} className={`h-9 rounded-lg border px-3 text-xs font-black ${condition !== "correct" ? "border-amber-600 bg-amber-950/50 text-amber-100" : "border-black bg-surface-card text-slate-200"}`}><AlertTriangle className="mr-1 inline h-4 w-4" />Con problema</button></div></div>
-                {selectedPackage.truckRouteId !== activeSession.routeId ? <p role="alert" className="mt-3 rounded-lg bg-amber-950/45 px-3 py-2 text-xs font-black text-amber-100">No pertenece a este manifiesto. Se registrará como sobrante y quedará en Cuarentena.</p> : null}
+                {isFoundIntake ? <p role="alert" className="mt-3 rounded-lg bg-amber-950/45 px-3 py-2 text-xs font-black text-amber-100">Origen sin identificar. Se registrará en Cuarentena con una excepción de custodia abierta.</p> : selectedPackage.truckRouteId !== activeSession.routeId ? <p role="alert" className="mt-3 rounded-lg bg-amber-950/45 px-3 py-2 text-xs font-black text-amber-100">No pertenece a este manifiesto. Se registrará como sobrante y quedará en Cuarentena.</p> : null}
                 {selectedPackage.paymentStatus === "pending" ? <p className="mt-2 rounded-lg bg-surface-card px-3 py-2 text-xs font-bold text-slate-300"><span className="font-black text-amber-300">Pago pendiente.</span> La recepción física continúa, pero la caja sigue bloqueada para despacho.</p> : null}
                 {weightWarning ? <div role="alert" className="mt-2 rounded-lg border border-amber-900 bg-amber-950/35 p-3"><p className="text-xs font-black text-amber-100">Diferencia de {weightDifference.toFixed(2)} kg. La tolerancia es {workspace.toleranceKg.toFixed(2)} kg y la caja irá a Cuarentena.</p><label className="mt-2 grid gap-1"><span className="text-[11px] font-black uppercase text-amber-200/70">Motivo de la diferencia</span><input value={note} onChange={(event) => setNote(event.target.value)} className={`${inputClass} h-10 w-full`} placeholder="Ej. báscula de origen descalibrada" /></label></div> : null}
                 {condition !== "correct" ? <p className="mt-2 text-xs font-black text-amber-200">{warehouseIntakeConditionLabel[condition]} · Foto lista · Cuarentena</p> : null}
@@ -479,9 +542,9 @@ export function WarehouseIntakeClient({
       {drawer ? <Drawer view={drawer} session={activeSession} workspace={workspace} onClose={() => setDrawer(null)} onReopen={(session) => { setReopenTarget(session); setReopenReason(""); }} /> : null}
 
       {issueOpen ? <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4"><button type="button" aria-label="Cerrar condición" className="absolute inset-0" onClick={() => setIssueOpen(false)} /><section role="dialog" aria-modal="true" aria-labelledby="warehouse-condition-title" className="relative max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-black bg-surface-panel p-4 pb-8 shadow-2xl sm:rounded-2xl sm:p-5">
-        <div className="flex items-start justify-between gap-3"><div><p className={labelMutedClass}>Excepción física</p><h2 id="warehouse-condition-title" className="mt-1 text-xl font-black text-slate-100">Cómo llegó la caja</h2></div><button type="button" onClick={() => setIssueOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300" aria-label="Cerrar"><X className="h-4 w-4" /></button></div>
+        <div className="flex items-start justify-between gap-3"><div><p className={labelMutedClass}>{isFoundIntake ? "Custodia por aclarar" : "Excepción física"}</p><h2 id="warehouse-condition-title" className="mt-1 text-xl font-black text-slate-100">{isFoundIntake ? "Dónde encontraste la caja" : "Cómo llegó la caja"}</h2></div><button type="button" onClick={() => setIssueOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300" aria-label="Cerrar"><X className="h-4 w-4" /></button></div>
         <div className="mt-4 grid grid-cols-2 gap-2">{warehouseIntakeConditions.filter((value) => value !== "correct" && (selectedPackage ? value !== "unidentified" : value === "unidentified")).map((value) => <button key={value} type="button" onClick={() => setCondition(value)} className={`min-h-11 rounded-lg border px-3 text-left text-xs font-black ${condition === value ? "border-amber-500 bg-amber-950/55 text-amber-100" : "border-black bg-surface-inset text-slate-300"}`}>{warehouseIntakeConditionLabel[value]}</button>)}</div>
-        <label className="mt-4 grid gap-1.5"><span className={labelMutedClass}>Observación obligatoria</span><textarea value={note} onChange={(event) => setNote(event.target.value)} className={`${inputClass} min-h-24 w-full resize-y py-3`} placeholder="Describe el daño, la etiqueta o por qué no se identifica" /></label>
+        <label className="mt-4 grid gap-1.5"><span className={labelMutedClass}>Observación obligatoria</span><textarea value={note} onChange={(event) => setNote(event.target.value)} className={`${inputClass} min-h-24 w-full resize-y py-3`} placeholder={isFoundIntake ? "Ej. junto a la puerta 2, sin etiqueta visible" : "Describe el daño, la etiqueta o por qué no se identifica"} /></label>
         <label className="mt-4 flex min-h-20 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-700 bg-surface-inset p-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-card text-amber-300"><Camera className="h-5 w-5" /></span><span className="min-w-0"><span className="block text-sm font-black text-slate-100">{evidence ? evidence.name : "Tomar foto"}</span><span className="mt-1 block text-xs font-bold text-slate-500">JPG, PNG o WebP · máximo 8 MB</span></span><input key={evidenceInputKey} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" onChange={(event) => setEvidence(event.target.files?.[0] || null)} /></label>
         <div className="mt-3 flex items-center gap-2 rounded-lg bg-amber-950/35 px-3 py-2 text-xs font-black text-amber-100"><MapPin className="h-4 w-4 shrink-0" />La caja quedará en Cuarentena.</div>
         {issueError ? <p role="alert" className="mt-3 text-sm font-black text-rose-200">{issueError}</p> : null}
@@ -492,7 +555,7 @@ export function WarehouseIntakeClient({
         <p className={labelMutedClass}>Conciliación final</p><h2 id="warehouse-close-title" className="mt-1 text-xl font-black text-slate-100">Cerrar {activeSession.code}</h2>
         <div className="mt-4 grid grid-cols-3 gap-2">{[["Recibidas", activeSession.summary.received], ["Faltantes", pendingCount], ["Sobrantes", activeSession.summary.unexpected], ["Dañadas", activeSession.summary.damaged], ["Sin identificar", activeSession.summary.unidentified], ["Cuarentena", activeSession.summary.quarantine]].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-black bg-surface-card p-2 text-center"><p className={`text-xl font-black ${Number(value) ? "text-amber-300" : "text-slate-100"}`}>{value}</p><p className="text-[10px] font-black uppercase text-slate-500">{label}</p></div>)}</div>
         {pendingCount || differences ? <p className="mt-3 rounded-lg bg-amber-950/35 px-3 py-2 text-xs font-bold text-amber-100">El ingreso se cerrará con excepciones abiertas. La operación puede continuar y cada diferencia quedará trazada.</p> : <p className="mt-3 rounded-lg bg-emerald-950/30 px-3 py-2 text-xs font-bold text-emerald-100">El manifiesto está conciliado sin diferencias.</p>}
-        <label className="mt-4 flex min-h-12 items-center gap-3 rounded-lg border border-black bg-surface-inset px-3"><input type="checkbox" checked={driverConfirmed} onChange={(event) => setDriverConfirmed(event.target.checked)} className="h-5 w-5 accent-emerald-400" /><span className="text-sm font-black text-slate-200">El conductor confirma la entrega</span></label>
+        {needsDriverConfirmation ? <label className="mt-4 flex min-h-12 items-center gap-3 rounded-lg border border-black bg-surface-inset px-3"><input type="checkbox" checked={driverConfirmed} onChange={(event) => setDriverConfirmed(event.target.checked)} className="h-5 w-5 accent-emerald-400" /><span className="text-sm font-black text-slate-200">El conductor confirma la entrega</span></label> : <p className="mt-4 rounded-lg bg-amber-950/35 px-3 py-2 text-xs font-bold text-amber-100">Sin conductor ni manifiesto: esta caja queda con custodia pendiente de aclarar.</p>}
         {!driverConfirmed ? <label className="mt-2 grid gap-1.5"><span className={labelMutedClass}>Por qué no confirmó</span><input value={driverNote} onChange={(event) => setDriverNote(event.target.value)} className={`${inputClass} h-11 w-full`} placeholder="Ej. conductor no disponible" /></label> : null}
         <label className="mt-2 flex min-h-12 items-center gap-3 rounded-lg border border-black bg-surface-inset px-3"><input type="checkbox" checked={receiverConfirmed} onChange={(event) => setReceiverConfirmed(event.target.checked)} className="h-5 w-5 accent-emerald-400" /><span className="text-sm font-black text-slate-200">Confirmo como encargado de bodega</span></label>
         {closeError ? <p role="alert" className="mt-3 text-sm font-black text-rose-200">{closeError}</p> : null}

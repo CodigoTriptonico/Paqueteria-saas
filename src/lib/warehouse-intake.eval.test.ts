@@ -8,6 +8,7 @@ const page = readFileSync("src/app/ingreso-bodega/page.tsx", "utf8");
 const migration = readFileSync("supabase/migrations/117_warehouse_intake_sessions.sql", "utf8");
 const arrivalMigration = readFileSync("supabase/migrations/120_conductor_route_arrival.sql", "utf8");
 const custodyOrderingMigration = readFileSync("supabase/migrations/122_fix_current_custody_same_timestamp.sql", "utf8");
+const foundIntakeMigration = readFileSync("supabase/migrations/123_found_warehouse_intake.sql", "utf8");
 
 test("warehouse intake is a formal manifest with atomic, idempotent scans", () => {
   assert.match(migration, /warehouse_intake_sessions/);
@@ -56,4 +57,17 @@ test("damage, unknown boxes, reconciliation and audited reopening stay reachable
   assert.match(actions, /reopen_warehouse_intake/);
   assert.match(migration, /EXCEPTION_EVIDENCE_REQUIRED/);
   assert.match(migration, /DRIVER_CONFIRMATION_OR_NOTE_REQUIRED/);
+});
+
+test("a found box enters without a truck while keeping its source uncertainty traceable", () => {
+  assert.match(foundIntakeMigration, /open_found_warehouse_intake/);
+  assert.match(foundIntakeMigration, /scan_found_warehouse_intake_package/);
+  assert.match(foundIntakeMigration, /route_id drop not null/);
+  assert.match(foundIntakeMigration, /unknown_custody/);
+  assert.match(foundIntakeMigration, /'unknown_custody', 'open', true/);
+  assert.match(foundIntakeMigration, /found_in_warehouse/);
+  assert.match(actions, /openFoundWarehouseIntakeAction/);
+  assert.match(actions, /scanFoundWarehouseIntakePackageAction/);
+  assert.match(component, /Ingresar caja encontrada/);
+  assert.match(component, /Sin camión/);
 });

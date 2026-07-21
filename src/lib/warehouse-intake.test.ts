@@ -7,6 +7,7 @@ import {
   validateWarehouseIntakeDraft,
   warehouseIntakeCloseStatus,
   warehouseIntakeHasExceptions,
+  warehouseIntakeNeedsDriverConfirmation,
 } from "./warehouse-intake";
 
 test("warehouse intake reconciles expected, missing, unexpected and damaged boxes", () => {
@@ -76,4 +77,9 @@ test("known boxes require a positive received weight", () => {
     hasEvidence: false,
     isKnownPackage: true,
   }), { ok: false, error: "Indica el peso recibido en kg." });
+});
+
+test("found warehouse intake closes without inventing a driver", () => {
+  assert.equal(warehouseIntakeNeedsDriverConfirmation("truck_manifest"), true);
+  assert.equal(warehouseIntakeNeedsDriverConfirmation("found_in_warehouse"), false);
 });

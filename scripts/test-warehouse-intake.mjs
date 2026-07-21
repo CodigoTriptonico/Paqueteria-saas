@@ -158,6 +158,45 @@ try {
     assert.deepEqual(audit.rows.map((event) => event.event_type), [
       "opened", "scanned", "exception_recorded", "closed", "reopened",
     ]);
+
+    const foundOpenKey = randomUUID();
+    const found = await client.query(
+      "select public.open_found_warehouse_intake($1, $2) as id",
+      [context.warehouse_id, foundOpenKey],
+    );
+    const foundIntakeId = found.rows[0].id;
+    const foundSession = await client.query(
+      "select intake_kind, route_id, expected_count from public.warehouse_intake_sessions where id = $1",
+      [foundIntakeId],
+    );
+    assert.deepEqual(foundSession.rows[0], {
+      intake_kind: "found_in_warehouse",
+      route_id: null,
+      expected_count: 0,
+    });
+    await client.query(
+      "select public.scan_found_warehouse_intake_package($1, $2, 10, 'Encontrada junto a la puerta', 'qa/found.webp', $3)",
+      [foundIntakeId, packageCode, randomUUID()],
+    );
+    const foundException = await client.query(
+      "select exception_type, blocks_release from public.operational_exceptions where package_id = $1 and exception_type = 'unknown_custody'",
+      [packageId],
+    );
+    assert.deepEqual(foundException.rows[0], { exception_type: "unknown_custody", blocks_release: true });
+    const foundClose = await client.query(
+      "select public.close_warehouse_intake($1, false, '', true, $2) as summary",
+      [foundIntakeId, randomUUID()],
+    );
+    assert.deepEqual(foundClose.rows[0].summary, {
+      expected: 0,
+      received: 1,
+      missing: 0,
+      unexpected: 1,
+      damaged: 0,
+      unidentified: 0,
+      weightDifferences: 0,
+      quarantine: 1,
+    });
   });
 
   const custody = await client.query(`
@@ -176,6 +215,7 @@ try {
     reconciledClose: "pass",
     appendOnlyAudit: "pass",
     authorizedReopen: "pass",
+    foundWithoutManifest: "pass",
   }, null, 2));
 } finally {
   await client.query("rollback");

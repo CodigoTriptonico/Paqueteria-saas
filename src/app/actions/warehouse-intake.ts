@@ -78,6 +78,8 @@ function normalizeSummary(value: unknown, fallback: WarehouseIntakeSummary) {
 function intakeErrorMessage(error: unknown) {
   const raw = actionErrorMessage(error);
   const mappings: Array<[string, string]> = [
+    ["PACKAGE_CUSTODY_CONFLICT", "Esta caja ya tiene una custodia final. Revisa su historial antes de moverla."],
+    ["INTAKE_KIND_MISMATCH", "Esta accion no corresponde al tipo de ingreso abierto."],
     ["WAREHOUSE_FORBIDDEN", "No tienes acceso a esa bodega."],
     ["WAREHOUSE_NOT_FOUND", "La bodega no está disponible."],
     ["ARRIVAL_WAREHOUSE_MISMATCH", "Esta ruta debe recibirse en la bodega que confirmó el conductor."],
@@ -161,7 +163,7 @@ async function loadWorkspace(): Promise<WarehouseIntakeWorkspace> {
 
   const [sessionsResult, binsResult, packagesResult, settingsResult] = await Promise.all([
     supabase.from("warehouse_intake_sessions")
-      .select("id, code, status, route_id, warehouse_id, expected_count, started_at, closed_at, closed_by, driver_confirmed, driver_exception_note, close_summary")
+      .select("id, code, status, intake_kind, route_id, warehouse_id, expected_count, started_at, closed_at, closed_by, driver_confirmed, driver_exception_note, close_summary")
       .eq("organization_id", session.organizationId)
       .in("warehouse_id", warehouseIds)
       .order("started_at", { ascending: false })
@@ -288,10 +290,11 @@ async function loadWorkspace(): Promise<WarehouseIntakeWorkspace> {
       id: text(intake.id),
       code: text(intake.code),
       status: text(intake.status) as WarehouseIntakeStatus,
-      routeId: text(intake.route_id),
-      routeName: text(route?.name) || "Ruta",
+      intakeKind: text(intake.intake_kind) === "found_in_warehouse" ? "found_in_warehouse" : "truck_manifest",
+      routeId: text(intake.route_id) || null,
+      routeName: text(route?.name) || (text(intake.intake_kind) === "found_in_warehouse" ? "Caja encontrada" : "Ruta"),
       vehicleName: text(vehicles.get(text(route?.vehicle_id))?.name) || "Camión",
-      driverName: profileName(profiles.get(text(route?.assigned_to))),
+      driverName: text(intake.intake_kind) === "found_in_warehouse" ? "Origen desconocido" : profileName(profiles.get(text(route?.assigned_to))),
       warehouseId: text(intake.warehouse_id),
       warehouseName: warehouseMap.get(text(intake.warehouse_id))?.name || "Bodega",
       expectedCount: Number(intake.expected_count) || 0,
@@ -367,6 +370,28 @@ export async function openWarehouseIntakeAction(input: {
   }
 }
 
+export async function openFoundWarehouseIntakeAction(input: {
+  warehouseId: string;
+  operationKey?: string;
+}): Promise<ActionResult<WarehouseIntakeWorkspace>> {
+  try {
+    const session = await requireAppSession();
+    if (!canOperateWarehouse(session)) throw new Error("FORBIDDEN");
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) return fail("Supabase no configurado");
+    const { error } = await supabase.rpc("open_found_warehouse_intake", {
+      target_warehouse_id: input.warehouseId,
+      operation_key: input.operationKey || randomUUID(),
+    });
+    if (error) throw new Error(error.message);
+    revalidatePath("/ingreso-bodega");
+    revalidatePath("/bodega");
+    return ok(await loadWorkspace());
+  } catch (error) {
+    return fail(intakeErrorMessage(error));
+  }
+}
+
 export async function scanWarehouseIntakePackageAction(formData: FormData): Promise<ActionResult<WarehouseIntakeWorkspace>> {
   let evidencePath = "";
   try {
@@ -404,6 +429,49 @@ export async function scanWarehouseIntakePackageAction(formData: FormData): Prom
       note_value: note,
       evidence_path_value: evidencePath,
       target_bin_id: binId || null,
+      operation_key: operationKey,
+    });
+    if (error) throw new Error(error.message);
+    revalidatePath("/ingreso-bodega");
+    revalidatePath("/bodega");
+    revalidatePath("/seguimiento/excepciones");
+    return ok(await loadWorkspace());
+  } catch (error) {
+    await removeEvidence(evidencePath);
+    return fail(intakeErrorMessage(error));
+  }
+}
+
+export async function scanFoundWarehouseIntakePackageAction(formData: FormData): Promise<ActionResult<WarehouseIntakeWorkspace>> {
+  let evidencePath = "";
+  try {
+    const session = await requireAppSession();
+    if (!canOperateWarehouse(session)) throw new Error("FORBIDDEN");
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) return fail("Supabase no configurado");
+    const sessionId = text(formData.get("sessionId"));
+    const code = text(formData.get("code"));
+    const weightKg = nullableNumber(text(formData.get("weightKg")).replace(",", "."));
+    const note = text(formData.get("note"));
+    const operationKey = text(formData.get("operationKey")) || randomUUID();
+    const fileValue = formData.get("evidence");
+    const evidence = fileValue instanceof File && fileValue.name ? fileValue : null;
+    if (!code) return fail("Escanea o escribe el codigo de la caja.");
+    if (!note) return fail("Describe donde encontraste la caja o por que no se conoce su origen.");
+    if (!evidence) return fail("Toma una foto de la caja antes de ingresarla.");
+    const { data: knownPackage } = await supabase.from("shipment_packages")
+      .select("id")
+      .eq("organization_id", session.organizationId)
+      .ilike("code", code)
+      .maybeSingle();
+    if (knownPackage && (!weightKg || weightKg <= 0)) return fail("Indica el peso recibido en kg.");
+    evidencePath = await uploadEvidence({ organizationId: session.organizationId, sessionId, operationKey, file: evidence });
+    const { error } = await supabase.rpc("scan_found_warehouse_intake_package", {
+      target_session_id: sessionId,
+      scanned_code_value: code,
+      received_weight_value: weightKg,
+      note_value: note,
+      evidence_path_value: evidencePath,
       operation_key: operationKey,
     });
     if (error) throw new Error(error.message);

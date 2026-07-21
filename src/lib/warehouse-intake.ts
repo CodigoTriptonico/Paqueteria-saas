@@ -31,6 +31,8 @@ export type WarehouseIntakeStatus =
   | "completed_with_exceptions"
   | "cancelled";
 
+export type WarehouseIntakeKind = "truck_manifest" | "found_in_warehouse";
+
 export type WarehouseIntakeSummary = {
   expected: number;
   received: number;
@@ -72,7 +74,8 @@ export type WarehouseIntakeSession = {
   id: string;
   code: string;
   status: WarehouseIntakeStatus;
-  routeId: string;
+  intakeKind: WarehouseIntakeKind;
+  routeId: string | null;
   routeName: string;
   vehicleName: string;
   driverName: string;
@@ -161,6 +164,10 @@ export function warehouseIntakeHasExceptions(summary: WarehouseIntakeSummary) {
 
 export function canScanWarehouseIntake(status: WarehouseIntakeStatus) {
   return status === "unloading" || status === "in_review";
+}
+
+export function warehouseIntakeNeedsDriverConfirmation(kind: WarehouseIntakeKind) {
+  return kind === "truck_manifest";
 }
 
 export function warehouseIntakeCloseStatus(summary: WarehouseIntakeSummary): WarehouseIntakeStatus {
