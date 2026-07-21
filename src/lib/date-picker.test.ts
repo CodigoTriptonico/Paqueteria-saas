@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildCalendarMonth,
+  buildVisibleCalendarMonth,
   formatDateInputDisplay,
   formatDateTimeInputValue,
   isDateDisabled,
@@ -15,7 +16,8 @@ import {
 describe("date picker", () => {
   it("parses and formats schedule dates", () => {
     assert.deepEqual(parseDateInput("2026-07-10"), { year: 2026, month: 7, day: 10 });
-    assert.equal(formatDateInputDisplay("2026-07-10"), "10/07/2026");
+    assert.equal(formatDateInputDisplay("2026-07-10"), "10 julio 2026");
+    assert.equal(formatDateInputDisplay("2026-09-01"), "1 septiembre 2026");
     assert.equal(parseDateInput("invalid"), null);
   });
 
@@ -26,6 +28,26 @@ describe("date picker", () => {
     assert.equal(july2026[2].date, "2026-07-01");
     assert.equal(july2026[2].inMonth, true);
     assert.equal(july2026[0].inMonth, false);
+  });
+
+  it("hides orphan spill weeks and keeps only the viewed month as actionable days", () => {
+    const julyVisible = buildVisibleCalendarMonth(2026, 7);
+    const inMonth = julyVisible.filter((cell) => cell.inMonth);
+    const outOfMonth = julyVisible.filter((cell) => !cell.inMonth);
+
+    assert.equal(inMonth.length, 31);
+    assert.equal(julyVisible.length % 7, 0);
+    assert.ok(julyVisible.length < 42);
+    assert.equal(
+      inMonth.every((cell) => cell.date.startsWith("2026-07-")),
+      true,
+    );
+    // Spill cells remain as placeholders for weekday alignment; UI renders them blank.
+    assert.ok(outOfMonth.length > 0);
+    assert.equal(
+      outOfMonth.some((cell) => cell.date.startsWith("2026-08-")),
+      true,
+    );
   });
 
   it("shifts months across year boundaries", () => {

@@ -7,6 +7,10 @@ import { describe, it } from "node:test";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const dateInputSource = readFileSync(join(root, "components/date-input.tsx"), "utf8");
+const datePickerCalendarSource = readFileSync(
+  join(root, "components/date-picker-calendar.tsx"),
+  "utf8",
+);
 
 const consumerFiles = [
   "components/logistica-client.tsx",
@@ -14,7 +18,6 @@ const consumerFiles = [
   "components/inventory-movements-panel.tsx",
   "components/sale/sale-logistics-step.tsx",
   "components/sale/sale-quick-empty-box-modal.tsx",
-  "components/shipment-step-context-menu.tsx",
   "components/shipment-contact-log-dialog.tsx",
 ];
 
@@ -26,6 +29,12 @@ describe("date input standard", () => {
     assert.equal(dateInputSource.includes("formatDateInputDisplay(value)"), true);
     assert.equal(dateInputSource.includes("aria-haspopup=\"dialog\""), true);
     assert.match(dateInputSource, /onChange=\{pickDate\}/);
+  });
+
+  it("hides out-of-month spill days in the calendar grid", () => {
+    assert.match(datePickerCalendarSource, /buildVisibleCalendarMonth/);
+    assert.match(datePickerCalendarSource, /if \(!cell\.inMonth\)/);
+    assert.match(datePickerCalendarSource, /aria-hidden/);
   });
 
   it("replaces raw date inputs across the app", () => {

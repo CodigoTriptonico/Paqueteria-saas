@@ -29,9 +29,14 @@ test("seguimiento wires program-route into logistics approval flow", () => {
   assert.match(envios, /selectionOrder=\"date-first\"/);
   assert.match(envios, /showDriverPicker=\{false\}/);
   assert.match(envios, /allowPendingRoute/);
+  assert.match(panel, /resolveScheduleConfirmDriverId/);
+  assert.match(panel, /showDriverPicker \? resolvedDriverId : true/);
   assert.match(panel, /showDriverPicker/);
+  assert.match(actions, /driver_id: driverId \|\| null/);
+  assert.match(actions, /Completa fecha y ruta/);
   assert.match(panel, /allowPendingRoute/);
   assert.match(panel, /onConfirmPendingRoute/);
+  assert.equal(panel.includes("Logística debe configurarlo en Rutas"), false);
   assert.match(panel, /Solo días con rutas/);
   assert.match(panel, /nextDateForAvailableWeekdays/);
   assert.match(panel, /availableWeekdays/);

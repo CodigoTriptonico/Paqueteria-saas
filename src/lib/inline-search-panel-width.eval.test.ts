@@ -22,6 +22,12 @@ describe("inline search picker panel eval", () => {
     );
   });
 
+  it("keeps dropdown panels above app modals when portaled to body", () => {
+    assert.match(pickerSource, /createPortal\(panel, document\.body\)/);
+    assert.match(pickerSource, /fixed z-\[170\]/);
+    assert.doesNotMatch(pickerSource, /fixed z-\[120\]/);
+  });
+
   it("gives envios status filter enough room for bucket labels", () => {
     assert.match(enviosSource, /ENVIOS_STATUS_FILTER_OPTIONS/);
     assert.match(enviosSource, /matchesEnviosStatusFilter/);

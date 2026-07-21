@@ -246,7 +246,7 @@ export function InlineSearchPicker({
         id={listboxId}
         role="listbox"
         data-inline-search-picker-panel
-        className="fixed z-[120] overflow-hidden rounded-lg border border-black bg-[#101820] shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+        className="fixed z-[170] overflow-hidden rounded-lg border border-black bg-[#101820] shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
         style={{
           top: panelPosition.top,
           left: panelPosition.left,
@@ -521,7 +521,7 @@ export function InlineSearchCombobox({
         id={listboxId}
         role="listbox"
         data-inline-search-picker-panel
-        className="fixed z-[120] overflow-hidden rounded-lg border border-black bg-[#101820] shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+        className="fixed z-[170] overflow-hidden rounded-lg border border-black bg-[#101820] shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
         style={{
           top: panelPosition.top,
           left: panelPosition.left,

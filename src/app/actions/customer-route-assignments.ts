@@ -65,7 +65,7 @@ function mapRequestRow(row: {
   task_id: string;
   route_template_id: string;
   scheduled_at: string;
-  driver_id: string;
+  driver_id: string | null;
   zone_key: string;
   status: string;
   requested_by: string | null;
@@ -79,6 +79,7 @@ function mapRequestRow(row: {
 }): CustomerRouteAssignmentRequestRow {
   const first = String(row.customer?.first_name || "").trim();
   const last = String(row.customer?.last_name || "").trim();
+  const driverId = String(row.driver_id || "").trim();
   return {
     id: row.id,
     customerId: row.customer_id,
@@ -91,11 +92,12 @@ function mapRequestRow(row: {
     routeTemplateName: String(row.template?.name || "").trim() || "Ruta",
     routeWeekday: Number(row.template?.weekday ?? -1),
     scheduledAt: row.scheduled_at,
-    driverId: row.driver_id,
-    driverLabel:
-      String(row.driver?.full_name || "").trim() ||
-      String(row.driver?.email || "").trim() ||
-      "Conductor",
+    driverId,
+    driverLabel: driverId
+      ? String(row.driver?.full_name || "").trim() ||
+        String(row.driver?.email || "").trim() ||
+        "Conductor"
+      : "Sin conductor todavía",
     zoneKey: row.zone_key,
     status: row.status as CustomerRouteAssignmentRequestStatus,
     requestedBy: row.requested_by,
@@ -226,7 +228,7 @@ export async function requestCustomerRouteAssignmentAction(input: {
   taskId: string;
   routeTemplateId: string;
   scheduledAt: string;
-  driverId: string;
+  driverId?: string | null;
 }): Promise<ActionResult<CustomerRouteAssignmentResult>> {
   try {
     const session = await requireAppSession();
@@ -242,12 +244,36 @@ export async function requestCustomerRouteAssignmentAction(input: {
     const shipmentId = String(input.shipmentId || "").trim();
     const taskId = String(input.taskId || "").trim();
     const routeTemplateId = String(input.routeTemplateId || "").trim();
-    const driverId = String(input.driverId || "").trim();
+    let driverId = String(input.driverId || "").trim();
     const scheduledAt = String(input.scheduledAt || "").trim();
     const routeDate = scheduledAtToLocalDateInput(scheduledAt);
 
-    if (!shipmentId || !taskId || !routeTemplateId || !driverId || !/^\d{4}-\d{2}-\d{2}$/.test(routeDate)) {
-      return fail("Completa fecha, conductor y ruta");
+    if (!shipmentId || !taskId || !routeTemplateId || !/^\d{4}-\d{2}-\d{2}$/.test(routeDate)) {
+      return fail("Completa fecha y ruta");
+    }
+
+    if (!driverId) {
+      const { data: weekdayDefault } = await supabase
+        .from("logistics_weekday_defaults")
+        .select("default_driver_id")
+        .eq("organization_id", session.organizationId)
+        .eq("weekday", getLogisticsWeekdayIndex(routeDate))
+        .maybeSingle();
+      driverId = String(weekdayDefault?.default_driver_id || "").trim();
+    }
+
+    if (!driverId) {
+      const { data: conductors } = await supabase
+        .from("profiles")
+        .select("id, roles(slug)")
+        .eq("organization_id", session.organizationId)
+        .eq("is_active", true);
+      const firstConductor = (conductors || []).find((row) => {
+        const raw = row.roles as { slug?: string } | { slug?: string }[] | null;
+        const role = Array.isArray(raw) ? raw[0] : raw;
+        return role?.slug === "conductor";
+      });
+      driverId = String(firstConductor?.id || "").trim();
     }
 
     const [{ data: shipment, error: shipmentError }, { data: task, error: taskError }, { data: template, error: templateError }] =
@@ -334,7 +360,7 @@ export async function requestCustomerRouteAssignmentAction(input: {
       currentZoneKey: zoneKey,
     });
 
-    if (outcome === "assigned") {
+    if (outcome === "assigned" && driverId) {
       const assignResult = await confirmLogisticsTaskScheduleAction({
         taskId,
         scheduledAt,
@@ -394,7 +420,7 @@ export async function requestCustomerRouteAssignmentAction(input: {
         task_id: taskId,
         route_template_id: routeTemplateId,
         scheduled_at: scheduledAt,
-        driver_id: driverId,
+        driver_id: driverId || null,
         zone_key: zoneKey,
         status: "pending",
         requested_by: session.userId,
@@ -599,10 +625,28 @@ export async function reviewCustomerRouteAssignmentRequestAction(input: {
       return fail("La zona del remitente cambió; el vendedor debe volver a proponer la ruta");
     }
 
+    const routeDate = scheduledAtToLocalDateInput(request.scheduled_at);
+    let assignDriverId = String(request.driver_id || "").trim();
+    if (!assignDriverId) {
+      const { data: weekdayDefault } = await supabase
+        .from("logistics_weekday_defaults")
+        .select("default_driver_id")
+        .eq("organization_id", session.organizationId)
+        .eq("weekday", getLogisticsWeekdayIndex(routeDate))
+        .maybeSingle();
+      assignDriverId = String(weekdayDefault?.default_driver_id || "").trim();
+    }
+
+    if (!assignDriverId) {
+      return fail(
+        "No hay conductor para esta ruta. Configúralo en Rutas (predeterminado del día) o crea un conductor.",
+      );
+    }
+
     const assignResult = await confirmLogisticsTaskScheduleAction({
       taskId: request.task_id,
       scheduledAt: request.scheduled_at,
-      driverId: request.driver_id,
+      driverId: assignDriverId,
       routeTemplateId: request.route_template_id,
     });
     if (!assignResult.ok) {

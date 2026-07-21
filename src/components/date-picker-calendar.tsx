@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  buildCalendarMonth,
+  buildVisibleCalendarMonth,
   formatCalendarMonthLabel,
   getWeekdayLabels,
   isDateDisabled,
@@ -37,7 +37,10 @@ export function DatePickerCalendar({
 }: DatePickerCalendarProps) {
   const [today, setToday] = useState<string | null>(null);
   const weekdays = getWeekdayLabels();
-  const days = useMemo(() => buildCalendarMonth(viewYear, viewMonth), [viewMonth, viewYear]);
+  const days = useMemo(
+    () => buildVisibleCalendarMonth(viewYear, viewMonth),
+    [viewMonth, viewYear],
+  );
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -91,8 +94,12 @@ export function DatePickerCalendar({
         ))}
       </div>
 
-      <div className="grid max-h-56 grid-cols-7 gap-1 overflow-y-auto p-2">
+      <div className="grid grid-cols-7 gap-1 p-2">
         {days.map((cell) => {
+          if (!cell.inMonth) {
+            return <span key={cell.date} className="h-9" aria-hidden />;
+          }
+
           const selected = cell.date === value;
           const disabled = isDateDisabled(cell.date, min, max, { allowedWeekdays });
           const isToday = cell.date === today;
@@ -108,11 +115,9 @@ export function DatePickerCalendar({
                   ? "bg-emerald-400 text-slate-950"
                   : disabled
                     ? "cursor-not-allowed bg-surface-panel text-slate-600 opacity-40"
-                    : cell.inMonth
-                      ? isToday
-                        ? "border border-emerald-600/60 bg-surface-panel text-[#f8fafc] hover:bg-surface-card-hover"
-                        : "bg-surface-panel text-[#f8fafc] hover:bg-surface-card-hover"
-                      : "bg-surface-panel text-slate-500 opacity-55 hover:bg-surface-card-hover hover:opacity-80"
+                    : isToday
+                      ? "border border-emerald-600/60 bg-surface-panel text-[#f8fafc] hover:bg-surface-card-hover"
+                      : "bg-surface-panel text-[#f8fafc] hover:bg-surface-card-hover"
               }`}
               aria-label={cell.date}
               aria-pressed={selected}

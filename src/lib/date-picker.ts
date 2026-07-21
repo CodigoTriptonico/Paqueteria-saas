@@ -54,10 +54,15 @@ export function formatDateInputDisplay(value: string) {
     return "—";
   }
 
-  const day = String(parsed.day).padStart(2, "0");
-  const month = String(parsed.month).padStart(2, "0");
+  const monthName = MONTH_NAMES_ES[parsed.month - 1];
 
-  return `${day}/${month}/${parsed.year}`;
+  if (!monthName) {
+    const day = String(parsed.day).padStart(2, "0");
+    const month = String(parsed.month).padStart(2, "0");
+    return `${day}/${month}/${parsed.year}`;
+  }
+
+  return `${parsed.day} ${monthName} ${parsed.year}`;
 }
 
 export function formatCalendarMonthLabel(year: number, month: number) {
@@ -117,6 +122,21 @@ export function buildCalendarMonth(year: number, month: number): CalendarDayCell
   }
 
   return cells;
+}
+
+/** Month grid weeks that contain at least one day of the viewed month (no orphan spill weeks). */
+export function buildVisibleCalendarMonth(year: number, month: number): CalendarDayCell[] {
+  const cells = buildCalendarMonth(year, month);
+  const visible: CalendarDayCell[] = [];
+
+  for (let index = 0; index < cells.length; index += 7) {
+    const week = cells.slice(index, index + 7);
+    if (week.some((cell) => cell.inMonth)) {
+      visible.push(...week);
+    }
+  }
+
+  return visible;
 }
 
 export function shiftCalendarMonth(year: number, month: number, delta: number) {

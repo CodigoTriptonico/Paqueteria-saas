@@ -7,6 +7,7 @@ import { InlineSearchPicker } from "@/components/inline-search-picker";
 import { TimePickerInput } from "@/components/time-picker-input";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { logisticsWeekdayKeys } from "@/lib/logistics-route-catalog";
+import { resolveScheduleConfirmDriverId } from "@/lib/logistics-schedule-confirm-driver";
 import {
   dateMatchesLogisticsWeekday,
   getLogisticsWeekdayIndex,
@@ -86,7 +87,7 @@ export function LogisticsTaskScheduleConfirmPanel({
   const initialDraft = scheduleDraft(scheduledAt);
   const initialWeekday = getLogisticsWeekdayIndex(initialDraft.date);
   const initialTemplate =
-    templates.find((template) => template.weekday === initialWeekday) ||
+    templates.find((template) => Number(template.weekday) === initialWeekday) ||
     templates.find((template) => availableWeekdays.includes(Number(template.weekday))) ||
     templates[0] ||
     null;
@@ -126,12 +127,18 @@ export function LogisticsTaskScheduleConfirmPanel({
       : getLogisticsWeekdayIndex(draft.date)
     : getLogisticsWeekdayIndex(draft.date);
   const [driverId, setDriverId] = useState(defaultDriverByWeekday[weekday] || "");
-  const resolvedDriverId = showDriverPicker
-    ? driverId
-    : defaultDriverByWeekday[weekday] || "";
+  const resolvedDriverId = resolveScheduleConfirmDriverId({
+    showDriverPicker,
+    selectedDriverId: driverId,
+    defaultDriverId: defaultDriverByWeekday[weekday],
+    conductors: routeMembers,
+  });
 
   const dayTemplates = useMemo(
-    () => (routeFirst ? templates : templates.filter((template) => template.weekday === weekday)),
+    () =>
+      routeFirst
+        ? templates
+        : templates.filter((template) => Number(template.weekday) === weekday),
     [routeFirst, templates, weekday],
   );
   const templateOptions = useMemo(
@@ -211,10 +218,12 @@ export function LogisticsTaskScheduleConfirmPanel({
     const nextWeekday = getLogisticsWeekdayIndex(date);
     setDraft((current) => ({ ...current, date }));
     setDriverId(defaultDriverByWeekday[nextWeekday] || "");
-    const firstForDay = templates.find((template) => template.weekday === nextWeekday);
+    const firstForDay = templates.find(
+      (template) => Number(template.weekday) === nextWeekday,
+    );
     setRouteTemplateId((current) => {
       const stillValid = templates.some(
-        (template) => template.id === current && template.weekday === nextWeekday,
+        (template) => template.id === current && Number(template.weekday) === nextWeekday,
       );
       return stillValid ? current : firstForDay?.id || "";
     });
@@ -225,12 +234,13 @@ export function LogisticsTaskScheduleConfirmPanel({
   const scheduledTimestamp = scheduleAtToTimestamp(`${draft.date}T${draft.time}`);
   const dateMatchesRoute =
     !selectedTemplate || dateMatchesLogisticsWeekday(draft.date, selectedTemplate.weekday);
+  // Sellers (no driver picker) only need day + route; logistics owns the driver.
   const canConfirm = Boolean(
     scheduledTimestamp &&
-      resolvedDriverId &&
       routeTemplateId &&
       dayTemplates.length &&
-      dateMatchesRoute,
+      dateMatchesRoute &&
+      (showDriverPicker ? resolvedDriverId : true),
   );
 
   const routeField = (
@@ -356,10 +366,6 @@ export function LogisticsTaskScheduleConfirmPanel({
                 </span>
               ) : null}
             </label>
-          ) : !resolvedDriverId ? (
-            <p className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] font-bold text-amber-100">
-              Ese día no tiene conductor predeterminado. Logística debe configurarlo en Rutas.
-            </p>
           ) : null}
         </div>
 
@@ -386,15 +392,19 @@ export function LogisticsTaskScheduleConfirmPanel({
             <button
               type="button"
               disabled={saving || !canConfirm}
-              onClick={() =>
-                scheduledTimestamp &&
-                resolvedDriverId &&
+              onClick={() => {
+                if (!scheduledTimestamp || !routeTemplateId) {
+                  return;
+                }
+                if (showDriverPicker && !resolvedDriverId) {
+                  return;
+                }
                 void onConfirm({
                   scheduledAt: scheduledTimestamp,
                   driverId: resolvedDriverId,
                   routeTemplateId,
-                })
-              }
+                });
+              }}
               className={`${primaryButtonClass} h-11 text-sm font-black disabled:opacity-40`}
             >
               {saving ? "Confirmando..." : confirmLabel}

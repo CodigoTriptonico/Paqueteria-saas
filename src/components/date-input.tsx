@@ -53,10 +53,10 @@ export function DateInput({
   const [viewMonth, setViewMonth] = useState(initialView.month);
 
   const shellClass = embedded
-    ? `${shellBaseClass} h-9 w-[9.75rem] px-2.5`
+    ? `${shellBaseClass} h-9 min-w-[11.5rem] w-[12.75rem] px-2.5`
     : compact
-      ? `${shellBaseClass} h-9 w-[10.75rem] px-2.5`
-      : `${shellBaseClass} h-11 w-[11.5rem] px-3`;
+      ? `${shellBaseClass} h-9 min-w-[12rem] w-[13.5rem] px-2.5`
+      : `${shellBaseClass} h-11 min-w-[13rem] w-[14.5rem] px-3`;
 
   const updatePanelPosition = useCallback(() => {
     const trigger = triggerRef.current;
