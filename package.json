@@ -54,6 +54,7 @@
     "test:matrix-initialization": "node scripts/test-matrix-initialization.mjs",
     "test:business-db": "node scripts/test-business-model.mjs",
     "test:commercial-db": "node scripts/test-commercial-config.mjs",
+    "test:warehouse-db": "node scripts/test-warehouse-intake.mjs",
     "test:sms": "node scripts/test-sms-flow.mjs",
     "export:chatgpt": "node scripts/export-chatgpt-folder.mjs"
   },

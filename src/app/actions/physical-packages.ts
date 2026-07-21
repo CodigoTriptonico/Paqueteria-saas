@@ -5,7 +5,6 @@ import { requireAppSession } from "@/lib/auth/session";
 import { sessionHasPermission } from "@/lib/auth/permissions";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
-import { recordActivityHistory } from "@/lib/activity-history";
 import {
   parsePackageContents,
   type PackageInvoiceLifecycleEvent,
@@ -182,88 +181,6 @@ export async function listWarehousePackagesAction(
   }
 }
 
-export async function receivePhysicalPackageAtIntakeAction(input: {
-  code: string;
-  weightKg: number;
-  differenceNote?: string;
-}): Promise<ActionResult<PhysicalPackage>> {
-  try {
-    const session = await requireAppSession();
-    if (!canOperateWarehouse(session)) throw new Error("FORBIDDEN");
-    const supabase = await createScopedSupabase(session);
-    if (!supabase) return fail("Supabase no configurado");
-    const { data: row, error } = await supabase
-      .from("shipment_packages")
-      .select(PACKAGE_SELECT)
-      .eq("organization_id", session.organizationId)
-      .eq("code", input.code.trim())
-      .maybeSingle();
-    if (error || !row) return fail("No encontramos una caja con ese código.");
-    const pkg = mapPackage(row as PackageDbRow);
-    if (pkg.status !== "pending_intake") {
-      return fail("Esta caja no está pendiente de ingreso a bodega.");
-    }
-    const intakeWeight = Number(input.weightKg);
-    if (!Number.isFinite(intakeWeight) || intakeWeight <= 0) {
-      return fail("Indica un peso válido en kg.");
-    }
-    const toleranceResult = await supabase
-      .from("organizations")
-      .select("settings")
-      .eq("id", session.organizationId)
-      .single();
-    const settings = (toleranceResult.data?.settings || {}) as Record<string, unknown>;
-    const tolerance = Math.max(0, Number(settings.warehouse_weight_tolerance_kg) || 0);
-    const difference =
-      pkg.collectionWeightKg === null ? null : Math.abs(intakeWeight - pkg.collectionWeightKg);
-    const note = String(input.differenceNote || "").trim();
-    if (difference !== null && difference > tolerance && !note) {
-      return fail(
-        `La diferencia de ${difference.toFixed(2)} kg supera el margen permitido (${tolerance.toFixed(2)} kg). Indica el motivo.`,
-      );
-    }
-    const { error: updateError } = await supabase
-      .from("shipment_packages")
-      .update({
-        intake_weight_kg: intakeWeight,
-        intake_recorded_at: new Date().toISOString(),
-        intake_recorded_by: session.userId,
-        weight_difference_kg: difference,
-        weight_difference_note: note,
-        status: "warehouse_intake",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", pkg.id)
-      .eq("organization_id", session.organizationId);
-    if (updateError) return fail(updateError.message);
-    await recordActivityHistory(supabase, session, {
-      action: "package.warehouse_intake",
-      entityType: "shipment",
-      entityId: pkg.shipmentId,
-      title: `Ingreso a bodega · ${pkg.code}`,
-      description: `${intakeWeight.toFixed(2)} kg registrados al ingresar.`,
-      metadata: {
-        packageId: pkg.id,
-        packageCode: pkg.code,
-        intakeWeightKg: intakeWeight,
-        differenceKg: difference,
-      },
-    });
-    revalidatePath("/ingreso-bodega");
-    revalidatePath("/bodega");
-    revalidatePath("/seguimiento");
-    return ok({
-      ...pkg,
-      intakeWeightKg: intakeWeight,
-      weightDifferenceKg: difference,
-      weightDifferenceNote: note,
-      status: "warehouse_intake" as const,
-    });
-  } catch (error) {
-    return fail(actionErrorMessage(error));
-  }
-}
-
 export async function movePhysicalPackageToWarehouseAction(
   packageId: string,
 ): Promise<ActionResult<PhysicalPackage>> {
@@ -312,20 +229,29 @@ export async function listWarehouseTruckArrivalsAction(): Promise<ActionResult<W
     if (!canOperateWarehouse(session)) throw new Error("FORBIDDEN");
     const supabase = await createScopedSupabase(session);
     if (!supabase) return fail("Supabase no configurado");
-    const { data, error } = await supabase
-      .from("shipment_packages")
-      .select(
-        "truck_route_id, truck_arrived_at, logistics_routes(id, name, assigned_to, logistics_vehicles(name), profiles:assigned_to(full_name))",
-      )
-      .eq("organization_id", session.organizationId)
-      .eq("status", "in_truck")
-      .not("truck_route_id", "is", null);
+    const [{ data, error }, { data: openIntakes, error: intakeError }] = await Promise.all([
+      supabase
+        .from("shipment_packages")
+        .select(
+          "truck_route_id, truck_arrived_at, logistics_routes(id, name, assigned_to, logistics_vehicles(name), profiles:assigned_to(full_name))",
+        )
+        .eq("organization_id", session.organizationId)
+        .eq("status", "in_truck")
+        .not("truck_route_id", "is", null),
+      supabase
+        .from("warehouse_intake_sessions")
+        .select("route_id")
+        .eq("organization_id", session.organizationId)
+        .in("status", ["unloading", "in_review"]),
+    ]);
     if (error) return fail(error.message);
+    if (intakeError) return fail(intakeError.message);
+    const routesInIntake = new Set((openIntakes || []).map((row) => String(row.route_id)));
     const arrivals = new Map<string, WarehouseTruckArrival>();
     for (const row of data || []) {
       const route = row.logistics_routes as unknown as Record<string, unknown> | null;
       const routeId = String(row.truck_route_id || "");
-      if (!routeId) continue;
+      if (!routeId || routesInIntake.has(routeId)) continue;
       const current = arrivals.get(routeId);
       if (current) {
         current.packageCount += 1;
@@ -347,74 +273,6 @@ export async function listWarehouseTruckArrivalsAction(): Promise<ActionResult<W
         String(right.arrivedAt || "").localeCompare(String(left.arrivedAt || "")),
       ),
     );
-  } catch (error) {
-    return fail(actionErrorMessage(error));
-  }
-}
-
-export async function unloadTruckToWarehouseIntakeAction(
-  routeId: string,
-): Promise<ActionResult<PhysicalPackage[]>> {
-  try {
-    const session = await requireAppSession();
-    if (!canOperateWarehouse(session)) throw new Error("FORBIDDEN");
-    const supabase = await createScopedSupabase(session);
-    if (!supabase) return fail("Supabase no configurado");
-    const now = new Date().toISOString();
-    const { data, error } = await supabase
-      .from("shipment_packages")
-      .update({
-        status: "pending_intake",
-        truck_unloaded_at: now,
-        truck_unloaded_by: session.userId,
-        updated_at: now,
-      })
-      .eq("organization_id", session.organizationId)
-      .eq("truck_route_id", routeId)
-      .eq("status", "in_truck")
-      .select(PACKAGE_SELECT);
-    if (error) return fail(error.message);
-    if (!data?.length) return fail("Ese camión no tiene cajas pendientes de descargar.");
-    revalidatePath("/ingreso-bodega");
-    revalidatePath("/bodega");
-    return ok(data.map(mapPackage));
-  } catch (error) {
-    return fail(actionErrorMessage(error));
-  }
-}
-
-export async function returnPhysicalPackageToTruckAction(
-  packageId: string,
-): Promise<ActionResult<PhysicalPackage>> {
-  try {
-    const session = await requireAppSession();
-    if (!canOperateWarehouse(session)) throw new Error("FORBIDDEN");
-    const supabase = await createScopedSupabase(session);
-    if (!supabase) return fail("Supabase no configurado");
-    const { data, error } = await supabase
-      .from("shipment_packages")
-      .update({
-        status: "in_truck",
-        intake_weight_kg: null,
-        intake_recorded_at: null,
-        intake_recorded_by: null,
-        weight_difference_kg: null,
-        weight_difference_note: "",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", packageId)
-      .eq("organization_id", session.organizationId)
-      .eq("status", "pending_intake")
-      .not("truck_route_id", "is", null)
-      .select(PACKAGE_SELECT)
-      .maybeSingle();
-    if (error || !data) {
-      return fail(
-        error?.message || "La caja debe estar pendiente de ingreso y pertenecer a un camión.",
-      );
-    }
-    revalidatePath("/ingreso-bodega");
-    return ok(mapPackage(data));
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
