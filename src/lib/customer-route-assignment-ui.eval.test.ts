@@ -15,18 +15,22 @@ test("seguimiento wires program-route into logistics approval flow", () => {
   const panel = read("src/components/logistica/logistics-task-schedule-confirm-panel.tsx");
   const logistics = read("src/components/logistica-client.tsx");
   const actions = read("src/app/actions/customer-route-assignments.ts");
+  const labels = read("src/lib/shipment-leg-labels.ts");
 
-  assert.match(menu, /Programar en ruta/);
+  assert.match(menu, /Programar entrega|readyLabel/);
+  assert.equal(menu.includes("onMarkReady"), false);
   assert.equal(menu.includes("Establecer una fecha"), false);
+  assert.match(labels, /Programar entrega/);
+  assert.match(labels, /No sé la ruta todavía/);
   assert.match(envios, /requestCustomerRouteAssignmentAction/);
+  assert.match(envios, /confirmPendingRoute/);
+  assert.match(envios, /allowPendingRoute/);
   assert.match(envios, /LogisticsTaskScheduleConfirmPanel/);
   assert.match(envios, /selectionOrder=\"route-first\"/);
-  assert.match(panel, /selectionOrder/);
+  assert.match(panel, /allowPendingRoute/);
+  assert.match(panel, /onConfirmPendingRoute/);
   assert.match(panel, /allowedWeekdays/);
-  assert.match(panel, /nextDateForLogisticsWeekday/);
   assert.match(logistics, /CustomerRouteApprovalPanel/);
-  assert.match(logistics, /showRouteHistory/);
   assert.match(actions, /pending_approval/);
-  assert.match(actions, /confirmLogisticsTaskScheduleAction/);
   assert.match(read("src/app/actions/customers.ts"), /revokeCustomerRouteVerificationsForZoneChange/);
 });

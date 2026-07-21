@@ -81,25 +81,19 @@ describe("shipment step context menu", () => {
     assert.equal(scheduleApplyButtonLabel(true), "Cambiar fecha");
   });
 
-  it("schedules driver legs only through Programar en ruta", () => {
-    assert.match(contextMenuSource, /EMPTY_BOX_LEG_LABELS\.ready/);
-    assert.match(contextMenuSource, /FULL_BOX_LEG_LABELS\.ready/);
-    assert.match(contextMenuSource, /Programar en ruta/);
+  it("uses one program action instead of separate listo + ruta buttons", () => {
+    assert.equal(EMPTY_BOX_LEG_LABELS.ready, "Programar entrega");
+    assert.equal(FULL_BOX_LEG_LABELS.ready, "Programar recolección");
+    assert.match(EMPTY_BOX_LEG_LABELS.pendingRoute, /ruta/i);
     assert.match(contextMenuSource, /function DriverLegReadyMenu/);
-    assert.equal(contextMenuSource.includes("DRIVER_LEG_READY_LABELS.setDate"), false);
+    assert.match(contextMenuSource, /onProgramRoute/);
+    assert.equal(contextMenuSource.includes("onMarkReady"), false);
+    assert.equal(contextMenuSource.includes("Listo para dejar"), false);
     assert.equal(contextMenuSource.includes("Establecer una fecha"), false);
-    assert.equal(contextMenuSource.includes("onApplySchedule"), false);
-    assert.equal(contextMenuSource.includes("scheduleOpen"), false);
-    assert.equal(EMPTY_BOX_LEG_LABELS.ready, "Listo para dejar");
-    assert.equal(EMPTY_BOX_LEG_LABELS.cancel, "No dejar");
-    assert.equal(FULL_BOX_LEG_LABELS.cancel, "No recoger");
     assert.match(contextMenuSource, /title="Opciones de dejar"/);
-    assert.match(contextMenuSource, /function requestMarkDriverReady/);
     assert.match(contextMenuSource, /function requestCancelPickup|function requestCancelDelivery/);
     assert.match(contextMenuSource, /logisticsLegCancelCopy/);
     assert.match(contextMenuSource, /ActionConfirmDialog/);
-    assert.match(contextMenuSource, /DriverTaskOrdered/);
-    assert.match(contextMenuSource, /onProgramRoute/);
   });
 
   it("keeps the menu open while native pickers are in use", () => {

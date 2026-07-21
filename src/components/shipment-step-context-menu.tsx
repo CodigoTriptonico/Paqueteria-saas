@@ -28,7 +28,6 @@ import {
   FULL_BOX_LEG_LABELS,
 } from "@/lib/shipment-leg-labels";
 import type { ShipmentLogisticsEditorState } from "@/lib/shipment-logistics-edit";
-import { markReadyConflictsWithScheduledDate, markReadyScheduleConflictCopy } from "@/lib/shipment-schedule-confirm";
 import { logisticsLegCancelCopy } from "@/lib/shipment-leg-cancel-confirm";
 import { shouldSuppressDismissForNativePicker } from "@/lib/native-picker";
 
@@ -69,7 +68,6 @@ function DriverLegReadyMenu({
   scheduleChanged = false,
   legOrdered,
   locked,
-  onMarkReady,
   onCancel,
   onProgramRoute,
 }: {
@@ -79,39 +77,38 @@ function DriverLegReadyMenu({
   scheduleChanged?: boolean;
   legOrdered: boolean;
   locked: boolean;
-  onMarkReady: () => void;
   onCancel: () => void;
   onProgramRoute?: () => void;
 }) {
-  if (legOrdered) {
-    return (
-      <div className="grid gap-2">
-        {onProgramRoute ? (
-          <button
-            type="button"
-            disabled={locked}
-            onClick={onProgramRoute}
-            className="flex w-full items-center gap-3 rounded-lg border border-emerald-800/60 bg-emerald-950/20 px-3 py-2.5 text-left hover:bg-emerald-950/35 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <span className="text-emerald-300">
-              <Route className="h-5 w-5" />
+  return (
+    <div className="grid gap-2">
+      {onProgramRoute ? (
+        <button
+          type="button"
+          disabled={locked}
+          onClick={onProgramRoute}
+          className="flex w-full items-center gap-3 rounded-lg border border-emerald-800/60 bg-emerald-950/20 px-3 py-2.5 text-left hover:bg-emerald-950/35 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span className="text-emerald-300">
+            <Route className="h-5 w-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-black text-emerald-100">{readyLabel}</span>
+            <span className="mt-0.5 block text-[11px] font-bold leading-snug text-slate-400">
+              Eliges la ruta (día) y la hora. Si no la sabes, déjala pendiente de ruta.
             </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-black text-emerald-100">Programar en ruta</span>
-              <span className="mt-0.5 block text-[11px] font-bold leading-snug text-slate-400">
-                Eliges la ruta (día) y la hora. Primera vez: logística aprueba.
+            {scheduleDetail ? (
+              <span className="mt-1 block text-[11px] font-bold text-slate-500">{scheduleDetail}</span>
+            ) : null}
+            {scheduleChanged ? (
+              <span className="mt-1 inline-flex rounded border border-amber-700/50 bg-amber-950/30 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-200">
+                Fecha modificada
               </span>
-              {scheduleDetail ? (
-                <span className="mt-1 block text-[11px] font-bold text-slate-500">{scheduleDetail}</span>
-              ) : null}
-              {scheduleChanged ? (
-                <span className="mt-1 inline-flex rounded border border-amber-700/50 bg-amber-950/30 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-200">
-                  Fecha modificada
-                </span>
-              ) : null}
-            </span>
-          </button>
-        ) : null}
+            ) : null}
+          </span>
+        </button>
+      ) : null}
+      {legOrdered ? (
         <button
           type="button"
           disabled={locked}
@@ -122,41 +119,6 @@ function DriverLegReadyMenu({
             <X className="h-5 w-5" />
           </span>
           <span className="text-sm font-black text-rose-100">{cancelLabel}</span>
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-black bg-surface-inset">
-      <button
-        type="button"
-        disabled={locked}
-        onClick={onMarkReady}
-        className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <span className="text-emerald-300">
-          <Truck className="h-5 w-5 shrink-0" />
-        </span>
-        <span className="min-w-0 flex-1 text-sm font-black text-[#f8fafc]">{readyLabel}</span>
-      </button>
-
-      {onProgramRoute ? (
-        <button
-          type="button"
-          disabled={locked}
-          onClick={onProgramRoute}
-          className="flex w-full items-start gap-3 border-t border-black/70 px-3 py-2.5 text-left transition-colors hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <span className="pt-0.5 text-emerald-300">
-            <Route className="h-5 w-5 shrink-0" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-black text-emerald-100">Programar en ruta</span>
-            <span className="mt-0.5 block text-[11px] font-bold leading-snug text-slate-400">
-              Eliges la ruta (día), cuál semana y la hora.
-            </span>
-          </span>
         </button>
       ) : null}
     </div>
@@ -332,7 +294,6 @@ export function ShipmentStepContextMenu({
   const isEmpty = menu.kind === "empty_box";
   const isFull = menu.kind === "full_box";
   const isStatusMenu = isStatusStepKind(menu.kind);
-  const legKey = isEmpty ? "emptyBox" : "fullBox";
   const officeMode = isEmpty ? EMPTY_BOX_OFFICE_MODE : FULL_BOX_OFFICE_MODE;
   const driverMode = isEmpty ? EMPTY_BOX_DRIVER_MODE : FULL_BOX_DRIVER_MODE;
   const activeChannel =
@@ -378,43 +339,6 @@ export function ShipmentStepContextMenu({
   }
 
   const driverScheduledActive = scheduleMode === "scheduled" && Boolean(scheduleAt);
-
-  function commitMarkDriverReady() {
-    const orderedKey = isEmpty ? "emptyBoxDriverTaskOrdered" : "fullBoxDriverTaskOrdered";
-
-    onApply({
-      [`${legKey}Mode`]: driverMode,
-      [orderedKey]: true,
-      [`${legKey}ScheduleMode`]: "pending",
-      [`${legKey}ScheduleAt`]: "",
-      ...(isEmpty ? { emptyBoxHandingNow: false } : {}),
-    } as Partial<ShipmentLogisticsEditorState>);
-    onClose();
-  }
-
-  function requestMarkDriverReady() {
-    if (markReadyConflictsWithScheduledDate(scheduleMode, scheduleAt)) {
-      const copy = markReadyScheduleConflictCopy(legShortLabel, scheduleAt);
-      setScheduleConfirm({
-        ...copy,
-        onConfirm: () => {
-          setScheduleConfirm(null);
-          commitMarkDriverReady();
-        },
-      });
-      return;
-    }
-
-    commitMarkDriverReady();
-  }
-
-  function applyMarkForPickup() {
-    requestMarkDriverReady();
-  }
-
-  function applyMarkForDelivery() {
-    requestMarkDriverReady();
-  }
 
   function commitCancelPickup() {
     onApply({
@@ -534,7 +458,6 @@ export function ShipmentStepContextMenu({
                 scheduleChanged={scheduleChanged}
                 legOrdered={legOrdered}
                 locked={locked}
-                onMarkReady={applyMarkForPickup}
                 onCancel={requestCancelPickup}
                 onProgramRoute={
                   onProgramRoute
@@ -575,7 +498,6 @@ export function ShipmentStepContextMenu({
                 scheduleChanged={scheduleChanged}
                 legOrdered={legOrdered}
                 locked={locked}
-                onMarkReady={applyMarkForDelivery}
                 onCancel={requestCancelDelivery}
                 onProgramRoute={
                   onProgramRoute

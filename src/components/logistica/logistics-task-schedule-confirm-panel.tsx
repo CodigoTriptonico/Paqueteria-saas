@@ -47,8 +47,11 @@ export function LogisticsTaskScheduleConfirmPanel({
   title = "Confirmar y programar",
   confirmLabel = "Confirmar y programar",
   selectionOrder = "date-first",
+  allowPendingRoute = false,
+  pendingRouteLabel = "No sé la ruta todavía",
   onCancel,
   onConfirm,
+  onConfirmPendingRoute,
 }: {
   open: boolean;
   shipmentCode: string;
@@ -62,8 +65,11 @@ export function LogisticsTaskScheduleConfirmPanel({
   title?: string;
   confirmLabel?: string;
   selectionOrder?: SelectionOrder;
+  allowPendingRoute?: boolean;
+  pendingRouteLabel?: string;
   onCancel: () => void;
   onConfirm: (input: { scheduledAt: string; driverId: string; routeTemplateId: string }) => void | Promise<void>;
+  onConfirmPendingRoute?: () => void | Promise<void>;
 }) {
   const routeFirst = selectionOrder === "route-first";
   const initialDraft = scheduleDraft(scheduledAt);
@@ -268,26 +274,43 @@ export function LogisticsTaskScheduleConfirmPanel({
           </label>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={saving}
-            className={`${secondaryButtonClass} h-11 text-sm font-black disabled:opacity-40`}
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            disabled={saving || !canConfirm}
-            onClick={() =>
-              scheduledTimestamp &&
-              void onConfirm({ scheduledAt: scheduledTimestamp, driverId, routeTemplateId })
-            }
-            className={`${primaryButtonClass} h-11 text-sm font-black disabled:opacity-40`}
-          >
-            {saving ? "Confirmando..." : confirmLabel}
-          </button>
+        <div className="mt-5 grid gap-3">
+          {allowPendingRoute && onConfirmPendingRoute ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void onConfirmPendingRoute()}
+              className={`${secondaryButtonClass} h-11 w-full text-sm font-black disabled:opacity-40`}
+            >
+              {pendingRouteLabel}
+            </button>
+          ) : null}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={saving}
+              className={`${secondaryButtonClass} h-11 text-sm font-black disabled:opacity-40`}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={saving || !canConfirm}
+              onClick={() =>
+                scheduledTimestamp &&
+                void onConfirm({ scheduledAt: scheduledTimestamp, driverId, routeTemplateId })
+              }
+              className={`${primaryButtonClass} h-11 text-sm font-black disabled:opacity-40`}
+            >
+              {saving ? "Confirmando..." : confirmLabel}
+            </button>
+          </div>
+          {allowPendingRoute ? (
+            <p className="text-center text-[11px] font-bold text-slate-500">
+              Sin ruta queda listo para logística, pendiente de asignar día.
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

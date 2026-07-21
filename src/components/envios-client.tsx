@@ -110,6 +110,10 @@ import {
   EMPTY_BOX_DRIVER_MODE,
   FULL_BOX_DRIVER_MODE,
 } from "@/components/sale/venta-parts";
+import {
+  EMPTY_BOX_LEG_LABELS,
+  FULL_BOX_LEG_LABELS,
+} from "@/lib/shipment-leg-labels";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { CUSTOMER_ROUTE_PENDING_APPROVAL_LABEL } from "@/lib/customer-route-verification";
 import { isoToPlanScheduleAt } from "@/lib/shipment-schedule-history";
@@ -903,6 +907,63 @@ export function EnviosClient({
     }
   }
 
+  async function confirmPendingRoute() {
+    if (!routeProgramTarget || !canManageSales) {
+      return;
+    }
+
+    const { row, kind } = routeProgramTarget;
+    const isEmpty = kind === "empty_box";
+
+    setRouteProgramSaving(true);
+    setProgressBusyId(row.id);
+
+    try {
+      const nextState: ShipmentLogisticsEditorState = {
+        ...shipmentLogisticsEditorState(row),
+        ...(isEmpty
+          ? {
+              emptyBoxMode: EMPTY_BOX_DRIVER_MODE,
+              emptyBoxDriverTaskOrdered: true,
+              emptyBoxScheduleMode: "pending",
+              emptyBoxScheduleAt: "",
+              emptyBoxHandingNow: false,
+            }
+          : {
+              fullBoxMode: FULL_BOX_DRIVER_MODE,
+              fullBoxDriverTaskOrdered: true,
+              fullBoxScheduleMode: "pending",
+              fullBoxScheduleAt: "",
+            }),
+      };
+
+      const planResult = await updateShipmentLogisticsPlanAction({
+        shipmentId: row.id,
+        ...editorStateToUpdateInput(nextState),
+        audit: {
+          interaction: "context_menu",
+          source: "envios.program_route_pending",
+          stepTitle: isEmpty ? "Dejar" : "Recoger",
+          stepKind: kind,
+        },
+      });
+
+      if (!planResult.ok) {
+        notify.error(planResult.error);
+        return;
+      }
+
+      setShipments((current) =>
+        current.map((entry) => (entry.id === row.id ? planResult.data : entry)),
+      );
+      notify.success("Listo · pendiente de ruta");
+      setRouteProgramTarget(null);
+    } finally {
+      setRouteProgramSaving(false);
+      setProgressBusyId(null);
+    }
+  }
+
   const pendingRouteTaskIdSet = useMemo(
     () => new Set(pendingRouteTaskIds),
     [pendingRouteTaskIds],
@@ -1177,15 +1238,26 @@ export function EnviosClient({
           defaultDriverByWeekday={routeCatalog.defaultDriverByWeekday}
           routeMembers={routeMembers}
           saving={routeProgramSaving}
-          title="Programar en ruta"
+          title={
+            routeProgramTarget.kind === "empty_box"
+              ? EMPTY_BOX_LEG_LABELS.ready
+              : FULL_BOX_LEG_LABELS.ready
+          }
           confirmLabel="Asignar ruta"
           selectionOrder="route-first"
+          allowPendingRoute
+          pendingRouteLabel={
+            routeProgramTarget.kind === "empty_box"
+              ? EMPTY_BOX_LEG_LABELS.pendingRoute
+              : FULL_BOX_LEG_LABELS.pendingRoute
+          }
           onCancel={() => {
             if (!routeProgramSaving) {
               setRouteProgramTarget(null);
             }
           }}
           onConfirm={(input) => void confirmProgramRoute(input)}
+          onConfirmPendingRoute={() => void confirmPendingRoute()}
         />
       ) : null}
 
