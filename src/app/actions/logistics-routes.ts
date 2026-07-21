@@ -492,7 +492,10 @@ export async function listLogisticsRouteCatalogAction(): Promise<ActionResult<Lo
   try {
     const session = await requireAppSession();
 
-    if (!sessionHasPermission(session, "routes.view")) {
+    if (
+      !sessionHasPermission(session, "routes.view") &&
+      !sessionHasPermission(session, "sales.manage")
+    ) {
       throw new Error("FORBIDDEN");
     }
 
@@ -523,17 +526,16 @@ export async function listLogisticsRouteCatalogAction(): Promise<ActionResult<Lo
       return fail(templatesResult.error.message);
     }
 
-    if (defaultsResult.error) {
-      return fail(defaultsResult.error.message);
+    const defaultDriverByWeekday = Array<string | null>(7).fill(null);
+    if (!defaultsResult.error) {
+      for (const row of (defaultsResult.data || []) as LogisticsWeekdayDefaultDbRow[]) {
+        if (Number.isInteger(row.weekday) && row.weekday >= 0 && row.weekday <= 6) {
+          defaultDriverByWeekday[row.weekday] = row.default_driver_id || null;
+        }
+      }
     }
 
     const enabledDays = (daysResult.data || []).filter(isLogisticsWeekdayKey);
-    const defaultDriverByWeekday = Array<string | null>(7).fill(null);
-    for (const row of (defaultsResult.data || []) as LogisticsWeekdayDefaultDbRow[]) {
-      if (Number.isInteger(row.weekday) && row.weekday >= 0 && row.weekday <= 6) {
-        defaultDriverByWeekday[row.weekday] = row.default_driver_id || null;
-      }
-    }
 
     return ok({
       enabledDays,
@@ -877,7 +879,10 @@ export async function listLogisticsRoutesAction(): Promise<ActionResult<Logistic
   try {
     const session = await requireAppSession();
 
-    if (!sessionHasPermission(session, "routes.view")) {
+    if (
+      !sessionHasPermission(session, "routes.view") &&
+      !sessionHasPermission(session, "sales.manage")
+    ) {
       throw new Error("FORBIDDEN");
     }
 

@@ -63,6 +63,7 @@ import { LogisticsTaskReprogramPanel } from "@/components/logistica/logistics-ta
 import { LogisticsTaskScheduleConfirmPanel } from "@/components/logistica/logistics-task-schedule-confirm-panel";
 import { LogisticsSectionNav } from "@/components/logistica/logistics-section-nav";
 import { AgencyLogisticsPanel } from "@/components/logistica/agency-logistics-panel";
+import { CustomerRouteApprovalPanel } from "@/components/logistica/customer-route-approval-panel";
 import { LogisticsTaskStatusBadge } from "@/components/logistica/logistics-task-status-badge";
 import { InlineSearchCombobox, InlineSearchPicker } from "@/components/inline-search-picker";
 import { PageLoading } from "@/components/page-loading";
@@ -406,6 +407,7 @@ export function LogisticaClient({
   const [failedFilter, setFailedFilter] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [operationScope, setOperationScope] = useState<"domicilios" | "agencias">("domicilios");
+  const [showRouteHistory, setShowRouteHistory] = useState(false);
   const [selectedRouteId, setSelectedRouteId] = useState<string>("");
   const [routeDetailDrawerOpen, setRouteDetailDrawerOpen] = useState(false);
   const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
@@ -977,12 +979,13 @@ export function LogisticaClient({
 
   const filteredRoutes = useMemo(() => {
     return routes
-      .filter((route) => route.status !== "cancelled" && route.status !== "completed")
+      .filter((route) => route.status !== "cancelled")
+      .filter((route) => (showRouteHistory ? route.status === "completed" : route.status !== "completed"))
       .filter((route) => !dateFilter || route.routeDate === dateFilter)
       .filter((route) => !driverFilter || route.assignedTo === driverFilter)
       .filter((route) => !zoneFilter || route.zoneKey === zoneFilter)
       .sort((a, b) => a.routeDate.localeCompare(b.routeDate) || a.name.localeCompare(b.name));
-  }, [dateFilter, driverFilter, routes, zoneFilter]);
+  }, [dateFilter, driverFilter, routes, showRouteHistory, zoneFilter]);
 
   const selectedRoute = useMemo(() => {
     return routes.find((route) => route.id === selectedRouteId) || filteredRoutes[0] || null;
@@ -2171,6 +2174,24 @@ export function LogisticaClient({
                 <button type="button" className={`rounded-md px-2.5 ${operationScope === "domicilios" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`} onClick={() => setOperationScope("domicilios")}>Domicilios</button>
                 {agencyModuleEnabled ? <button type="button" className={`rounded-md px-2.5 ${operationScope === "agencias" ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`} onClick={() => setOperationScope("agencias")}>Agencias</button> : null}
               </div>
+              {operationScope === "domicilios" ? (
+                <div className="flex h-9 shrink-0 rounded-lg border border-black bg-surface-inset p-0.5 text-xs font-black">
+                  <button
+                    type="button"
+                    className={`rounded-md px-2.5 ${!showRouteHistory ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}
+                    onClick={() => setShowRouteHistory(false)}
+                  >
+                    Activas
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-md px-2.5 ${showRouteHistory ? "bg-emerald-400 text-slate-950" : "text-slate-300"}`}
+                    onClick={() => setShowRouteHistory(true)}
+                  >
+                    Historial
+                  </button>
+                </div>
+              ) : null}
               {operationScope === "domicilios" ? <>
               <InlineSearchCombobox
                 value={query}
@@ -2333,22 +2354,33 @@ export function LogisticaClient({
           </div>
 
           <div className={`${panelListScrollClass} pt-3`}>
-            {agencyModuleEnabled && operationScope === "agencias" ? <AgencyLogisticsPanel /> : visibleInvoiceItems.length ? (
-              viewLayout === "rows" ? (
-                <div className={panelListStackClass}>
-                  {visibleInvoiceItems.map((item) => renderInvoiceRow(item))}
-                </div>
-              ) : (
-                <div className={LOGISTICS_INVOICE_CARD_GRID_CLASS}>
-                  {visibleInvoiceItems.map((item) => renderInvoiceCard(item))}
-                </div>
-              )
+            {agencyModuleEnabled && operationScope === "agencias" ? (
+              <AgencyLogisticsPanel />
             ) : (
-              <div className="flex min-h-40 flex-col items-center justify-center px-4 text-center">
-                <ClipboardList className="h-7 w-7 text-slate-600" />
-                <p className="mt-2 text-sm font-black text-slate-300">
-                  {failedFilter ? "Sin tareas fallidas" : "Sin invoices"}
-                </p>
+              <div className="grid gap-3">
+                {canManageRoutes ? <CustomerRouteApprovalPanel /> : null}
+                {visibleInvoiceItems.length ? (
+                  viewLayout === "rows" ? (
+                    <div className={panelListStackClass}>
+                      {visibleInvoiceItems.map((item) => renderInvoiceRow(item))}
+                    </div>
+                  ) : (
+                    <div className={LOGISTICS_INVOICE_CARD_GRID_CLASS}>
+                      {visibleInvoiceItems.map((item) => renderInvoiceCard(item))}
+                    </div>
+                  )
+                ) : (
+                  <div className="flex min-h-40 flex-col items-center justify-center px-4 text-center">
+                    <ClipboardList className="h-7 w-7 text-slate-600" />
+                    <p className="mt-2 text-sm font-black text-slate-300">
+                      {showRouteHistory
+                        ? "Sin rutas en historial"
+                        : failedFilter
+                          ? "Sin tareas fallidas"
+                          : "Sin invoices"}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>

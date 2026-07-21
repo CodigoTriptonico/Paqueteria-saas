@@ -17,4 +17,5 @@ test("restored migrations preserve the contracts used by customers and logistics
   assert.match(migration("056_logistics_weekly_route_catalog.sql"), /create table if not exists public\.logistics_route_templates/i);
   assert.match(migration("057_reload_logistics_route_catalog_schema.sql"), /route_template_id/i);
   assert.match(migration("058_logistics_schedule_confirmation.sql"), /schedule_confirmation_status/i);
+  assert.match(migration("115_customer_route_verifications.sql"), /customer_route_assignment_requests/);
 });

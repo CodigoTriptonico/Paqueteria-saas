@@ -73,6 +73,7 @@ type ShipmentProgressStepsProps = {
   onLogisticsPatch?: (patch: Partial<ShipmentLogisticsEditorState>, audit: ShipmentAuditContext) => void;
   onStatusChange?: (status: ShipmentStatus, audit: ShipmentAuditContext) => void;
   onFullBoxReceivedAtOffice?: (audit: ShipmentAuditContext) => void;
+  onProgramRoute?: (kind: "empty_box" | "full_box") => void;
   onLockedLeg?: (message: string) => void;
 };
 
@@ -256,6 +257,7 @@ export function ShipmentProgressSteps({
   onLogisticsPatch,
   onStatusChange,
   onFullBoxReceivedAtOffice,
+  onProgramRoute,
   onLockedLeg,
 }: ShipmentProgressStepsProps) {
   const [menu, setMenu] = useState<ShipmentStepMenuState>(null);
@@ -537,6 +539,7 @@ export function ShipmentProgressSteps({
             stepKind: menu.kind,
           });
         }}
+        onProgramRoute={onProgramRoute}
       />
     ) : null;
 

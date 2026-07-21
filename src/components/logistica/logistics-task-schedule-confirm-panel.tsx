@@ -33,6 +33,8 @@ export function LogisticsTaskScheduleConfirmPanel({
   defaultDriverByWeekday,
   routeMembers,
   saving = false,
+  title = "Confirmar y programar",
+  confirmLabel = "Confirmar y programar",
   onCancel,
   onConfirm,
 }: {
@@ -45,6 +47,8 @@ export function LogisticsTaskScheduleConfirmPanel({
   defaultDriverByWeekday: Array<string | null>;
   routeMembers: Driver[];
   saving?: boolean;
+  title?: string;
+  confirmLabel?: string;
   onCancel: () => void;
   onConfirm: (input: { scheduledAt: string; driverId: string; routeTemplateId: string }) => void | Promise<void>;
 }) {
@@ -96,7 +100,7 @@ export function LogisticsTaskScheduleConfirmPanel({
             <CalendarCheck2 className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <p id="confirm-task-schedule-title" className="text-xl font-black text-[#f8fafc]">Confirmar y programar</p>
+            <p id="confirm-task-schedule-title" className="text-xl font-black text-[#f8fafc]">{title}</p>
             <p className="mt-1 break-words text-sm font-bold text-slate-400">{shipmentCode} - {customerName}</p>
             <p className="mt-1 text-xs font-black uppercase text-emerald-300">{taskTypeLabel}</p>
           </div>
@@ -139,7 +143,7 @@ export function LogisticsTaskScheduleConfirmPanel({
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <button type="button" onClick={onCancel} disabled={saving} className={`${secondaryButtonClass} h-11 text-sm font-black disabled:opacity-40`}>Cancelar</button>
           <button type="button" disabled={saving || !canConfirm} onClick={() => scheduledTimestamp && void onConfirm({ scheduledAt: scheduledTimestamp, driverId, routeTemplateId })} className={`${primaryButtonClass} h-11 text-sm font-black disabled:opacity-40`}>
-            {saving ? "Confirmando..." : "Confirmar y programar"}
+            {saving ? "Confirmando..." : confirmLabel}
           </button>
         </div>
       </div>

@@ -6,6 +6,7 @@ import {
   ChevronRight,
   MapPinCheck,
   Plane,
+  Route,
   Truck,
   X,
 } from "lucide-react";
@@ -65,6 +66,7 @@ type ShipmentStepContextMenuProps = {
   onApply: (patch: Partial<ShipmentLogisticsEditorState>) => void;
   onStatusChange?: (status: ShipmentStatus) => void;
   onFullBoxReceivedAtOffice?: () => void;
+  onProgramRoute?: (kind: "empty_box" | "full_box") => void;
 };
 
 export function scheduleApplyButtonLabel(hasExistingSchedule: boolean) {
@@ -95,6 +97,7 @@ function DriverLegReadyMenu({
   onMarkReady,
   onCancel,
   onApplySchedule,
+  onProgramRoute,
   scheduleApplyDisabled,
 }: {
   readyLabel: string;
@@ -114,23 +117,44 @@ function DriverLegReadyMenu({
   onMarkReady: () => void;
   onCancel: () => void;
   onApplySchedule: () => void;
+  onProgramRoute?: () => void;
   scheduleApplyDisabled: boolean;
 }) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
   if (legOrdered) {
     return (
-      <button
-        type="button"
-        disabled={locked}
-        onClick={onCancel}
-        className="flex w-full items-center gap-3 rounded-lg border border-rose-900/60 bg-rose-950/20 px-3 py-2.5 text-left hover:bg-rose-950/35 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <span className="text-rose-300">
-          <X className="h-5 w-5" />
-        </span>
-        <span className="text-sm font-black text-rose-100">{cancelLabel}</span>
-      </button>
+      <div className="grid gap-2">
+        {onProgramRoute ? (
+          <button
+            type="button"
+            disabled={locked}
+            onClick={onProgramRoute}
+            className="flex w-full items-center gap-3 rounded-lg border border-emerald-800/60 bg-emerald-950/20 px-3 py-2.5 text-left hover:bg-emerald-950/35 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="text-emerald-300">
+              <Route className="h-5 w-5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-black text-emerald-100">Programar en ruta</span>
+              <span className="mt-0.5 block text-[11px] font-bold leading-snug text-slate-400">
+                Primera vez: logística aprueba. Después entra sola.
+              </span>
+            </span>
+          </button>
+        ) : null}
+        <button
+          type="button"
+          disabled={locked}
+          onClick={onCancel}
+          className="flex w-full items-center gap-3 rounded-lg border border-rose-900/60 bg-rose-950/20 px-3 py-2.5 text-left hover:bg-rose-950/35 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span className="text-rose-300">
+            <X className="h-5 w-5" />
+          </span>
+          <span className="text-sm font-black text-rose-100">{cancelLabel}</span>
+        </button>
+      </div>
     );
   }
 
@@ -198,6 +222,17 @@ function DriverLegReadyMenu({
           >
             {scheduleApplyButtonLabel(driverScheduledActive)}
           </button>
+          {onProgramRoute ? (
+            <button
+              type="button"
+              disabled={locked}
+              onClick={onProgramRoute}
+              className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-emerald-800/50 bg-emerald-950/25 text-xs font-black text-emerald-100 hover:bg-emerald-900/40 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Route className="h-3.5 w-3.5" />
+              Programar en ruta
+            </button>
+          ) : null}
           {scheduleCommitted ? (
             <p className="text-[11px] font-bold text-emerald-300/90">
               En uso: {scheduleDetailFull}
@@ -311,6 +346,7 @@ export function ShipmentStepContextMenu({
   onApply,
   onStatusChange,
   onFullBoxReceivedAtOffice,
+  onProgramRoute,
 }: ShipmentStepContextMenuProps) {
   const [routeDate, setRouteDate] = useState("");
   const [routeTime, setRouteTime] = useState("");
@@ -651,6 +687,14 @@ export function ShipmentStepContextMenu({
                 onMarkReady={applyMarkForPickup}
                 onCancel={requestCancelPickup}
                 onApplySchedule={requestDriverScheduled}
+                onProgramRoute={
+                  onProgramRoute
+                    ? () => {
+                        onProgramRoute("full_box");
+                        onClose();
+                      }
+                    : undefined
+                }
                 scheduleApplyDisabled={scheduleApplyDisabled}
               />
             </div>
@@ -694,6 +738,14 @@ export function ShipmentStepContextMenu({
                 onMarkReady={applyMarkForDelivery}
                 onCancel={requestCancelDelivery}
                 onApplySchedule={requestDriverScheduled}
+                onProgramRoute={
+                  onProgramRoute
+                    ? () => {
+                        onProgramRoute("empty_box");
+                        onClose();
+                      }
+                    : undefined
+                }
                 scheduleApplyDisabled={scheduleApplyDisabled}
               />
             ) : null

@@ -5,8 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { History, Package, PhoneCall, Search, Star, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import {
+  listLogisticsRouteCatalogAction,
   listLogisticsRoutesAction,
+  type LogisticsRouteCatalog,
 } from "@/app/actions/logistics-routes";
+import {
+  listPendingCustomerRouteAssignmentTaskIdsAction,
+  requestCustomerRouteAssignmentAction,
+} from "@/app/actions/customer-route-assignments";
 import {
   finalizeShipmentInvoiceAction,
   listRouteMembersAction,
@@ -25,6 +31,7 @@ import {
 import { CountryFlag, CountryName } from "@/components/country-flag";
 import { EstadisticasAuditoriaPanel } from "@/components/estadisticas/auditoria-panel";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
+import { LogisticsTaskScheduleConfirmPanel } from "@/components/logistica/logistics-task-schedule-confirm-panel";
 import { ShipmentCollectDialog } from "@/components/shipment-collect-dialog";
 import {
   ShipmentContactLogDialog,
@@ -99,7 +106,13 @@ import {
   shipmentLogisticsEditorState,
   type ShipmentLogisticsEditorState,
 } from "@/lib/shipment-logistics-edit";
+import {
+  EMPTY_BOX_DRIVER_MODE,
+  FULL_BOX_DRIVER_MODE,
+} from "@/components/sale/venta-parts";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { CUSTOMER_ROUTE_PENDING_APPROVAL_LABEL } from "@/lib/customer-route-verification";
+import { isoToPlanScheduleAt } from "@/lib/shipment-schedule-history";
 
 type EnviosClientProps = {
   mode?: EnviosClientMode;
@@ -108,11 +121,18 @@ type EnviosClientProps = {
   initialRouteMembers?: RouteMemberRow[];
   initialSalesOwners?: SalesOwnerRow[];
   initialRoutes?: LogisticsRouteRow[];
+  initialRouteCatalog?: LogisticsRouteCatalog | null;
+  initialPendingRouteTaskIds?: string[];
   initialRoleSlug?: string;
   canManageSales?: boolean;
   canUpdateShipmentStatus?: boolean;
   canManageShipmentOwners?: boolean;
   canAccessAuditoria?: boolean;
+};
+
+type RouteProgramTarget = {
+  row: ShipmentRow;
+  kind: "empty_box" | "full_box";
 };
 
 function driverCollectionLabel(row: ShipmentRow) {
@@ -136,6 +156,8 @@ export function EnviosClient({
   initialRouteMembers,
   initialSalesOwners,
   initialRoutes,
+  initialRouteCatalog = null,
+  initialPendingRouteTaskIds = [],
   initialRoleSlug = "administrador",
   canManageSales = false,
   canUpdateShipmentStatus = false,
@@ -151,6 +173,10 @@ export function EnviosClient({
   const [routeMembers, setRouteMembers] = useState<RouteMemberRow[]>(initialRouteMembers || []);
   const [salesOwners, setSalesOwners] = useState<SalesOwnerRow[]>(initialSalesOwners || []);
   const [routes, setRoutes] = useState<LogisticsRouteRow[]>(initialRoutes || []);
+  const [routeCatalog, setRouteCatalog] = useState<LogisticsRouteCatalog | null>(initialRouteCatalog);
+  const [pendingRouteTaskIds, setPendingRouteTaskIds] = useState<string[]>(initialPendingRouteTaskIds);
+  const [routeProgramTarget, setRouteProgramTarget] = useState<RouteProgramTarget | null>(null);
+  const [routeProgramSaving, setRouteProgramSaving] = useState(false);
   const [query, setQuery] = useState("");
   const [country, setCountry] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -230,6 +256,22 @@ export function EnviosClient({
     () => filterShipmentsForEnviosMode(shipments, activeMode),
     [activeMode, shipments],
   );
+
+  useEffect(() => {
+    if (!routeProgramTarget || routeCatalog || !canManageSales) {
+      return;
+    }
+
+    void (async () => {
+      const result = await listLogisticsRouteCatalogAction();
+      if (result.ok) {
+        setRouteCatalog(result.data);
+      } else {
+        notify.error(result.error);
+        setRouteProgramTarget(null);
+      }
+    })();
+  }, [canManageSales, notify, routeCatalog, routeProgramTarget]);
 
   useEffect(() => {
     if (appliedQueryFromUrlRef.current) {
@@ -744,6 +786,128 @@ export function EnviosClient({
     }
   }
 
+  async function confirmProgramRoute(input: {
+    scheduledAt: string;
+    driverId: string;
+    routeTemplateId: string;
+  }) {
+    if (!routeProgramTarget || !canManageSales) {
+      return;
+    }
+
+    const { row, kind } = routeProgramTarget;
+    const isEmpty = kind === "empty_box";
+    const taskType = isEmpty ? "deliver_empty_box" : "pickup_full_box";
+    const planScheduleAt = isoToPlanScheduleAt(input.scheduledAt);
+
+    setRouteProgramSaving(true);
+    setProgressBusyId(row.id);
+
+    try {
+      const nextState: ShipmentLogisticsEditorState = {
+        ...shipmentLogisticsEditorState(row),
+        ...(isEmpty
+          ? {
+              emptyBoxMode: EMPTY_BOX_DRIVER_MODE,
+              emptyBoxDriverTaskOrdered: true,
+              emptyBoxScheduleMode: "scheduled",
+              emptyBoxScheduleAt: planScheduleAt,
+              emptyBoxHandingNow: false,
+            }
+          : {
+              fullBoxMode: FULL_BOX_DRIVER_MODE,
+              fullBoxDriverTaskOrdered: true,
+              fullBoxScheduleMode: "scheduled",
+              fullBoxScheduleAt: planScheduleAt,
+            }),
+      };
+
+      const planResult = await updateShipmentLogisticsPlanAction({
+        shipmentId: row.id,
+        ...editorStateToUpdateInput(nextState),
+        audit: {
+          interaction: "context_menu",
+          source: "envios.program_route",
+          stepTitle: isEmpty ? "Dejar" : "Recoger",
+          stepKind: kind,
+        },
+      });
+
+      if (!planResult.ok) {
+        notify.error(planResult.error);
+        return;
+      }
+
+      const task = planResult.data.logisticsTasks.find(
+        (entry) =>
+          entry.taskType === taskType &&
+          entry.status !== "completed" &&
+          entry.status !== "cancelled",
+      );
+
+      if (!task) {
+        notify.error("No se pudo crear la tarea de logística");
+        setShipments((current) =>
+          current.map((entry) => (entry.id === row.id ? planResult.data : entry)),
+        );
+        return;
+      }
+
+      const assignResult = await requestCustomerRouteAssignmentAction({
+        shipmentId: row.id,
+        taskId: task.id,
+        routeTemplateId: input.routeTemplateId,
+        scheduledAt: input.scheduledAt,
+        driverId: input.driverId,
+      });
+
+      if (!assignResult.ok) {
+        notify.error(assignResult.error);
+        setShipments((current) =>
+          current.map((entry) => (entry.id === row.id ? planResult.data : entry)),
+        );
+        return;
+      }
+
+      const [shipmentsResult, routesResult, pendingResult] = await Promise.all([
+        listShipmentsAction(),
+        listLogisticsRoutesAction(),
+        listPendingCustomerRouteAssignmentTaskIdsAction(),
+      ]);
+
+      if (shipmentsResult.ok) {
+        setShipments(shipmentsResult.data);
+      } else {
+        setShipments((current) =>
+          current.map((entry) => (entry.id === row.id ? planResult.data : entry)),
+        );
+      }
+
+      if (routesResult.ok) {
+        setRoutes(routesResult.data);
+      }
+
+      if (pendingResult.ok) {
+        setPendingRouteTaskIds(pendingResult.data);
+      }
+
+      notify.success(
+        assignResult.data.outcome === "assigned"
+          ? "Ruta asignada"
+          : "Enviado a logística para aprobar la ruta",
+      );
+      setRouteProgramTarget(null);
+    } finally {
+      setRouteProgramSaving(false);
+      setProgressBusyId(null);
+    }
+  }
+
+  const pendingRouteTaskIdSet = useMemo(
+    () => new Set(pendingRouteTaskIds),
+    [pendingRouteTaskIds],
+  );
+
   const canEditProgress = !isHistoryMode && (canManageSales || canUpdateShipmentStatus);
 
   const finalizeQuote = finalizeTarget ? quoteFromShipment(finalizeTarget) : null;
@@ -868,6 +1032,12 @@ export function EnviosClient({
                   onLogisticsPatch={applyLogisticsPatch}
                   onStatusChange={applyShipmentStatus}
                   onFullBoxReceivedAtOffice={receiveFullBoxAtOffice}
+                  onProgramRoute={
+                    canManageSales && !isHistoryMode
+                      ? (row, kind) => setRouteProgramTarget({ row, kind })
+                      : undefined
+                  }
+                  pendingRouteTaskIds={pendingRouteTaskIdSet}
                   onLockedLeg={(message) => notify.error(message)}
                   selectionEnabled={selectionEnabled}
                   isShipmentSelected={isShipmentSelected}
@@ -903,6 +1073,12 @@ export function EnviosClient({
                   onLogisticsPatch={applyLogisticsPatch}
                   onStatusChange={applyShipmentStatus}
                   onFullBoxReceivedAtOffice={receiveFullBoxAtOffice}
+                  onProgramRoute={
+                    canManageSales && !isHistoryMode
+                      ? (row, kind) => setRouteProgramTarget({ row, kind })
+                      : undefined
+                  }
+                  pendingRouteTaskIds={pendingRouteTaskIdSet}
                   onLockedLeg={(message) => notify.error(message)}
                   selectionEnabled={selectionEnabled}
                   isShipmentSelected={isShipmentSelected}
@@ -983,6 +1159,34 @@ export function EnviosClient({
           }
         }}
       />
+
+      {routeProgramTarget && routeCatalog ? (
+        <LogisticsTaskScheduleConfirmPanel
+          open
+          shipmentCode={routeProgramTarget.row.code}
+          customerName={routeProgramTarget.row.customer_name}
+          taskTypeLabel={
+            routeProgramTarget.kind === "empty_box" ? "Dejar caja vacía" : "Recoger caja llena"
+          }
+          scheduledAt={
+            routeProgramTarget.kind === "empty_box"
+              ? shipmentLogisticsEditorState(routeProgramTarget.row).emptyBoxScheduleAt || null
+              : shipmentLogisticsEditorState(routeProgramTarget.row).fullBoxScheduleAt || null
+          }
+          templates={routeCatalog.templates}
+          defaultDriverByWeekday={routeCatalog.defaultDriverByWeekday}
+          routeMembers={routeMembers}
+          saving={routeProgramSaving}
+          title="Programar en ruta"
+          confirmLabel="Asignar ruta"
+          onCancel={() => {
+            if (!routeProgramSaving) {
+              setRouteProgramTarget(null);
+            }
+          }}
+          onConfirm={(input) => void confirmProgramRoute(input)}
+        />
+      ) : null}
 
       {contactLogTarget ? (
         <ShipmentContactLogDialog
@@ -1384,6 +1588,8 @@ type EnviosShipmentListsSharedProps = {
     audit: ShipmentAuditContext,
   ) => Promise<void>;
   onFullBoxReceivedAtOffice: (row: ShipmentRow, audit: ShipmentAuditContext) => Promise<void>;
+  onProgramRoute?: (row: ShipmentRow, kind: "empty_box" | "full_box") => void;
+  pendingRouteTaskIds?: Set<string>;
   onLockedLeg: (message: string) => void;
   selectionEnabled: boolean;
   isShipmentSelected: (shipmentId: string) => boolean;
@@ -1419,6 +1625,8 @@ const EnviosShipmentRowsList = memo(function EnviosShipmentRowsList({
   onLogisticsPatch,
   onStatusChange,
   onFullBoxReceivedAtOffice,
+  onProgramRoute,
+  pendingRouteTaskIds,
   onLockedLeg,
   selectionEnabled,
   isShipmentSelected,
@@ -1572,6 +1780,11 @@ const EnviosShipmentRowsList = memo(function EnviosShipmentRowsList({
                         ? (audit) => void onFullBoxReceivedAtOffice(row, audit)
                         : undefined
                     }
+                    onProgramRoute={
+                      onProgramRoute
+                        ? (kind) => onProgramRoute(row, kind)
+                        : undefined
+                    }
                     onLockedLeg={onLockedLeg}
                   />
                 </div>
@@ -1584,6 +1797,11 @@ const EnviosShipmentRowsList = memo(function EnviosShipmentRowsList({
                   onClick={(event) => event.stopPropagation()}
                   onKeyDown={(event) => event.stopPropagation()}
                 >
+                  {row.logisticsTasks.some((task) => pendingRouteTaskIds?.has(task.id)) ? (
+                    <p className="mb-2 text-[10px] font-bold leading-snug text-amber-200/90">
+                      {CUSTOMER_ROUTE_PENDING_APPROVAL_LABEL}
+                    </p>
+                  ) : null}
                   {logisticsBridgeLabel ? (
                     <p className="mb-2 text-[10px] font-bold leading-snug text-amber-200/90">
                       {logisticsBridgeLabel}
@@ -1698,6 +1916,8 @@ const EnviosShipmentCardsGrid = memo(function EnviosShipmentCardsGrid({
   onLogisticsPatch,
   onStatusChange,
   onFullBoxReceivedAtOffice,
+  onProgramRoute,
+  pendingRouteTaskIds,
   onLockedLeg,
   selectionEnabled,
   isShipmentSelected,
@@ -1813,6 +2033,11 @@ const EnviosShipmentCardsGrid = memo(function EnviosShipmentCardsGrid({
                     ? (audit) => void onFullBoxReceivedAtOffice(row, audit)
                     : undefined
                 }
+                onProgramRoute={
+                  onProgramRoute
+                    ? (kind) => onProgramRoute(row, kind)
+                    : undefined
+                }
                 onLockedLeg={onLockedLeg}
               />
             </div>
@@ -1835,6 +2060,11 @@ const EnviosShipmentCardsGrid = memo(function EnviosShipmentCardsGrid({
             </div>
 
             <div className="mt-2 border-t border-black pt-2">
+              {row.logisticsTasks.some((task) => pendingRouteTaskIds?.has(task.id)) ? (
+                <p className="mb-2 text-[10px] font-bold leading-snug text-amber-200/90">
+                  {CUSTOMER_ROUTE_PENDING_APPROVAL_LABEL}
+                </p>
+              ) : null}
               {logisticsBridgeLabel ? (
                 <p className="mb-1.5 text-[10px] font-bold leading-snug text-amber-200/90">
                   {logisticsBridgeLabel}

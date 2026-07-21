@@ -17,6 +17,8 @@ import {
 import type { ListCustomersParams } from "@/lib/customers/list-params";
 import { assertSameOrgCustomerIds } from "@/lib/security/org-scope";
 import { normalizePersonName } from "@/lib/person-name";
+import { customerZoneKeyFromParts } from "@/lib/customer-route-verification";
+import { revokeCustomerRouteVerificationsForZoneChange } from "@/lib/customer-route-verifications-mutate";
 
 export type { CustomerRecipientRow, CustomerWithRecipientsRow } from "@/lib/customers/load";
 
@@ -209,6 +211,20 @@ export async function updateCustomerAction(input: {
       return fail("Agrega al menos un telefono");
     }
 
+    const { data: previousCustomer } = await supabase
+      .from("customers")
+      .select("city, postal_code, lat, lng")
+      .eq("id", input.customerId)
+      .eq("organization_id", session.organizationId)
+      .maybeSingle();
+
+    const previousZoneKey = customerZoneKeyFromParts({
+      city: String(previousCustomer?.city || ""),
+      postalCode: String(previousCustomer?.postal_code || ""),
+      lat: previousCustomer?.lat == null ? null : Number(previousCustomer.lat),
+      lng: previousCustomer?.lng == null ? null : Number(previousCustomer.lng),
+    });
+
     const { data, error } = await supabase
       .from("customers")
       .update({
@@ -281,6 +297,25 @@ export async function updateCustomerAction(input: {
 
     if (error || !data) {
       return fail(error?.message || "No se pudo actualizar el cliente");
+    }
+
+    const nextZoneKey = customerZoneKeyFromParts({
+      city: String(data.city || ""),
+      postalCode: String(data.postal_code || ""),
+      lat: data.lat == null ? null : Number(data.lat),
+      lng: data.lng == null ? null : Number(data.lng),
+    });
+
+    try {
+      await revokeCustomerRouteVerificationsForZoneChange({
+        supabase,
+        session,
+        customerId: data.id,
+        previousZoneKey,
+        nextZoneKey,
+      });
+    } catch (revokeError) {
+      return fail(actionErrorMessage(revokeError));
     }
 
     await recordActivityHistory(supabase, session, {
