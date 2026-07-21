@@ -233,12 +233,27 @@ describe("logistica single-action invoice card eval", () => {
     assert.equal(componentSource.includes("listRowBaseClass"), true);
   });
 
-  it("opens the native date picker from the toolbar date filter", () => {
+  it("filters the toolbar by weekday, route and calendar date", () => {
     const toolbar = logisticsToolbarSource();
 
+    assert.equal(toolbar.includes('ariaLabel="Fecha"'), false);
+    assert.equal(toolbar.includes('aria-label="Filtrar por día"'), true);
+    assert.equal(toolbar.includes("weekdayFilterOptions"), true);
+    assert.equal(toolbar.includes("logisticsWeekdayFullLabels"), false);
+    assert.equal(toolbar.includes('ariaLabel="Filtrar por ruta del día"'), true);
+    assert.equal(toolbar.includes('ariaLabel="Filtrar por fecha"'), true);
     assert.equal(toolbar.includes("<DateInput"), true);
-    assert.equal(toolbar.includes("onClick={() => openDatePicker(inputRef.current)}"), false);
-    assert.equal(toolbar.includes('ariaLabel="Fecha"'), true);
+    assert.equal(toolbar.includes("dayTones={calendarDayTones}"), true);
+    assert.equal(toolbar.includes("showToneLegend"), true);
+    assert.equal(componentSource.includes("buildLogisticsCalendarDayTones"), true);
+    assert.equal(toolbar.includes("Todos los días"), true);
+    assert.equal(toolbar.includes("min-w-[10.5rem]"), true);
+    assert.equal(componentSource.includes("logisticsEnabledWeekdayFilterOptions"), true);
+    assert.equal(componentSource.includes("enabledWeekdayIndexes"), true);
+    assert.equal(componentSource.includes("matchesLogisticsDateFilter"), true);
+    assert.equal(toolbar.includes("filterRoutePickerOptions"), true);
+    assert.equal(componentSource.includes("buildLogisticsDayRouteFilterOptions"), true);
+    assert.equal(componentSource.includes("matchesLogisticsWeekdayFilter"), true);
   });
 
   it("marks the filters trigger active while its panel is open", () => {

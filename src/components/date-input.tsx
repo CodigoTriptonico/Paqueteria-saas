@@ -4,6 +4,7 @@ import { CalendarDays } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DatePickerCalendar } from "@/components/date-picker-calendar";
 import { formatDateInputDisplay, PICKER_PANEL_SELECTOR, resolveCalendarView } from "@/lib/date-picker";
+import type { LogisticsCalendarDayTone } from "@/lib/logistics-calendar-day-tones";
 import { insetShellClass } from "@/components/ui-blocks";
 
 const shellBaseClass =
@@ -22,6 +23,8 @@ export type DateInputProps = {
   min?: string;
   max?: string;
   allowedWeekdays?: number[];
+  dayTones?: Readonly<Record<string, LogisticsCalendarDayTone>>;
+  showToneLegend?: boolean;
   disabled?: boolean;
   className?: string;
   ariaLabel: string;
@@ -36,6 +39,8 @@ export function DateInput({
   min,
   max,
   allowedWeekdays,
+  dayTones,
+  showToneLegend = false,
   disabled = false,
   className = "",
   ariaLabel,
@@ -192,6 +197,8 @@ export function DateInput({
             min={min}
             max={max}
             allowedWeekdays={allowedWeekdays}
+            dayTones={dayTones}
+            showToneLegend={showToneLegend}
             onChange={pickDate}
             onViewChange={(year, month) => {
               setViewYear(year);

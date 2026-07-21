@@ -305,20 +305,6 @@ export async function requestCustomerRouteAssignmentAction(input: {
       driverId = String(weekdayDefault?.default_driver_id || "").trim();
     }
 
-    if (!driverId) {
-      const { data: conductors } = await supabase
-        .from("profiles")
-        .select("id, roles(slug)")
-        .eq("organization_id", session.organizationId)
-        .eq("is_active", true);
-      const firstConductor = (conductors || []).find((row) => {
-        const raw = row.roles as { slug?: string } | { slug?: string }[] | null;
-        const role = Array.isArray(raw) ? raw[0] : raw;
-        return role?.slug === "conductor";
-      });
-      driverId = String(firstConductor?.id || "").trim();
-    }
-
     const [{ data: shipment, error: shipmentError }, { data: task, error: taskError }, { data: template, error: templateError }] =
       await Promise.all([
         supabase
@@ -403,11 +389,11 @@ export async function requestCustomerRouteAssignmentAction(input: {
       currentZoneKey: zoneKey,
     });
 
-    if (outcome === "assigned" && driverId) {
+    if (outcome === "assigned") {
       const assignResult = await confirmLogisticsTaskScheduleAction({
         taskId,
         scheduledAt,
-        driverId,
+        driverId: driverId || null,
         routeTemplateId,
       });
       if (!assignResult.ok) {
@@ -423,7 +409,7 @@ export async function requestCustomerRouteAssignmentAction(input: {
         metadata: {
           taskId,
           routeTemplateId,
-          driverId,
+          driverId: driverId || null,
           zoneKey,
           routeId: assignResult.data.id,
         },
@@ -683,16 +669,10 @@ export async function reviewCustomerRouteAssignmentRequestAction(input: {
       assignDriverId = String(weekdayDefault?.default_driver_id || "").trim();
     }
 
-    if (!assignDriverId) {
-      return fail(
-        "No hay conductor para esta ruta. Configúralo en Rutas (predeterminado del día) o crea un conductor.",
-      );
-    }
-
     const assignResult = await confirmLogisticsTaskScheduleAction({
       taskId: request.task_id,
       scheduledAt: request.scheduled_at,
-      driverId: assignDriverId,
+      driverId: assignDriverId || null,
       routeTemplateId: request.route_template_id,
     });
     if (!assignResult.ok) {
@@ -832,16 +812,10 @@ export async function replaceCustomerRouteAssignmentRequestAction(input: {
       driverId = String(weekdayDefault?.default_driver_id || "").trim();
     }
 
-    if (!driverId) {
-      return fail(
-        "No hay conductor para esta ruta. Configúralo en Rutas (predeterminado del día) o crea un conductor.",
-      );
-    }
-
     const assignResult = await confirmLogisticsTaskScheduleAction({
       taskId: request.task_id,
       scheduledAt,
-      driverId,
+      driverId: driverId || null,
       routeTemplateId,
     });
     if (!assignResult.ok) {

@@ -21,7 +21,7 @@ describe("customer-route-replacement", () => {
     assert.match(draft.time, /^\d{2}:\d{2}$/);
   });
 
-  it("requires template, driver and matching weekday before submit", () => {
+  it("requires template and matching weekday before submit; driver is optional", () => {
     assert.equal(
       canSubmitCustomerRouteReplacement({
         routeTemplateId: "t1",
@@ -40,7 +40,7 @@ describe("customer-route-replacement", () => {
         driverId: "",
         templateWeekday: 5,
       }),
-      false,
+      true,
     );
     assert.equal(
       canSubmitCustomerRouteReplacement({
@@ -49,6 +49,42 @@ describe("customer-route-replacement", () => {
         time: "10:00",
         driverId: "d1",
         templateWeekday: 0,
+      }),
+      false,
+    );
+  });
+
+  it("allows day-as-route sentinel when an enabled day has 0 named templates", () => {
+    assert.equal(
+      canSubmitCustomerRouteReplacement({
+        routeTemplateId: "__day_as_route__",
+        date: "2026-07-24",
+        time: "10:00",
+        driverId: "",
+        dayAsRoute: true,
+        templateWeekday: 4,
+      }),
+      true,
+    );
+    assert.equal(
+      canSubmitCustomerRouteReplacement({
+        routeTemplateId: "__day_as_route__",
+        date: "2026-07-24",
+        time: "10:00",
+        driverId: "d1",
+        dayAsRoute: false,
+        templateWeekday: 4,
+      }),
+      false,
+    );
+    assert.equal(
+      canSubmitCustomerRouteReplacement({
+        routeTemplateId: "t1",
+        date: "2026-07-24",
+        time: "10:00",
+        driverId: "d1",
+        dayAsRoute: true,
+        templateWeekday: 4,
       }),
       false,
     );

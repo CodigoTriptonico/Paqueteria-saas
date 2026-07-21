@@ -1,6 +1,9 @@
 import type { LogisticsTaskStatus, LogisticsTaskType, ShipmentRow } from "@/app/actions/shipments";
 import { scheduledAtToLocalDateInput } from "@/lib/schedule-date";
-import { resolveRouteDateForTemplate } from "@/lib/logistics-route-week";
+import {
+  getLogisticsWeekdayIndex,
+  resolveRouteDateForTemplate,
+} from "@/lib/logistics-route-week";
 import { logisticsWeekdayKeys } from "@/lib/logistics-route-catalog";
 import { formatShipmentDuration } from "@/lib/shipment-timing";
 
@@ -159,6 +162,100 @@ export function buildDriverPickerOptions(
       searchText: member.label,
     })),
   ];
+}
+
+/** True when no weekday is selected, or the schedule/route date falls on that weekday. */
+export function matchesLogisticsWeekdayFilter(input: {
+  weekdayFilter: number | null;
+  scheduledAt?: string | null;
+  routeDate?: string | null;
+}) {
+  if (input.weekdayFilter == null || !Number.isInteger(input.weekdayFilter)) {
+    return true;
+  }
+
+  const weekday = Number(input.weekdayFilter);
+  const scheduleDate = scheduledAtToLocalDateInput(input.scheduledAt || null);
+  if (scheduleDate && getLogisticsWeekdayIndex(scheduleDate) === weekday) {
+    return true;
+  }
+
+  const routeDate = String(input.routeDate || "").trim();
+  if (routeDate && getLogisticsWeekdayIndex(routeDate) === weekday) {
+    return true;
+  }
+
+  return false;
+}
+
+/** True when no route template is selected, or the task/route uses that template. */
+export function matchesLogisticsRouteTemplateFilter(input: {
+  routeTemplateIdFilter: string;
+  routeTemplateId?: string | null;
+}) {
+  const filter = String(input.routeTemplateIdFilter || "").trim();
+  if (!filter) {
+    return true;
+  }
+  return String(input.routeTemplateId || "").trim() === filter;
+}
+
+/** True when no calendar date is selected, or schedule/route date equals that day. */
+export function matchesLogisticsDateFilter(input: {
+  dateFilter: string;
+  scheduledAt?: string | null;
+  routeDate?: string | null;
+}) {
+  const filter = String(input.dateFilter || "").trim();
+  if (!filter) {
+    return true;
+  }
+
+  const scheduleDate = scheduledAtToLocalDateInput(input.scheduledAt || null);
+  if (scheduleDate === filter) {
+    return true;
+  }
+
+  return String(input.routeDate || "").trim() === filter;
+}
+
+/** Route-template options for the logistics toolbar, scoped to a weekday. */
+export function buildLogisticsDayRouteFilterOptions(input: {
+  weekday: number | null;
+  templates: ReadonlyArray<{ id: string; name: string; weekday: number }>;
+  enabledWeekdays?: ReadonlyArray<string>;
+}): RoutePickerOption[] {
+  const empty: RoutePickerOption = {
+    value: "",
+    label: "Todas las rutas",
+    searchText: "todas las rutas",
+  };
+
+  if (input.weekday == null || !Number.isInteger(input.weekday)) {
+    return [empty];
+  }
+
+  const enabledWeekdaySet = new Set(input.enabledWeekdays || []);
+  const weekday = Number(input.weekday);
+  const weekdayLabel = logisticsWeekdayKeys[weekday as 0 | 1 | 2 | 3 | 4 | 5 | 6] || "";
+
+  const options = input.templates
+    .filter((template) => Number(template.weekday) === weekday)
+    .filter((template) => {
+      if (!enabledWeekdaySet.size) {
+        return true;
+      }
+      return enabledWeekdaySet.has(
+        logisticsWeekdayKeys[Number(template.weekday) as 0 | 1 | 2 | 3 | 4 | 5 | 6],
+      );
+    })
+    .map((template) => ({
+      value: template.id,
+      label: template.name,
+      searchText: `${template.name} ${weekdayLabel}`.trim(),
+    }));
+
+  return [empty, ...options];
 }
 
 export function driverChangeDialogCopy(

@@ -37,6 +37,7 @@ import {
   logisticsWeekdayKeys,
   type LogisticsWeekdayKey,
 } from "@/lib/logistics-route-catalog";
+import { genericLogisticsRouteName } from "@/lib/logistics-day-route";
 import type { AppSession } from "@/lib/auth/types";
 
 type Supabase = NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>;
@@ -692,6 +693,114 @@ export async function createLogisticsRouteTemplateAction(input: {
   }
 }
 
+/**
+ * When an enabled weekday has no named templates, the day itself is the route.
+ * Finds or creates the generic "Ruta del {día}" template for that weekday.
+ */
+export async function ensureLogisticsDayRouteTemplateAction(input: {
+  weekday: number;
+}): Promise<ActionResult<LogisticsRouteTemplateRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canManageRoutes(session)) {
+      throw new Error("FORBIDDEN");
+    }
+
+    if (!Number.isInteger(input.weekday) || input.weekday < 0 || input.weekday > 6) {
+      return fail("Dia de ruta invalido");
+    }
+
+    const weekdayKey = logisticsWeekdayKeys[input.weekday];
+    if (!weekdayKey) {
+      return fail("Dia de ruta invalido");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data: enabledDaysRaw, error: daysError } = await supabase.rpc(
+      "list_logistics_route_weekdays",
+      { target_org_id: session.organizationId },
+    );
+    if (daysError) {
+      return fail(daysError.message);
+    }
+
+    const enabledDays = (enabledDaysRaw || []).filter(isLogisticsWeekdayKey);
+    if (!enabledDays.includes(weekdayKey)) {
+      return fail(`${weekdayKey} no esta disponible en el calendario de rutas`);
+    }
+
+    const { data: existingRows, error: listError } = await supabase
+      .from("logistics_route_templates")
+      .select("id, weekday, name, created_at, updated_at")
+      .eq("organization_id", session.organizationId)
+      .eq("weekday", input.weekday)
+      .order("created_at", { ascending: true });
+
+    if (listError) {
+      return fail(listError.message);
+    }
+
+    const existing = ((existingRows || []) as LogisticsRouteTemplateDbRow[]).map(mapRouteTemplate);
+    const genericName = genericLogisticsRouteName(input.weekday);
+    const genericMatch = existing.find(
+      (template) => template.name.trim().toLowerCase() === genericName.toLowerCase(),
+    );
+    if (genericMatch) {
+      return ok(genericMatch);
+    }
+    if (existing[0]) {
+      return ok(existing[0]);
+    }
+
+    const { data, error } = await supabase
+      .from("logistics_route_templates")
+      .insert({
+        organization_id: session.organizationId,
+        weekday: input.weekday,
+        name: genericName,
+        created_by: session.userId,
+      })
+      .select("id, weekday, name, created_at, updated_at")
+      .single();
+
+    if (error || !data) {
+      if (error?.code === "23505") {
+        const { data: raced } = await supabase
+          .from("logistics_route_templates")
+          .select("id, weekday, name, created_at, updated_at")
+          .eq("organization_id", session.organizationId)
+          .eq("weekday", input.weekday)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (raced) {
+          return ok(mapRouteTemplate(raced as LogisticsRouteTemplateDbRow));
+        }
+      }
+      return fail(error?.message || "No se pudo crear la ruta del dia");
+    }
+
+    const template = mapRouteTemplate(data as LogisticsRouteTemplateDbRow);
+    await recordActivityHistory(supabase, session, {
+      action: "logistics.route_template_created",
+      entityType: "logistics_route_template",
+      entityId: template.id,
+      title: `Ruta del dia asegurada: ${template.name}`,
+      description: weekdayKey,
+      metadata: { weekday: template.weekday, dayAsRoute: true },
+    });
+
+    return ok(template);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
 export async function updateLogisticsRouteTemplateAction(input: {
   templateId: string;
   name: string;
@@ -795,7 +904,8 @@ export async function deleteLogisticsRouteTemplateAction(input: {
 export async function confirmLogisticsTaskScheduleAction(input: {
   taskId: string;
   scheduledAt: string;
-  driverId: string;
+  /** Optional: routes can be built first and drivers assigned later. */
+  driverId?: string | null;
   routeTemplateId: string;
 }): Promise<ActionResult<LogisticsRouteRow>> {
   try {
@@ -804,15 +914,18 @@ export async function confirmLogisticsTaskScheduleAction(input: {
     const supabase = await createScopedSupabase(session);
     if (!supabase) return fail("Supabase no configurado");
     const routeDate = scheduledAtToLocalDateInput(input.scheduledAt);
-    if (!input.taskId || !input.driverId || !input.routeTemplateId || !/^\d{4}-\d{2}-\d{2}$/.test(routeDate)) {
-      return fail("Completa fecha, conductor y ruta");
+    const driverId = String(input.driverId || "").trim() || null;
+    if (!input.taskId || !input.routeTemplateId || !/^\d{4}-\d{2}-\d{2}$/.test(routeDate)) {
+      return fail("Completa fecha y ruta");
     }
     const [{ data: template, error: templateError }, taskInputs] = await Promise.all([
       supabase.from("logistics_route_templates").select("id, weekday, name").eq("id", input.routeTemplateId).eq("organization_id", session.organizationId).single(),
       loadTaskInputs(supabase, session, { excludeRouted: true, onlyCurrentStep: true }),
     ]);
     if (templateError || !template) return fail("Ruta semanal no encontrada");
-    await assertConductorProfile(supabase, session, input.driverId);
+    if (driverId) {
+      await assertConductorProfile(supabase, session, driverId);
+    }
     const weekday = weekdayIndexForRouteDate(routeDate);
     if (weekday === null) return fail("Fecha invalida");
     if (Number(template.weekday) !== weekday) return fail("La ruta no corresponde al día elegido");
@@ -821,16 +934,17 @@ export async function confirmLogisticsTaskScheduleAction(input: {
     const { data: existing } = await supabase.from("logistics_routes").select(ROUTE_SELECT).eq("organization_id", session.organizationId).eq("route_template_id", input.routeTemplateId).eq("route_date", routeDate).neq("status", "cancelled").maybeSingle();
     let route = existing ? mapRoute(existing as unknown as LogisticsRouteDbRow) : null;
     if (!route) {
-      const { data, error } = await supabase.from("logistics_routes").insert({ organization_id: session.organizationId, route_template_id: input.routeTemplateId, route_date: routeDate, name: template.name, status: "draft", assigned_to: input.driverId, zone_key: "", created_by: session.userId }).select(ROUTE_SELECT).single();
+      const { data, error } = await supabase.from("logistics_routes").insert({ organization_id: session.organizationId, route_template_id: input.routeTemplateId, route_date: routeDate, name: template.name, status: "draft", assigned_to: driverId, zone_key: "", created_by: session.userId }).select(ROUTE_SELECT).single();
       if (error || !data) return fail(error?.message || "No se pudo crear la ruta operativa");
       route = mapRoute(data as unknown as LogisticsRouteDbRow);
-    } else if (route.assignedTo && route.assignedTo !== input.driverId) {
+    } else if (driverId && route.assignedTo && route.assignedTo !== driverId) {
       return fail("Esta ruta ya tiene otro conductor asignado");
     }
-    if (!route.assignedTo) await syncRouteDriver(supabase, session, route, input.driverId);
+    if (driverId && !route.assignedTo) await syncRouteDriver(supabase, session, route, driverId);
     route = await loadRouteById(supabase, session, route.id);
     if (!route.stops.some((stop) => stop.taskId === task.taskId)) await insertStops(supabase, session, route.id, [task], Math.max(0, ...route.stops.map((stop) => stop.order)) + 1);
     const nowIso = new Date().toISOString();
+    const taskAssignedTo = driverId || route.assignedTo || null;
     const { error: taskError } = await supabase
       .from("shipment_logistics_tasks")
       .update({
@@ -838,9 +952,9 @@ export async function confirmLogisticsTaskScheduleAction(input: {
         schedule_kind: "exact",
         window_start_at: input.scheduledAt,
         window_end_at: null,
-        assigned_to: input.driverId,
-        assigned_at: nowIso,
-        status: "assigned",
+        assigned_to: taskAssignedTo,
+        assigned_at: taskAssignedTo ? nowIso : null,
+        status: taskAssignedTo ? "assigned" : "scheduled",
         schedule_confirmation_status: "confirmed",
         schedule_confirmed_at: nowIso,
         schedule_confirmed_by: session.userId,
@@ -850,11 +964,13 @@ export async function confirmLogisticsTaskScheduleAction(input: {
       .eq("organization_id", session.organizationId);
     if (taskError) return fail(taskError.message);
 
-    await supabase
-      .from("shipments")
-      .update({ assigned_to: input.driverId })
-      .eq("id", task.shipmentId)
-      .eq("organization_id", session.organizationId);
+    if (taskAssignedTo) {
+      await supabase
+        .from("shipments")
+        .update({ assigned_to: taskAssignedTo })
+        .eq("id", task.shipmentId)
+        .eq("organization_id", session.organizationId);
+    }
 
     await recordActivityHistory(supabase, session, {
       action: "shipment.logistics_task_schedule_confirmed",
@@ -866,7 +982,7 @@ export async function confirmLogisticsTaskScheduleAction(input: {
         taskId: task.taskId,
         taskType: task.taskType,
         scheduledAt: input.scheduledAt,
-        driverId: input.driverId,
+        driverId: taskAssignedTo,
         routeId: route.id,
         routeTemplateId: input.routeTemplateId,
       },

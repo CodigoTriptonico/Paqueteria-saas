@@ -15,12 +15,9 @@ import { InlineSearchPicker } from "@/components/inline-search-picker";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
 import { logisticsWeekdayKeys, type LogisticsWeekdayKey } from "@/lib/logistics-route-catalog";
+import { genericLogisticsRouteName } from "@/lib/logistics-day-route";
 
 const weekdayNames = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
-
-function genericRouteName(weekday: number) {
-  return `Ruta del ${weekdayNames[weekday]}`;
-}
 
 export function LogisticsRouteCatalog({
   initialCatalog,
@@ -292,10 +289,10 @@ export function LogisticsRouteCatalog({
                 type="button"
                 className={`${secondaryButtonClass} h-9 px-3 text-xs disabled:opacity-50`}
                 disabled={busy === "create"}
-                onClick={() => void createRoute(genericRouteName(selectedDay))}
+                onClick={() => void createRoute(genericLogisticsRouteName(selectedDay))}
               >
                 {busy === "create" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4" />}
-                {genericRouteName(selectedDay)}
+                {genericLogisticsRouteName(selectedDay)}
               </button>
               <button
                 type="button"

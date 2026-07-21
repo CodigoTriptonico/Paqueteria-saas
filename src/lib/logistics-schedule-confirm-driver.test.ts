@@ -32,7 +32,7 @@ describe("resolveScheduleConfirmDriverId", () => {
     );
   });
 
-  it("falls back to the first conductor when there is no weekday default", () => {
+  it("leaves driver empty when sellers hide the picker and there is no weekday default", () => {
     assert.equal(
       resolveScheduleConfirmDriverId({
         showDriverPicker: false,
@@ -40,7 +40,7 @@ describe("resolveScheduleConfirmDriverId", () => {
         defaultDriverId: null,
         conductors,
       }),
-      "c1",
+      "",
     );
   });
 

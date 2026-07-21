@@ -84,6 +84,7 @@ import { useNotify } from "@/hooks/use-notify";
 import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provider";
 import {
   buildDriverPickerOptions,
+  buildLogisticsDayRouteFilterOptions,
   buildTaskRoutePickerOptions,
   formatLogisticsTaskStatusLabel,
   logisticsScheduleDisplayParts,
@@ -93,6 +94,9 @@ import {
   logisticsPriorityAwaitingDriver,
   logisticsTaskWaitingParts,
   logisticsWaitingToneClass,
+  matchesLogisticsDateFilter,
+  matchesLogisticsRouteTemplateFilter,
+  matchesLogisticsWeekdayFilter,
   resolveLogisticsInvoiceStep,
   sortLogisticsInvoiceItemsByPriority,
   resolveLogisticsShipmentDeepLink,
@@ -105,6 +109,9 @@ import { canEditLogisticsTaskFields } from "@/lib/logistics-task-edit";
 import { estimateRouteStopEtaMinutes, formatEtaMinutes } from "@/lib/logistics-eta";
 import { isLogisticsFailedTask } from "@/lib/logistics-reprogram";
 import { LOGISTICS_LIVE_REFRESH_MS, shouldRunLogisticsLiveRefresh } from "@/lib/logistics-live-refresh";
+import { selectWeekdayDate, defaultLogisticsWeekdayFilter, enabledWeekdayIndexes, logisticsEnabledWeekdayFilterOptions } from "@/lib/logistics-day-route";
+import { buildLogisticsCalendarDayTones } from "@/lib/logistics-calendar-day-tones";
+import { getLogisticsWeekdayIndex } from "@/lib/logistics-route-week";
 import { quoteFromShipment, readShipmentBoxLines, type ShipmentQuote } from "@/lib/shipment-display";
 import { ShipmentBoxLinesTrigger } from "@/components/shipment-box-lines-trigger";
 import { formatScheduleDateInput, scheduledAtToLocalDateInput } from "@/lib/schedule-date";
@@ -400,7 +407,9 @@ export function LogisticaClient({
   );
   const [query, setQuery] = useState("");
   const [todayDate] = useState(() => formatScheduleDateInput(new Date()));
-  const [dateFilter, setDateFilter] = useState(() => formatScheduleDateInput(new Date()));
+  const [weekdayFilter, setWeekdayFilter] = useState<number | null>(null);
+  const [routeTemplateFilter, setRouteTemplateFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [driverFilter, setDriverFilter] = useState("");
   const [zoneFilter, setZoneFilter] = useState("");
@@ -658,6 +667,75 @@ export function LogisticaClient({
     [routeMembers],
   );
 
+  const todayWeekday = getLogisticsWeekdayIndex(todayDate);
+
+  const availableFilterWeekdays = useMemo(
+    () => enabledWeekdayIndexes(routeCatalog?.enabledDays || []),
+    [routeCatalog?.enabledDays],
+  );
+
+  const weekdayFilterOptions = useMemo(
+    () => logisticsEnabledWeekdayFilterOptions(availableFilterWeekdays),
+    [availableFilterWeekdays],
+  );
+
+  const filterRoutePickerOptions = useMemo(
+    () =>
+      buildLogisticsDayRouteFilterOptions({
+        weekday: weekdayFilter,
+        templates: routeCatalog?.templates || [],
+        enabledWeekdays: routeCatalog?.enabledDays || [],
+      }),
+    [routeCatalog?.enabledDays, routeCatalog?.templates, weekdayFilter],
+  );
+
+  const filterAnchorDate = useMemo(() => {
+    if (dateFilter) {
+      return dateFilter;
+    }
+    if (weekdayFilter == null) {
+      return todayDate;
+    }
+    return selectWeekdayDate(weekdayFilter, todayDate);
+  }, [dateFilter, todayDate, weekdayFilter]);
+
+  const weekdayFilterInitializedRef = useRef(false);
+
+  function selectWeekdayFilter(next: number | null) {
+    setWeekdayFilter(next);
+    setRouteTemplateFilter("");
+    setDateFilter(next == null ? "" : selectWeekdayDate(next, todayDate));
+  }
+
+  useEffect(() => {
+    if (!availableFilterWeekdays.length) {
+      weekdayFilterInitializedRef.current = false;
+      setWeekdayFilter((current) => (current == null ? current : null));
+      setRouteTemplateFilter("");
+      setDateFilter("");
+      return;
+    }
+
+    if (!weekdayFilterInitializedRef.current) {
+      weekdayFilterInitializedRef.current = true;
+      const initial = defaultLogisticsWeekdayFilter(availableFilterWeekdays, todayWeekday);
+      setWeekdayFilter(initial);
+      setRouteTemplateFilter("");
+      setDateFilter(initial == null ? "" : selectWeekdayDate(initial, todayDate));
+      return;
+    }
+
+    setWeekdayFilter((current) => {
+      if (current == null || availableFilterWeekdays.includes(current)) {
+        return current;
+      }
+      const next = defaultLogisticsWeekdayFilter(availableFilterWeekdays, todayWeekday);
+      setRouteTemplateFilter("");
+      setDateFilter(next == null ? "" : selectWeekdayDate(next, todayDate));
+      return next;
+    });
+  }, [availableFilterWeekdays, todayDate, todayWeekday]);
+
   const routeByTaskId = useMemo(() => {
     const map = new Map<string, { route: LogisticsRouteRow; stop: LogisticsRouteStopRow }>();
 
@@ -701,6 +779,18 @@ export function LogisticaClient({
       })
       .sort((a, b) => taskSortValue(a) - taskSortValue(b));
   }, [shipments]);
+
+  const calendarDayTones = useMemo(
+    () =>
+      buildLogisticsCalendarDayTones(
+        allTasks.map((task) => ({
+          scheduledAt: task.scheduledAt,
+          status: task.status,
+          assignedTo: task.assignedTo,
+        })),
+      ),
+    [allTasks],
+  );
 
   const taskById = useMemo(() => {
     return new Map(allTasks.map((task) => [task.id, task]));
@@ -799,12 +889,20 @@ export function LogisticaClient({
         const fallbackTask = item.currentTask || item.nextTask;
         const address = fallbackTask ? addressByTaskId.get(fallbackTask.id) : undefined;
         const routeInfo = task ? routeByTaskId.get(task.id) : undefined;
-        const dateMatches =
-          !dateFilter ||
-          Boolean(
-            task?.scheduledAt &&
-              scheduledAtToLocalDateInput(task.scheduledAt) === dateFilter,
-          );
+        const dateMatches = matchesLogisticsWeekdayFilter({
+          weekdayFilter,
+          scheduledAt: task?.scheduledAt,
+          routeDate: routeInfo?.route.routeDate,
+        });
+        const routeMatches = matchesLogisticsRouteTemplateFilter({
+          routeTemplateIdFilter: routeTemplateFilter,
+          routeTemplateId: routeInfo?.route.routeTemplateId,
+        });
+        const calendarMatches = matchesLogisticsDateFilter({
+          dateFilter,
+          scheduledAt: task?.scheduledAt,
+          routeDate: routeInfo?.route.routeDate,
+        });
         const haystack = [
           item.shipment.code,
           item.shipment.customer_name,
@@ -826,6 +924,8 @@ export function LogisticaClient({
 
         return (
           dateMatches &&
+          routeMatches &&
+          calendarMatches &&
           (!cleanQuery || haystack.includes(cleanQuery)) &&
           (!cleanType || item.step.stepType === cleanType) &&
           (!cleanDriver || task?.assignedTo === cleanDriver || routeInfo?.route.assignedTo === cleanDriver) &&
@@ -841,7 +941,9 @@ export function LogisticaClient({
     memberById,
     query,
     routeByTaskId,
+    routeTemplateFilter,
     typeFilter,
+    weekdayFilter,
     zoneFilter,
   ]);
 
@@ -854,12 +956,20 @@ export function LogisticaClient({
     return allTasks.filter((task) => {
       const address = addressByTaskId.get(task.id);
       const routeInfo = routeByTaskId.get(task.id);
-        const dateMatches =
-          !dateFilter ||
-          Boolean(
-            task.scheduledAt &&
-              scheduledAtToLocalDateInput(task.scheduledAt) === dateFilter,
-          );
+      const dateMatches = matchesLogisticsWeekdayFilter({
+        weekdayFilter,
+        scheduledAt: task.scheduledAt,
+        routeDate: routeInfo?.route.routeDate,
+      });
+      const routeMatches = matchesLogisticsRouteTemplateFilter({
+        routeTemplateIdFilter: routeTemplateFilter,
+        routeTemplateId: routeInfo?.route.routeTemplateId,
+      });
+      const calendarMatches = matchesLogisticsDateFilter({
+        dateFilter,
+        scheduledAt: task.scheduledAt,
+        routeDate: routeInfo?.route.routeDate,
+      });
       const haystack = [
         task.shipment.code,
         task.shipment.customer_name,
@@ -881,6 +991,8 @@ export function LogisticaClient({
 
       return (
         dateMatches &&
+        routeMatches &&
+        calendarMatches &&
         (!cleanQuery || haystack.includes(cleanQuery)) &&
         (!cleanType || task.taskType === cleanType) &&
         (!cleanDriver || task.assignedTo === cleanDriver || routeInfo?.route.assignedTo === cleanDriver) &&
@@ -895,7 +1007,9 @@ export function LogisticaClient({
     memberById,
     query,
     routeByTaskId,
+    routeTemplateFilter,
     typeFilter,
+    weekdayFilter,
     zoneFilter,
   ]);
 
@@ -981,18 +1095,45 @@ export function LogisticaClient({
     return routes
       .filter((route) => route.status !== "cancelled")
       .filter((route) => (showRouteHistory ? route.status === "completed" : route.status !== "completed"))
-      .filter((route) => !dateFilter || route.routeDate === dateFilter)
+      .filter((route) =>
+        matchesLogisticsWeekdayFilter({
+          weekdayFilter,
+          routeDate: route.routeDate,
+        }),
+      )
+      .filter((route) =>
+        matchesLogisticsRouteTemplateFilter({
+          routeTemplateIdFilter: routeTemplateFilter,
+          routeTemplateId: route.routeTemplateId,
+        }),
+      )
+      .filter((route) =>
+        matchesLogisticsDateFilter({
+          dateFilter,
+          routeDate: route.routeDate,
+        }),
+      )
       .filter((route) => !driverFilter || route.assignedTo === driverFilter)
       .filter((route) => !zoneFilter || route.zoneKey === zoneFilter)
       .sort((a, b) => a.routeDate.localeCompare(b.routeDate) || a.name.localeCompare(b.name));
-  }, [dateFilter, driverFilter, routes, showRouteHistory, zoneFilter]);
+  }, [dateFilter, driverFilter, routeTemplateFilter, routes, showRouteHistory, weekdayFilter, zoneFilter]);
 
   const selectedRoute = useMemo(() => {
     return routes.find((route) => route.id === selectedRouteId) || filteredRoutes[0] || null;
   }, [filteredRoutes, routes, selectedRouteId]);
 
+  const defaultWeekdayFilter = defaultLogisticsWeekdayFilter(availableFilterWeekdays, todayWeekday);
+  const defaultDateFilter =
+    defaultWeekdayFilter == null ? "" : selectWeekdayDate(defaultWeekdayFilter, todayDate);
   const hasFilters = Boolean(
-    query.trim() || dateFilter !== todayDate || typeFilter || driverFilter || zoneFilter || failedFilter,
+    query.trim() ||
+      weekdayFilter !== defaultWeekdayFilter ||
+      routeTemplateFilter ||
+      dateFilter !== defaultDateFilter ||
+      typeFilter ||
+      driverFilter ||
+      zoneFilter ||
+      failedFilter,
   );
   const selectedTasks = useMemo(
     () => allTasks.filter((task) => selectedTaskIds.includes(task.id)),
@@ -1083,8 +1224,18 @@ export function LogisticaClient({
     setEditingTask(null);
 
     const nextDate = scheduledAtToLocalDateInput(patch.scheduledAt);
-    if (nextDate && nextDate !== previousDate && dateFilter === previousDate) {
+    if (nextDate && nextDate !== previousDate && dateFilter && dateFilter === previousDate) {
       setDateFilter(nextDate);
+      setWeekdayFilter(getLogisticsWeekdayIndex(nextDate));
+      setRouteTemplateFilter("");
+    } else if (
+      nextDate &&
+      nextDate !== previousDate &&
+      weekdayFilter != null &&
+      previousDate &&
+      getLogisticsWeekdayIndex(previousDate) === weekdayFilter
+    ) {
+      selectWeekdayFilter(getLogisticsWeekdayIndex(nextDate));
     }
   }
 
@@ -1227,7 +1378,7 @@ export function LogisticaClient({
       })),
       templates: routeCatalog?.templates || [],
       enabledWeekdays: routeCatalog?.enabledDays || [],
-      taskDate: taskRoutePickerDate(task.scheduledAt, dateFilter || todayDate),
+      taskDate: taskRoutePickerDate(task.scheduledAt, filterAnchorDate),
       driverLabelById: memberById,
     });
   }
@@ -1282,7 +1433,7 @@ export function LogisticaClient({
       taskId: task.id,
       routeId: parsed.routeId,
       routeTemplateId: parsed.routeTemplateId,
-      routeDate: taskRoutePickerDate(task.scheduledAt, dateFilter || todayDate),
+      routeDate: taskRoutePickerDate(task.scheduledAt, filterAnchorDate),
     });
     setBusyId(null);
 
@@ -2212,20 +2363,55 @@ export function LogisticaClient({
               />
 
               <div className="flex shrink-0 items-center gap-1">
-                {dateFilter ? (
+                {weekdayFilter != null ? (
                   <>
+                    <select
+                      className="h-9 min-w-[10.5rem] shrink-0 rounded-lg border border-emerald-500 bg-emerald-950/50 px-2.5 pr-8 text-sm font-black text-emerald-100 outline-none"
+                      value={String(weekdayFilter)}
+                      onChange={(event) => {
+                        const raw = event.target.value;
+                        selectWeekdayFilter(raw === "" ? null : Number(raw));
+                      }}
+                      aria-label="Filtrar por día"
+                    >
+                      {weekdayFilterOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <InlineSearchPicker
+                      className="w-[11rem] shrink-0"
+                      minWidthClass="w-full min-w-0"
+                      value={routeTemplateFilter}
+                      onChange={setRouteTemplateFilter}
+                      options={filterRoutePickerOptions}
+                      placeholder="Todas las rutas"
+                      searchPlaceholder="Buscar ruta…"
+                      emptyLabel="Sin rutas ese día"
+                      ariaLabel="Filtrar por ruta del día"
+                      leadingIcon={<Route className="h-4 w-4 text-emerald-300" aria-hidden />}
+                    />
                     <DateInput
                       className="w-[11.5rem] shrink-0 border-emerald-500 bg-emerald-950/50"
-                      value={dateFilter}
-                      ariaLabel="Fecha"
-                      onChange={setDateFilter}
+                      value={dateFilter || filterAnchorDate}
+                      allowedWeekdays={weekdayFilter == null ? availableFilterWeekdays : [weekdayFilter]}
+                      dayTones={calendarDayTones}
+                      showToneLegend
+                      ariaLabel="Filtrar por fecha"
+                      onChange={(nextDate) => {
+                        setDateFilter(nextDate);
+                        if (nextDate) {
+                          setWeekdayFilter(getLogisticsWeekdayIndex(nextDate));
+                        }
+                      }}
                     />
                     <button
                       type="button"
                       className={`${secondaryButtonClass} h-9 w-9 shrink-0 p-0`}
-                      aria-label="Quitar filtro de fecha"
-                      title="Ver todas las fechas"
-                      onClick={() => setDateFilter("")}
+                      aria-label="Quitar filtro de día"
+                      title="Ver todos los días"
+                      onClick={() => selectWeekdayFilter(null)}
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -2234,12 +2420,12 @@ export function LogisticaClient({
                   <button
                     type="button"
                     className={`${primaryButtonClass} h-9 shrink-0 gap-1.5 px-2.5 text-xs font-black`}
-                    aria-label="Mostrando tareas de todas las fechas"
-                    title="Mostrando todas las fechas"
-                    onClick={() => setDateFilter(todayDate)}
+                    aria-label="Mostrando tareas de todos los días"
+                    title="Mostrando todos los días"
+                    onClick={() => selectWeekdayFilter(defaultWeekdayFilter)}
                   >
                     <CalendarDays className="h-4 w-4" />
-                    Todas las fechas
+                    Todos los días
                   </button>
                 )}
               </div>
@@ -2329,7 +2515,7 @@ export function LogisticaClient({
                 disabled={!hasFilters}
                 onClick={() => {
                   setQuery("");
-                  setDateFilter(todayDate);
+                  selectWeekdayFilter(defaultWeekdayFilter);
                   setTypeFilter("");
                   setDriverFilter("");
                   setZoneFilter("");
@@ -2361,6 +2547,7 @@ export function LogisticaClient({
                 {canManageRoutes ? (
                   <CustomerRouteApprovalPanel
                     templates={routeCatalog?.templates || []}
+                    enabledDays={routeCatalog?.enabledDays || []}
                     defaultDriverByWeekday={
                       routeCatalog?.defaultDriverByWeekday || Array<string | null>(7).fill(null)
                     }
@@ -2501,6 +2688,7 @@ export function LogisticaClient({
         }
         scheduledAt={confirmingScheduleTask?.task.scheduledAt || null}
         templates={routeCatalog?.templates || []}
+        enabledDays={routeCatalog?.enabledDays || []}
         defaultDriverByWeekday={routeCatalog?.defaultDriverByWeekday || Array<string | null>(7).fill(null)}
         routeMembers={routeMembers}
         saving={Boolean(confirmingScheduleTask && busyId === `confirm:${confirmingScheduleTask.task.id}`)}

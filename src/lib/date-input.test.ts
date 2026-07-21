@@ -37,6 +37,13 @@ describe("date input standard", () => {
     assert.match(datePickerCalendarSource, /aria-hidden/);
   });
 
+  it("marks the selected day with a ring, not a green fill that hides status tones", () => {
+    assert.equal(datePickerCalendarSource.includes('selected\n            stateClass = "bg-emerald-400 text-slate-950"'), false);
+    assert.equal(datePickerCalendarSource.includes("bg-emerald-400 text-slate-950"), false);
+    assert.match(datePickerCalendarSource, /ring-2 ring-white/);
+    assert.match(datePickerCalendarSource, /data-day-selected/);
+  });
+
   it("replaces raw date inputs across the app", () => {
     for (const relativePath of consumerFiles) {
       const source = readFileSync(join(root, relativePath), "utf8");

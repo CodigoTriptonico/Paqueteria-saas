@@ -1235,6 +1235,7 @@ export function EnviosClient({
               : shipmentLogisticsEditorState(routeProgramTarget.row).fullBoxScheduleAt || null
           }
           templates={routeCatalog.templates}
+          enabledDays={routeCatalog.enabledDays}
           defaultDriverByWeekday={routeCatalog.defaultDriverByWeekday}
           routeMembers={routeMembers}
           saving={routeProgramSaving}

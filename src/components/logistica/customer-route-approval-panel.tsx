@@ -9,17 +9,31 @@ import {
   reviewCustomerRouteAssignmentRequestAction,
   type CustomerRouteAssignmentRequestRow,
 } from "@/app/actions/customer-route-assignments";
-import type { LogisticsRouteTemplateRow } from "@/app/actions/logistics-routes";
+import {
+  ensureLogisticsDayRouteTemplateAction,
+  type LogisticsRouteTemplateRow,
+} from "@/app/actions/logistics-routes";
 import type { RouteMemberRow } from "@/app/actions/shipments";
-import { DateInput } from "@/components/date-input";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
+import { LogisticsWeekdayPicker } from "@/components/logistica/logistics-weekday-picker";
 import { ShipmentBoxLinesTrigger } from "@/components/shipment-box-lines-trigger";
 import { TimePickerInput } from "@/components/time-picker-input";
 import { usePageViewLayout } from "@/components/ui/ui-surface-preferences-provider";
 import { Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { useAnchoredPopover } from "@/hooks/use-anchored-popover";
 import { useNotify } from "@/hooks/use-notify";
-import { logisticsWeekdayKeys } from "@/lib/logistics-route-catalog";
+import {
+  logisticsWeekdayKeys,
+  type LogisticsWeekdayKey,
+} from "@/lib/logistics-route-catalog";
+import {
+  dayAsRouteHint,
+  enabledWeekdayIndexes,
+  isDayAsRouteTemplateId,
+  nextWeekdayScheduleHint,
+  resolveDayRouteTemplateId,
+  selectWeekdayDate,
+} from "@/lib/logistics-day-route";
 import {
   canSubmitCustomerRouteReplacement,
   draftFromScheduledAt,
@@ -102,10 +116,12 @@ function emptyReplaceDraft(request: CustomerRouteAssignmentRequestRow): ReplaceD
 
 export function CustomerRouteApprovalPanel({
   templates,
+  enabledDays = [],
   defaultDriverByWeekday,
   routeMembers,
 }: {
   templates: LogisticsRouteTemplateRow[];
+  enabledDays?: LogisticsWeekdayKey[];
   defaultDriverByWeekday: Array<string | null>;
   routeMembers: RouteMemberRow[];
 }) {
@@ -130,20 +146,11 @@ export function CustomerRouteApprovalPanel({
     return () => window.clearTimeout(timer);
   }, [reload]);
 
-  const availableWeekdays = useMemo(
-    () =>
-      [...new Set(templates.map((template) => Number(template.weekday)))]
-        .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
-        .sort((a, b) => a - b),
-    [templates],
-  );
-
-  const availableWeekdayLabels = availableWeekdays
-    .map((day) => logisticsWeekdayKeys[day])
-    .filter(Boolean)
-    .join(", ");
+  const availableWeekdays = useMemo(() => enabledWeekdayIndexes(enabledDays), [enabledDays]);
 
   const replaceWeekday = replaceDraft ? getLogisticsWeekdayIndex(replaceDraft.date) : -1;
+  const replaceDateHint =
+    replaceDraft && replaceWeekday >= 0 ? nextWeekdayScheduleHint(replaceDraft.date) : "";
 
   const dayTemplates = useMemo(
     () =>
@@ -152,6 +159,8 @@ export function CustomerRouteApprovalPanel({
         : [],
     [replaceDraft, replaceWeekday, templates],
   );
+
+  const dayAsRoute = Boolean(replaceDraft && dayTemplates.length === 0 && replaceWeekday >= 0);
 
   const dayTemplateOptions = useMemo(
     () =>
@@ -164,14 +173,16 @@ export function CustomerRouteApprovalPanel({
   );
 
   const driverOptions = useMemo(
-    () =>
-      routeMembers
+    () => [
+      { value: "", label: "Sin conductor todavía", searchText: "sin conductor" },
+      ...routeMembers
         .filter((member) => member.roleSlug === "conductor")
         .map((member) => ({
           value: member.id,
           label: member.label,
           searchText: member.label,
         })),
+    ],
     [routeMembers],
   );
 
@@ -187,11 +198,16 @@ export function CustomerRouteApprovalPanel({
         date: replaceDraft.date,
         time: replaceDraft.time,
         driverId: replaceDraft.driverId,
-        templateWeekday: selectedReplaceTemplate
-          ? Number(selectedReplaceTemplate.weekday)
-          : null,
+        dayAsRoute,
+        templateWeekday: dayAsRoute
+          ? replaceWeekday
+          : selectedReplaceTemplate
+            ? Number(selectedReplaceTemplate.weekday)
+            : null,
       }),
   );
+
+  const canOpenReplace = availableWeekdays.length > 0;
 
   function approveRoute(request: CustomerRouteAssignmentRequestRow) {
     startTransition(async () => {
@@ -217,36 +233,33 @@ export function CustomerRouteApprovalPanel({
       draft.date || minScheduleDateInput(),
     );
     const weekday = getLogisticsWeekdayIndex(startDate);
-    const firstForDay =
-      templates.find(
-        (template) =>
-          template.id !== request.routeTemplateId && Number(template.weekday) === weekday,
-      ) ||
-      templates.find((template) => Number(template.weekday) === weekday) ||
-      null;
 
     draft.date = startDate;
-    draft.routeTemplateId = firstForDay?.id || "";
-    draft.driverId =
-      defaultDriverByWeekday[weekday] || driverOptions[0]?.value || "";
+    draft.routeTemplateId = resolveDayRouteTemplateId({
+      weekday,
+      templates,
+      preferNotId: request.routeTemplateId,
+    });
+    draft.driverId = defaultDriverByWeekday[weekday] || "";
     setReplacingId(request.id);
     setReplaceDraft(draft);
   }
 
-  function selectReplaceDate(date: string) {
-    const weekday = getLogisticsWeekdayIndex(date);
-    const options = templates.filter((template) => Number(template.weekday) === weekday);
+  function selectReplaceWeekday(weekday: number) {
+    const date = selectWeekdayDate(weekday, minScheduleDateInput());
     setReplaceDraft((current) => {
       if (!current) {
         return current;
       }
-      const stillValid = options.some((template) => template.id === current.routeTemplateId);
       return {
         ...current,
         date,
-        routeTemplateId: stillValid ? current.routeTemplateId : options[0]?.id || "",
-        driverId:
-          defaultDriverByWeekday[weekday] || current.driverId || driverOptions[0]?.value || "",
+        routeTemplateId: resolveDayRouteTemplateId({
+          weekday,
+          templates,
+          currentTemplateId: current.routeTemplateId,
+        }),
+        driverId: defaultDriverByWeekday[weekday] || current.driverId || "",
       };
     });
   }
@@ -269,8 +282,7 @@ export function CustomerRouteApprovalPanel({
       ...replaceDraft,
       routeTemplateId: nextTemplateId,
       date: nextDate,
-      driverId:
-        defaultDriverByWeekday[weekday] || replaceDraft.driverId || driverOptions[0]?.value || "",
+      driverId: defaultDriverByWeekday[weekday] || replaceDraft.driverId || "",
     });
   }
 
@@ -290,9 +302,25 @@ export function CustomerRouteApprovalPanel({
     }
 
     startTransition(async () => {
+      let routeTemplateId = replaceDraft.routeTemplateId;
+      let templateName =
+        templates.find((template) => template.id === routeTemplateId)?.name || "ruta";
+
+      if (isDayAsRouteTemplateId(routeTemplateId)) {
+        const ensured = await ensureLogisticsDayRouteTemplateAction({
+          weekday: getLogisticsWeekdayIndex(replaceDraft.date),
+        });
+        if (!ensured.ok) {
+          notify.error(ensured.error);
+          return;
+        }
+        routeTemplateId = ensured.data.id;
+        templateName = ensured.data.name;
+      }
+
       const result = await replaceCustomerRouteAssignmentRequestAction({
         requestId: request.id,
-        routeTemplateId: replaceDraft.routeTemplateId,
+        routeTemplateId,
         scheduledAt,
         driverId: replaceDraft.driverId,
       });
@@ -300,8 +328,6 @@ export function CustomerRouteApprovalPanel({
         notify.error(result.error);
         return;
       }
-      const templateName =
-        templates.find((template) => template.id === replaceDraft.routeTemplateId)?.name || "ruta";
       notify.success(`Ruta cambiada: ${request.customerName} → ${templateName}`);
       setReplacingId(null);
       setReplaceDraft(null);
@@ -317,37 +343,22 @@ export function CustomerRouteApprovalPanel({
     return (
       <div className="mt-3 grid max-w-xl gap-3 rounded-lg border border-black bg-surface-panel p-3">
         <p className="text-xs font-black uppercase text-amber-200">Elegir ruta de reemplazo</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-1">
-            <span className="text-[10px] font-black uppercase text-slate-500">Día</span>
-            <DateInput
-              value={replaceDraft.date}
-              min={minScheduleDateInput()}
-              allowedWeekdays={availableWeekdays}
-              disabled={availableWeekdays.length === 0}
-              onChange={selectReplaceDate}
-              ariaLabel="Día de la ruta de reemplazo"
-            />
-            {availableWeekdayLabels ? (
-              <span className="text-[11px] font-bold text-slate-500">
-                Solo días con rutas: {availableWeekdayLabels}
-              </span>
-            ) : (
-              <span className="text-[11px] font-bold text-amber-200">
-                No hay rutas semanales configuradas.
-              </span>
-            )}
-          </div>
-          <div className="grid gap-1">
-            <span className="text-[10px] font-black uppercase text-slate-500">Hora</span>
-            <TimePickerInput
-              value={replaceDraft.time}
-              onChange={(time) =>
-                setReplaceDraft((current) => (current ? { ...current, time } : current))
-              }
-              ariaLabel="Hora de la ruta de reemplazo"
-            />
-          </div>
+        <div className="grid gap-1">
+          <span className="text-[10px] font-black uppercase text-slate-500">Día</span>
+          <LogisticsWeekdayPicker
+            value={replaceWeekday}
+            availableWeekdays={availableWeekdays}
+            disabled={availableWeekdays.length === 0}
+            onChange={selectReplaceWeekday}
+            ariaLabel="Día de la ruta de reemplazo"
+          />
+          {availableWeekdays.length === 0 ? (
+            <span className="text-[11px] font-bold text-amber-200">
+              No hay días disponibles en el calendario de rutas.
+            </span>
+          ) : replaceDateHint ? (
+            <span className="text-[11px] font-bold text-slate-500">{replaceDateHint}</span>
+          ) : null}
         </div>
         <div className="grid gap-1">
           <span className="text-[10px] font-black uppercase text-slate-500">
@@ -356,20 +367,41 @@ export function CustomerRouteApprovalPanel({
               ? ` · ${logisticsWeekdayKeys[replaceWeekday]}`
               : ""}
           </span>
-          <InlineSearchPicker
-            value={replaceDraft.routeTemplateId}
-            onChange={selectReplaceTemplate}
-            options={dayTemplateOptions}
-            placeholder={
-              dayTemplates.length
-                ? `Rutas de ${logisticsWeekdayKeys[replaceWeekday] || "ese día"}`
-                : "No hay rutas ese día"
+          {dayAsRoute ? (
+            <div className="rounded-lg border border-black bg-surface-inset px-3 py-2">
+              <p className="text-sm font-black text-[#f8fafc]">
+                {logisticsWeekdayKeys[replaceWeekday] || "Día"}
+              </p>
+              <p className="mt-0.5 text-[11px] font-bold text-slate-500">
+                {dayAsRouteHint(replaceWeekday)}
+              </p>
+            </div>
+          ) : (
+            <InlineSearchPicker
+              value={replaceDraft.routeTemplateId}
+              onChange={selectReplaceTemplate}
+              options={dayTemplateOptions}
+              placeholder={
+                dayTemplates.length
+                  ? `Rutas de ${logisticsWeekdayKeys[replaceWeekday] || "ese día"}`
+                  : "No hay rutas ese día"
+              }
+              searchPlaceholder="Buscar ruta..."
+              emptyLabel={`No hay rutas para ${logisticsWeekdayKeys[replaceWeekday] || "ese día"}`}
+              ariaLabel="Ruta de reemplazo"
+              className="w-full min-w-0"
+              minWidthClass="min-w-0 w-full"
+            />
+          )}
+        </div>
+        <div className="grid gap-1">
+          <span className="text-[10px] font-black uppercase text-slate-500">Hora</span>
+          <TimePickerInput
+            value={replaceDraft.time}
+            onChange={(time) =>
+              setReplaceDraft((current) => (current ? { ...current, time } : current))
             }
-            searchPlaceholder="Buscar ruta..."
-            emptyLabel={`No hay rutas para ${logisticsWeekdayKeys[replaceWeekday] || "ese día"}`}
-            ariaLabel="Ruta de reemplazo"
-            className="w-full min-w-0"
-            minWidthClass="min-w-0 w-full"
+            ariaLabel="Hora de la ruta de reemplazo"
           />
         </div>
         <div className="grid gap-1">
@@ -380,13 +412,16 @@ export function CustomerRouteApprovalPanel({
               setReplaceDraft((current) => (current ? { ...current, driverId } : current))
             }
             options={driverOptions}
-            placeholder="Selecciona un conductor"
+            placeholder="Sin conductor todavía"
             searchPlaceholder="Buscar conductor..."
             emptyLabel="Sin conductores"
             ariaLabel="Conductor de la ruta de reemplazo"
             className="w-full min-w-0"
             minWidthClass="min-w-0 w-full"
           />
+          <span className="text-[11px] font-bold text-slate-500">
+            Opcional. Puedes asignar el conductor después filtrando por ruta.
+          </span>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -550,7 +585,7 @@ export function CustomerRouteApprovalPanel({
               <button
                 type="button"
                 className={secondaryButtonClass}
-                disabled={pending || templates.length === 0}
+                disabled={pending || !canOpenReplace}
                 onClick={() => openReplace(request)}
               >
                 Cambiar ruta
@@ -582,7 +617,7 @@ export function CustomerRouteApprovalPanel({
               <button
                 type="button"
                 className={secondaryButtonClass}
-                disabled={pending || templates.length === 0}
+                disabled={pending || !canOpenReplace}
                 onClick={() => openReplace(request)}
               >
                 Cambiar ruta

@@ -4,6 +4,7 @@ import {
   activeLogisticsRouteTaskIds,
   buildLogisticaShipmentDeepLink,
   buildDriverPickerOptions,
+  buildLogisticsDayRouteFilterOptions,
   buildTaskRoutePickerOptions,
   driverChangeDialogCopy,
   driverLabel,
@@ -19,7 +20,9 @@ import {
   logisticsPriorityAwaitingDriverClass,
   logisticsPriorityCardClass,
   logisticsPriorityHeaderClass,
-  logisticsPriorityAwaitingDriver,
+  matchesLogisticsDateFilter,
+  matchesLogisticsRouteTemplateFilter,
+  matchesLogisticsWeekdayFilter,
   prioritizeLogisticsTasks,
   prioritizeMissingGeoTasks,
   resolveLogisticsInvoiceStep,
@@ -381,6 +384,115 @@ describe("logistics view", () => {
     assert.equal(options[0]?.label, "Sin asignar");
     assert.equal(options[1]?.label, "Conductor 1");
     assert.equal(options[2]?.searchText, "Conductor 2");
+  });
+
+  it("matches weekday and route-template filters for the logistics toolbar", () => {
+    assert.equal(
+      matchesLogisticsWeekdayFilter({
+        weekdayFilter: null,
+        scheduledAt: "2026-07-25T17:00:00.000Z",
+      }),
+      true,
+    );
+    assert.equal(
+      matchesLogisticsWeekdayFilter({
+        weekdayFilter: 5,
+        scheduledAt: "2026-07-25T17:00:00.000Z",
+      }),
+      true,
+    );
+    assert.equal(
+      matchesLogisticsWeekdayFilter({
+        weekdayFilter: 0,
+        scheduledAt: "2026-07-25T17:00:00.000Z",
+      }),
+      false,
+    );
+    assert.equal(
+      matchesLogisticsWeekdayFilter({
+        weekdayFilter: 5,
+        routeDate: "2026-07-25",
+      }),
+      true,
+    );
+    assert.equal(
+      matchesLogisticsRouteTemplateFilter({
+        routeTemplateIdFilter: "",
+        routeTemplateId: "hollywood",
+      }),
+      true,
+    );
+    assert.equal(
+      matchesLogisticsRouteTemplateFilter({
+        routeTemplateIdFilter: "hollywood",
+        routeTemplateId: "hollywood",
+      }),
+      true,
+    );
+    assert.equal(
+      matchesLogisticsRouteTemplateFilter({
+        routeTemplateIdFilter: "hollywood",
+        routeTemplateId: "van",
+      }),
+      false,
+    );
+    assert.equal(
+      matchesLogisticsDateFilter({
+        dateFilter: "",
+        scheduledAt: "2026-07-25T17:00:00.000Z",
+      }),
+      true,
+    );
+    assert.equal(
+      matchesLogisticsDateFilter({
+        dateFilter: "2026-07-25",
+        scheduledAt: "2026-07-25T17:00:00.000Z",
+      }),
+      true,
+    );
+    assert.equal(
+      matchesLogisticsDateFilter({
+        dateFilter: "2026-07-24",
+        scheduledAt: "2026-07-25T17:00:00.000Z",
+        routeDate: "2026-07-24",
+      }),
+      true,
+    );
+    assert.equal(
+      matchesLogisticsDateFilter({
+        dateFilter: "2026-07-18",
+        scheduledAt: "2026-07-25T17:00:00.000Z",
+        routeDate: "2026-07-25",
+      }),
+      false,
+    );
+  });
+
+  it("builds day-scoped route filter options for the toolbar", () => {
+    const allDays = buildLogisticsDayRouteFilterOptions({
+      weekday: null,
+      templates: [
+        { id: "hollywood", name: "Hollywood", weekday: 5 },
+        { id: "van", name: "Van Nuys", weekday: 5 },
+        { id: "mon", name: "Lunes centro", weekday: 0 },
+      ],
+      enabledWeekdays: ["Sab", "Lun"],
+    });
+    assert.equal(allDays.length, 1);
+    assert.equal(allDays[0]?.label, "Todas las rutas");
+
+    const sab = buildLogisticsDayRouteFilterOptions({
+      weekday: 5,
+      templates: [
+        { id: "hollywood", name: "Hollywood", weekday: 5 },
+        { id: "van", name: "Van Nuys", weekday: 5 },
+        { id: "mon", name: "Lunes centro", weekday: 0 },
+      ],
+      enabledWeekdays: ["Sab", "Lun"],
+    });
+    assert.equal(sab.length, 3);
+    assert.equal(sab[1]?.value, "hollywood");
+    assert.equal(sab[2]?.value, "van");
   });
 
   it("builds searchable route picker options for the task date", () => {

@@ -9,10 +9,16 @@ import {
   isDateDisabled,
   shiftCalendarMonth,
 } from "@/lib/date-picker";
+import {
+  logisticsCalendarDayToneClass,
+  logisticsCalendarDayToneDotClass,
+  logisticsCalendarDayToneLegend,
+  type LogisticsCalendarDayTone,
+} from "@/lib/logistics-calendar-day-tones";
 import { formatScheduleDateInput } from "@/lib/schedule-date";
 
 const dayButtonClass =
-  "flex h-9 items-center justify-center rounded-md text-sm font-black transition";
+  "relative flex h-9 items-center justify-center rounded-md text-sm font-black transition";
 
 type DatePickerCalendarProps = {
   value: string;
@@ -21,6 +27,9 @@ type DatePickerCalendarProps = {
   min?: string;
   max?: string;
   allowedWeekdays?: number[];
+  /** Optional logistics markers: YYYY-MM-DD → tone. */
+  dayTones?: Readonly<Record<string, LogisticsCalendarDayTone>>;
+  showToneLegend?: boolean;
   onChange: (value: string) => void;
   onViewChange: (year: number, month: number) => void;
 };
@@ -32,6 +41,8 @@ export function DatePickerCalendar({
   min,
   max,
   allowedWeekdays,
+  dayTones,
+  showToneLegend = false,
   onChange,
   onViewChange,
 }: DatePickerCalendarProps) {
@@ -41,6 +52,7 @@ export function DatePickerCalendar({
     () => buildVisibleCalendarMonth(viewYear, viewMonth),
     [viewMonth, viewYear],
   );
+  const hasTones = Boolean(dayTones && Object.keys(dayTones).length);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -103,6 +115,24 @@ export function DatePickerCalendar({
           const selected = cell.date === value;
           const disabled = isDateDisabled(cell.date, min, max, { allowedWeekdays });
           const isToday = cell.date === today;
+          const tone = dayTones?.[cell.date] || null;
+
+          let stateClass: string;
+          if (disabled) {
+            stateClass = "cursor-not-allowed bg-surface-panel text-slate-600 opacity-40";
+          } else if (tone) {
+            stateClass = logisticsCalendarDayToneClass(tone);
+          } else if (isToday) {
+            stateClass =
+              "border border-emerald-600/60 bg-surface-panel text-[#f8fafc] hover:bg-surface-card-hover";
+          } else {
+            stateClass = "bg-surface-panel text-[#f8fafc] hover:bg-surface-card-hover";
+          }
+
+          if (selected && !disabled) {
+            // Selection is a ring only — never a fill — so the status palette stays readable.
+            stateClass = `${stateClass} z-[1] ring-2 ring-white ring-offset-2 ring-offset-[#121816]`;
+          }
 
           return (
             <button
@@ -110,23 +140,40 @@ export function DatePickerCalendar({
               type="button"
               disabled={disabled}
               onClick={() => onChange(cell.date)}
-              className={`${dayButtonClass} ${
-                selected
-                  ? "bg-emerald-400 text-slate-950"
-                  : disabled
-                    ? "cursor-not-allowed bg-surface-panel text-slate-600 opacity-40"
-                    : isToday
-                      ? "border border-emerald-600/60 bg-surface-panel text-[#f8fafc] hover:bg-surface-card-hover"
-                      : "bg-surface-panel text-[#f8fafc] hover:bg-surface-card-hover"
-              }`}
-              aria-label={cell.date}
+              className={`${dayButtonClass} ${stateClass}`}
+              aria-label={tone ? `${cell.date} · ${tone}` : cell.date}
               aria-pressed={selected}
+              data-day-tone={tone || undefined}
+              data-day-selected={selected || undefined}
             >
               {cell.day}
+              {tone && !disabled ? (
+                <span
+                  className={`absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${logisticsCalendarDayToneDotClass(tone)}`}
+                  aria-hidden
+                />
+              ) : null}
             </button>
           );
         })}
       </div>
+
+      {showToneLegend && hasTones ? (
+        <div className="grid grid-cols-2 gap-1.5 border-t border-black px-2 py-2">
+          {logisticsCalendarDayToneLegend.map((entry) => (
+            <span
+              key={entry.tone}
+              className="inline-flex items-center gap-1.5 text-[10px] font-black text-slate-400"
+            >
+              <span
+                className={`h-2 w-2 shrink-0 rounded-full ${logisticsCalendarDayToneDotClass(entry.tone)}`}
+                aria-hidden
+              />
+              {entry.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

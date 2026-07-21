@@ -1,3 +1,4 @@
+import { isDayAsRouteTemplateId } from "@/lib/logistics-day-route";
 import { getLogisticsWeekdayIndex, nextDateForLogisticsWeekday } from "@/lib/logistics-route-week";
 import { scheduleAtToTimestamp } from "@/lib/sale/schedule-time";
 import { scheduledAtToLocalDateInput } from "@/lib/schedule-date";
@@ -20,14 +21,20 @@ export function canSubmitCustomerRouteReplacement(input: {
   routeTemplateId: string;
   date: string;
   time: string;
-  driverId: string;
+  driverId?: string | null;
   templateWeekday?: number | null;
+  /** Enabled day with 0 named templates: the day itself is the route. */
+  dayAsRoute?: boolean;
 }) {
   const routeTemplateId = String(input.routeTemplateId || "").trim();
-  const driverId = String(input.driverId || "").trim();
   const scheduledTimestamp = scheduleAtToTimestamp(`${input.date}T${input.time}`);
+  const dayAsRoute = Boolean(input.dayAsRoute);
+  const templateOk = dayAsRoute
+    ? isDayAsRouteTemplateId(routeTemplateId)
+    : Boolean(routeTemplateId) && !isDayAsRouteTemplateId(routeTemplateId);
 
-  if (!routeTemplateId || !driverId || !scheduledTimestamp) {
+  // Driver is optional: assign stops to the route first, pick a driver later.
+  if (!templateOk || !scheduledTimestamp) {
     return false;
   }
 
