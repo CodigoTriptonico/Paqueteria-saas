@@ -1,3 +1,5 @@
+import { isoToPlanScheduleAt } from "@/lib/shipment-schedule-history";
+
 export type SaleRouteDecision =
   | {
       kind: "selected";
@@ -20,7 +22,7 @@ export function saleRouteDecisionSummary(decision: SaleRouteDecision | null) {
     return `Ruta pendiente · ${decision.routeDate}`;
   }
 
-  return `${decision.routeLabel} · ${decision.routeDate}`;
+  return `${decision.routeLabel} · ${isoToPlanScheduleAt(decision.scheduledAt)}`;
 }
 
 export function saleRouteDecisionSchedule(decision: SaleRouteDecision | null) {
@@ -32,7 +34,10 @@ export function saleRouteDecisionSchedule(decision: SaleRouteDecision | null) {
     return { scheduleMode: "pending", scheduleAt: "" } as const;
   }
 
-  return { scheduleMode: "scheduled", scheduleAt: decision.scheduledAt } as const;
+  return {
+    scheduleMode: "scheduled",
+    scheduleAt: isoToPlanScheduleAt(decision.scheduledAt),
+  } as const;
 }
 
 export function saleRouteDecisionTask(decision: SaleRouteDecision) {

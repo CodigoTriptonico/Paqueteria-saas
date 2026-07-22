@@ -17,7 +17,6 @@ const consumerFiles = [
   "components/estadisticas/period-range-toolbar.tsx",
   "components/inventory-movements-panel.tsx",
   "components/logistica/logistics-task-schedule-confirm-panel.tsx",
-  "components/sale/sale-quick-empty-box-modal.tsx",
   "components/shipment-contact-log-dialog.tsx",
 ];
 

@@ -81,6 +81,7 @@ import { inventarioHrefWithReturn } from "@/lib/inventario-return";
 import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 import { recipientCountrySetupRequired } from "@/lib/recipient-country-gate";
 import { formatSalePersonListCount } from "@/lib/sale-person-list-count";
+import { resolveQuickSaleBoxCatalog } from "@/lib/sale-quick-box-catalog";
 import {
   saleRouteDecisionSummary,
   saleRouteDecisionTask,
@@ -702,7 +703,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const quickBoxPromotions = useMemo(
     () =>
       quickSaleDraft
-        ? resolveCountryPromotions(countryPromotions, "USA", quickSaleDraft.box)
+        ? resolveCountryPromotions(countryPromotions, quickSaleDraft.country, quickSaleDraft.box)
         : [],
     [countryPromotions, quickSaleDraft],
   );
@@ -1398,7 +1399,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setQuickInvoiceNumber("");
     setQuickPayNowDraft("");
     setQuickPayNowDraftTouched(false);
-    setQuickPaymentMethod(SALE_PAYMENT_UNSET);
+    setQuickPaymentMethod(draft.depositPaid ? defaultSalePaymentSelection() : "pending");
     setQuickPaymentNote("");
     setQuickCheckoutCompleted(false);
     setQuickSelectedPromotionId("");
@@ -2976,7 +2977,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           ? undefined
           : quickSaleDraft.sender.id,
         customerName: personFullName(quickSaleDraft.sender),
-        country: "USA",
+        country: quickSaleDraft.country,
         carrier: quickSaleDraft.box[3] || "Deposito caja vacia",
         paid: payment.paid,
         cost: formatMoneyValue(
@@ -3082,7 +3083,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     }
   }
 
-  const usaBoxes = useMemo(() => resolveCountryBoxes(countryBoxes, "USA"), [countryBoxes]);
+  const quickSaleBoxCatalog = useMemo(
+    () => resolveQuickSaleBoxCatalog(countryBoxes),
+    [countryBoxes],
+  );
 
   function resolveContextSender() {
     if (!contextMenu || contextMenu.type !== "remitente") {
@@ -4461,8 +4465,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       {quickSaleSender ? (
         <SaleQuickEmptyBoxModal
           sender={quickSaleSender}
-          boxes={usaBoxes}
-          promotions={resolveCountryPromotions(countryPromotions, "USA")}
+          country={quickSaleBoxCatalog?.country || ""}
+          boxes={quickSaleBoxCatalog?.boxes || []}
+          promotions={resolveCountryPromotions(
+            countryPromotions,
+            quickSaleBoxCatalog?.country || "",
+          )}
           routeDecision={quickEmptyBoxRouteDecision}
           onClose={() => {
             setQuickSaleSender(null);
@@ -4533,7 +4541,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           enabledDays={routeCatalog.enabledDays}
           defaultDriverByWeekday={routeCatalog.defaultDriverByWeekday}
           routeMembers={[]}
-          title={routePlannerLeg === "emptyBox" ? "Programar entrega" : "Programar recolección"}
+          title={routePlannerLeg === "fullBox" ? "Programar recolección" : "Programar entrega"}
           confirmLabel="Asignar ruta"
           selectionOrder="date-first"
           showDriverPicker={false}

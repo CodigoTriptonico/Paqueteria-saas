@@ -59,14 +59,15 @@ describe("sale payment choice", () => {
     assert.equal(defaultSalePaymentSelection(), "cash");
   });
 
-  it("uses one pending-deposit checkbox for every delivery channel", () => {
+  it("uses one paid-deposit checkbox for every delivery channel", () => {
     assert.equal(salePaymentChoiceLabel("pending"), "Pendiente");
     assert.equal(fieldSource.includes("openPaymentSelect"), true);
     assert.equal(fieldSource.includes("select.showPicker"), true);
     assert.equal(fieldSource.includes("Cobro del depósito"), true);
     assert.equal(fieldSource.includes("Conductor cobra"), false);
     assert.equal(fieldSource.includes("Cobrar ahora"), false);
-    assert.equal(fieldSource.includes("Depósito pendiente"), true);
+    assert.equal(fieldSource.includes("Depósito pagado"), true);
+    assert.equal(fieldSource.includes("Desmárcalo para dejarlo pendiente"), true);
     assert.equal(fieldSource.includes('type="checkbox"'), true);
     assert.equal(fieldSource.includes("Estado: pendiente"), true);
     assert.equal(fieldSource.includes("No se registra en caja hasta que se cobre"), true);

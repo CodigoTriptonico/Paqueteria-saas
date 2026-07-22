@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Clock, Minus, Plus, Route, X } from "lucide-react";
+import { CalendarDays, Clock, Package, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   quotePromotionsForBox,
@@ -15,15 +15,19 @@ import {
   deliveryModeCardClass,
   deliveryModeIconClass,
   deliverySummary,
-  inputClass,
   personFullName,
+  SaleBoxCartQtyBadge,
   type Sender,
 } from "@/components/sale/venta-parts";
+import { nextQuickBoxSelection } from "@/lib/sale-quick-box-selection";
+import { SaleDepositPaidToggle } from "@/components/sale/sale-payment-method-field";
 
 export type QuickEmptyBoxDraft = {
   sender: Sender;
+  country: string;
   box: string[];
   boxCount: number;
+  depositPaid: boolean;
   emptyBoxMode: string;
   emptyBoxScheduleMode: string;
   emptyBoxScheduleAt: string;
@@ -33,6 +37,7 @@ export type QuickEmptyBoxDraft = {
 
 type SaleQuickEmptyBoxModalProps = {
   sender: Sender;
+  country: string;
   boxes: string[][];
   promotions?: PricingPromotionConfig[];
   routeDecision: SaleRouteDecision | null;
@@ -44,6 +49,7 @@ type SaleQuickEmptyBoxModalProps = {
 
 export function SaleQuickEmptyBoxModal({
   sender,
+  country,
   boxes,
   promotions = [],
   routeDecision,
@@ -54,12 +60,12 @@ export function SaleQuickEmptyBoxModal({
 }: SaleQuickEmptyBoxModalProps) {
   const [selectedBoxKey, setSelectedBoxKey] = useState("");
   const [emptyBoxMode, setEmptyBoxMode] = useState("");
-  const [boxCount, setBoxCount] = useState(1);
+  const [boxCount, setBoxCount] = useState(0);
+  const [depositPaid, setDepositPaid] = useState(true);
 
-  const effectiveSelectedBoxKey = selectedBoxKey || boxes[0]?.[0] || "";
   const selectedBox = useMemo(
-    () => boxes.find((box) => box[0] === effectiveSelectedBoxKey) || boxes[0] || null,
-    [boxes, effectiveSelectedBoxKey],
+    () => boxes.find((box) => box[0] === selectedBoxKey) || null,
+    [boxes, selectedBoxKey],
   );
 
   const routeSchedule = saleRouteDecisionSchedule(routeDecision);
@@ -103,8 +109,14 @@ export function SaleQuickEmptyBoxModal({
       ? `$${boxSubtotal}`
       : "$0";
 
-  function updateBoxCount(rawValue: string) {
-    setBoxCount(Math.max(Number.parseInt(rawValue, 10) || 1, 1));
+  function updateBoxSelection(boxKey: string, action: "add" | "remove") {
+    const next = nextQuickBoxSelection(
+      { boxKey: selectedBoxKey, quantity: boxCount },
+      boxKey,
+      action,
+    );
+    setSelectedBoxKey(next.boxKey);
+    setBoxCount(next.quantity);
   }
 
   return (
@@ -113,7 +125,7 @@ export function SaleQuickEmptyBoxModal({
         <div className="mb-4 flex items-start justify-between gap-3 border-b border-black pb-4">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase text-slate-500">Venta rápida</p>
-            <h3 className="text-2xl font-black text-[#f8fafc]">Caja vacía + depósito</h3>
+            <h3 className="text-2xl font-black text-[#f8fafc]">Venta de caja vacía</h3>
           </div>
           <button
             type="button"
@@ -130,51 +142,96 @@ export function SaleQuickEmptyBoxModal({
             <p className="break-words text-lg font-black text-[#f8fafc]">{personFullName(sender)}</p>
           </div>
 
-          <label className="grid gap-2">
-            <span className="text-sm font-black text-slate-300">Caja</span>
-            <select
-              className={inputClass}
-              value={effectiveSelectedBoxKey}
-              onChange={(event) => setSelectedBoxKey(event.target.value)}
-            >
-              {boxes.map((box) => (
-                <option key={box[0]} value={box[0]}>
-                  {box[0]} — {box[1]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <fieldset className="grid gap-2">
+            <legend className="text-sm font-black text-slate-300">
+              Caja{country ? ` · ${country}` : ""}
+            </legend>
+            {boxes.length ? (
+              <>
+                <div
+                  className="grid grid-cols-2 gap-2 sm:grid-cols-3"
+                  role="group"
+                  aria-label={`Cajas para ${country || "venta rápida"}`}
+                >
+                  {boxes.map((box) => {
+                  const selected = box[0] === selectedBoxKey;
 
-          <div className="rounded-xl border border-black bg-surface-card p-3">
-            <p className="text-xs font-black uppercase text-slate-500">Cantidad</p>
-            <div className="mt-2 grid grid-cols-[2.75rem_1fr_2.75rem] items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setBoxCount((current) => Math.max(current - 1, 1))}
-                className="flex h-11 items-center justify-center rounded-lg border border-black bg-surface-panel text-slate-300"
-                aria-label="Restar caja"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <input
-                className={`${inputClass} text-center text-xl font-black`}
-                value={boxCount}
-                onChange={(event) => updateBoxCount(event.target.value)}
-                inputMode="numeric"
-                aria-label="Cantidad de cajas"
-              />
-              <button
-                type="button"
-                onClick={() => setBoxCount((current) => current + 1)}
-                className="flex h-11 items-center justify-center rounded-lg border border-black bg-surface-panel text-slate-300"
-                aria-label="Agregar caja"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+                  return (
+                    <button
+                      key={box[0]}
+                      type="button"
+                      aria-pressed={selected}
+                      aria-label={`${box[0]}, ${box[1]}${selected ? `, ${boxCount} en carrito` : ""}. Clic agrega; clic derecho resta`}
+                      title={`${box[0]}: clic izquierdo agrega, clic derecho resta`}
+                      onClick={() => updateBoxSelection(box[0], "add")}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        updateBoxSelection(box[0], "remove");
+                      }}
+                      onMouseUp={(event) => {
+                        if (event.button === 2) {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }
+                      }}
+                      className={`group relative flex min-w-0 flex-col items-center gap-2 rounded-xl border p-3 text-center shadow-[0_6px_16px_rgba(0,0,0,0.22)] transition focus-visible:ring-2 focus-visible:ring-emerald-400/50 ${
+                        selected
+                          ? "border-emerald-400 bg-emerald-400/10 shadow-[0_8px_20px_rgba(16,185,129,0.14)]"
+                          : "border-black bg-[#3f4b46] hover:-translate-y-0.5 hover:bg-[#46544e]"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-10 w-10 items-center justify-center rounded-lg text-slate-950 transition ${
+                          selected
+                            ? "bg-emerald-300 shadow-[0_8px_16px_rgba(16,185,129,0.2)]"
+                            : "bg-emerald-400"
+                        }`}
+                      >
+                        <Package className="h-5 w-5" aria-hidden />
+                      </span>
+                      <span className="min-w-0 max-w-full">
+                        <span className="block truncate text-sm font-black leading-tight text-[#f8fafc]">
+                          {box[0]}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[10px] font-bold text-slate-400">
+                          {box[4] || "Caja vacía"}
+                        </span>
+                      </span>
+                      <span className="mt-auto w-full rounded-lg border border-black/70 bg-[#202926] px-2 py-1.5">
+                        <span className="block text-[9px] font-black uppercase text-slate-400">
+                          Cobra
+                        </span>
+                        <span className="block text-base font-black tabular-nums text-[#f8fafc]">
+                          {box[1]}
+                        </span>
+                        <span className="flex h-10 items-start justify-center">
+                          {selected && boxCount > 0 ? (
+                            <SaleBoxCartQtyBadge quantity={boxCount} />
+                          ) : null}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                  })}
+                </div>
+                <span className="text-center text-[11px] font-bold text-slate-500">
+                  Clic agrega · clic derecho resta
+                </span>
+              </>
+            ) : (
+              <span className="rounded-lg border border-amber-900/60 bg-amber-950/25 px-3 py-2 text-xs font-bold text-amber-100">
+                <strong className="block font-black">No hay cajas con precio.</strong>
+                Configura al menos una para usar la venta rápida.
+              </span>
+            )}
+          </fieldset>
 
-          <div className="grid gap-2 sm:grid-cols-2">
+          <fieldset className="grid gap-2">
+            <legend className="text-sm font-black text-slate-300">
+              ¿Cómo se entrega la caja vacía?
+            </legend>
+            <div className="grid gap-2 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => selectMode("Cliente recoge caja vacia en oficina")}
@@ -189,7 +246,8 @@ export function SaleQuickEmptyBoxModal({
               >
                 <Clock className="h-5 w-5" />
               </span>
-              <p className="mt-2 text-sm font-black">Recoge en oficina</p>
+              <p className="mt-2 text-sm font-black">Entregar ahora</p>
+              <p className="mt-1 text-xs font-bold text-slate-400">Entregarla en mostrador</p>
             </button>
             <button
               type="button"
@@ -205,52 +263,35 @@ export function SaleQuickEmptyBoxModal({
               >
                 <CalendarDays className="h-5 w-5" />
               </span>
-              <p className="mt-2 text-sm font-black">Programar entrega</p>
+              <p className="mt-2 text-sm font-black">Programar ruta</p>
+              <p className="mt-1 line-clamp-2 min-h-8 text-xs font-bold text-slate-400">
+                {routeSummary || "Elegir día y ruta"}
+              </p>
             </button>
+            </div>
+          </fieldset>
+
+          <div className="min-h-[8.25rem] rounded-xl border border-black bg-surface-inset px-4 py-3 text-center">
+            <p className="text-xs font-black uppercase text-slate-500">Total de cajas</p>
+            <p className="text-3xl font-black text-emerald-300">
+              {selectedBox ? boxSubtotalLabel : "$0"}
+            </p>
+            <p className="mt-1 min-h-4 text-xs font-bold text-slate-400">
+              {selectedBox ? `${selectedBox[1]} x ${boxCount}` : "Selecciona una caja"}
+            </p>
+            <p className="mt-1 min-h-4 text-xs font-black text-emerald-300">
+              {automaticPromotion
+                ? `${automaticPromotion.name} -${automaticPromotion.discountTotal}`
+                : promotionQuotes.length > 1
+                  ? "Elige promoción al crear invoice"
+                  : ""}
+            </p>
+            <p className="mt-1 min-h-4 text-xs font-bold text-slate-400">
+              {summary === "Pendiente" ? "" : summary}
+            </p>
           </div>
 
-          {emptyBoxMode === "Programar entrega de caja vacia" ? (
-            <button
-              type="button"
-              onClick={onRequestRoute}
-              className="flex w-full items-center gap-3 rounded-xl border border-black bg-surface-card p-3 text-left"
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-emerald-300">
-                <Route className="h-5 w-5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-xs font-black uppercase text-slate-500">Ruta de entrega</span>
-                <span className="mt-0.5 block break-words text-sm font-black text-[#f8fafc]">
-                  {routeSummary || "Elige un día y una ruta disponible"}
-                </span>
-                <span className="mt-0.5 block text-xs font-bold text-slate-400">
-                  Usa los días y conductores configurados en Rutas.
-                </span>
-              </span>
-            </button>
-          ) : null}
-
-          {selectedBox ? (
-            <div className="rounded-xl border border-black bg-surface-inset px-4 py-3 text-center">
-              <p className="text-xs font-black uppercase text-slate-500">Depósito requerido</p>
-              <p className="text-3xl font-black text-emerald-300">{boxSubtotalLabel}</p>
-              <p className="mt-1 text-xs font-bold text-slate-400">
-                {selectedBox[1]} x {boxCount}
-              </p>
-              {automaticPromotion ? (
-                <p className="mt-1 text-xs font-black text-emerald-300">
-                  {automaticPromotion.name} -{automaticPromotion.discountTotal}
-                </p>
-              ) : promotionQuotes.length > 1 ? (
-                <p className="mt-1 text-xs font-black text-emerald-300">
-                  Elige promocion al crear invoice
-                </p>
-              ) : null}
-              {summary ? (
-                <p className="mt-1 text-xs font-bold text-slate-400">{summary}</p>
-              ) : null}
-            </div>
-          ) : null}
+          <SaleDepositPaidToggle paid={depositPaid} onChange={setDepositPaid} />
         </div>
 
         <div className="mt-5 grid gap-2 sm:grid-cols-2">
@@ -271,8 +312,10 @@ export function SaleQuickEmptyBoxModal({
 
               onProceed({
                 sender,
+                country,
                 box: selectedBox,
                 boxCount,
+                depositPaid,
                 emptyBoxMode,
                 emptyBoxScheduleMode: routeSchedule.scheduleMode,
                 emptyBoxScheduleAt: routeSchedule.scheduleAt,

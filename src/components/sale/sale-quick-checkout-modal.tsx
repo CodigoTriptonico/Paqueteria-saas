@@ -13,7 +13,7 @@ import {
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import type { OrganizationBranding } from "@/lib/organizations/branding";
 import { saleFinishActionLabel, type InvoiceBillingSnapshot } from "@/lib/invoice-billing";
-import { defaultSalePaymentSelection, type SalePaymentSelection } from "@/lib/sale-payment-choice";
+import type { SalePaymentSelection } from "@/lib/sale-payment-choice";
 import { SaleInvoiceConfirmDialog } from "@/components/sale/sale-invoice-confirm-dialog";
 import { useState } from "react";
 
@@ -82,7 +82,7 @@ export function SaleQuickCheckoutModal({
               {completed ? "Invoice creado" : saleFinishActionLabel(billingForPayment)}
             </p>
             <h3 className="text-3xl font-black">Invoice {invoiceNumber}</h3>
-            <p className="font-bold text-slate-400">Depósito de caja vacía</p>
+            <p className="font-bold text-slate-400">Venta rápida de caja vacía</p>
           </div>
           <button
             type="button"
@@ -175,7 +175,6 @@ export function SaleQuickCheckoutModal({
               <button
                 type="button"
                 onClick={() => {
-                  onPaymentMethodChange(defaultSalePaymentSelection());
                   onPaymentNoteChange("");
                   setConfirmOpen(true);
                 }}

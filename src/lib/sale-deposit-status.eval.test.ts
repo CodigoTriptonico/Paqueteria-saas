@@ -17,8 +17,10 @@ const invoiceSource = readFileSync(
 );
 
 describe("sale deposit status UI", () => {
-  it("offers one channel-neutral pending state and records no money while pending", () => {
-    assert.match(fieldSource, /Depósito pendiente/);
+  it("defaults to paid and records no money when the seller unchecks it", () => {
+    assert.match(fieldSource, /Depósito pagado/);
+    assert.match(fieldSource, /checked=\{paid\}/);
+    assert.match(fieldSource, /Desmárcalo para dejarlo pendiente/);
     assert.match(fieldSource, /Estado: pendiente/);
     assert.doesNotMatch(fieldSource, /Conductor cobra|Cobrar ahora/);
     assert.doesNotMatch(fieldSource, /pendingPaymentSource/);
