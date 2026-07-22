@@ -8,6 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const appShellSource = readFileSync(join(root, "components/app-shell.tsx"), "utf8");
 const appFrameSource = readFileSync(join(root, "components/app-frame.tsx"), "utf8");
+const appNavigationSource = readFileSync(join(root, "lib/app-navigation.ts"), "utf8");
 const permissionsSource = readFileSync(join(root, "lib/auth/permissions.ts"), "utf8");
 const conductorPageSource = readFileSync(join(root, "app/conductor/tareas/page.tsx"), "utf8");
 const conductorClientSource = readFileSync(
@@ -25,8 +26,9 @@ describe("conductor tareas shell eval", () => {
   });
 
   it("maps conductor routes to the shell active label", () => {
-    assert.match(appFrameSource, /pathname\.startsWith\("\/conductor"\)/);
-    assert.match(appFrameSource, /conductorTasksNavLabel/);
+    assert.match(appFrameSource, /resolveAppNavActiveLabel\(pathname, session\?\.roleSlug\)/);
+    assert.match(appNavigationSource, /pathname\.startsWith\("\/conductor"\)/);
+    assert.match(appNavigationSource, /conductorTasksNavLabel\(roleSlug\)/);
   });
 
   it("grants conductor role access to /conductor paths without envios", () => {

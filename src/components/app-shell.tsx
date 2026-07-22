@@ -53,7 +53,6 @@ const navItems: {
   href: string;
   icon: LucideIcon;
   section: NavSectionId;
-  flowStep?: string;
   hasSubmenu?: boolean;
   platformOnly?: boolean;
 }[] = [
@@ -64,9 +63,9 @@ const navItems: {
   { label: "Agencias a mi cargo", href: "/captacion", icon: Users, section: "agencies" },
   { label: "Seguimiento y envíos", href: "/seguimiento", icon: ClipboardList, section: "shipments" },
   { label: "Inventario", href: "/inventario", icon: Boxes, section: "stock", hasSubmenu: true },
-  { label: "Ingreso a bodega", href: "/ingreso-bodega", icon: Box, section: "warehouse", flowStep: "01" },
-  { label: "Bodega", href: "/bodega", icon: PackageCheck, section: "warehouse", flowStep: "02" },
-  { label: "Paletas", href: "/paletas", icon: Layers3, section: "warehouse", flowStep: "03" },
+  { label: "Ingreso a bodega", href: "/ingreso-bodega", icon: Box, section: "warehouse" },
+  { label: "Bodega", href: "/bodega", icon: PackageCheck, section: "warehouse" },
+  { label: "Paletas", href: "/paletas", icon: Layers3, section: "warehouse" },
   { label: "Logistica", href: "/logistica", icon: Truck, section: "operations" },
   { label: "Tareas conductor", href: "/conductor/tareas", icon: ListTodo, section: "operations" },
   { label: "Inventario camion", href: "/conductor/inventario-camion", icon: Boxes, section: "operations" },
@@ -315,27 +314,25 @@ function ShellNavItem({ item, label, isActive, variant, onNavigate }: ShellNavIt
   }
 
   if (variant === "sidebar") {
-    const isWorkflowItem = Boolean(item.flowStep);
     return (
       <Link
         key={item.href}
         href={item.href}
         prefetch
         data-onboarding-target={onboardingTarget}
+        aria-current={isActive ? "page" : undefined}
         onClick={() => onNavigate?.(isActive, item.hasSubmenu)}
-        className={`relative flex min-w-0 items-center gap-3 rounded-lg border px-3 text-left text-base font-black transition-colors duration-200 ${
+        className={`group relative flex min-h-11 min-w-0 items-center gap-2.5 overflow-hidden rounded-lg border px-2.5 py-1.5 text-left text-sm font-black transition-[background-color,border-color,box-shadow,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70 ${
           isActive
-            ? isWorkflowItem
-              ? "min-h-12 border-black bg-[#33413c] py-2 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-              : "h-11 border-black bg-[#33413c] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-            : isWorkflowItem
-              ? "min-h-11 border-transparent py-2 text-slate-300 hover:border-black hover:bg-surface-card hover:text-white"
-              : "h-11 border-transparent text-slate-300 hover:border-black hover:bg-surface-card hover:text-white"
+            ? "sidebar-nav-item-active border-black/90 bg-[#243a32] text-white"
+            : "border-transparent text-slate-300 hover:border-black/90 hover:bg-surface-card hover:text-white"
         }`}
       >
-        {isWorkflowItem ? <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-black ${isActive ? "bg-white/10 text-slate-100" : "bg-slate-700/40 text-slate-400"}`}>{item.flowStep}</span> : null}
-        <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? "text-slate-100" : "text-slate-400"}`} />
-        <span className={isWorkflowItem ? "min-w-0 flex-1 whitespace-normal leading-tight" : "min-w-0 flex-1 truncate"}>{label}</span>
+        {isActive ? <span className="sidebar-nav-active-dot h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-300" aria-hidden /> : null}
+        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors duration-200 ${isActive ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-200" : "border-transparent bg-black/10 text-slate-400 group-hover:text-slate-200"}`}>
+          <Icon className="h-[17px] w-[17px]" strokeWidth={2.25} aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1 whitespace-normal leading-[1.05rem]">{label}</span>
       </Link>
     );
   }
@@ -693,7 +690,7 @@ export function AppShell({
                         }`}
                       >
                         <div className="min-h-0">
-                          <div className="grid gap-1">
+                          <div className={showDesktopRail ? "grid gap-1" : "ml-3 grid gap-1 border-l border-black/70 pl-2"}>
                             {section.items.map((item) => {
                               const label = navItemLabel(item, session);
 

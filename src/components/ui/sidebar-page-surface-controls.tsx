@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronsDown, ChevronsUp, Palette } from "lucide-react";
+import { Palette, SlidersHorizontal, X } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { SidebarCollapseButton } from "@/components/notifications/notifications-center";
 import { ViewLayoutToggle } from "@/components/view-layout-toggle";
@@ -62,7 +62,7 @@ function CollapsibleControlsRow({
           title={expandLabel}
           onClick={() => setExpanded(true)}
         >
-          <ChevronsUp className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+          <SlidersHorizontal className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
         </button>
       </div>
     );
@@ -79,7 +79,7 @@ function CollapsibleControlsRow({
         title={collapseLabel}
         onClick={() => setExpanded(false)}
       >
-        <ChevronsDown className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+        <X className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
       </button>
     </div>
   );

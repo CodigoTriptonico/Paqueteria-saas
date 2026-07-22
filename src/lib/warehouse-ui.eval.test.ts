@@ -24,9 +24,11 @@ test("warehouse surfaces keep compact disclosure and shared sidebar layout contr
   assert.doesNotMatch(warehouse, /ViewLayoutToggle/);
   assert.doesNotMatch(pallets, /ViewLayoutToggle/);
   assert.match(pallets, /bg-emerald-400/);
-  assert.match(shell, /flowStep: "01"/);
-  assert.match(shell, /flowStep: "02"/);
-  assert.match(shell, /flowStep: "03"/);
+  assert.match(shell, /label: "Ingreso a bodega", href: "\/ingreso-bodega"/);
+  assert.match(shell, /label: "Bodega", href: "\/bodega"/);
+  assert.match(shell, /label: "Paletas", href: "\/paletas"/);
+  assert.doesNotMatch(shell, /flowStep/);
+  assert.match(shell, /sidebar-nav-active-dot/);
   assert.match(shell, /bg-emerald-400/);
   assert.match(shell, /Flujo de bodega/);
 });

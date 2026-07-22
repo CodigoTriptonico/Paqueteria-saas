@@ -1,20 +1,20 @@
 "use client";
 
-import { CalendarDays, Clock, Minus, Plus, X } from "lucide-react";
+import { CalendarDays, Clock, Minus, Plus, Route, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { DateInput } from "@/components/date-input";
-import { ScheduleTimeField } from "@/components/sale/schedule-time-field";
-import { scheduleTimeComplete } from "@/lib/sale/schedule-time";
 import {
   quotePromotionsForBox,
   type PricingPromotionConfig,
 } from "@/lib/pricing-promotions";
 import {
+  saleRouteDecisionSchedule,
+  saleRouteDecisionSummary,
+  type SaleRouteDecision,
+} from "@/lib/sale-route-decision";
+import {
   deliveryModeCardClass,
   deliveryModeIconClass,
   deliverySummary,
-  minScheduleDateInput,
-  resolveScheduleDate,
   inputClass,
   personFullName,
   type Sender,
@@ -28,13 +28,17 @@ export type QuickEmptyBoxDraft = {
   emptyBoxScheduleMode: string;
   emptyBoxScheduleAt: string;
   deliverySummary: string;
+  routeDecision: SaleRouteDecision | null;
 };
 
 type SaleQuickEmptyBoxModalProps = {
   sender: Sender;
   boxes: string[][];
   promotions?: PricingPromotionConfig[];
+  routeDecision: SaleRouteDecision | null;
   onClose: () => void;
+  onClearRoute: () => void;
+  onRequestRoute: () => void;
   onProceed: (draft: QuickEmptyBoxDraft) => void;
 };
 
@@ -42,13 +46,14 @@ export function SaleQuickEmptyBoxModal({
   sender,
   boxes,
   promotions = [],
+  routeDecision,
   onClose,
+  onClearRoute,
+  onRequestRoute,
   onProceed,
 }: SaleQuickEmptyBoxModalProps) {
   const [selectedBoxKey, setSelectedBoxKey] = useState("");
   const [emptyBoxMode, setEmptyBoxMode] = useState("");
-  const [emptyBoxScheduleMode, setEmptyBoxScheduleMode] = useState("");
-  const [emptyBoxScheduleAt, setEmptyBoxScheduleAt] = useState("");
   const [boxCount, setBoxCount] = useState(1);
 
   const effectiveSelectedBoxKey = selectedBoxKey || boxes[0]?.[0] || "";
@@ -57,37 +62,27 @@ export function SaleQuickEmptyBoxModal({
     [boxes, effectiveSelectedBoxKey],
   );
 
-  const routeDate = emptyBoxScheduleAt.split("T")[0] || "";
-  const routeTime = emptyBoxScheduleAt.split("T")[1] || "";
+  const routeSchedule = saleRouteDecisionSchedule(routeDecision);
+  const routeSummary = saleRouteDecisionSummary(routeDecision);
 
   const deliveryComplete =
     emptyBoxMode === "Cliente recoge caja vacia en oficina" ||
-    (emptyBoxMode === "Programar entrega de caja vacia" &&
-      (emptyBoxScheduleMode === "pending" ||
-        (emptyBoxScheduleMode === "scheduled" && Boolean(routeDate && scheduleTimeComplete(routeTime)))));
+    (emptyBoxMode === "Programar entrega de caja vacia" && Boolean(routeDecision));
 
-  const summary = deliverySummary(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt);
-
-  function updateRouteSchedule(nextDate = routeDate, nextTime = routeTime) {
-    if (!nextDate && !nextTime) {
-      setEmptyBoxScheduleAt("");
-      return;
-    }
-
-    setEmptyBoxScheduleAt(
-      `${resolveScheduleDate(nextDate)}T${nextTime || "10:00"}`,
-    );
-  }
+  const summary = deliverySummary(
+    emptyBoxMode,
+    routeSchedule.scheduleMode,
+    routeSchedule.scheduleAt,
+  );
 
   function selectMode(mode: string) {
     setEmptyBoxMode(mode);
     if (mode === "Cliente recoge caja vacia en oficina") {
-      setEmptyBoxScheduleMode("");
-      setEmptyBoxScheduleAt("");
+      onClearRoute();
       return;
     }
 
-    setEmptyBoxScheduleMode("pending");
+    onRequestRoute();
   }
 
   const canProceed = Boolean(selectedBox && deliveryComplete);
@@ -215,57 +210,29 @@ export function SaleQuickEmptyBoxModal({
           </div>
 
           {emptyBoxMode === "Programar entrega de caja vacia" ? (
-            <div className="grid gap-3 rounded-lg border border-black bg-surface-card p-3">
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-surface-panel p-1">
-                <button
-                  type="button"
-                  onClick={() => setEmptyBoxScheduleMode("pending")}
-                  className={`h-9 rounded-md text-xs font-black ${
-                    emptyBoxScheduleMode === "pending"
-                      ? "bg-emerald-400 text-slate-950"
-                      : "text-slate-400"
-                  }`}
-                >
-                  Pendiente
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEmptyBoxScheduleMode("scheduled")}
-                  className={`h-9 rounded-md text-xs font-black ${
-                    emptyBoxScheduleMode === "scheduled"
-                      ? "bg-emerald-400 text-slate-950"
-                      : "text-slate-400"
-                  }`}
-                >
-                  Con fecha
-                </button>
-              </div>
-              {emptyBoxScheduleMode === "scheduled" ? (
-                <div className="grid gap-3">
-                  <label className="grid gap-1.5">
-                    <span className="text-[11px] font-black uppercase text-slate-500">Fecha</span>
-                    <DateInput
-                      compact={false}
-                      min={minScheduleDateInput()}
-                      value={routeDate}
-                      ariaLabel="Fecha de entrega"
-                      onChange={(nextValue) =>
-                        updateRouteSchedule(resolveScheduleDate(nextValue), routeTime)
-                      }
-                    />
-                  </label>
-                  <ScheduleTimeField
-                    value={routeTime}
-                    onChange={(timePart) => updateRouteSchedule(routeDate, timePart)}
-                  />
-                </div>
-              ) : null}
-            </div>
+            <button
+              type="button"
+              onClick={onRequestRoute}
+              className="flex w-full items-center gap-3 rounded-xl border border-black bg-surface-card p-3 text-left"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-emerald-300">
+                <Route className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-black uppercase text-slate-500">Ruta de entrega</span>
+                <span className="mt-0.5 block break-words text-sm font-black text-[#f8fafc]">
+                  {routeSummary || "Elige un día y una ruta disponible"}
+                </span>
+                <span className="mt-0.5 block text-xs font-bold text-slate-400">
+                  Usa los días y conductores configurados en Rutas.
+                </span>
+              </span>
+            </button>
           ) : null}
 
           {selectedBox ? (
             <div className="rounded-xl border border-black bg-surface-inset px-4 py-3 text-center">
-              <p className="text-xs font-black uppercase text-slate-500">Depósito a cobrar</p>
+              <p className="text-xs font-black uppercase text-slate-500">Depósito requerido</p>
               <p className="text-3xl font-black text-emerald-300">{boxSubtotalLabel}</p>
               <p className="mt-1 text-xs font-bold text-slate-400">
                 {selectedBox[1]} x {boxCount}
@@ -307,14 +274,15 @@ export function SaleQuickEmptyBoxModal({
                 box: selectedBox,
                 boxCount,
                 emptyBoxMode,
-                emptyBoxScheduleMode,
-                emptyBoxScheduleAt,
+                emptyBoxScheduleMode: routeSchedule.scheduleMode,
+                emptyBoxScheduleAt: routeSchedule.scheduleAt,
                 deliverySummary: summary,
+                routeDecision,
               });
             }}
             className="h-12 rounded-lg bg-emerald-400 font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Cobrar depósito
+            Continuar a pago
           </button>
         </div>
       </div>

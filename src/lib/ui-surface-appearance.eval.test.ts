@@ -97,6 +97,9 @@ describe("ui surface appearance eval", () => {
     assert.match(sidebarControls, /useState\(false\)/);
     assert.match(sidebarControls, /Mostrar opciones de vista y apariencia/);
     assert.match(sidebarControls, /Ocultar opciones de vista y apariencia/);
+    assert.match(sidebarControls, /SlidersHorizontal/);
+    assert.match(sidebarControls, /<X className="h-4 w-4 shrink-0"/);
+    assert.doesNotMatch(sidebarControls, /ChevronsUp|ChevronsDown/);
     assert.match(sidebarControls, /<CollapsibleControlsRow/);
   });
 

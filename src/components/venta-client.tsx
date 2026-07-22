@@ -81,6 +81,11 @@ import { inventarioHrefWithReturn } from "@/lib/inventario-return";
 import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 import { recipientCountrySetupRequired } from "@/lib/recipient-country-gate";
 import { formatSalePersonListCount } from "@/lib/sale-person-list-count";
+import {
+  saleRouteDecisionSummary,
+  saleRouteDecisionTask,
+  type SaleRouteDecision,
+} from "@/lib/sale-route-decision";
 import { saleContextTargetData } from "@/lib/sale-context-target";
 import { formatBoxQuantityLabel } from "@/lib/shipment-display";
 import {
@@ -226,20 +231,7 @@ type CreatedInvoiceSnapshot = {
   billing: InvoiceBillingSnapshot;
 };
 
-type SaleDriverLeg = "emptyBox" | "fullBox";
-
-type SaleRouteDecision =
-  | {
-      kind: "selected";
-      routeDate: string;
-      routeTemplateId: string;
-      routeLabel: string;
-      scheduledAt: string;
-    }
-  | {
-      kind: "pending";
-      routeDate: string;
-    };
+type SaleDriverLeg = "emptyBox" | "fullBox" | "quickEmptyBox";
 
 type RouteAssignmentRetry = {
   shipmentId: string;
@@ -248,18 +240,6 @@ type RouteAssignmentRetry = {
   scheduledAt: string;
   label: string;
 };
-
-function saleRouteDecisionSummary(decision: SaleRouteDecision | null) {
-  if (!decision) {
-    return "";
-  }
-
-  if (decision.kind === "pending") {
-    return `Ruta pendiente · ${decision.routeDate}`;
-  }
-
-  return `${decision.routeLabel} · ${isoToPlanScheduleAt(decision.scheduledAt)}`;
-}
 
 function billingForPaymentChoice(
   billing: InvoiceBillingSnapshot | null,
@@ -654,6 +634,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [fullBoxScheduleAt, setFullBoxScheduleAt] = useState("");
   const [emptyBoxRouteDecision, setEmptyBoxRouteDecision] = useState<SaleRouteDecision | null>(null);
   const [fullBoxRouteDecision, setFullBoxRouteDecision] = useState<SaleRouteDecision | null>(null);
+  const [quickEmptyBoxRouteDecision, setQuickEmptyBoxRouteDecision] = useState<SaleRouteDecision | null>(null);
   const [routeCatalog, setRouteCatalog] = useState<LogisticsRouteCatalog | null>(null);
   const [routePlannerLeg, setRoutePlannerLeg] = useState<SaleDriverLeg | null>(null);
   const [routeAssignmentRetries, setRouteAssignmentRetries] = useState<RouteAssignmentRetry[]>([]);
@@ -2485,10 +2466,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       setEmptyBoxScheduleMode("scheduled");
       setEmptyBoxScheduleAt(planScheduleAt);
       setEmptyBoxRouteDecision(decision);
-    } else {
+    } else if (routePlannerLeg === "fullBox") {
       setFullBoxScheduleMode("scheduled");
       setFullBoxScheduleAt(planScheduleAt);
       setFullBoxRouteDecision(decision);
+    } else {
+      setQuickEmptyBoxRouteDecision(decision);
     }
 
     setRoutePlannerLeg(null);
@@ -2505,10 +2488,12 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       setEmptyBoxScheduleMode("pending");
       setEmptyBoxScheduleAt("");
       setEmptyBoxRouteDecision(decision);
-    } else {
+    } else if (routePlannerLeg === "fullBox") {
       setFullBoxScheduleMode("pending");
       setFullBoxScheduleAt("");
       setFullBoxRouteDecision(decision);
+    } else {
+      setQuickEmptyBoxRouteDecision(decision);
     }
 
     setRoutePlannerLeg(null);
@@ -2933,6 +2918,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
   async function proceedQuickEmptyBox(draft: QuickEmptyBoxDraft) {
     setQuickSaleDraft(draft);
+    setQuickEmptyBoxRouteDecision(null);
     setQuickSelectedPromotionId("");
     setQuickPaymentMethod(SALE_PAYMENT_UNSET);
     setQuickPaymentNote("");
@@ -3019,8 +3005,15 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
             scheduleMode: quickSaleDraft.emptyBoxScheduleMode || null,
             scheduleAt: quickSaleDraft.emptyBoxScheduleAt || null,
             driverTaskNeeded: quickSaleDraft.emptyBoxMode === EMPTY_BOX_DRIVER_MODE,
+            driverTaskOrdered: Boolean(quickSaleDraft.routeDecision),
             driverTaskType:
               quickSaleDraft.emptyBoxMode === EMPTY_BOX_DRIVER_MODE ? "deliver_empty_box" : null,
+            routeDecision: quickSaleDraft.routeDecision?.kind || null,
+            requestedRouteDate: quickSaleDraft.routeDecision?.routeDate || null,
+            routeTemplateId:
+              quickSaleDraft.routeDecision?.kind === "selected"
+                ? quickSaleDraft.routeDecision.routeTemplateId
+                : null,
           },
           fullBox: null,
           driverTaskCount: quickSaleDraft.emptyBoxMode === EMPTY_BOX_DRIVER_MODE ? 1 : 0,
@@ -3033,12 +3026,43 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           notes: "",
           summary: quickSaleDraft.deliverySummary,
         },
-        logisticsTasks: [],
+        logisticsTasks: quickSaleDraft.routeDecision
+          ? [saleRouteDecisionTask(quickSaleDraft.routeDecision)]
+          : [],
       });
 
       if (!shipmentResult.ok) {
         setStockMessage(shipmentResult.error);
         return false;
+      }
+
+      if (quickSaleDraft.routeDecision?.kind === "selected") {
+        const task = shipmentResult.data.logisticsTasks.find(
+          (candidate) => candidate.taskType === "deliver_empty_box",
+        );
+        const retry: RouteAssignmentRetry = {
+          shipmentId: shipmentResult.data.id,
+          taskId: task?.id || "",
+          routeTemplateId: quickSaleDraft.routeDecision.routeTemplateId,
+          scheduledAt: quickSaleDraft.routeDecision.scheduledAt,
+          label: "Entrega",
+        };
+        const routeResult = task
+          ? await requestCustomerRouteAssignmentAction({
+              shipmentId: shipmentResult.data.id,
+              taskId: task.id,
+              routeTemplateId: quickSaleDraft.routeDecision.routeTemplateId,
+              scheduledAt: quickSaleDraft.routeDecision.scheduledAt,
+            })
+          : { ok: false as const, error: "No se creó la tarea de entrega" };
+
+        if (!routeResult.ok) {
+          setRouteAssignmentRetries((current) => [
+            ...current.filter((candidate) => candidate.taskId !== retry.taskId),
+            retry,
+          ]);
+          setStockMessage(`Invoice ${invoice} creado, pero la ruta necesita reintento.`);
+        }
       }
 
       if (quickSaleDraft.sender.id) {
@@ -3547,9 +3571,13 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       mode === "new-recipient");
 
   const routePlannerDecision =
-    routePlannerLeg === "emptyBox" ? emptyBoxRouteDecision : fullBoxRouteDecision;
+    routePlannerLeg === "emptyBox"
+      ? emptyBoxRouteDecision
+      : routePlannerLeg === "fullBox"
+        ? fullBoxRouteDecision
+        : quickEmptyBoxRouteDecision;
   const routePlannerTaskLabel =
-    routePlannerLeg === "emptyBox" ? "Dejar caja vacía" : "Recoger caja llena";
+    routePlannerLeg === "fullBox" ? "Recoger caja llena" : "Dejar caja vacía";
 
   return (
     <>
@@ -4435,7 +4463,16 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           sender={quickSaleSender}
           boxes={usaBoxes}
           promotions={resolveCountryPromotions(countryPromotions, "USA")}
-          onClose={() => setQuickSaleSender(null)}
+          routeDecision={quickEmptyBoxRouteDecision}
+          onClose={() => {
+            setQuickSaleSender(null);
+            setQuickEmptyBoxRouteDecision(null);
+            if (routePlannerLeg === "quickEmptyBox") {
+              setRoutePlannerLeg(null);
+            }
+          }}
+          onClearRoute={() => setQuickEmptyBoxRouteDecision(null)}
+          onRequestRoute={() => void openRoutePlanner("quickEmptyBox")}
           onProceed={(draft) => void proceedQuickEmptyBox(draft)}
         />
       ) : null}
@@ -4474,7 +4511,13 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           key={`${routePlannerLeg}:${routePlannerDecision?.routeDate || "new"}`}
           open
           shipmentCode={nextInvoiceNumber}
-          customerName={selectedSender ? personFullName(selectedSender) : "Nueva venta"}
+          customerName={
+            routePlannerLeg === "quickEmptyBox" && quickSaleSender
+              ? personFullName(quickSaleSender)
+              : selectedSender
+                ? personFullName(selectedSender)
+                : "Nueva venta"
+          }
           taskTypeLabel={routePlannerTaskLabel}
           scheduledAt={
             routePlannerDecision?.kind === "selected"

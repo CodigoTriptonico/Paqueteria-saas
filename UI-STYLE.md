@@ -63,6 +63,7 @@ Al **agregar un item**, respeta lo que el usuario ya tiene seleccionado en los f
 - **Toolbar estable:** altura fija, sin anillos que “engorden” el control, sin labels que aparezcan y desaparezcan.
 - **Tarjeta de stock:** el estado tiñe toda la tarjeta con calma; el borde exterior sigue neutro; dentro, métricas con divisiones visibles (líneas que se noten).
 - **Historial aparte:** consulta, no decoración. No va al pie de la pantalla ni en una franja que repita títulos.
+- **Menú lateral por capas:** el encabezado indica qué grupo está abierto; el enlace hijo usa fondo y punto esmeralda para indicar la página actual. Los iconos de herramientas describen la acción, nunca una dirección que la interfaz no respeta. No usar numeración decorativa en enlaces que no sean una secuencia obligatoria.
 
 ---
 

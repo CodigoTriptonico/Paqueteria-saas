@@ -8,8 +8,8 @@ import { OnboardingCoachOverlay } from "@/components/onboarding/onboarding-coach
 import { NotificationProvider } from "@/components/notifications/notification-provider";
 import { UiSurfacePreferencesProvider } from "@/components/ui/ui-surface-preferences-provider";
 import { isPlatformOnlySession } from "@/lib/auth/permissions";
-import { conductorTasksNavLabel } from "@/lib/conductor-tareas-view";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { resolveAppNavActiveLabel } from "@/lib/app-navigation";
 import type { UiSurfaceContextId } from "@/lib/ui-surface-context";
 import { resolveSurfaceContextFromPathname } from "@/lib/ui-surface-route-context";
 import type { AppSession } from "@/lib/auth/types";
@@ -35,75 +35,7 @@ type ShellConfigPatch = (patch: ShellConfig) => void;
 const ShellConfigContext = createContext<ShellConfigPatch | null>(null);
 
 function activeFromPath(pathname: string, session: AppSession | null) {
-  if (pathname.startsWith("/venta")) {
-    return "Nueva venta";
-  }
-
-  if (pathname.startsWith("/captacion")) {
-    return "Agencias a mi cargo";
-  }
-
-  if (pathname.startsWith("/agencias")) {
-    return "Red de agencias";
-  }
-
-  if (pathname.startsWith("/agencia")) {
-    return "Mi agencia";
-  }
-
-  if (pathname.startsWith("/solicitudes")) {
-    return "Solicitudes";
-  }
-
-  if (pathname.startsWith("/contabilidad")) {
-    return "Contabilidad";
-  }
-
-  if (pathname.startsWith("/mis-distribuidores")) {
-    return "Mis distribuidores";
-  }
-
-  if (pathname.startsWith("/distribuidor")) {
-    return pathname.startsWith("/distribuidores") ? "Distribuidores" : "Mi distribuidora";
-  }
-
-  if (pathname.startsWith("/inventario")) {
-    return "Inventario";
-  }
-
-  if (pathname.startsWith("/seguimiento") || pathname.startsWith("/envios")) {
-    return "Seguimiento y envíos";
-  }
-
-  if (pathname.startsWith("/conductor/inventario-camion")) {
-    return "Inventario camion";
-  }
-
-  if (pathname.startsWith("/conductor")) {
-    return conductorTasksNavLabel(session?.roleSlug ?? "administrador");
-  }
-
-  if (pathname.startsWith("/logistica")) {
-    return "Logistica";
-  }
-
-  if (pathname.startsWith("/estadisticas") || pathname.startsWith("/vendedores")) {
-    return "Estadisticas";
-  }
-
-  if (pathname.startsWith("/configuracion")) {
-    return "Configuracion";
-  }
-
-  if (pathname.startsWith("/perfil")) {
-    return "Mi perfil";
-  }
-
-  if (pathname.startsWith("/platform")) {
-    return "Plataforma";
-  }
-
-  return "Inicio";
+  return resolveAppNavActiveLabel(pathname, session?.roleSlug);
 }
 
 export function AppFrame({

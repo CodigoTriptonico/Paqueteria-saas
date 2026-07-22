@@ -114,12 +114,18 @@ describe("app shell sidebar eval", () => {
     );
   });
 
-  it("keeps sidebar child items neutral and reserves green glow for expanded group headers", () => {
+  it("makes the current page unmistakable inside its expanded group", () => {
     assert.doesNotMatch(appShellSource, /function sidebarNavItemClass\(/);
     assert.doesNotMatch(appShellSource, /groupExpanded/);
-    assert.match(appShellSource, /border-transparent text-slate-300 hover:border-black hover:bg-surface-card hover:text-white/);
-    assert.doesNotMatch(appShellSource, /border-emerald-800\/70 bg-emerald-950\/55/);
-    assert.doesNotMatch(appShellSource, /before:bg-emerald-300\/35/);
+    assert.match(appShellSource, /aria-current=\{isActive \? "page" : undefined\}/);
+    assert.match(appShellSource, /sidebar-nav-item-active border-black\/90 bg-\[#243a32\] text-white/);
+    assert.match(appShellSource, /sidebar-nav-active-dot/);
+    assert.match(appShellSource, /ml-3 grid gap-1 border-l border-black\/70 pl-2/);
+    assert.doesNotMatch(appShellSource, /flowStep/);
+    assert.match(
+      readFileSync(join(process.cwd(), "src", "app", "globals.css"), "utf8"),
+      /\.sidebar-nav-item-active \{/,
+    );
   });
 
   it("toggles every sidebar group from the brand header control", () => {

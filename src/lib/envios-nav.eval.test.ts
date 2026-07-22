@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const shellSource = readFileSync(join(root, "components/app-shell.tsx"), "utf8");
 const frameSource = readFileSync(join(root, "components/app-frame.tsx"), "utf8");
+const appNavigationSource = readFileSync(join(root, "lib/app-navigation.ts"), "utf8");
 
 describe("envios nav eval", () => {
   it("shows one unified shipment workspace in the sidebar", () => {
@@ -19,11 +20,12 @@ describe("envios nav eval", () => {
   });
 
   it("maps the unified workspace to the active shell label", () => {
-    const seguimientoCheckIndex = frameSource.indexOf('pathname.startsWith("/seguimiento")');
+    const seguimientoCheckIndex = appNavigationSource.indexOf('pathname.startsWith("/seguimiento")');
 
     assert.ok(seguimientoCheckIndex >= 0);
-    assert.match(frameSource, /return "Seguimiento y envíos"/);
-    assert.doesNotMatch(frameSource, /return "Envios"/);
+    assert.match(frameSource, /resolveAppNavActiveLabel\(pathname, session\?\.roleSlug\)/);
+    assert.match(appNavigationSource, /return "Seguimiento y envíos"/);
+    assert.doesNotMatch(appNavigationSource, /return "Envios"/);
   });
 
   it("redirects legacy /envios URLs to /seguimiento", async () => {
