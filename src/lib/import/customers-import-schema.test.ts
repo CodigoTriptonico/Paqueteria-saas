@@ -5,7 +5,9 @@ import {
   CUSTOMERS_IMPORT_COLUMNS,
   CUSTOMERS_IMPORT_MAX_ROWS,
   emptyCustomersImportRow,
+  formatAutoRemitenteClave,
   hasRecipientSideData,
+  remitentGroupingKey,
   validateCustomersImportRow,
   type CustomersImportRawRow,
 } from "./customers-import-schema";
@@ -15,16 +17,18 @@ function row(partial: Partial<CustomersImportRawRow>): CustomersImportRawRow {
 }
 
 describe("customers import schema", () => {
-  it("keeps remitente and destinatario columns in fixed order", () => {
-    assert.equal(CUSTOMERS_IMPORT_COLUMNS[0], "remitente_clave");
+  it("keeps remitente and destinatario columns without manual clave", () => {
+    assert.equal(CUSTOMERS_IMPORT_COLUMNS[0], "rem_nombre");
+    assert.ok(!CUSTOMERS_IMPORT_COLUMNS.includes("remitente_clave" as never));
     assert.ok(CUSTOMERS_IMPORT_COLUMNS.includes("rem_telefono"));
     assert.ok(CUSTOMERS_IMPORT_COLUMNS.includes("dest_pais"));
     assert.equal(CUSTOMERS_IMPORT_MAX_ROWS, 500);
+    assert.equal(formatAutoRemitenteClave(1), "R001");
   });
 
-  it("validates required remitent fields", () => {
+  it("validates required remitent fields without clave", () => {
     const errors = validateCustomersImportRow(row({ rem_nombre: "Ana" }), 2);
-    assert.ok(errors.some((error) => /remitente_clave/.test(error.message)));
+    assert.equal(errors.some((error) => /remitente_clave/.test(error.message)), false);
     assert.ok(errors.some((error) => /rem_apellido/.test(error.message)));
     assert.ok(errors.some((error) => /rem_telefono/.test(error.message)));
   });
@@ -32,7 +36,6 @@ describe("customers import schema", () => {
   it("requires full destinatario when any dest field is present", () => {
     const errors = validateCustomersImportRow(
       row({
-        remitente_clave: "R1",
         rem_nombre: "Ana",
         rem_apellido: "Lopez",
         rem_telefono: "123",
@@ -47,7 +50,6 @@ describe("customers import schema", () => {
 
   it("allows remitent-only rows", () => {
     const values = row({
-      remitente_clave: "R1",
       rem_nombre: "Ana",
       rem_apellido: "Lopez",
       rem_telefono: "123",
@@ -56,12 +58,11 @@ describe("customers import schema", () => {
     assert.equal(validateCustomersImportRow(values, 2).length, 0);
   });
 
-  it("groups same remitente_clave into one sender with many recipients", () => {
+  it("groups same remitent identity and assigns claves automatically", () => {
     const result = buildCustomersImportGroups([
       {
         rowNumber: 2,
         values: row({
-          remitente_clave: "R001",
           rem_nombre: "Maria",
           rem_apellido: "Gonzalez",
           rem_telefono: "111",
@@ -74,7 +75,6 @@ describe("customers import schema", () => {
       {
         rowNumber: 3,
         values: row({
-          remitente_clave: "R001",
           rem_nombre: "Maria",
           rem_apellido: "Gonzalez",
           rem_telefono: "111",
@@ -87,7 +87,6 @@ describe("customers import schema", () => {
       {
         rowNumber: 4,
         values: row({
-          remitente_clave: "R002",
           rem_nombre: "Carlos",
           rem_apellido: "Ramirez",
           rem_telefono: "444",
@@ -98,8 +97,22 @@ describe("customers import schema", () => {
     assert.equal(result.rowErrors.length, 0);
     assert.equal(result.validSenderCount, 2);
     assert.equal(result.validRecipientCount, 2);
+    assert.equal(result.groups[0]?.clave, "R001");
     assert.equal(result.groups[0]?.recipients.length, 2);
+    assert.equal(result.groups[1]?.clave, "R002");
     assert.equal(result.groups[1]?.recipients.length, 0);
+    assert.equal(
+      remitentGroupingKey({
+        rem_nombre: "Maria",
+        rem_apellido: "Gonzalez",
+        rem_telefono: "111",
+      }),
+      remitentGroupingKey({
+        rem_nombre: " maria ",
+        rem_apellido: "GONZALEZ",
+        rem_telefono: "111",
+      }),
+    );
   });
 
   it("rejects incomplete destinatario rows without creating a group entry for that row", () => {
@@ -107,7 +120,6 @@ describe("customers import schema", () => {
       {
         rowNumber: 2,
         values: row({
-          remitente_clave: "R001",
           rem_nombre: "Maria",
           rem_apellido: "Gonzalez",
           rem_telefono: "111",

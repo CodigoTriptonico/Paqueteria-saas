@@ -22,7 +22,6 @@ const DESTINATARIO_HEADER_FILL: ExcelJS.Fill = {
 
 const EXAMPLE_ROWS: Array<Record<CustomersImportColumn, string>> = [
   {
-    remitente_clave: "R001",
     rem_nombre: "Maria",
     rem_apellido: "Gonzalez",
     rem_telefono: "+1-661-255-4821",
@@ -49,7 +48,6 @@ const EXAMPLE_ROWS: Array<Record<CustomersImportColumn, string>> = [
     dest_referencia: "Casa azul",
   },
   {
-    remitente_clave: "R001",
     rem_nombre: "Maria",
     rem_apellido: "Gonzalez",
     rem_telefono: "+1-661-255-4821",
@@ -82,8 +80,8 @@ const INSTRUCTION_LINES = [
   "",
   "1. Llena la hoja Datos. No renombres las columnas ni las hojas.",
   "2. Izquierda (verde) = remitente. Derecha (ámbar) = destinatario.",
-  "3. remitente_clave agrupa filas del mismo remitente. Usa el mismo valor (ej. R001) en cada fila de ese remitente.",
-  "4. Obligatorios del remitente: remitente_clave, rem_nombre, rem_apellido, rem_telefono.",
+  "3. No inventes claves: el sistema agrupa solo. Si repites el mismo rem_nombre + rem_apellido + rem_telefono, es el mismo remitente con varios destinatarios.",
+  "4. Obligatorios del remitente: rem_nombre, rem_apellido, rem_telefono.",
   "5. Si dejas el bloque destinatario vacío, se crea solo el remitente.",
   "6. Si llenas destinatario, son obligatorios: dest_nombre, dest_apellido, dest_telefono, dest_pais.",
   "7. dest_pais debe coincidir EXACTAMENTE con un país ya creado en Configuración → Países y precios (ej. Mexico).",
@@ -128,20 +126,18 @@ export async function buildCustomersImportXlsx(): Promise<Buffer> {
   }
 
   CUSTOMERS_IMPORT_COLUMNS.forEach((column, index) => {
-    const width =
-      column === "remitente_clave"
-        ? 16
-        : column.includes("email")
-          ? 28
-          : column.includes("referencia")
-            ? 22
-            : column.includes("calle")
-              ? 20
-              : 14;
+    const width = column.includes("email")
+      ? 28
+      : column.includes("referencia")
+        ? 22
+        : column.includes("calle")
+          ? 20
+          : column.includes("telefono")
+            ? 18
+            : 14;
     dataSheet.getColumn(index + 1).width = width;
   });
 
-  // Visual separator cue between remitent / destinatario blocks
   const remitentEnd = REMITENTE_COLUMNS.length;
   dataSheet.getColumn(remitentEnd).border = {
     right: { style: "medium", color: { argb: "FF000000" } },

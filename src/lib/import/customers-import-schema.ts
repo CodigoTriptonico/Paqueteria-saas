@@ -6,7 +6,6 @@ export const CUSTOMERS_IMPORT_SHEET_INSTRUCTIONS = "Instrucciones";
 export const CUSTOMERS_IMPORT_TEMPLATE_FILENAME = "plantilla-remitentes-destinatarios.xlsx";
 
 export const REMITENTE_COLUMNS = [
-  "remitente_clave",
   "rem_nombre",
   "rem_apellido",
   "rem_telefono",
@@ -120,6 +119,23 @@ export function normalizeImportCell(value: unknown): string {
   return String(value).trim();
 }
 
+function normalizeIdentityPart(value: string): string {
+  return value.trim().toLocaleLowerCase("es").replace(/\s+/g, " ");
+}
+
+/** Same nombre + apellido + teléfono → same remitent (system assigns clave). */
+export function remitentGroupingKey(row: Pick<CustomersImportRawRow, "rem_nombre" | "rem_apellido" | "rem_telefono">): string {
+  return [
+    normalizeIdentityPart(row.rem_nombre),
+    normalizeIdentityPart(row.rem_apellido),
+    normalizeIdentityPart(row.rem_telefono),
+  ].join("|");
+}
+
+export function formatAutoRemitenteClave(index: number): string {
+  return `R${String(index).padStart(3, "0")}`;
+}
+
 export function hasRecipientSideData(row: CustomersImportRawRow): boolean {
   return DESTINATARIO_COLUMNS.some((column) => row[column].length > 0);
 }
@@ -128,9 +144,9 @@ export function isBlankImportRow(row: CustomersImportRawRow): boolean {
   return CUSTOMERS_IMPORT_COLUMNS.every((column) => row[column].length === 0);
 }
 
-function senderFromRow(row: CustomersImportRawRow): CustomersImportSender {
+function senderFromRow(row: CustomersImportRawRow, clave: string): CustomersImportSender {
   return {
-    clave: row.remitente_clave,
+    clave,
     firstName: row.rem_nombre,
     lastName: row.rem_apellido,
     phone: row.rem_telefono,
@@ -172,9 +188,6 @@ export function validateCustomersImportRow(
   const errors: CustomersImportRowError[] = [];
   const push = (message: string) => errors.push({ rowNumber, message });
 
-  if (!row.remitente_clave) {
-    push("Falta remitente_clave.");
-  }
   if (!row.rem_nombre) {
     push("Falta rem_nombre.");
   }
@@ -209,6 +222,7 @@ export function buildCustomersImportGroups(
   const rowErrors: CustomersImportRowError[] = [];
   const groupMap = new Map<string, CustomersImportGroup>();
   let totalDataRows = 0;
+  let nextClaveIndex = 1;
 
   if (rows.length > CUSTOMERS_IMPORT_MAX_ROWS) {
     rowErrors.push({
@@ -236,16 +250,18 @@ export function buildCustomersImportGroups(
       continue;
     }
 
-    const clave = values.remitente_clave;
-    let group = groupMap.get(clave);
+    const groupingKey = remitentGroupingKey(values);
+    let group = groupMap.get(groupingKey);
     if (!group) {
+      const clave = formatAutoRemitenteClave(nextClaveIndex);
+      nextClaveIndex += 1;
       group = {
         clave,
-        sender: senderFromRow(values),
+        sender: senderFromRow(values, clave),
         recipients: [],
         sourceRowNumbers: [],
       };
-      groupMap.set(clave, group);
+      groupMap.set(groupingKey, group);
     }
 
     group.sourceRowNumbers.push(rowNumber);

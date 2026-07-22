@@ -36,12 +36,13 @@ describe("customers import eval", () => {
     assert.match(actionSource, /customer\.import/);
   });
 
-  it("panel exposes download, upload preview and confirm import", () => {
+  it("panel exposes download, upload preview and confirm import without manual clave", () => {
     assert.match(panelSource, /Descargar plantilla/);
     assert.match(panelSource, /Subir Excel/);
     assert.match(panelSource, /Importar .* válidos/);
     assert.match(panelSource, /previewCustomersImportAction/);
     assert.match(panelSource, /importCustomersFromRowsAction/);
+    assert.doesNotMatch(panelSource, /remitente_clave/);
   });
 
   it("template workbook keeps Datos/Instrucciones sheets and full column contract", async () => {

@@ -130,9 +130,9 @@ export function CustomersImportPanel() {
         <div className="grid gap-4 p-4">
           <p className="text-sm font-semibold leading-relaxed text-slate-300">
             Descarga la plantilla Excel, llena el bloque verde (remitente) y el ámbar (destinatario),
-            y súbelo aquí. Misma <span className="font-black text-emerald-300">remitente_clave</span>{" "}
-            = un remitente con varios destinatarios. El país del destinatario debe existir ya en
-            Países y precios.
+            y súbelo aquí. Si repites el mismo nombre + apellido + teléfono del remitente en varias
+            filas, el sistema lo trata como un solo remitente con varios destinatarios. El país del
+            destinatario debe existir ya en Países y precios.
           </p>
 
           <div className="flex flex-wrap gap-2">

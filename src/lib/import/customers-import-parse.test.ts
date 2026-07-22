@@ -12,7 +12,6 @@ describe("customers import parse + template", () => {
   it("maps plain objects through the same group builder", () => {
     const result = mapObjectRowsToImportResult([
       {
-        remitente_clave: "R1",
         rem_nombre: "Ana",
         rem_apellido: "Lopez",
         rem_telefono: "123",
@@ -24,6 +23,7 @@ describe("customers import parse + template", () => {
     ]);
     assert.equal(result.validSenderCount, 1);
     assert.equal(result.validRecipientCount, 1);
+    assert.equal(result.groups[0]?.clave, "R001");
   });
 
   it("builds a workbook with Datos + Instrucciones and required columns", async () => {
@@ -41,8 +41,8 @@ describe("customers import parse + template", () => {
     const ExcelJS = (await import("exceljs")).default;
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet(CUSTOMERS_IMPORT_SHEET_DATA);
-    sheet.addRow(["remitente_clave", "rem_nombre"]);
-    sheet.addRow(["R1", "Ana"]);
+    sheet.addRow(["rem_nombre", "rem_apellido"]);
+    sheet.addRow(["Ana", "Lopez"]);
     workbook.addWorksheet(CUSTOMERS_IMPORT_SHEET_INSTRUCTIONS);
     const arrayBuffer = await workbook.xlsx.writeBuffer();
     const parsed = await parseCustomersImportWorkbook(Buffer.from(arrayBuffer));
