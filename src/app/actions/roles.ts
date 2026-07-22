@@ -2,6 +2,11 @@
 
 import { requireAppSession } from "@/lib/auth/session";
 import { sessionHasPermission } from "@/lib/auth/permissions";
+import {
+  findRoleCatalogEntry,
+  listSuggestedRoleCatalog,
+  type RoleCatalogEntry,
+} from "@/lib/auth/role-catalog";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import type { PermissionKey, PermissionRow, RoleRow } from "@/lib/auth/types";
@@ -47,6 +52,8 @@ export async function listRolesAndPermissionsAction(): Promise<
     roles: RoleRow[];
     permissions: PermissionRow[];
     rolePermissions: RolePermissionState[];
+    suggestedRoles: RoleCatalogEntry[];
+    agencyModuleEnabled: boolean;
   }>
 > {
   try {
@@ -109,7 +116,95 @@ export async function listRolesAndPermissionsAction(): Promise<
       roles: visibleRoles.map(mapRole),
       permissions: visiblePermissions as PermissionRow[],
       rolePermissions: mapped,
+      suggestedRoles: listSuggestedRoleCatalog({
+        existingSlugs: visibleRoles.map((role) => role.slug),
+        agencyModuleEnabled: session.agencyModuleEnabled,
+      }),
+      agencyModuleEnabled: session.agencyModuleEnabled,
     });
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+export async function addSuggestedRoleAction(
+  slug: string,
+): Promise<ActionResult<RoleRow>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!sessionHasPermission(session, "permissions.manage")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const entry = findRoleCatalogEntry(slug);
+    if (!entry || entry.base) {
+      return fail("Rol sugerido no válido");
+    }
+
+    if (entry.agencyModule && !session.agencyModuleEnabled) {
+      return fail("Activa el módulo de agencias para agregar este rol");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data: existing } = await supabase
+      .from("roles")
+      .select("id, slug, name, is_system")
+      .eq("organization_id", session.organizationId)
+      .eq("slug", entry.slug)
+      .maybeSingle();
+
+    if (existing) {
+      return fail("Ese rol ya existe en la organización");
+    }
+
+    const { data: role, error } = await supabase
+      .from("roles")
+      .insert({
+        organization_id: session.organizationId,
+        slug: entry.slug,
+        name: entry.name,
+        is_system: false,
+      })
+      .select("id, slug, name, is_system")
+      .single();
+
+    if (error || !role) {
+      return fail(error?.message || "No se pudo agregar el rol");
+    }
+
+    const permissionKeys =
+      entry.permissions[0] === "all"
+        ? null
+        : entry.permissions;
+
+    const { data: permissions, error: permissionsError } = permissionKeys
+      ? await supabase.from("permissions").select("id, key").in("key", permissionKeys)
+      : await supabase.from("permissions").select("id, key");
+
+    if (permissionsError) {
+      return fail(permissionsError.message);
+    }
+
+    if (permissions?.length) {
+      const { error: grantError } = await supabase.from("role_permissions").insert(
+        permissions.map((permission) => ({
+          role_id: role.id,
+          permission_id: permission.id,
+          granted: true,
+        })),
+      );
+
+      if (grantError) {
+        return fail(grantError.message);
+      }
+    }
+
+    return ok(mapRole(role));
   } catch (error) {
     return fail(actionErrorMessage(error));
   }

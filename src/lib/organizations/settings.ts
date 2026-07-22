@@ -13,6 +13,12 @@ export type OrganizationSettings = {
   onboarding_started?: boolean;
 };
 
+/** Plan base de bodegas para cuentas nuevas y orgs sin límite explícito. */
+export const DEFAULT_MAX_WAREHOUSES = 3;
+
+/** Plan base de usuarios al crear una empresa desde plataforma. */
+export const DEFAULT_MAX_USERS = 5;
+
 export function isAgencyModuleEnabled(
   settings: OrganizationSettings | null | undefined,
 ): boolean {
@@ -50,7 +56,7 @@ function resolveWarehouseLimit(
     return configured;
   }
 
-  return 1;
+  return DEFAULT_MAX_WAREHOUSES;
 }
 
 export function canEnableMultiWarehouseHub(

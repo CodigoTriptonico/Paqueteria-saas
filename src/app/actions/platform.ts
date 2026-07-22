@@ -24,6 +24,8 @@ import { assertPhoneAvailable } from "@/lib/phone/profile-phone";
 import { syncProfileRecoveryPhones } from "@/lib/phone/profile-phones";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
+  DEFAULT_MAX_USERS,
+  DEFAULT_MAX_WAREHOUSES,
   isAgencyModuleEnabled,
   parsePlanLimit,
   type OrganizationSettings,
@@ -175,11 +177,11 @@ export async function createOrganizationAction(input: {
     }
     const maxUsers = Math.max(
       1,
-      Math.min(500, Math.trunc(input.settings?.maxUsers || 5)),
+      Math.min(500, Math.trunc(input.settings?.maxUsers || DEFAULT_MAX_USERS)),
     );
     const maxWarehouses = Math.max(
       1,
-      Math.min(100, Math.trunc(input.settings?.maxWarehouses || 5)),
+      Math.min(100, Math.trunc(input.settings?.maxWarehouses || DEFAULT_MAX_WAREHOUSES)),
     );
     const { data: org } = await admin
       .from("organizations")

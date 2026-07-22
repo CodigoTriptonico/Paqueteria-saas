@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const PLAN_CONFIG_HREF = "/configuracion?view=organization&tab=plan";
+export const WAREHOUSES_CONFIG_HREF = "/configuracion?view=organization&tab=warehouses";
 
 export function PlanUsageLink({ className = "" }: { className?: string }) {
   return (

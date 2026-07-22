@@ -10,6 +10,7 @@ const timeClock = readFileSync("src/lib/time-clock.ts", "utf8");
 const appFrame = readFileSync("src/components/app-frame.tsx", "utf8");
 const shell = readFileSync("src/components/app-shell.tsx", "utf8");
 const configClient = readFileSync("src/components/configuracion-client.tsx", "utf8");
+const configLabels = readFileSync("src/lib/config-section-labels.ts", "utf8");
 const permissions = readFileSync("src/lib/auth/permissions.ts", "utf8");
 
 test("time clock keeps employee punches immutable and scope-limited", () => {
@@ -42,7 +43,8 @@ test("time clock exposes separate employee and administrator surfaces", () => {
   assert.match(adminScreen, /Abrir pantalla de reloj/);
   assert.doesNotMatch(adminScreen, /Marcaciones, alertas y horas calculadas desde el historial real\./);
   assert.match(appFrame, /pathname\.startsWith\("\/reloj"\)/);
-  assert.match(configClient, /Control de horario/);
+  assert.match(configLabels, /title: "Control de horario"/);
+  assert.match(configClient, /CONFIG_SECTION_LABELS\.timeclock/);
   assert.match(configClient, /id: "timeclock"/);
   assert.match(configClient, /TimeClockAdminClient/);
   assert.doesNotMatch(shell, /href: "\/time-clock"/);

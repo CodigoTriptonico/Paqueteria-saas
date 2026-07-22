@@ -38,6 +38,7 @@ import { CountryCommercialServiceCosts } from "@/components/config/country-comme
 import { AppearanceSettingsPanel } from "@/components/config/appearance-settings-panel";
 import {
   OrganizationManagementPanel,
+  isOrganizationManagementTab,
   type OrganizationManagementTab,
 } from "@/components/config/organization-management-panel";
 import { PageLoading } from "@/components/page-loading";
@@ -81,6 +82,7 @@ import {
 } from "@/lib/pricing-promotions";
 import { moneyInputDisplayValue, parseMoneyValue } from "@/lib/logistics-fees";
 import { CONFIG_MENU_GROUPS } from "@/lib/config-menu-groups";
+import { CONFIG_SECTION_LABELS } from "@/lib/config-section-labels";
 import type { TimeClockDashboardSnapshot } from "@/lib/time-clock-data";
 
 const ComboBuilder = dynamic(
@@ -106,38 +108,38 @@ type Section = "menu" | "organization" | "prices" | "distributors" | "deliveries
 const sections = [
   {
     id: "organization" as Section,
-    title: "Empresa y acceso",
-    text: "Identidad, plan, usuarios y permisos en un solo lugar.",
+    title: CONFIG_SECTION_LABELS.organization.title,
+    text: CONFIG_SECTION_LABELS.organization.text,
     icon: Building2,
   },
   {
     id: "prices" as Section,
-    title: "Países y precios",
-    text: "Destinos, tiempos de entrega y productos.",
+    title: CONFIG_SECTION_LABELS.prices.title,
+    text: CONFIG_SECTION_LABELS.prices.text,
     icon: Globe2,
   },
   {
     id: "distributors" as Section,
-    title: "Distribuidores",
-    text: "Proveedores y costos por país.",
+    title: CONFIG_SECTION_LABELS.distributors.title,
+    text: CONFIG_SECTION_LABELS.distributors.text,
     icon: Truck,
   },
   {
     id: "deliveries" as Section,
-    title: "Logística",
-    text: "Horarios y tarifas de entrega y recolección.",
+    title: CONFIG_SECTION_LABELS.deliveries.title,
+    text: CONFIG_SECTION_LABELS.deliveries.text,
     icon: Route,
   },
   {
     id: "appearance" as Section,
-    title: "Apariencia",
-    text: "Tema visual del sistema.",
+    title: CONFIG_SECTION_LABELS.appearance.title,
+    text: CONFIG_SECTION_LABELS.appearance.text,
     icon: Palette,
   },
   {
     id: "timeclock" as Section,
-    title: "Control de horario",
-    text: "Empleados, marcaciones y reportes.",
+    title: CONFIG_SECTION_LABELS.timeclock.title,
+    text: CONFIG_SECTION_LABELS.timeclock.text,
     icon: Clock,
   },
 ];
@@ -231,12 +233,10 @@ function countryOptionKey(country: Pick<CountryOption, "code" | "name">) {
 
 function parseConfigUrl(params: URLSearchParams) {
   const view = params.get("view");
-  const legacyManagementTab = ["company", "plan", "users"].includes(view || "")
-    ? (view as OrganizationManagementTab)
-    : null;
+  const legacyManagementTab = isOrganizationManagementTab(view) ? view : null;
   const requestedTab = params.get("tab");
-  const managementTab = ["company", "plan", "users"].includes(requestedTab || "")
-    ? (requestedTab as OrganizationManagementTab)
+  const managementTab = isOrganizationManagementTab(requestedTab)
+    ? requestedTab
     : legacyManagementTab || "company";
 
   return {
@@ -1458,7 +1458,7 @@ export function ConfiguracionClient({
     }
 
     if (section === "organization") {
-      return "Empresa y acceso";
+      return CONFIG_SECTION_LABELS.organization.title;
     }
 
     if (section === "prices") {
@@ -1466,7 +1466,7 @@ export function ConfiguracionClient({
         return activeCountry;
       }
 
-      return "Países y precios";
+      return CONFIG_SECTION_LABELS.prices.title;
     }
 
     if (section === "distributors") {
@@ -1478,19 +1478,19 @@ export function ConfiguracionClient({
         return `Precios de ${selectedDistributorData?.name || selectedDistributor}`;
       }
 
-      return "Distribuidores";
+      return CONFIG_SECTION_LABELS.distributors.title;
     }
 
     if (section === "deliveries") {
-      return "Logística";
+      return CONFIG_SECTION_LABELS.deliveries.title;
     }
 
     if (section === "appearance") {
-      return "Apariencia";
+      return CONFIG_SECTION_LABELS.appearance.title;
     }
 
     if (section === "timeclock") {
-      return "Control de horario";
+      return CONFIG_SECTION_LABELS.timeclock.title;
     }
 
     return "Configuración";
@@ -1620,14 +1620,14 @@ export function ConfiguracionClient({
       ) : null}
 
       {section === "organization" ? (
-        <Panel title="Empresa y acceso" hideHeader={showSidebarNav} {...nestedPanelShell}>
+        <Panel title={CONFIG_SECTION_LABELS.organization.title} hideHeader={showSidebarNav} {...nestedPanelShell}>
           <OrganizationManagementPanel initialTab={parsedConfigUrl.managementTab} />
         </Panel>
       ) : null}
 
       {section === "prices" && !activeCountry && !pendingCountryFromUrl ? (
         <Panel
-          title="Países y precios"
+          title={CONFIG_SECTION_LABELS.prices.title}
           hideHeader={showSidebarNav}
           className={
             showCountryPicker || countries.length === 0
@@ -2240,7 +2240,7 @@ export function ConfiguracionClient({
       ) : null}
 
       {section === "distributors" && !selectedDistributor ? (
-        <Panel title="Distribuidores" hideHeader={showSidebarNav} {...nestedPanelShell}>
+        <Panel title={CONFIG_SECTION_LABELS.distributors.title} hideHeader={showSidebarNav} {...nestedPanelShell}>
           <div className="mb-5 grid gap-3">
             <button
               onClick={() => setShowDistributorForm((current) => !current)}
@@ -2480,7 +2480,7 @@ export function ConfiguracionClient({
       ) : null}
 
       {section === "deliveries" ? (
-        <Panel title="Logística" hideHeader={showSidebarNav} {...nestedPanelShell}>
+        <Panel title={CONFIG_SECTION_LABELS.deliveries.title} hideHeader={showSidebarNav} {...nestedPanelShell}>
           <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
             <div className="rounded-xl border border-black bg-surface-card p-4 xl:col-span-2">
               <div className="mb-3 flex items-start gap-3">
@@ -2746,7 +2746,7 @@ export function ConfiguracionClient({
       ) : null}
 
       {section === "appearance" ? (
-        <Panel title="Apariencia" hideHeader={showSidebarNav} {...nestedPanelShell}>
+        <Panel title={CONFIG_SECTION_LABELS.appearance.title} hideHeader={showSidebarNav} {...nestedPanelShell}>
           <AppearanceSettingsPanel />
         </Panel>
       ) : null}

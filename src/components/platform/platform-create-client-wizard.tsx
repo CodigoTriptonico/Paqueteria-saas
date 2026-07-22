@@ -32,6 +32,7 @@ import { FlowStepTitle } from "@/components/flow-step-title";
 import { EmailDomainSuggestionsInput } from "@/components/email-domain-suggestions-input";
 import { PhoneCountryInput } from "@/components/phone-country-input";
 import { formatPersonNameInput } from "@/lib/person-name";
+import { DEFAULT_MAX_WAREHOUSES } from "@/lib/organizations/settings";
 import {
   isValidNationalPhone,
   maxNationalDigitsForDialCode,
@@ -172,7 +173,7 @@ export function PlatformCreateClientWizard({
   }));
   const [orgSettings, setOrgSettings] = useState({
     maxUsers: initialAdditionalUserLimit,
-    maxWarehouses: 5,
+    maxWarehouses: DEFAULT_MAX_WAREHOUSES,
     agenciesEnabled: false,
   });
   const [showPassword, setShowPassword] = useState(false);

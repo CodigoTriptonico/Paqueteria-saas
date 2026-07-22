@@ -9,4 +9,4 @@ Agencias es una capacidad opcional del contrato de cada matriz de Boxario.
 - Desactivar el módulo no borra agencias ni historial. Al reactivarlo, la operación existente vuelve a estar disponible.
 - La matriz no ve el nombre ni el estado del módulo mientras está desactivado. Solo Boxario lo administra desde `/platform`.
 
-La configuración general de la matriz está reunida en `Configuración > Empresa y acceso`, con las pestañas Empresa, Plan y Usuarios.
+La configuración general de la matriz está reunida en `Configuración > Organización`, con las pestañas Empresa, Plan, Usuarios y Bodegas.

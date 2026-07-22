@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ChevronDown,
   Crown,
   Loader2,
   Plus,
@@ -20,15 +19,18 @@ import { useEffect, useMemo, useState } from "react";
 import type { OrgUserRow } from "@/app/actions/users";
 import {
   createRoleAction,
+  addSuggestedRoleAction,
   deleteRoleAction,
   setRolePermissionAction,
   setRolePermissionsBatchAction,
   updateRoleAction,
   type RolePermissionState,
 } from "@/app/actions/roles";
+import type { RoleCatalogEntry } from "@/lib/auth/role-catalog";
 import type { PermissionKey, PermissionRow, RoleRow } from "@/lib/auth/types";
 import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
+import { AddRoleModal } from "@/components/config/add-role-modal";
 import { settingsSectionClass as sectionClass } from "@/components/config/settings-panel-styles";
 
 const compactInputClass = `${inputClass} h-10`;
@@ -61,6 +63,34 @@ const ROLE_META: Record<
   conductor: {
     icon: Truck,
     hint: "Consulta rutas y actualiza entregas.",
+  },
+  logistica: {
+    icon: Truck,
+    hint: "Rutas, asignación y operaciones de entrega.",
+  },
+  bodega: {
+    icon: Shield,
+    hint: "Inventario y bodegas.",
+  },
+  finanzas: {
+    icon: ShieldCheck,
+    hint: "Cuentas, cobros y retención financiera.",
+  },
+  auditor: {
+    icon: ShieldCheck,
+    hint: "Consulta de auditoría y estados financieros.",
+  },
+  captador_distribuidores: {
+    icon: UserCog,
+    hint: "Alta y seguimiento de distribuidores.",
+  },
+  captador_agencias: {
+    icon: UserCog,
+    hint: "Crea y da soporte a agencias.",
+  },
+  supervisor_agencias: {
+    icon: Crown,
+    hint: "Supervisa captadores y soporte de agencias.",
   },
 };
 
@@ -106,6 +136,7 @@ type RolesPermissionsPanelProps = {
   roles: RoleRow[];
   permissions: PermissionRow[];
   rolePermissions: RolePermissionState[];
+  suggestedRoles?: RoleCatalogEntry[];
   selectedRoleId: string;
   onSelectRole: (roleId: string) => void;
   onRolePermissionsChange: (next: RolePermissionState[]) => void;
@@ -117,13 +148,14 @@ export function RolesPermissionsPanel({
   roles,
   permissions,
   rolePermissions,
+  suggestedRoles = [],
   selectedRoleId,
   onSelectRole,
   onRolePermissionsChange,
   onReload,
 }: RolesPermissionsPanelProps) {
   const notify = useNotify();
-  const [showRoleOptions, setShowRoleOptions] = useState(false);
+  const [showAddRoleModal, setShowAddRoleModal] = useState(false);
   const [roleQuery, setRoleQuery] = useState("");
   const [permissionQuery, setPermissionQuery] = useState("");
   const [newRoleName, setNewRoleName] = useState("");
@@ -144,7 +176,15 @@ export function RolesPermissionsPanel({
       active = false;
     };
   }, [selectedRole]);
+
   const allPermission = permissions.find((permission) => permission.key === "all") || null;
+  const roleIcons = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(ROLE_META).map(([slug, meta]) => [slug, meta.icon]),
+      ),
+    [],
+  );
 
   const usersByRole = useMemo(() => {
     const counts = new Map<string, number>();
@@ -358,8 +398,25 @@ export function RolesPermissionsPanel({
     }
 
     setNewRoleName("");
+    setShowAddRoleModal(false);
     onSelectRole(result.data.id);
     notify.success("Rol creado");
+    await onReload();
+  }
+
+  async function addSuggestedRole(slug: string) {
+    setRoleSaving(true);
+    const result = await addSuggestedRoleAction(slug);
+    setRoleSaving(false);
+
+    if (!result.ok) {
+      notify.error(result.error);
+      return;
+    }
+
+    setShowAddRoleModal(false);
+    onSelectRole(result.data.id);
+    notify.success(`${result.data.name} agregado`);
     await onReload();
   }
 
@@ -441,6 +498,7 @@ export function RolesPermissionsPanel({
   }
 
   return (
+    <>
     <section className={sectionClass}>
       <div className="grid gap-0 xl:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="border-b border-black xl:border-b-0 xl:border-r">
@@ -515,12 +573,12 @@ export function RolesPermissionsPanel({
               type="button"
               className={`${secondaryButtonClass} w-full justify-center gap-2`}
               onClick={() => {
-                setShowRoleOptions(true);
                 setNewRoleName("");
+                setShowAddRoleModal(true);
               }}
             >
               <Plus className="h-4 w-4" />
-              Rol personalizado
+              Agregar rol
             </button>
           </div>
         </aside>
@@ -704,112 +762,82 @@ export function RolesPermissionsPanel({
       </div>
 
       <div className="border-t border-black">
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 px-4 py-3 text-left"
-          onClick={() => setShowRoleOptions((current) => !current)}
-          aria-expanded={showRoleOptions}
-        >
-          <span className="flex h-8 w-8 items-center justify-center rounded-md border border-black bg-emerald-400 text-slate-950">
-            <Settings2 className="h-4 w-4" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-black text-[#f8fafc]">Administrar roles</span>
-            <span className="mt-0.5 block text-xs font-bold text-slate-500">
-              Crear, renombrar o eliminar roles personalizados
-            </span>
-          </span>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 text-slate-500 transition ${
-              showRoleOptions ? "rotate-180" : ""
-            }`}
-          />
-        </button>
-
-        {showRoleOptions ? (
-          <div className="grid gap-3 border-t border-black px-4 py-4 lg:grid-cols-2">
-            <div className="rounded-lg border border-black bg-surface-panel p-3">
-              <p className="text-sm font-black text-[#f8fafc]">Nuevo rol personalizado</p>
+        {!selectedRole?.isSystem && selectedRole ? (
+          <div className="grid gap-3 px-4 py-4 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div>
+              <p className="text-sm font-black text-[#f8fafc]">Editar rol personalizado</p>
               <p className="mt-1 text-xs font-bold text-slate-500">
-                Hereda los permisos de{" "}
-                <span className="text-slate-300">{selectedRole?.name || "el rol actual"}</span>.
+                {selectedRole.name} · no es un rol base
               </p>
-              <div className="mt-3 flex gap-2">
-                <input
-                  className={`${compactInputClass} min-w-0 flex-1`}
-                  placeholder="Ej: Supervisor de bodega"
-                  value={newRoleName}
-                  onChange={(event) => setNewRoleName(event.target.value)}
-                />
-                <button
-                  type="button"
-                  className={`${primaryButtonClass} gap-2`}
-                  disabled={!newRoleName.trim() || roleSaving}
-                  onClick={() => void createRole()}
-                >
-                  {roleSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Crear
-                </button>
-              </div>
+              <input
+                className={`${compactInputClass} mt-3 w-full max-w-md`}
+                value={editRoleName}
+                onChange={(event) => setEditRoleName(event.target.value)}
+              />
             </div>
-
-            <div className="rounded-lg border border-black bg-surface-panel p-3">
-              {selectedRole?.isSystem ? (
-                <>
-                  <p className="text-sm font-black text-[#f8fafc]">Roles base</p>
-                  <p className="mt-2 text-sm font-bold leading-snug text-slate-400">
-                    Los roles del sistema no se renombran ni eliminan. Puedes ajustar sus permisos
-                    arriba o crear un rol personalizado como variante.
-                  </p>
-                </>
-              ) : selectedRole ? (
-                <>
-                  <p className="text-sm font-black text-[#f8fafc]">Editar rol personalizado</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <input
-                      className={`${compactInputClass} min-w-0 flex-1`}
-                      value={editRoleName}
-                      onChange={(event) => setEditRoleName(event.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className={secondaryButtonClass}
-                      disabled={!editRoleName.trim() || roleSaving}
-                      onClick={() => void renameRole()}
-                    >
-                      Guardar
-                    </button>
-                    <button
-                      type="button"
-                      className={`${secondaryButtonClass} gap-1.5 text-rose-200`}
-                      disabled={roleSaving || roleUserCount > 0}
-                      title={
-                        roleUserCount > 0
-                          ? "Reasigna los usuarios antes de eliminar"
-                          : undefined
-                      }
-                      onClick={() => void deleteRole()}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Eliminar
-                    </button>
-                  </div>
-                  {roleUserCount > 0 ? (
-                    <p className="mt-2 text-xs font-bold text-amber-200/90">
-                      Hay {roleUserCount} usuario(s) con este rol. Cámbiales el rol antes de
-                      eliminarlo.
-                    </p>
-                  ) : null}
-                </>
-              ) : (
-                <p className="text-sm font-bold text-slate-400">
-                  Selecciona un rol para editarlo.
-                </p>
-              )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                disabled={!editRoleName.trim() || roleSaving}
+                onClick={() => void renameRole()}
+              >
+                Guardar nombre
+              </button>
+              <button
+                type="button"
+                className={`${secondaryButtonClass} gap-1.5 text-rose-200`}
+                disabled={roleSaving || roleUserCount > 0}
+                title={
+                  roleUserCount > 0 ? "Reasigna los usuarios antes de eliminar" : undefined
+                }
+                onClick={() => void deleteRole()}
+              >
+                <Trash2 className="h-4 w-4" />
+                Eliminar
+              </button>
             </div>
+            {roleUserCount > 0 ? (
+              <p className="text-xs font-bold text-amber-200/90 lg:col-span-2">
+                Hay {roleUserCount} usuario(s) con este rol. Cámbiales el rol antes de
+                eliminarlo.
+              </p>
+            ) : null}
           </div>
-        ) : null}
+        ) : (
+          <div className="flex items-center gap-3 px-4 py-3 text-left">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-black bg-surface-inset text-slate-400">
+              <Settings2 className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-black text-[#f8fafc]">Roles base</span>
+              <span className="mt-0.5 block text-xs font-bold text-slate-500">
+                Usa Agregar rol para abrir el modal de sugeridos o personalizados.
+              </span>
+            </span>
+          </div>
+        )}
       </div>
     </section>
+
+    <AddRoleModal
+      open={showAddRoleModal}
+      suggestedRoles={suggestedRoles}
+      selectedRoleName={selectedRole?.name}
+      newRoleName={newRoleName}
+      roleSaving={roleSaving}
+      roleIcons={roleIcons}
+      onClose={() => {
+        if (roleSaving) {
+          return;
+        }
+        setShowAddRoleModal(false);
+        setNewRoleName("");
+      }}
+      onNewRoleNameChange={setNewRoleName}
+      onAddSuggested={(slug) => void addSuggestedRole(slug)}
+      onCreateCustom={() => void createRole()}
+    />
+    </>
   );
 }

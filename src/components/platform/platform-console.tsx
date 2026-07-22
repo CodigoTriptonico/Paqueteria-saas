@@ -34,6 +34,7 @@ import {
 import { PlatformCreateClientWizard } from "@/components/platform/platform-create-client-wizard";
 import { useContextNav } from "@/hooks/use-context-nav";
 import { useNotify } from "@/hooks/use-notify";
+import { DEFAULT_MAX_WAREHOUSES } from "@/lib/organizations/settings";
 import {
   inputClass,
   labelMutedClass,
@@ -97,7 +98,7 @@ export function PlatformConsole() {
   const [editOrgName, setEditOrgName] = useState("");
   const [editOrgSlug, setEditOrgSlug] = useState("");
   const [editMaxUsers, setEditMaxUsers] = useState(5);
-  const [editMaxWarehouses, setEditMaxWarehouses] = useState(5);
+  const [editMaxWarehouses, setEditMaxWarehouses] = useState(DEFAULT_MAX_WAREHOUSES);
   const [editAgenciesEnabled, setEditAgenciesEnabled] = useState(false);
   const [contextMenu, setContextMenu] =
     useState<OrganizationContextMenu | null>(null);
@@ -137,7 +138,7 @@ export function PlatformConsole() {
       setEditOrgName(selectedOrg.name);
       setEditOrgSlug(selectedOrg.slug);
       setEditMaxUsers(selectedOrg.max_users ?? 5);
-      setEditMaxWarehouses(selectedOrg.max_warehouses ?? 5);
+      setEditMaxWarehouses(selectedOrg.max_warehouses ?? DEFAULT_MAX_WAREHOUSES);
       setEditAgenciesEnabled(selectedOrg.agencies_enabled);
     });
   }, [selectedOrg]);
@@ -225,7 +226,7 @@ export function PlatformConsole() {
     setEditOrgName(organization.name);
     setEditOrgSlug(organization.slug);
     setEditMaxUsers(organization.max_users ?? 5);
-    setEditMaxWarehouses(organization.max_warehouses ?? 5);
+    setEditMaxWarehouses(organization.max_warehouses ?? DEFAULT_MAX_WAREHOUSES);
     setEditAgenciesEnabled(organization.agencies_enabled);
     setShowArchiveConfirm(false);
     setShowEditOrg(true);

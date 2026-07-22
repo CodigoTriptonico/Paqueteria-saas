@@ -17,13 +17,13 @@ export const CONFIG_MENU_GROUPS: ConfigMenuGroup[] = [
   {
     id: "operation",
     title: "Operación",
-    description: "Precios, catálogo, proveedores y logística del día a día.",
+    description: "Países, precios, proveedores y domicilio.",
     sectionIds: ["prices", "distributors", "deliveries"],
   },
   {
     id: "administration",
     title: "Administración",
-    description: "Empresa, acceso, equipo y apariencia del sistema.",
+    description: "Organización, asistencia y apariencia del sistema.",
     sectionIds: ["organization", "timeclock", "appearance"],
   },
 ];

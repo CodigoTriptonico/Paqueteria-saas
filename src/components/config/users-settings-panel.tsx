@@ -22,6 +22,7 @@ import { PlanUsageLink } from "@/components/config/plan-usage-link";
 import { UserTeamCard } from "@/components/config/user-team-card";
 import { UserWarehouseAccessEditor } from "@/components/config/user-warehouse-access-editor";
 import { RolesPermissionsPanel } from "@/components/config/roles-permissions-panel";
+import type { RoleCatalogEntry } from "@/lib/auth/role-catalog";
 import {
   InlineSearchCombobox,
   InlineSearchPicker,
@@ -78,6 +79,7 @@ export function UsersSettingsPanel() {
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [permissions, setPermissions] = useState<PermissionRow[]>([]);
   const [rolePermissions, setRolePermissions] = useState<RolePermissionState[]>([]);
+  const [suggestedRoles, setSuggestedRoles] = useState<RoleCatalogEntry[]>([]);
   const [warehouses, setWarehouses] = useState<
     { id: string; name: string; is_default: boolean }[]
   >([]);
@@ -108,6 +110,7 @@ export function UsersSettingsPanel() {
       setRoles(rolesResult.data.roles);
       setPermissions(rolesResult.data.permissions);
       setRolePermissions(rolesResult.data.rolePermissions);
+      setSuggestedRoles(rolesResult.data.suggestedRoles);
       setSelectedRoleId((current) => current || rolesResult.data.roles[0]?.id || "");
     }
 
@@ -550,6 +553,7 @@ export function UsersSettingsPanel() {
           roles={roles}
           permissions={permissions}
           rolePermissions={rolePermissions}
+          suggestedRoles={suggestedRoles}
           selectedRoleId={selectedRoleId}
           onSelectRole={(roleId) => setSelectedRoleId(roleId)}
           onRolePermissionsChange={setRolePermissions}

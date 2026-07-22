@@ -208,7 +208,7 @@ export function WarehousesSettingsPanel() {
     }
 
     if (canManageSettings) {
-      parts.push(multiWarehouse ? "Hub activo" : "Entrada directa");
+      parts.push(multiWarehouse ? "Elige bodega" : "Entrada directa");
     }
 
     return parts.join(" · ");
@@ -529,16 +529,16 @@ export function WarehousesSettingsPanel() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-black text-[#f8fafc]">
-                          Selector en Inventario
+                          Elegir bodega en Inventario
                         </p>
                         <p className="mt-0.5 text-xs font-bold leading-snug text-slate-400">
                           {multiWarehouse
                             ? activeWarehouses.length > 1
-                              ? "Inventario abre el hub de bodegas."
-                              : "Activo, pero necesitas 2+ bodegas."
+                              ? "Al abrir Inventario te pide en cuál bodega trabajar."
+                              : "Ya está encendido. Crea otra bodega para que aparezca el selector."
                             : defaultWarehouse
-                              ? `Inventario entra directo a ${defaultWarehouse.name}.`
-                              : "Inventario entra directo a la principal."}
+                              ? `Apagado: Inventario entra directo a ${defaultWarehouse.name}.`
+                              : "Apagado: Inventario entra directo a la bodega principal."}
                         </p>
                       </div>
                       <ToggleSwitch
@@ -568,7 +568,7 @@ export function WarehousesSettingsPanel() {
                           setMultiWarehouse(enabled);
                           notify.success(
                             enabled
-                              ? "Selector de bodegas activado."
+                              ? "Inventario pedirá elegir bodega."
                               : "Inventario usará la bodega principal.",
                           );
                           router.refresh();
@@ -715,11 +715,6 @@ export function WarehousesSettingsPanel() {
                       </button>
                     </div>
                   ) : null}
-
-                  <p className="border-t border-black/80 pt-3 text-xs font-bold leading-relaxed text-slate-500">
-                    Categorías e items son compartidos. Cada bodega guarda su
-                    propio stock.
-                  </p>
                 </div>
               ) : null}
             </section>

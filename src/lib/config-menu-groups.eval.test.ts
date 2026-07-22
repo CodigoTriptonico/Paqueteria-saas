@@ -8,6 +8,14 @@ describe("config menu groups eval", () => {
     assert.deepEqual(titles, ["Operación", "Administración"]);
   });
 
+  it("describes groups by the work they cover", () => {
+    const operation = CONFIG_MENU_GROUPS.find((group) => group.id === "operation");
+    const administration = CONFIG_MENU_GROUPS.find((group) => group.id === "administration");
+    assert.match(operation?.description || "", /domicilio/);
+    assert.match(administration?.description || "", /Organización/);
+    assert.doesNotMatch(operation?.description || "", /logística/i);
+  });
+
   it("keeps daily workflow settings separate from account settings", () => {
     const operation = CONFIG_MENU_GROUPS.find((group) => group.id === "operation");
     const administration = CONFIG_MENU_GROUPS.find((group) => group.id === "administration");
