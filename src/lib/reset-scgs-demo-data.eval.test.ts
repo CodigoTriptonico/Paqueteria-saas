@@ -33,4 +33,14 @@ describe("reset scgs demo data eval", () => {
     assert.match(demoResetSource, /Usuarios: NO se tocan/);
     assert.match(demoResetSource, /after\.profiles !== before\.profiles/);
   });
+
+  it("clears shipment child tables before deleting shipments", () => {
+    assert.match(demoResetSource, /package_custody_events/);
+    assert.match(demoResetSource, /package_custody_events_immutable/);
+    assert.match(demoResetSource, /shipment_payments/);
+    assert.match(demoResetSource, /shipment_logistics_tasks/);
+    const custodyAt = demoResetSource.indexOf('"package_custody_events"');
+    const shipmentsAt = demoResetSource.indexOf('"shipments"');
+    assert.ok(custodyAt > -1 && shipmentsAt > custodyAt);
+  });
 });

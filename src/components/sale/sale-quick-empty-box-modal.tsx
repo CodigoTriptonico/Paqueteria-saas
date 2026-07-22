@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, Clock, Package, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   quotePromotionsForBox,
   type PricingPromotionConfig,
@@ -20,7 +20,13 @@ import {
   type Sender,
 } from "@/components/sale/venta-parts";
 import { nextQuickBoxSelection } from "@/lib/sale-quick-box-selection";
-import { SaleDepositPaidToggle } from "@/components/sale/sale-payment-method-field";
+import { SaleDepositChargeField } from "@/components/sale/sale-payment-method-field";
+import { parseMoneyValue } from "@/lib/logistics-fees";
+import {
+  defaultSaleDepositDraft,
+  saleDepositChargeAmountDigits,
+  type SaleDepositChargeMode,
+} from "@/lib/sale-deposit-charge";
 
 export type QuickEmptyBoxDraft = {
   sender: Sender;
@@ -28,6 +34,8 @@ export type QuickEmptyBoxDraft = {
   box: string[];
   boxCount: number;
   depositPaid: boolean;
+  paymentMode: SaleDepositChargeMode;
+  payNowAmount: string;
   emptyBoxMode: string;
   emptyBoxScheduleMode: string;
   emptyBoxScheduleAt: string;
@@ -40,6 +48,7 @@ type SaleQuickEmptyBoxModalProps = {
   country: string;
   boxes: string[][];
   promotions?: PricingPromotionConfig[];
+  minimumDeposit: string;
   routeDecision: SaleRouteDecision | null;
   onClose: () => void;
   onClearRoute: () => void;
@@ -52,6 +61,7 @@ export function SaleQuickEmptyBoxModal({
   country,
   boxes,
   promotions = [],
+  minimumDeposit,
   routeDecision,
   onClose,
   onClearRoute,
@@ -62,6 +72,9 @@ export function SaleQuickEmptyBoxModal({
   const [emptyBoxMode, setEmptyBoxMode] = useState("");
   const [boxCount, setBoxCount] = useState(0);
   const [depositPaid, setDepositPaid] = useState(true);
+  const [paymentMode, setPaymentMode] = useState<SaleDepositChargeMode>("deposit");
+  const [depositDraft, setDepositDraft] = useState("");
+  const [depositDraftTouched, setDepositDraftTouched] = useState(false);
 
   const selectedBox = useMemo(
     () => boxes.find((box) => box[0] === selectedBoxKey) || null,
@@ -103,11 +116,19 @@ export function SaleQuickEmptyBoxModal({
       })
     : [];
   const automaticPromotion = promotionQuotes.length === 1 ? promotionQuotes[0] : null;
-  const boxSubtotalLabel = automaticPromotion
-    ? automaticPromotion.subtotalAfterDiscount
-    : boxSubtotal > 0
-      ? `$${boxSubtotal}`
-      : "$0";
+  const quotedTotal = automaticPromotion
+    ? parseMoneyValue(automaticPromotion.subtotalAfterDiscount)
+    : boxSubtotal;
+
+  useEffect(() => {
+    if (depositDraftTouched) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      setDepositDraft(defaultSaleDepositDraft(minimumDeposit, quotedTotal));
+    });
+  }, [depositDraftTouched, minimumDeposit, quotedTotal]);
 
   function updateBoxSelection(boxKey: string, action: "add" | "remove") {
     const next = nextQuickBoxSelection(
@@ -271,27 +292,28 @@ export function SaleQuickEmptyBoxModal({
             </div>
           </fieldset>
 
-          <div className="min-h-[8.25rem] rounded-xl border border-black bg-surface-inset px-4 py-3 text-center">
-            <p className="text-xs font-black uppercase text-slate-500">Total de cajas</p>
-            <p className="text-3xl font-black text-emerald-300">
-              {selectedBox ? boxSubtotalLabel : "$0"}
-            </p>
-            <p className="mt-1 min-h-4 text-xs font-bold text-slate-400">
-              {selectedBox ? `${selectedBox[1]} x ${boxCount}` : "Selecciona una caja"}
-            </p>
-            <p className="mt-1 min-h-4 text-xs font-black text-emerald-300">
-              {automaticPromotion
+          <SaleDepositChargeField
+            mode={paymentMode}
+            depositDraft={depositDraft}
+            minimumDeposit={minimumDeposit}
+            quotedTotal={quotedTotal}
+            paid={depositPaid}
+            boxDetail={selectedBox ? `${selectedBox[1]} x ${boxCount}` : ""}
+            promotionLabel={
+              automaticPromotion
                 ? `${automaticPromotion.name} -${automaticPromotion.discountTotal}`
                 : promotionQuotes.length > 1
                   ? "Elige promoción al crear invoice"
-                  : ""}
-            </p>
-            <p className="mt-1 min-h-4 text-xs font-bold text-slate-400">
-              {summary === "Pendiente" ? "" : summary}
-            </p>
-          </div>
-
-          <SaleDepositPaidToggle paid={depositPaid} onChange={setDepositPaid} />
+                  : ""
+            }
+            deliveryLabel={summary === "Pendiente" ? "" : summary}
+            onModeChange={setPaymentMode}
+            onDepositDraftChange={(value) => {
+              setDepositDraftTouched(true);
+              setDepositDraft(value);
+            }}
+            onPaidChange={setDepositPaid}
+          />
         </div>
 
         <div className="mt-5 grid gap-2 sm:grid-cols-2">
@@ -316,6 +338,13 @@ export function SaleQuickEmptyBoxModal({
                 box: selectedBox,
                 boxCount,
                 depositPaid,
+                paymentMode,
+                payNowAmount: saleDepositChargeAmountDigits({
+                  mode: paymentMode,
+                  depositDraft,
+                  minimumDeposit,
+                  quotedTotal,
+                }),
                 emptyBoxMode,
                 emptyBoxScheduleMode: routeSchedule.scheduleMode,
                 emptyBoxScheduleAt: routeSchedule.scheduleAt,

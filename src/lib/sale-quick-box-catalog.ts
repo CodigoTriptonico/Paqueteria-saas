@@ -11,19 +11,31 @@ function normalizeCountry(value: string) {
     .trim();
 }
 
+export function listQuickSaleCountries(countryBoxes: Record<string, string[][]>): string[] {
+  return Object.entries(countryBoxes)
+    .filter(([, boxes]) => boxes.length > 0)
+    .map(([country]) => country)
+    .sort((left, right) => left.localeCompare(right, "es"));
+}
+
 export function resolveQuickSaleBoxCatalog(
   countryBoxes: Record<string, string[][]>,
   preferredCountry = "USA",
 ): QuickSaleBoxCatalog | null {
-  const entries = Object.entries(countryBoxes).filter(([, boxes]) => boxes.length > 0);
+  const countries = listQuickSaleCountries(countryBoxes);
 
-  if (!entries.length) {
+  if (!countries.length) {
     return null;
   }
 
   const preferredKey = normalizeCountry(preferredCountry);
-  const preferred = entries.find(([country]) => normalizeCountry(country) === preferredKey);
-  const [country, boxes] = preferred || entries[0];
+  const preferred = countries.find((country) => normalizeCountry(country) === preferredKey);
+  const country = preferred || countries[0];
+  const boxes = countryBoxes[country] || [];
+
+  if (!boxes.length) {
+    return null;
+  }
 
   return { country, boxes };
 }

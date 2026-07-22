@@ -1,8 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveQuickSaleBoxCatalog } from "@/lib/sale-quick-box-catalog";
+import {
+  listQuickSaleCountries,
+  resolveQuickSaleBoxCatalog,
+} from "@/lib/sale-quick-box-catalog";
 
 describe("quick sale box catalog", () => {
+  it("lists priced countries and resolves the chosen catalog", () => {
+    assert.deepEqual(
+      listQuickSaleCountries({
+        México: [["18x18x18", "$200"]],
+        USA: [],
+        Guatemala: [["20x20x20", "$180"]],
+      }),
+      ["Guatemala", "México"],
+    );
+  });
+
   it("uses the only configured country instead of assuming USA exists", () => {
     assert.deepEqual(
       resolveQuickSaleBoxCatalog({
@@ -22,6 +36,16 @@ describe("quick sale box catalog", () => {
         USA: [["20x20x20", "$250"]],
       })?.country,
       "USA",
+    );
+    assert.equal(
+      resolveQuickSaleBoxCatalog(
+        {
+          México: [["18x18x18", "$200"]],
+          USA: [["20x20x20", "$250"]],
+        },
+        "México",
+      )?.country,
+      "México",
     );
   });
 

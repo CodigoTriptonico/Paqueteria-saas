@@ -7,6 +7,10 @@ const modalSource = readFileSync(
   join(process.cwd(), "src/components/sale/sale-quick-empty-box-modal.tsx"),
   "utf8",
 );
+const fieldSource = readFileSync(
+  join(process.cwd(), "src/components/sale/sale-payment-method-field.tsx"),
+  "utf8",
+);
 
 describe("quick-sale box picker", () => {
   it("shows every box as a direct product choice instead of a native select", () => {
@@ -32,11 +36,12 @@ describe("quick-sale box picker", () => {
     assert.doesNotMatch(modalSource, /aria-label="Cantidad de cajas"/);
   });
 
-  it("labels the product subtotal correctly and reserves its layout before selection", () => {
-    assert.match(modalSource, /min-h-\[8\.25rem\]/);
-    assert.match(modalSource, />Total de cajas</);
-    assert.match(modalSource, /selectedBox \? boxSubtotalLabel : "\$0"/);
-    assert.match(modalSource, /Selecciona una caja/);
+  it("labels the product subtotal correctly and joins it with the deposit math", () => {
+    assert.match(modalSource, /SaleDepositChargeField/);
+    assert.match(modalSource, /boxDetail=\{selectedBox \? `\$\{selectedBox\[1\]\} x \$\{boxCount\}` : ""\}/);
+    assert.match(fieldSource, /Total de cajas/);
+    assert.match(fieldSource, /Queda debiendo/);
+    assert.match(fieldSource, /aria-live="polite"/);
     assert.doesNotMatch(modalSource, /Depósito requerido/);
   });
 

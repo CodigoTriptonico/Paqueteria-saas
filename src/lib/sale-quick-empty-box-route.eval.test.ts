@@ -8,6 +8,10 @@ const modalSource = readFileSync(
   join(root, "src/components/sale/sale-quick-empty-box-modal.tsx"),
   "utf8",
 );
+const fieldSource = readFileSync(
+  join(root, "src/components/sale/sale-payment-method-field.tsx"),
+  "utf8",
+);
 const saleSource = readFileSync(join(root, "src/components/venta-client.tsx"), "utf8");
 const checkoutSource = readFileSync(
   join(root, "src/components/sale/sale-quick-checkout-modal.tsx"),
@@ -37,8 +41,11 @@ describe("quick empty-box route workflow", () => {
   });
 
   it("keeps the box subtotal separate from the deposit configured at payment", () => {
-    assert.match(modalSource, /Total de cajas/);
+    assert.match(fieldSource, /Total de cajas/);
+    assert.match(fieldSource, /Queda debiendo/);
     assert.match(modalSource, /Continuar a pago/);
+    assert.match(modalSource, /SaleDepositChargeField/);
+    assert.match(fieldSource, /Pago completo/);
     assert.doesNotMatch(modalSource, /Depósito requerido|Depósito a cobrar|Cobrar depósito/);
     assert.match(checkoutSource, /Venta rápida de caja vacía/);
     assert.doesNotMatch(checkoutSource, /Depósito de caja vacía/);
@@ -46,6 +53,8 @@ describe("quick empty-box route workflow", () => {
       saleSource,
       /setQuickPaymentMethod\(draft\.depositPaid \? defaultSalePaymentSelection\(\) : "pending"\)/,
     );
+    assert.match(saleSource, /setQuickPayNowDraft\(draft\.payNowAmount\)/);
+    assert.match(saleSource, /minimumDeposit=\{logisticsFees\.minimumDeposit\}/);
     assert.doesNotMatch(
       checkoutSource,
       /onPaymentMethodChange\(defaultSalePaymentSelection\(\)\)/,
@@ -65,7 +74,13 @@ describe("quick empty-box route workflow", () => {
   });
 
   it("loads boxes from the configured catalog instead of requiring USA", () => {
-    assert.match(saleSource, /resolveQuickSaleBoxCatalog\(countryBoxes\)/);
+    assert.match(saleSource, /listQuickSaleCountries\(countryBoxes\)/);
+    assert.match(
+      saleSource,
+      /resolveQuickSaleBoxCatalog\(countryBoxes, quickSaleCountry\)/,
+    );
+    assert.match(saleSource, /SaleQuickCountryPicker/);
+    assert.match(saleSource, /startQuickEmptyBox/);
     assert.match(
       saleSource,
       /createShipmentAction\(\{[\s\S]{0,500}country: quickSaleDraft\.country/,
@@ -76,7 +91,7 @@ describe("quick empty-box route workflow", () => {
     );
     assert.match(saleSource, /quickSaleDraft\.country, quickSaleDraft\.box/);
     assert.doesNotMatch(saleSource, /resolveCountryBoxes\(countryBoxes, "USA"\)/);
-    assert.match(catalogSource, /Object\.entries\(countryBoxes\)\.filter\(\(\[, boxes\]\) => boxes\.length > 0\)/);
+    assert.match(catalogSource, /export function listQuickSaleCountries/);
     assert.match(modalSource, /No hay cajas con precio/);
   });
 });

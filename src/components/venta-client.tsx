@@ -60,6 +60,7 @@ import {
   type QuickEmptyBoxDraft,
 } from "@/components/sale/sale-quick-empty-box-modal";
 import { SaleQuickCheckoutModal } from "@/components/sale/sale-quick-checkout-modal";
+import { SaleQuickCountryPicker } from "@/components/sale/sale-quick-country-picker";
 import { SaleInvoiceConfirmDialog } from "@/components/sale/sale-invoice-confirm-dialog";
 import { PromotionSelector } from "@/components/sale/promotion-selector";
 import { SaleClientForm } from "@/components/sale/sale-client-form";
@@ -81,7 +82,10 @@ import { inventarioHrefWithReturn } from "@/lib/inventario-return";
 import { ONBOARDING_TARGETS } from "@/lib/onboarding/coach-targets";
 import { recipientCountrySetupRequired } from "@/lib/recipient-country-gate";
 import { formatSalePersonListCount } from "@/lib/sale-person-list-count";
-import { resolveQuickSaleBoxCatalog } from "@/lib/sale-quick-box-catalog";
+import {
+  listQuickSaleCountries,
+  resolveQuickSaleBoxCatalog,
+} from "@/lib/sale-quick-box-catalog";
 import {
   saleRouteDecisionSummary,
   saleRouteDecisionTask,
@@ -606,6 +610,8 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     recipientName?: string;
   } | null>(null);
   const [quickSaleSender, setQuickSaleSender] = useState<Sender | null>(null);
+  const [quickSaleCountry, setQuickSaleCountry] = useState<string | null>(null);
+  const [quickSaleCountryPickerOpen, setQuickSaleCountryPickerOpen] = useState(false);
   const [cardStylePicker, setCardStylePicker] = useState<{
     kind: "sender" | "recipient";
     cardStyle: string;
@@ -799,8 +805,14 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
   useEffect(() => {
     queueMicrotask(() => {
-      setQuickPayNowDraft("");
-      setQuickPayNowDraftTouched(false);
+      if (!quickSaleDraft) {
+        setQuickPayNowDraft("");
+        setQuickPayNowDraftTouched(false);
+        return;
+      }
+
+      setQuickPayNowDraft(quickSaleDraft.payNowAmount);
+      setQuickPayNowDraftTouched(true);
     });
   }, [quickSaleDraft, logisticsFees]);
 
@@ -1399,7 +1411,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setQuickInvoiceNumber("");
     setQuickPayNowDraft("");
     setQuickPayNowDraftTouched(false);
-    setQuickPaymentMethod(draft.depositPaid ? defaultSalePaymentSelection() : "pending");
+    setQuickPaymentMethod(SALE_PAYMENT_UNSET);
     setQuickPaymentNote("");
     setQuickCheckoutCompleted(false);
     setQuickSelectedPromotionId("");
@@ -2921,9 +2933,13 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setQuickSaleDraft(draft);
     setQuickEmptyBoxRouteDecision(null);
     setQuickSelectedPromotionId("");
-    setQuickPaymentMethod(SALE_PAYMENT_UNSET);
+    setQuickPayNowDraft(draft.payNowAmount);
+    setQuickPayNowDraftTouched(true);
+    setQuickPaymentMethod(draft.depositPaid ? defaultSalePaymentSelection() : "pending");
     setQuickPaymentNote("");
     setQuickSaleSender(null);
+    setQuickSaleCountry(null);
+    setQuickSaleCountryPickerOpen(false);
     setContextMenu(null);
     setActiveCopyGroup(null);
     setStockMessage("");
@@ -3083,10 +3099,44 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     }
   }
 
-  const quickSaleBoxCatalog = useMemo(
-    () => resolveQuickSaleBoxCatalog(countryBoxes),
+  const quickSaleCountries = useMemo(
+    () => listQuickSaleCountries(countryBoxes),
     [countryBoxes],
   );
+
+  const quickSaleBoxCatalog = useMemo(
+    () =>
+      quickSaleCountry
+        ? resolveQuickSaleBoxCatalog(countryBoxes, quickSaleCountry)
+        : null,
+    [countryBoxes, quickSaleCountry],
+  );
+
+  function closeQuickSaleCountryFlow() {
+    setQuickSaleSender(null);
+    setQuickSaleCountry(null);
+    setQuickSaleCountryPickerOpen(false);
+    setQuickEmptyBoxRouteDecision(null);
+    if (routePlannerLeg === "quickEmptyBox") {
+      setRoutePlannerLeg(null);
+    }
+  }
+
+  function startQuickEmptyBox(sender: Sender) {
+    const countries = listQuickSaleCountries(countryBoxes);
+
+    if (!countries.length) {
+      notify.error("Configura al menos un país con cajas para usar la venta rápida.");
+      return;
+    }
+
+    setQuickSaleSender(sender);
+    setQuickSaleCountry(null);
+    setQuickSaleCountryPickerOpen(true);
+    setQuickEmptyBoxRouteDecision(null);
+    setContextMenu(null);
+    setActiveCopyGroup(null);
+  }
 
   function resolveContextSender() {
     if (!contextMenu || contextMenu.type !== "remitente") {
@@ -3739,7 +3789,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     setActiveStep("client");
                   }}
                   onChoose={chooseSender}
-                  onQuickEmptyBox={(sender) => setQuickSaleSender(sender)}
+                  onQuickEmptyBox={startQuickEmptyBox}
                   onIconClick={(event, sender) => {
                     const rect = event.currentTarget.getBoundingClientRect();
                     setCardStylePicker({
@@ -4397,9 +4447,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     return;
                   }
 
-                  setQuickSaleSender(sender);
-                  setContextMenu(null);
-                  setActiveCopyGroup(null);
+                  startQuickEmptyBox(sender);
                 }
               : undefined
           }
@@ -4462,23 +4510,30 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         />
       ) : null}
 
-      {quickSaleSender ? (
+      {quickSaleCountryPickerOpen && quickSaleSender ? (
+        <SaleQuickCountryPicker
+          sender={quickSaleSender}
+          countries={quickSaleCountries}
+          onClose={closeQuickSaleCountryFlow}
+          onSelect={(country) => {
+            setQuickSaleCountry(country);
+            setQuickSaleCountryPickerOpen(false);
+          }}
+        />
+      ) : null}
+
+      {quickSaleSender && quickSaleCountry && quickSaleBoxCatalog && !quickSaleCountryPickerOpen ? (
         <SaleQuickEmptyBoxModal
           sender={quickSaleSender}
-          country={quickSaleBoxCatalog?.country || ""}
-          boxes={quickSaleBoxCatalog?.boxes || []}
+          country={quickSaleBoxCatalog.country}
+          boxes={quickSaleBoxCatalog.boxes}
           promotions={resolveCountryPromotions(
             countryPromotions,
-            quickSaleBoxCatalog?.country || "",
+            quickSaleBoxCatalog.country,
           )}
+          minimumDeposit={logisticsFees.minimumDeposit}
           routeDecision={quickEmptyBoxRouteDecision}
-          onClose={() => {
-            setQuickSaleSender(null);
-            setQuickEmptyBoxRouteDecision(null);
-            if (routePlannerLeg === "quickEmptyBox") {
-              setRoutePlannerLeg(null);
-            }
-          }}
+          onClose={closeQuickSaleCountryFlow}
           onClearRoute={() => setQuickEmptyBoxRouteDecision(null)}
           onRequestRoute={() => void openRoutePlanner("quickEmptyBox")}
           onProceed={(draft) => void proceedQuickEmptyBox(draft)}
