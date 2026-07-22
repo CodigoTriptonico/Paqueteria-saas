@@ -3,7 +3,7 @@
 import { requireAppSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
-import { createStorageSignedUrl, buildStorageObjectPath, extractStorageObjectPath } from "@/lib/supabase/storage-url";
+import { createStorageSignedUrl, buildStorageObjectPath, extractStorageObjectPath, storagePathOwnedBy } from "@/lib/supabase/storage-url";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { recordActivityHistory } from "@/lib/activity-history";
 import {
@@ -163,33 +163,43 @@ async function clearDriverFromOtherVehicles(
   }
 }
 
-function normalizeVehiclePhotoStoragePath(photoUrl: string): string {
-  return extractStorageObjectPath(LOGISTICS_VEHICLE_PHOTO_BUCKET, photoUrl) || photoUrl;
+function normalizeVehiclePhotoStoragePath(photoUrl: string, organizationId: string): string {
+  const path = extractStorageObjectPath(LOGISTICS_VEHICLE_PHOTO_BUCKET, photoUrl) || photoUrl.trim().replace(/^\/+/, "");
+  return storagePathOwnedBy(path, organizationId) ? path : "";
 }
 
 async function resolveVehiclePhotoUrl(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   photoUrl: string | null | undefined,
+  organizationId: string,
 ): Promise<string> {
   if (!photoUrl?.trim()) {
     return "";
   }
 
   if (!admin) {
-    return photoUrl;
+    return storagePathOwnedBy(
+      extractStorageObjectPath(LOGISTICS_VEHICLE_PHOTO_BUCKET, photoUrl) || photoUrl.trim(),
+      organizationId,
+    )
+      ? photoUrl
+      : "";
   }
 
-  return createStorageSignedUrl(admin, LOGISTICS_VEHICLE_PHOTO_BUCKET, photoUrl);
+  return createStorageSignedUrl(admin, LOGISTICS_VEHICLE_PHOTO_BUCKET, photoUrl, {
+    ownerId: organizationId,
+  });
 }
 
 async function mapVehicleRows(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   rows: VehicleDbRow[],
   driverById: Map<string, DriverLabelRow>,
+  organizationId: string,
 ): Promise<LogisticsVehicleRow[]> {
   return Promise.all(
     rows.map(async (row) => {
-      const photoUrl = await resolveVehiclePhotoUrl(admin, row.photo_url);
+      const photoUrl = await resolveVehiclePhotoUrl(admin, row.photo_url, organizationId);
       return mapVehicle(row, driverById, photoUrl);
     }),
   );
@@ -598,7 +608,7 @@ export async function listLogisticsVehiclesAction(): Promise<ActionResult<Logist
     );
     const admin = createSupabaseAdminClient();
 
-    return ok(await mapVehicleRows(admin, rows, driverById));
+    return ok(await mapVehicleRows(admin, rows, driverById, session.organizationId));
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -629,7 +639,7 @@ export async function createLogisticsVehicleAction(
         organization_id: session.organizationId,
         name: validation.data.name,
         plate: validation.data.plate,
-        photo_url: normalizeVehiclePhotoStoragePath(validation.data.photoUrl),
+        photo_url: normalizeVehiclePhotoStoragePath(validation.data.photoUrl, session.organizationId),
         cargo_box_size: validation.data.cargoBoxSize,
         cargo_capacity: validation.data.cargoCapacity,
         notes: validation.data.notes,
@@ -648,7 +658,7 @@ export async function createLogisticsVehicleAction(
       session,
       [validation.data.assignedDriverId || ""],
     );
-    const [vehicle] = await mapVehicleRows(admin, [data as VehicleDbRow], driverById);
+    const [vehicle] = await mapVehicleRows(admin, [data as VehicleDbRow], driverById, session.organizationId);
 
     await recordActivityHistory(supabase, session, {
       action: "logistics.vehicle_created",
@@ -695,7 +705,7 @@ export async function updateLogisticsVehicleAction(input: {
       .update({
         name: validation.data.name,
         plate: validation.data.plate,
-        photo_url: normalizeVehiclePhotoStoragePath(validation.data.photoUrl),
+        photo_url: normalizeVehiclePhotoStoragePath(validation.data.photoUrl, session.organizationId),
         cargo_box_size: validation.data.cargoBoxSize,
         cargo_capacity: validation.data.cargoCapacity,
         notes: validation.data.notes,
@@ -718,7 +728,7 @@ export async function updateLogisticsVehicleAction(input: {
       session,
       [validation.data.assignedDriverId || ""],
     );
-    const [vehicle] = await mapVehicleRows(admin, [data as VehicleDbRow], driverById);
+    const [vehicle] = await mapVehicleRows(admin, [data as VehicleDbRow], driverById, session.organizationId);
 
     await recordActivityHistory(supabase, session, {
       action: "logistics.vehicle_updated",
@@ -806,7 +816,9 @@ export async function uploadLogisticsVehiclePhotoAction(
       return fail(error.message);
     }
 
-    const previewUrl = await createStorageSignedUrl(admin, LOGISTICS_VEHICLE_PHOTO_BUCKET, path);
+    const previewUrl = await createStorageSignedUrl(admin, LOGISTICS_VEHICLE_PHOTO_BUCKET, path, {
+      ownerId: session.organizationId,
+    });
 
     return ok(previewUrl);
   } catch (error) {

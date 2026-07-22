@@ -28,21 +28,91 @@ export function extractStorageObjectPath(bucket: string, value: string): string 
   return null;
 }
 
+/** Reject path traversal and empty/unsafe storage object keys. */
+export function isSafeStorageObjectPath(path: string): boolean {
+  const trimmed = path.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  if (
+    trimmed.startsWith("/") ||
+    trimmed.includes("\\") ||
+    trimmed.includes("\0") ||
+    trimmed.includes("//")
+  ) {
+    return false;
+  }
+
+  let decoded = trimmed;
+  try {
+    decoded = decodeURIComponent(trimmed);
+  } catch {
+    return false;
+  }
+
+  if (decoded.includes("..") || decoded.includes("\\") || decoded.includes("\0")) {
+    return false;
+  }
+
+  const segments = decoded.split("/").filter(Boolean);
+  if (!segments.length || segments.some((segment) => segment === "." || segment === "..")) {
+    return false;
+  }
+
+  return true;
+}
+
+/** True when path is exactly ownerId or under ownerId/. */
+export function storagePathOwnedBy(path: string, ownerId: string): boolean {
+  const owner = ownerId.trim();
+  if (!owner || !isSafeStorageObjectPath(path)) {
+    return false;
+  }
+
+  return path === owner || path.startsWith(`${owner}/`);
+}
+
+export function assertStoragePathOwnedBy(path: string, ownerId: string): string {
+  const normalized = path.replace(/^\/+/, "").trim();
+  if (!storagePathOwnedBy(normalized, ownerId)) {
+    throw new Error("FORBIDDEN_STORAGE_PATH");
+  }
+  return normalized;
+}
+
+export type CreateStorageSignedUrlOptions = {
+  expiresInSeconds?: number;
+  /** Required owner folder (organizationId or userId for avatars). */
+  ownerId?: string;
+};
+
 export async function createStorageSignedUrl(
   client: SupabaseClient,
   bucket: string,
   pathOrUrl: string,
-  expiresInSeconds = SIGNED_URL_TTL_SECONDS,
+  expiresInSecondsOrOptions: number | CreateStorageSignedUrlOptions = SIGNED_URL_TTL_SECONDS,
 ): Promise<string> {
+  const options: CreateStorageSignedUrlOptions =
+    typeof expiresInSecondsOrOptions === "number"
+      ? { expiresInSeconds: expiresInSecondsOrOptions }
+      : expiresInSecondsOrOptions;
+
   const path = extractStorageObjectPath(bucket, pathOrUrl);
-  if (!path) {
-    return pathOrUrl;
+  if (!path || !isSafeStorageObjectPath(path)) {
+    return "";
   }
 
-  const { data, error } = await client.storage.from(bucket).createSignedUrl(path, expiresInSeconds);
+  if (options.ownerId && !storagePathOwnedBy(path, options.ownerId)) {
+    return "";
+  }
+
+  const { data, error } = await client.storage
+    .from(bucket)
+    .createSignedUrl(path, options.expiresInSeconds ?? SIGNED_URL_TTL_SECONDS);
 
   if (error || !data?.signedUrl) {
-    return pathOrUrl;
+    return "";
   }
 
   return data.signedUrl;

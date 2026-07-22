@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { extractStorageObjectPath } from "./storage-url";
+import {
+  assertStoragePathOwnedBy,
+  extractStorageObjectPath,
+  isSafeStorageObjectPath,
+  storagePathOwnedBy,
+} from "./storage-url";
 
 describe("extractStorageObjectPath", () => {
   it("returns raw paths unchanged", () => {
@@ -22,5 +27,17 @@ describe("extractStorageObjectPath", () => {
 
   it("rejects empty values", () => {
     assert.equal(extractStorageObjectPath("logistics-vehicle-photos", ""), null);
+  });
+});
+
+describe("storage path ownership", () => {
+  it("accepts owner-prefixed paths and rejects traversal or foreign folders", () => {
+    assert.equal(isSafeStorageObjectPath("org-1/a.webp"), true);
+    assert.equal(isSafeStorageObjectPath("org-1/../org-2/a.webp"), false);
+    assert.equal(isSafeStorageObjectPath("org-1/%2e%2e/org-2/a.webp"), false);
+    assert.equal(storagePathOwnedBy("org-1/logo.webp", "org-1"), true);
+    assert.equal(storagePathOwnedBy("org-2/logo.webp", "org-1"), false);
+    assert.equal(storagePathOwnedBy("org-1", "org-1"), true);
+    assert.throws(() => assertStoragePathOwnedBy("org-2/x", "org-1"), /FORBIDDEN_STORAGE_PATH/);
   });
 });

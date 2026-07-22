@@ -85,10 +85,14 @@ async function getDevelopmentPlatformOwnerSession(): Promise<AppSession | null> 
   const homeOrg = Array.isArray(orgRow) ? orgRow[0] : orgRow;
   const isPlatformAdmin = await loadIsPlatformAdmin(userId);
   const avatarUrl = profile.avatar_path
-    ? await createStorageSignedUrl(admin, PROFILE_AVATAR_BUCKET, profile.avatar_path)
+    ? await createStorageSignedUrl(admin, PROFILE_AVATAR_BUCKET, profile.avatar_path, {
+        ownerId: userId,
+      })
     : null;
   const organizationLogoUrl = homeOrg?.settings?.company_logo_path
-    ? await createStorageSignedUrl(admin, ORGANIZATION_LOGO_BUCKET, homeOrg.settings.company_logo_path)
+    ? await createStorageSignedUrl(admin, ORGANIZATION_LOGO_BUCKET, homeOrg.settings.company_logo_path, {
+        ownerId: profile.organization_id,
+      })
     : null;
 
   return {
@@ -178,10 +182,14 @@ async function resolveAppSessionUncached(): Promise<AppSession | null> {
     supabase.from("profile_warehouses").select("warehouse_id").eq("profile_id", userId),
     loadIsPlatformAdmin(userId, supabase),
     profile.avatar_path
-      ? createStorageSignedUrl(supabase, PROFILE_AVATAR_BUCKET, profile.avatar_path)
+      ? createStorageSignedUrl(supabase, PROFILE_AVATAR_BUCKET, profile.avatar_path, {
+          ownerId: userId,
+        })
       : Promise.resolve(null),
     homeOrg?.settings?.company_logo_path
-      ? createStorageSignedUrl(supabase, ORGANIZATION_LOGO_BUCKET, homeOrg.settings.company_logo_path)
+      ? createStorageSignedUrl(supabase, ORGANIZATION_LOGO_BUCKET, homeOrg.settings.company_logo_path, {
+          ownerId: profile.organization_id,
+        })
       : Promise.resolve(null),
   ]);
 

@@ -3,6 +3,7 @@ import {
   buildStorageObjectPath,
   createStorageSignedUrl,
   extractStorageObjectPath,
+  storagePathOwnedBy,
 } from "@/lib/supabase/storage-url";
 
 export const INVENTORY_ITEM_PHOTO_BUCKET = "inventory-item-photos";
@@ -31,23 +32,36 @@ export function validateInventoryItemPhoto(
   return { ok: true };
 }
 
-export function normalizeInventoryItemPhotoPath(photoUrl: string) {
-  return extractStorageObjectPath(INVENTORY_ITEM_PHOTO_BUCKET, photoUrl) || photoUrl.trim();
+export function normalizeInventoryItemPhotoPath(photoUrl: string, organizationId: string) {
+  const path =
+    extractStorageObjectPath(INVENTORY_ITEM_PHOTO_BUCKET, photoUrl) || photoUrl.trim().replace(/^\/+/, "");
+  if (!storagePathOwnedBy(path, organizationId)) {
+    return "";
+  }
+  return path;
 }
 
 export async function resolveInventoryItemPhotoUrl(
   client: SupabaseClient | null,
   photoUrl: string | null | undefined,
+  organizationId: string,
 ) {
   if (!photoUrl?.trim()) {
     return "";
   }
 
   if (!client) {
-    return photoUrl;
+    return storagePathOwnedBy(
+      extractStorageObjectPath(INVENTORY_ITEM_PHOTO_BUCKET, photoUrl) || photoUrl.trim(),
+      organizationId,
+    )
+      ? photoUrl
+      : "";
   }
 
-  return createStorageSignedUrl(client, INVENTORY_ITEM_PHOTO_BUCKET, photoUrl);
+  return createStorageSignedUrl(client, INVENTORY_ITEM_PHOTO_BUCKET, photoUrl, {
+    ownerId: organizationId,
+  });
 }
 
 export function buildInventoryItemPhotoPath(organizationId: string, fileName: string) {

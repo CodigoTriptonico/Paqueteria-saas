@@ -254,6 +254,9 @@ export async function updateOrganizationAction(input: {
         .from("warehouses")
         .select("id", { count: "exact", head: true })
         .eq("organization_id", input.organizationId);
+      if (!Number.isFinite(input.maxWarehouses)) {
+        return fail("Límite de bodegas inválido.");
+      }
       const limit = Math.max(
         count || 0,
         Math.max(1, Math.min(100, Math.trunc(input.maxWarehouses))),
@@ -265,6 +268,9 @@ export async function updateOrganizationAction(input: {
       if (input.maxUsers === null) {
         delete settings.max_users;
       } else {
+        if (!Number.isFinite(input.maxUsers)) {
+          return fail("Límite de usuarios inválido.");
+        }
         const { count } = await admin
           .from("profiles")
           .select("id", { count: "exact", head: true })

@@ -59,6 +59,7 @@ import { requireAppSession } from "@/lib/auth/session";
 import { sessionHasPermission } from "@/lib/auth/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
+import { createStorageSignedUrl } from "@/lib/supabase/storage-url";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { recordActivityHistory } from "@/lib/activity-history";
 import { recordInventoryMovementAtomic } from "@/lib/security/inventory-movement";
@@ -648,8 +649,10 @@ async function uploadEvidence(
     throw new Error(error.message);
   }
 
-  const { data } = await admin.storage.from(LOGISTICS_TASK_EVIDENCE_BUCKET).createSignedUrl(path, 60 * 60);
-  return data?.signedUrl || path;
+  const signed = await createStorageSignedUrl(admin, LOGISTICS_TASK_EVIDENCE_BUCKET, path, {
+    ownerId: session.organizationId,
+  });
+  return signed || path;
 }
 
 async function collectDriverPayment(admin: Admin, session: AppSession, shipment: ShipmentRow, input: {

@@ -134,7 +134,9 @@ export async function uploadMyProfileAvatarAction(
       return fail(profileError.message);
     }
 
-    const avatarUrl = await createStorageSignedUrl(admin, PROFILE_AVATAR_BUCKET, path);
+    const avatarUrl = await createStorageSignedUrl(admin, PROFILE_AVATAR_BUCKET, path, {
+      ownerId: session.userId,
+    });
     refreshAccountSurfaces();
     return ok({ avatarUrl });
   } catch (error) {

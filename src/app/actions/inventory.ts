@@ -108,7 +108,7 @@ async function loadWarehouseInventoryCore(
     items.map(async (item) => ({
       ...item,
       photoUrl: item.photoUrl
-        ? await resolveInventoryItemPhotoUrl(admin, item.photoUrl)
+        ? await resolveInventoryItemPhotoUrl(admin, item.photoUrl, organizationId)
         : undefined,
     })),
   );
@@ -672,7 +672,7 @@ async function ensureItemsForWarehouse(
             subcategory: leaf.subcategory || null,
             unit: normalizeInventoryUnit(stockItem?.unit) || DEFAULT_INVENTORY_UNIT,
             photo_url: stockItem?.photoUrl
-              ? normalizeInventoryItemPhotoPath(stockItem.photoUrl)
+              ? normalizeInventoryItemPhotoPath(stockItem.photoUrl, organizationId)
               : "",
           })
           .select("id")
@@ -691,7 +691,7 @@ async function ensureItemsForWarehouse(
     }
 
     const photoPath = stockItem?.photoUrl
-      ? normalizeInventoryItemPhotoPath(stockItem.photoUrl)
+      ? normalizeInventoryItemPhotoPath(stockItem.photoUrl, organizationId)
       : "";
     const unit = normalizeInventoryUnit(stockItem?.unit) || DEFAULT_INVENTORY_UNIT;
     const itemUpdates: { photo_url?: string; unit: string } = { unit };
@@ -990,7 +990,7 @@ export async function uploadInventoryItemPhotoAction(
       return fail(error.message);
     }
 
-    const previewUrl = await resolveInventoryItemPhotoUrl(admin, path);
+    const previewUrl = await resolveInventoryItemPhotoUrl(admin, path, session.organizationId);
     const itemId = String(formData.get("itemId") || "").trim();
 
     if (isPersistedInventoryItemId(itemId)) {

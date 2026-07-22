@@ -163,7 +163,9 @@ export async function getOrganizationProfileAction(): Promise<
     const settings = (org?.settings || {}) as OrganizationSettings;
     const logoPath = settings.company_logo_path?.trim() || "";
     const logoUrl = logoPath
-      ? await createStorageSignedUrl(supabase, ORGANIZATION_LOGO_BUCKET, logoPath)
+      ? await createStorageSignedUrl(supabase, ORGANIZATION_LOGO_BUCKET, logoPath, {
+          ownerId: session.organizationId,
+        })
       : null;
 
     return ok({
@@ -232,7 +234,9 @@ export async function updateOrganizationProfileAction(input: {
     const logoPath = nextSettings.company_logo_path?.trim() || "";
     const admin = createSupabaseAdminClient();
     const logoUrl = logoPath && admin
-      ? await createStorageSignedUrl(admin, ORGANIZATION_LOGO_BUCKET, logoPath)
+      ? await createStorageSignedUrl(admin, ORGANIZATION_LOGO_BUCKET, logoPath, {
+          ownerId: session.organizationId,
+        })
       : null;
 
     return ok({
@@ -307,7 +311,9 @@ export async function uploadOrganizationLogoAction(
       return fail(updateError.message);
     }
 
-    const logoUrl = await createStorageSignedUrl(admin, ORGANIZATION_LOGO_BUCKET, path);
+    const logoUrl = await createStorageSignedUrl(admin, ORGANIZATION_LOGO_BUCKET, path, {
+      ownerId: session.organizationId,
+    });
     revalidatePath("/", "layout");
     return ok({ logoUrl });
   } catch (error) {

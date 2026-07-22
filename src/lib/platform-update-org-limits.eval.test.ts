@@ -14,4 +14,9 @@ describe("platform update organization user limits", () => {
     assert.match(source, /if \(input\.maxUsers === null\) \{/);
     assert.match(source, /delete settings\.max_users/);
   });
+
+  it("rejects non-finite numeric plan caps before writing settings", () => {
+    assert.match(source, /Number\.isFinite\(input\.maxWarehouses\)/);
+    assert.match(source, /Number\.isFinite\(input\.maxUsers\)/);
+  });
 });

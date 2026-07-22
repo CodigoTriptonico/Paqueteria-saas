@@ -56,6 +56,7 @@
     "test:commercial-db": "node scripts/test-commercial-config.mjs",
     "test:warehouse-db": "node scripts/test-warehouse-intake.mjs",
     "test:route-arrival-db": "node scripts/test-conductor-route-arrival.mjs",
+    "test:plan-settings-guard": "node scripts/test-organization-plan-settings-guard.mjs",
     "test:sms": "node scripts/test-sms-flow.mjs",
     "export:chatgpt": "node scripts/export-chatgpt-folder.mjs"
   },

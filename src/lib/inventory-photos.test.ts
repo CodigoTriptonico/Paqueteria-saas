@@ -22,14 +22,17 @@ describe("inventory-photos", () => {
     );
   });
 
-  it("normalizes signed and public storage URLs back to object paths", () => {
+  it("normalizes owned paths and rejects foreign organization folders", () => {
     const path = "org-1/photo.webp";
-    assert.equal(normalizeInventoryItemPhotoPath(path), path);
+    assert.equal(normalizeInventoryItemPhotoPath(path, "org-1"), path);
     assert.equal(
       normalizeInventoryItemPhotoPath(
         `https://example.supabase.co/storage/v1/object/public/${INVENTORY_ITEM_PHOTO_BUCKET}/${path}`,
+        "org-1",
       ),
       path,
     );
+    assert.equal(normalizeInventoryItemPhotoPath("org-2/photo.webp", "org-1"), "");
+    assert.equal(normalizeInventoryItemPhotoPath("org-1/../org-2/x.webp", "org-1"), "");
   });
 });

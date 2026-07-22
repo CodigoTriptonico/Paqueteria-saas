@@ -25,6 +25,7 @@ export default async function ProfilePage() {
         supabase,
         PROFILE_AVATAR_BUCKET,
         data.avatar_path,
+        { ownerId: session.userId },
       );
     }
   }

@@ -259,7 +259,11 @@ async function loadWorkspace(): Promise<WarehouseIntakeWorkspace> {
       locationLabel: text(item.location_label),
       note: text(item.note),
       evidencePath,
-      evidenceUrl: admin && evidencePath ? await createStorageSignedUrl(admin, EVIDENCE_BUCKET, evidencePath) : evidencePath,
+      evidenceUrl: admin && evidencePath
+        ? await createStorageSignedUrl(admin, EVIDENCE_BUCKET, evidencePath, {
+            ownerId: session.organizationId,
+          })
+        : evidencePath,
       scannedAt: text(item.scanned_at),
       scannedByName: profileName(profiles.get(text(item.scanned_by))),
       package: packageRow ? {
