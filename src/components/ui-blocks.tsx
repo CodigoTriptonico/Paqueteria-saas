@@ -61,6 +61,9 @@ export const labelMutedClass = "text-xs font-black uppercase text-slate-500";
 
 export const textMutedClass = "text-sm font-bold text-slate-300";
 
+/** Ellipsis without clipping descenders (g/y/p). Prefer over Tailwind `truncate`. */
+export const textTruncateSafeClass = "text-truncate-safe min-w-0";
+
 export function StatCard({
   label,
   value,

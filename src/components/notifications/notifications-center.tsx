@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import type { OnboardingProgress } from "@/app/actions/onboarding";
 import { OnboardingPanel } from "@/components/onboarding/onboarding-panel";
 import { OnboardingStartPanel } from "@/components/onboarding/onboarding-start-panel";
-import { iconWellEmerald, labelMutedClass } from "@/components/ui-blocks";
+import { iconWellEmerald, labelMutedClass, textTruncateSafeClass } from "@/components/ui-blocks";
 import { useOnboardingProgress } from "@/hooks/use-onboarding-progress";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { isPlatformOnlySession } from "@/lib/auth/permissions";
@@ -106,12 +106,12 @@ export function BoxarioBrandHeader({
   });
   const brandTitle = branding.brandTitle;
   const resolvedTitle = title ?? brandTitle;
-  const shellClass = `relative grid min-h-[5.25rem] grid-rows-[2rem_2rem] gap-1 overflow-hidden rounded-xl border border-black bg-surface-card-header px-2.5 py-2 text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
+  const shellClass = `relative flex h-[5.25rem] flex-col overflow-hidden rounded-xl border border-black bg-surface-card-header px-2.5 py-2 text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
     compact ? "" : "px-3"
   } ${className}`;
-  const titleClass = `min-w-0 truncate font-black tracking-tight leading-none ${
+  const titleClass = `font-black tracking-tight ${
     compact ? "text-lg" : "text-xl"
-  }`;
+  } ${textTruncateSafeClass}`;
   const showNotifications = Boolean(session && !isPlatformOnlySession(session));
   const expandAllGroupsLabel = sidebarGroupsToggle?.allExpanded
     ? "Contraer todos los grupos del menú"
@@ -120,13 +120,12 @@ export function BoxarioBrandHeader({
     isHydrated && onBack && !keepBrand && resolvedTitle !== brandTitle;
   const showContextBack = Boolean(onBack && !keepBrand);
   const showReservedBack = !showContextBack && reserveBackSlot && !keepBrand;
-  const primaryRowClass = keepBrand
-    ? "flex w-full min-w-0 items-center justify-between gap-2"
-    : "row-span-2 flex w-full min-w-0 items-center justify-between gap-2";
+  const showBottomBack = Boolean(onBack && keepBrand);
+  const bottomBackVisible = Boolean(showBottomBack && isHydrated);
 
   return (
     <div className={shellClass}>
-      <div className={primaryRowClass}>
+      <div className="flex min-w-0 items-center justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
           {isHydrated && showContextBack ? (
             <button
@@ -184,19 +183,28 @@ export function BoxarioBrandHeader({
           {showNotifications ? <NotificationsCenter session={session} variant="brand" /> : null}
         </div>
       </div>
-      {isHydrated && onBack && keepBrand ? (
-        <button
-          type="button"
-          onClick={onBack}
-          title={backTitle}
-          aria-label={`${backTitle}: ${title}`}
-          data-onboarding-target={backTarget}
-          className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md border border-emerald-700/35 bg-emerald-400/10 px-2 text-left text-xs font-black text-emerald-200 transition hover:bg-emerald-400/15 hover:text-emerald-100"
-        >
-          <ArrowLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-          <span className="min-w-0 truncate">{title}</span>
-        </button>
-      ) : null}
+      <div className="mt-auto h-8">
+        {showBottomBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            title={backTitle}
+            aria-label={`${backTitle}: ${title}`}
+            data-onboarding-target={backTarget}
+            tabIndex={bottomBackVisible ? undefined : -1}
+            aria-hidden={!bottomBackVisible}
+            disabled={!bottomBackVisible}
+            className={`flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md border border-emerald-700/35 bg-emerald-400/10 px-2 text-left text-xs font-black text-emerald-200 transition hover:bg-emerald-400/15 hover:text-emerald-100 ${
+              bottomBackVisible ? "visible" : "invisible"
+            }`}
+          >
+            <ArrowLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+            <span className="min-w-0 truncate">{title}</span>
+          </button>
+        ) : (
+          <div className="h-8" aria-hidden />
+        )}
+      </div>
     </div>
   );
 }

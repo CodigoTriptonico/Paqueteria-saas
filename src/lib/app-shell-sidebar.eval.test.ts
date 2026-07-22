@@ -168,11 +168,12 @@ describe("app shell sidebar eval", () => {
     assert.doesNotMatch(brandHeaderSource, /bg-surface-card text-\[#f8fafc\] shadow-sm/);
   });
 
-  it("keeps the brand header height stable without leaving a blank lower strip", () => {
-    assert.match(brandHeaderSource, /grid min-h-\[5\.25rem\] grid-rows-\[2rem_2rem\] gap-1/);
-    assert.match(brandHeaderSource, /row-span-2 flex w-full min-w-0 items-center justify-between gap-2/);
-    assert.match(brandHeaderSource, /isHydrated && onBack && keepBrand/);
-    assert.doesNotMatch(brandHeaderSource, /<div className="mt-1 h-8 w-full" aria-hidden \/>/);
+  it("keeps a fixed two-row brand header with permanent action-button space", () => {
+    assert.match(brandHeaderSource, /flex h-\[5\.25rem\] flex-col/);
+    assert.match(brandHeaderSource, /mt-auto h-8/);
+    assert.match(brandHeaderSource, /bottomBackVisible \? "visible" : "invisible"/);
+    assert.match(brandHeaderSource, /const showBottomBack = Boolean\(onBack && keepBrand\)/);
+    assert.doesNotMatch(brandHeaderSource, /row-span-2/);
   });
 
   it("renders icon rail from sidebarNavGroups when desktop sidebar is collapsed", () => {

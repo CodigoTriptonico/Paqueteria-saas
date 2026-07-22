@@ -60,5 +60,24 @@ describe("platform companies layout eval", () => {
     assert.doesNotMatch(source, /max_users \?\? "-"\} usuarios extra/);
     assert.doesNotMatch(source, /max_warehouses \?\? "-"\} bodegas permitidas/);
   });
+
+  it("keeps company name descenders visible instead of clipping with truncate", () => {
+    assert.match(source, /textTruncateSafeClass/);
+    assert.match(source, /items-start gap-3/);
+    assert.doesNotMatch(
+      source,
+      /block truncate text-lg font-black text-slate-100/,
+    );
+  });
+
+  it("preserves null max_users as unlimited in the edit form instead of coercing to 5", () => {
+    assert.match(source, /useState<number \| null>\(null\)/);
+    assert.match(source, /setEditMaxUsers\(organization\.max_users\)/);
+    assert.match(source, /setEditMaxUsers\(selectedOrg\.max_users\)/);
+    assert.match(source, /value=\{editMaxUsers \?\? ""\}/);
+    assert.match(source, /placeholder="Sin límite"/);
+    assert.match(source, /Vacío = sin límite de usuarios extra\./);
+    assert.doesNotMatch(source, /max_users \?\? 5/);
+  });
 });
 

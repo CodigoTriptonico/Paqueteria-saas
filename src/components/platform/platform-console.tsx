@@ -41,6 +41,7 @@ import {
   Panel,
   primaryButtonClass,
   secondaryButtonClass,
+  textTruncateSafeClass,
 } from "@/components/ui-blocks";
 import type { PlatformOrganizationRow } from "@/lib/auth/types";
 import {
@@ -103,7 +104,7 @@ export function PlatformConsole() {
   const [saving, setSaving] = useState(false);
   const [editOrgName, setEditOrgName] = useState("");
   const [editOrgSlug, setEditOrgSlug] = useState("");
-  const [editMaxUsers, setEditMaxUsers] = useState(5);
+  const [editMaxUsers, setEditMaxUsers] = useState<number | null>(null);
   const [editMaxWarehouses, setEditMaxWarehouses] = useState(DEFAULT_MAX_WAREHOUSES);
   const [editAgenciesEnabled, setEditAgenciesEnabled] = useState(false);
   const [contextMenu, setContextMenu] =
@@ -143,7 +144,7 @@ export function PlatformConsole() {
     queueMicrotask(() => {
       setEditOrgName(selectedOrg.name);
       setEditOrgSlug(selectedOrg.slug);
-      setEditMaxUsers(selectedOrg.max_users ?? 5);
+      setEditMaxUsers(selectedOrg.max_users);
       setEditMaxWarehouses(selectedOrg.max_warehouses ?? DEFAULT_MAX_WAREHOUSES);
       setEditAgenciesEnabled(selectedOrg.agencies_enabled);
     });
@@ -231,7 +232,7 @@ export function PlatformConsole() {
     selectOrganization(organization.id);
     setEditOrgName(organization.name);
     setEditOrgSlug(organization.slug);
-    setEditMaxUsers(organization.max_users ?? 5);
+    setEditMaxUsers(organization.max_users);
     setEditMaxWarehouses(organization.max_warehouses ?? DEFAULT_MAX_WAREHOUSES);
     setEditAgenciesEnabled(organization.agencies_enabled);
     setShowArchiveConfirm(false);
@@ -423,16 +424,16 @@ export function PlatformConsole() {
                 className="group grid w-full cursor-context-menu gap-4 rounded-xl border border-black bg-surface-card p-4 text-left shadow-[0_6px_20px_rgba(0,0,0,0.18)] transition-colors hover:bg-surface-card-hover sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-5"
                 aria-label={`Abrir empresa ${org.name}. Clic derecho para más opciones.`}
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-black bg-surface-inset text-emerald-300" aria-hidden>
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="flex min-w-0 items-start gap-3">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-xl border border-black bg-surface-inset text-emerald-300" aria-hidden>
                       <Building2 className="h-6 w-6" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate text-lg font-black text-slate-100">
+                      <span className={`block text-lg font-black text-slate-100 ${textTruncateSafeClass}`}>
                         {org.name}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs font-bold text-slate-400">
+                      <span className={`mt-1 block text-xs font-bold text-slate-400 ${textTruncateSafeClass}`}>
                         {org.slug}
                       </span>
                     </span>
@@ -501,13 +502,13 @@ export function PlatformConsole() {
                 </button>
               </div>
             </div>
-            <div className="mt-4 flex min-w-0 items-center gap-3">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-black bg-surface-inset text-emerald-300" aria-hidden>
+            <div className="mt-4 flex min-w-0 items-start gap-3">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-xl border border-black bg-surface-inset text-emerald-300" aria-hidden>
                 <Building2 className="h-6 w-6" />
               </span>
               <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-wide text-emerald-300">Administración de empresa</p>
-                <h1 className="mt-1 truncate text-3xl font-black tracking-tight text-slate-100 sm:text-4xl">
+                <h1 className={`mt-1 text-3xl font-black tracking-tight text-slate-100 sm:text-4xl ${textTruncateSafeClass}`}>
                   {selectedOrg.name}
                 </h1>
                 <p className="mt-1 text-sm font-bold text-slate-400">
@@ -625,12 +626,22 @@ export function PlatformConsole() {
                     type="number"
                     min="1"
                     max="500"
-                    value={editMaxUsers}
-                    onChange={(event) =>
-                      setEditMaxUsers(Number(event.target.value))
-                    }
+                    value={editMaxUsers ?? ""}
+                    placeholder="Sin límite"
+                    onChange={(event) => {
+                      const raw = event.target.value.trim();
+                      if (!raw) {
+                        setEditMaxUsers(null);
+                        return;
+                      }
+                      const next = Number(raw);
+                      setEditMaxUsers(Number.isFinite(next) ? next : null);
+                    }}
                     className={inputClass}
                   />
+                  <span className="text-xs font-bold text-slate-500">
+                    Vacío = sin límite de usuarios extra.
+                  </span>
                 </label>
                 <label className="grid gap-1.5">
                   <FieldLabel>Bodegas permitidas</FieldLabel>

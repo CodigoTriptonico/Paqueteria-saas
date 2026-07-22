@@ -41,8 +41,8 @@ describe("platform console Spanish count labels", () => {
     assert.equal(formatPlatformWarehouseLimit(3), "3 bodegas permitidas");
   });
 
-  it("describes null plan limits as unlimited instead of a dash", () => {
-    assert.equal(formatPlatformExtraUserLimit(null), "Sin límite de usuarios");
-    assert.equal(formatPlatformWarehouseLimit(null), "Sin límite de bodegas");
+  it("describes null user limits as unlimited and null warehouse limits as unset", () => {
+    assert.equal(formatPlatformExtraUserLimit(null), "Sin límite de usuarios extra");
+    assert.equal(formatPlatformWarehouseLimit(null), "Límite de bodegas no configurado");
   });
 });

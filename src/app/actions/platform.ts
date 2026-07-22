@@ -227,7 +227,7 @@ export async function updateOrganizationAction(input: {
   organizationId: string;
   name: string;
   slug?: string;
-  maxUsers?: number;
+  maxUsers?: number | null;
   maxWarehouses?: number;
   agenciesEnabled?: boolean;
 }): Promise<ActionResult<null>> {
@@ -262,15 +262,19 @@ export async function updateOrganizationAction(input: {
       settings.multi_warehouse_enabled = limit > 1;
     }
     if (input.maxUsers !== undefined) {
-      const { count } = await admin
-        .from("profiles")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", input.organizationId);
-      const limit = Math.max(
-        Math.max(0, (count || 0) - 1),
-        Math.max(1, Math.min(500, Math.trunc(input.maxUsers))),
-      );
-      settings.max_users = limit;
+      if (input.maxUsers === null) {
+        delete settings.max_users;
+      } else {
+        const { count } = await admin
+          .from("profiles")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", input.organizationId);
+        const limit = Math.max(
+          Math.max(0, (count || 0) - 1),
+          Math.max(1, Math.min(500, Math.trunc(input.maxUsers))),
+        );
+        settings.max_users = limit;
+      }
     }
     if (input.agenciesEnabled !== undefined) {
       settings.agencies_enabled = input.agenciesEnabled === true;

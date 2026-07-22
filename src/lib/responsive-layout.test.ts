@@ -11,6 +11,11 @@ test("shared responsive foundations protect intrinsic content without clipping i
 
   assert.match(css, /\*::before,[\s\S]*box-sizing: inherit/);
   assert.match(css, /overflow-wrap: anywhere/);
+  assert.match(css, /\.text-truncate-safe/);
+  assert.match(css, /overflow-clip-margin:\s*0\.25em/);
+  assert.match(css, /padding-block:\s*0\.2em/);
+  assert.match(css, /line-height:\s*1\.45/);
+  assert.doesNotMatch(css, /\.text-truncate-safe[\s\S]*margin-block:/);
   assert.match(css, /img,[\s\S]*max-width: 100%/);
   assert.match(css, /\.app-modal-overlay[\s\S]*overflow-y: auto/);
   assert.match(css, /\.app-modal-content[\s\S]*max-height: calc\(100dvh - 1\.5rem\)/);

@@ -115,6 +115,21 @@ textarea {
   resize: vertical;
 }
 
+/*
+  Horizontal ellipsis without clipping glyph descenders (g, y, p, q).
+  Tailwind `truncate` uses overflow:hidden with no vertical padding, so
+  font-black synthetic bold ink gets cut under the baseline.
+  Do not use negative margin-block here: it lets the next line paint over descenders.
+*/
+.text-truncate-safe {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.45;
+  padding-block: 0.2em;
+  overflow-clip-margin: 0.25em;
+}
+
 /* Shared dialog geometry: short phones scroll the dialog instead of clipping it. */
 .app-modal-overlay {
   align-items: flex-start;

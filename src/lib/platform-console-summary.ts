@@ -24,12 +24,12 @@ export function formatPlatformWarehouseCount(count: number) {
 }
 
 export function formatPlatformExtraUserLimit(maxUsers: number | null) {
-  if (maxUsers === null) return "Sin límite de usuarios";
+  if (maxUsers === null) return "Sin límite de usuarios extra";
   return maxUsers === 1 ? "1 usuario extra" : `${maxUsers} usuarios extra`;
 }
 
 export function formatPlatformWarehouseLimit(maxWarehouses: number | null) {
-  if (maxWarehouses === null) return "Sin límite de bodegas";
+  if (maxWarehouses === null) return "Límite de bodegas no configurado";
   return maxWarehouses === 1
     ? "1 bodega permitida"
     : `${maxWarehouses} bodegas permitidas`;
