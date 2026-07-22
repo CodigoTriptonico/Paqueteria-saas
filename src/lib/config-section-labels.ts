@@ -15,7 +15,7 @@ export type ConfigSectionLabel = {
 export const CONFIG_SECTION_LABELS: Record<ConfigSectionId, ConfigSectionLabel> = {
   organization: {
     title: "Organización",
-    text: "Empresa, plan, usuarios, roles y bodegas.",
+    text: "Empresa, plan, usuarios, roles, bodegas e importación.",
   },
   prices: {
     title: "Países y precios",

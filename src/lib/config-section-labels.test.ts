@@ -6,6 +6,7 @@ describe("config section labels", () => {
   it("names each section by what it actually configures", () => {
     assert.equal(CONFIG_SECTION_LABELS.organization.title, "Organización");
     assert.match(CONFIG_SECTION_LABELS.organization.text, /bodegas/i);
+    assert.match(CONFIG_SECTION_LABELS.organization.text, /importación/i);
     assert.equal(CONFIG_SECTION_LABELS.prices.title, "Países y precios");
     assert.equal(CONFIG_SECTION_LABELS.distributors.title, "Distribuidores");
     assert.equal(CONFIG_SECTION_LABELS.deliveries.title, "Entrega y recolección");

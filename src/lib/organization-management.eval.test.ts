@@ -24,20 +24,23 @@ describe("organization management information architecture", () => {
   it("keeps one organization landing card for company access and warehouses", () => {
     assert.match(configSource, /id: "organization" as Section/);
     assert.match(labelsSource, /title: "Organización"/);
-    assert.match(labelsSource, /usuarios, roles y bodegas/);
+    assert.match(labelsSource, /usuarios, roles, bodegas e importación/);
     assert.doesNotMatch(configSource, /id: "plan" as Section/);
     assert.doesNotMatch(configSource, /id: "company" as Section/);
     assert.doesNotMatch(configSource, /id: "users" as Section/);
   });
 
-  it("keeps Empresa, Plan, Usuarios and Bodegas as clear internal tabs", () => {
+  it("keeps Empresa, Plan, Usuarios, Bodegas and Importar as clear internal tabs", () => {
     assert.match(managementSource, /label: "Empresa"/);
     assert.match(managementSource, /label: "Plan"/);
     assert.match(managementSource, /label: "Usuarios"/);
     assert.match(managementSource, /label: "Bodegas"/);
+    assert.match(managementSource, /label: "Importar"/);
     assert.match(managementSource, /WarehousesSettingsPanel/);
+    assert.match(managementSource, /CustomersImportPanel/);
     assert.match(managementSource, /"warehouses"/);
-    assert.match(managementSource, /ariaLabel="Empresa, plan, usuarios y bodegas"/);
+    assert.match(managementSource, /"import"/);
+    assert.match(managementSource, /ariaLabel="Empresa, plan, usuarios, bodegas e importar"/);
     assert.match(configSource, /isOrganizationManagementTab/);
     assert.match(planUsageSource, /WAREHOUSES_CONFIG_HREF/);
     assert.match(
