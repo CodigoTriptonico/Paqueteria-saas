@@ -140,6 +140,8 @@ export function AppFrame({
     config.contextNavLabel ?? (isHydrated ? defaultContextNav?.contextNavLabel : undefined);
   const onContextNavBack =
     config.onContextNavBack ?? (isHydrated ? defaultContextNav?.onContextNavBack : undefined);
+  const reserveDefaultContextNav =
+    !isHydrated && !config.onContextNavBack && Boolean(defaultContextNav?.onContextNavBack);
   const surfaceContextId =
     config.surfaceContextId !== undefined
       ? config.surfaceContextId
@@ -177,6 +179,7 @@ export function AppFrame({
             onContextNavBack={onContextNavBack}
             contextNavTarget={config.contextNavTarget}
             contextNavKeepBrand={config.contextNavKeepBrand}
+            reserveContextNav={reserveDefaultContextNav}
             contentEdgeToEdge={config.contentEdgeToEdge}
             surfaceContextId={surfaceContextId}
           >

@@ -162,6 +162,13 @@ describe("app shell sidebar eval", () => {
     assert.doesNotMatch(brandHeaderSource, /bg-surface-card text-\[#f8fafc\] shadow-sm/);
   });
 
+  it("keeps the brand header height stable without leaving a blank lower strip", () => {
+    assert.match(brandHeaderSource, /grid min-h-\[5\.25rem\] grid-rows-\[2rem_2rem\] gap-1/);
+    assert.match(brandHeaderSource, /row-span-2 flex w-full min-w-0 items-center justify-between gap-2/);
+    assert.match(brandHeaderSource, /isHydrated && onBack && keepBrand/);
+    assert.doesNotMatch(brandHeaderSource, /<div className="mt-1 h-8 w-full" aria-hidden \/>/);
+  });
+
   it("renders icon rail from sidebarNavGroups when desktop sidebar is collapsed", () => {
     assert.match(appShellSource, /showDesktopRail/);
     assert.match(appShellSource, /variant=\{showDesktopRail \? "rail" : "sidebar"\}/);

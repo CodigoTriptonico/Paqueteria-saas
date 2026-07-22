@@ -28,11 +28,17 @@ describe("app shell hydration contract", () => {
       appFrameSource,
       /config\.onContextNavBack \?\? \(isHydrated \? defaultContextNav\?\.onContextNavBack : undefined\)/,
     );
+    assert.match(
+      appFrameSource,
+      /const reserveDefaultContextNav =\s*!isHydrated && !config\.onContextNavBack && Boolean\(defaultContextNav\?\.onContextNavBack\)/,
+    );
+    assert.match(appFrameSource, /reserveContextNav=\{reserveDefaultContextNav\}/);
   });
 
   it("keeps the brand wordmark as the stable initial header tree", () => {
     assert.match(brandHeaderSource, /const showContextualTitle =\s*isHydrated && onBack/);
-    assert.match(brandHeaderSource, /\{isHydrated && onBack && !keepBrand \? \(/);
+    assert.match(brandHeaderSource, /\{isHydrated && showContextBack \? \(/);
+    assert.match(brandHeaderSource, /const showReservedBack = !showContextBack && reserveBackSlot && !keepBrand/);
     assert.match(brandHeaderSource, /<h1 className=\{titleClass\}>\{brandTitle\}<\/h1>/);
   });
 });

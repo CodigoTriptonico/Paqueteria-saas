@@ -13,7 +13,8 @@ const source = readFileSync(
 
 describe("BoxarioBrandHeader layout", () => {
   it("aligns brand title and notifications on one horizontal row", () => {
-    assert.match(source, /flex w-full min-w-0 items-center justify-between/);
+    assert.match(source, /primaryRowClass/);
+    assert.match(source, /flex w-full min-w-0 items-center justify-between gap-2/);
     assert.match(source, /variant="brand"/);
     assert.match(source, /<h1 className=\{titleClass\}>\{brandTitle\}<\/h1>/);
   });
@@ -23,8 +24,10 @@ describe("BoxarioBrandHeader layout", () => {
     assert.match(source, /<Link href="\/" prefetch aria-label="Ir al inicio"/);
     assert.match(source, /<h1 className=\{titleClass\}>\{brandTitle\}<\/h1>/);
     assert.match(source, /onBack && keepBrand/);
-    assert.match(source, /min-h-\[4\.75rem\] flex-col/);
-    assert.match(source, /<div className="mt-1 h-8 w-full" aria-hidden \/>/);
+    assert.match(source, /reserveBackSlot\?: boolean/);
+    assert.match(source, /grid min-h-\[5\.25rem\] grid-rows-\[2rem_2rem\] gap-1/);
+    assert.match(source, /row-span-2 flex w-full min-w-0 items-center justify-between gap-2/);
+    assert.doesNotMatch(source, /<div className="mt-1 h-8 w-full" aria-hidden \/>/);
     assert.doesNotMatch(source, /<House className=/);
     assert.match(source, /\{onBack && !keepBrand && showContextualTitle \? \(/);
   });
@@ -45,9 +48,21 @@ describe("BoxarioBrandHeader layout", () => {
   });
 
   it("keeps context back navigation separate from sidebar collapse", () => {
-    assert.match(source, /\{isHydrated && onBack && !keepBrand \? \([\s\S]*onClick=\{onBack\}/);
+    assert.match(source, /\{isHydrated && showContextBack \? \([\s\S]*onClick=\{onBack\}/);
     assert.match(source, /\{isHydrated && onBack && keepBrand \? \([\s\S]*onClick=\{onBack\}/);
     assert.doesNotMatch(source, /sidebarToggle/);
+  });
+
+  it("uses the reserved lower row for back navigation only when the brand stays visible", () => {
+    assert.match(source, /isHydrated && onBack && keepBrand/);
+    assert.match(source, /className="flex h-8 w-full min-w-0 items-center gap-1\.5/);
+    assert.match(source, /<span className="min-w-0 truncate">\{title\}<\/span>/);
+  });
+
+  it("reserves the contextual back control before hydration so the brand does not move", () => {
+    assert.match(source, /const showReservedBack = !showContextBack && reserveBackSlot && !keepBrand/);
+    assert.match(source, /\) : showReservedBack \? \(/);
+    assert.match(source, /<span className=\{backButtonClass\} aria-hidden>/);
   });
 
   it("keeps the server header identical to the first hydration render", () => {

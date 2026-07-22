@@ -49,6 +49,7 @@ type BoxarioBrandHeaderProps = {
   backTitle?: string;
   backTarget?: string;
   keepBrand?: boolean;
+  reserveBackSlot?: boolean;
   sidebarGroupsToggle?: {
     allExpanded: boolean;
     onToggle: () => void;
@@ -94,6 +95,7 @@ export function BoxarioBrandHeader({
   backTitle = "Volver",
   backTarget,
   keepBrand = false,
+  reserveBackSlot = false,
   sidebarGroupsToggle,
 }: BoxarioBrandHeaderProps) {
   const isHydrated = useHydrated();
@@ -104,7 +106,7 @@ export function BoxarioBrandHeader({
   });
   const brandTitle = branding.brandTitle;
   const resolvedTitle = title ?? brandTitle;
-  const shellClass = `relative flex min-h-[4.75rem] flex-col overflow-hidden rounded-xl border border-black bg-surface-card-header px-2.5 py-2 text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
+  const shellClass = `relative grid min-h-[5.25rem] grid-rows-[2rem_2rem] gap-1 overflow-hidden rounded-xl border border-black bg-surface-card-header px-2.5 py-2 text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
     compact ? "" : "px-3"
   } ${className}`;
   const titleClass = `min-w-0 truncate font-black tracking-tight leading-none ${
@@ -116,12 +118,17 @@ export function BoxarioBrandHeader({
     : "Expandir todos los grupos del menú";
   const showContextualTitle =
     isHydrated && onBack && !keepBrand && resolvedTitle !== brandTitle;
+  const showContextBack = Boolean(onBack && !keepBrand);
+  const showReservedBack = !showContextBack && reserveBackSlot && !keepBrand;
+  const primaryRowClass = keepBrand
+    ? "flex w-full min-w-0 items-center justify-between gap-2"
+    : "row-span-2 flex w-full min-w-0 items-center justify-between gap-2";
 
   return (
     <div className={shellClass}>
-      <div className="flex w-full min-w-0 items-center justify-between gap-2">
+      <div className={primaryRowClass}>
         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
-          {isHydrated && onBack && !keepBrand ? (
+          {isHydrated && showContextBack ? (
             <button
               type="button"
               onClick={onBack}
@@ -132,6 +139,10 @@ export function BoxarioBrandHeader({
             >
               <ArrowLeft className="h-4 w-4" strokeWidth={2.5} />
             </button>
+          ) : showReservedBack ? (
+            <span className={backButtonClass} aria-hidden>
+              <ArrowLeft className="h-4 w-4" strokeWidth={2.5} />
+            </span>
           ) : null}
           {onBack && !keepBrand && showContextualTitle ? (
             <span className={titleClass}>{resolvedTitle}</span>
@@ -180,14 +191,11 @@ export function BoxarioBrandHeader({
           title={backTitle}
           aria-label={`${backTitle}: ${title}`}
           data-onboarding-target={backTarget}
-          className="mt-1 flex w-full min-w-0 items-center gap-1.5 rounded-md border border-emerald-700/35 bg-emerald-400/10 px-2 py-1.5 text-left text-xs font-black leading-snug text-emerald-200 transition hover:bg-emerald-400/15 hover:text-emerald-100"
+          className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md border border-emerald-700/35 bg-emerald-400/10 px-2 text-left text-xs font-black text-emerald-200 transition hover:bg-emerald-400/15 hover:text-emerald-100"
         >
           <ArrowLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-          <span className="min-w-0 break-words">{title}</span>
+          <span className="min-w-0 truncate">{title}</span>
         </button>
-      ) : null}
-      {!isHydrated || !onBack || !keepBrand ? (
-        <div className="mt-1 h-8 w-full" aria-hidden />
       ) : null}
     </div>
   );

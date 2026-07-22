@@ -97,7 +97,7 @@ export function UserAccountMenu({
     ? "flex w-full items-center justify-center rounded-lg border border-black bg-surface-card p-2 transition-colors hover:bg-[#2f3834]"
     : isSidebar
       ? "flex w-full items-center gap-3 overflow-hidden rounded-lg border border-black bg-surface-card px-3 py-2.5 text-left transition-colors hover:bg-[#2f3834]"
-      : "flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-black bg-surface-card p-0 transition-colors hover:bg-[#2f3834] sm:h-auto sm:w-auto sm:gap-3 sm:px-3 sm:py-2";
+      : "flex h-10 w-10 items-center justify-center rounded-full border border-transparent bg-transparent p-0 transition-colors hover:bg-emerald-400/10 sm:h-auto sm:w-auto sm:gap-3 sm:rounded-lg sm:border-black sm:bg-surface-card sm:px-3 sm:py-2 sm:hover:bg-[#2f3834]";
   const menuPositionClass = isRail
     ? "left-full top-0 ml-2 w-72"
     : isSidebar

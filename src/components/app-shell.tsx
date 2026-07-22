@@ -98,6 +98,7 @@ type AppShellProps = {
   onContextNavBack?: () => void;
   contextNavTarget?: string;
   contextNavKeepBrand?: boolean;
+  reserveContextNav?: boolean;
   contentEdgeToEdge?: boolean;
   surfaceContextId?: UiSurfaceContextId | null;
   children: React.ReactNode;
@@ -403,6 +404,7 @@ export function AppShell({
   onContextNavBack,
   contextNavTarget,
   contextNavKeepBrand = false,
+  reserveContextNav = false,
   onActiveClick,
   contentEdgeToEdge = false,
   surfaceContextId = null,
@@ -598,6 +600,7 @@ export function AppShell({
                     title={showContextNav ? brandTitle : undefined}
                     backTarget={showContextNav ? contextNavTarget : undefined}
                     keepBrand={contextNavKeepBrand}
+                    reserveBackSlot={reserveContextNav}
                     sidebarGroupsToggle={{
                       allExpanded: allSidebarGroupsExpanded,
                       onToggle: toggleAllSidebarGroups,
@@ -742,6 +745,7 @@ export function AppShell({
               title={showContextNav ? brandTitle : undefined}
               backTarget={showContextNav ? contextNavTarget : undefined}
               keepBrand={contextNavKeepBrand}
+              reserveBackSlot={reserveContextNav}
             />
             <UserAccountMenu session={session} variant="bar" />
             {surfaceContextId ? (
