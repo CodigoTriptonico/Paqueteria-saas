@@ -7,21 +7,17 @@ import {
   listWarehouseBinsAction,
   saveWarehouseBinAction,
 } from "@/app/actions/inventory-bins";
+import { CreateWarehouseBinModal } from "@/components/config/create-warehouse-bin-modal";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
-import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import { primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
+import type { WarehouseBin } from "@/lib/inventory-bins";
 import {
-  buildWarehouseBinCode,
-  buildWarehouseBinLabel,
-  type WarehouseBin,
-} from "@/lib/inventory-bins";
-import {
+  settingsIconBoxClass as iconBoxClass,
   settingsSectionClass as sectionClass,
   settingsSectionHeaderClass as sectionHeaderClass,
   settingsSectionTitleClass as sectionTitleClass,
 } from "@/components/config/settings-panel-styles";
-
-const compactInputClass = `${inputClass} h-10`;
 
 export function WarehouseBinsPanel({
   warehouses,
@@ -39,43 +35,51 @@ export function WarehouseBinsPanel({
   const [bins, setBins] = useState<WarehouseBin[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [zone, setZone] = useState("");
   const [aisle, setAisle] = useState("");
   const [shelf, setShelf] = useState("");
   const [label, setLabel] = useState("");
   const selectedWarehouseId = warehouseId || activeWarehouses[0]?.id || "";
+  const selectedWarehouseName =
+    activeWarehouses.find((warehouse) => warehouse.id === selectedWarehouseId)?.name || "";
 
-  const previewCode = buildWarehouseBinCode({ zone, aisle, shelf });
-  const previewLabel = previewCode
-    ? buildWarehouseBinLabel({ zone, aisle, shelf, label, code: previewCode })
-    : "";
+  const reload = useCallback(
+    async (nextWarehouseId = selectedWarehouseId) => {
+      if (!nextWarehouseId) {
+        setBins([]);
+        return;
+      }
 
-  const reload = useCallback(async (nextWarehouseId = selectedWarehouseId) => {
-    if (!nextWarehouseId) {
-      setBins([]);
-      return;
-    }
+      setLoading(true);
+      const result = await listWarehouseBinsAction({
+        warehouseId: nextWarehouseId,
+        includeInactive: false,
+      });
+      setLoading(false);
 
-    setLoading(true);
-    const result = await listWarehouseBinsAction({
-      warehouseId: nextWarehouseId,
-      includeInactive: false,
-    });
-    setLoading(false);
+      if (!result.ok) {
+        notify.error(result.error);
+        return;
+      }
 
-    if (!result.ok) {
-      notify.error(result.error);
-      return;
-    }
-
-    setBins(result.data);
-  }, [notify, selectedWarehouseId]);
+      setBins(result.data);
+    },
+    [notify, selectedWarehouseId],
+  );
 
   useEffect(() => {
     queueMicrotask(() => {
       void reload();
     });
   }, [reload]);
+
+  function resetDraft() {
+    setZone("");
+    setAisle("");
+    setShelf("");
+    setLabel("");
+  }
 
   async function handleCreate() {
     if (!selectedWarehouseId) {
@@ -98,158 +102,144 @@ export function WarehouseBinsPanel({
     }
 
     notify.success("Estante creado");
-    setZone("");
-    setAisle("");
-    setShelf("");
-    setLabel("");
+    resetDraft();
+    setShowCreateModal(false);
     await reload();
   }
 
   return (
-    <section className={sectionClass}>
-      <div className={sectionHeaderClass}>
-        <div>
-          <p className={sectionTitleClass}>Zonas y estantes</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">
-            Define ubicaciones internas para saber dónde está el stock dentro de cada bodega.
-          </p>
-        </div>
-      </div>
+    <>
+      <section className={sectionClass}>
+        <div className={sectionHeaderClass}>
+          <div className={sectionTitleClass}>
+            <span className={iconBoxClass}>
+              <MapPin className="h-4 w-4" />
+            </span>
+            <span>
+              Zonas y estantes
+              {bins.length ? (
+                <span className="ml-2 text-sm font-bold text-slate-400">
+                  {bins.length} {bins.length === 1 ? "ubicación" : "ubicaciones"}
+                </span>
+              ) : null}
+            </span>
+          </div>
 
-      <div className="space-y-4 px-4 py-4">
-        <label className="grid gap-1 text-xs font-black text-slate-300">
-          Bodega
-          <InlineSearchPicker
-            value={selectedWarehouseId}
-            onChange={(next) => setWarehouseId(next)}
-            options={activeWarehouses.map((warehouse) => ({
-              value: warehouse.id,
-              label: warehouse.name,
-            }))}
-            placeholder="Elegir bodega"
-            disabled={!activeWarehouses.length}
-          />
-        </label>
-
-        {canManage ? (
-          <div className="rounded-xl border border-black bg-surface-inset/40 p-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-black bg-surface-card text-emerald-300">
-                <Plus className="h-4 w-4" aria-hidden />
-              </span>
-              <div>
-                <p className="text-sm font-black text-[#f8fafc]">Nuevo estante</p>
-                <p className="text-[11px] font-bold text-slate-500">
-                  Código automático: {previewCode || "—"}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              <label className="grid gap-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
-                Zona
-                <input
-                  className={compactInputClass}
-                  value={zone}
-                  onChange={(event) => setZone(event.target.value)}
-                  placeholder="A"
-                />
-              </label>
-              <label className="grid gap-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
-                Pasillo
-                <input
-                  className={compactInputClass}
-                  value={aisle}
-                  onChange={(event) => setAisle(event.target.value)}
-                  placeholder="2"
-                />
-              </label>
-              <label className="grid gap-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
-                Estante
-                <input
-                  className={compactInputClass}
-                  value={shelf}
-                  onChange={(event) => setShelf(event.target.value)}
-                  placeholder="3"
-                />
-              </label>
-            </div>
-
-            <label className="mt-2 grid gap-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
-              Etiqueta opcional
-              <input
-                className={compactInputClass}
-                value={label}
-                onChange={(event) => setLabel(event.target.value)}
-                placeholder={previewLabel || "Zona A · Pasillo 2 · Estante 3"}
-              />
-            </label>
-
+          {canManage && selectedWarehouseId ? (
             <button
               type="button"
-              className={`${primaryButtonClass} mt-3`}
-              disabled={saving || !previewCode}
-              onClick={() => void handleCreate()}
+              className={`${primaryButtonClass} h-10 shrink-0 gap-1.5 px-4`}
+              onClick={() => {
+                resetDraft();
+                setShowCreateModal(true);
+              }}
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              Crear estante
+              <Plus className="h-4 w-4" />
+              Nuevo estante
             </button>
-          </div>
-        ) : null}
-
-        <div className="overflow-hidden rounded-xl border border-black">
-          {loading ? (
-            <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm font-bold text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Cargando estantes...
-            </div>
-          ) : !bins.length ? (
-            <div className="px-4 py-8 text-center">
-              <p className="text-sm font-black text-slate-300">Sin estantes definidos</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">
-                Crea la primera zona para empezar a ubicar productos.
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-black/80">
-              {bins.map((bin) => (
-                <li key={bin.id} className="flex items-center gap-3 px-4 py-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-emerald-300">
-                    <MapPin className="h-4 w-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-black text-[#f8fafc]">{bin.label}</p>
-                    <p className="text-xs font-bold text-slate-500">{bin.code}</p>
-                  </div>
-                  {canManage ? (
-                    <button
-                      type="button"
-                      className={`${secondaryButtonClass} h-9 px-3 text-xs`}
-                      onClick={async () => {
-                        const result = await deactivateWarehouseBinAction({
-                          warehouseId: selectedWarehouseId,
-                          binId: bin.id,
-                        });
-
-                        if (!result.ok) {
-                          notify.error(result.error);
-                          return;
-                        }
-
-                        notify.success("Estante desactivado");
-                        await reload();
-                      }}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      Quitar
-                    </button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
+          ) : null}
         </div>
-      </div>
-    </section>
+
+        <div className="space-y-4 px-4 py-4">
+          <label className="grid gap-1.5">
+            <span className="text-[11px] font-black uppercase tracking-wide text-slate-500">
+              Bodega
+            </span>
+            <InlineSearchPicker
+              value={selectedWarehouseId}
+              onChange={(next) => setWarehouseId(next)}
+              options={activeWarehouses.map((warehouse) => ({
+                value: warehouse.id,
+                label: warehouse.name,
+              }))}
+              placeholder="Elegir bodega"
+              disabled={!activeWarehouses.length}
+            />
+          </label>
+
+          <div className="overflow-hidden rounded-xl border border-black">
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm font-bold text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando estantes...
+              </div>
+            ) : !bins.length ? (
+              <div className="px-4 py-10 text-center">
+                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-black bg-surface-inset text-emerald-300">
+                  <MapPin className="h-5 w-5" />
+                </span>
+                <p className="mt-3 text-sm font-black text-[#f8fafc]">Sin estantes</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">
+                  {canManage
+                    ? "Usa Nuevo estante para definir la primera ubicación."
+                    : "Aún no hay ubicaciones en esta bodega."}
+                </p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-black/80">
+                {bins.map((bin) => (
+                  <li key={bin.id} className="flex items-center gap-3 px-4 py-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-emerald-300">
+                      <MapPin className="h-4 w-4" aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-black text-[#f8fafc]">{bin.label}</p>
+                      <p className="font-mono text-xs font-bold tracking-wide text-slate-500">
+                        {bin.code}
+                      </p>
+                    </div>
+                    {canManage ? (
+                      <button
+                        type="button"
+                        className={`${secondaryButtonClass} h-9 px-3 text-xs`}
+                        onClick={async () => {
+                          const result = await deactivateWarehouseBinAction({
+                            warehouseId: selectedWarehouseId,
+                            binId: bin.id,
+                          });
+
+                          if (!result.ok) {
+                            notify.error(result.error);
+                            return;
+                          }
+
+                          notify.success("Estante desactivado");
+                          await reload();
+                        }}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Quitar
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <CreateWarehouseBinModal
+        open={showCreateModal}
+        warehouseName={selectedWarehouseName}
+        busy={saving}
+        zone={zone}
+        aisle={aisle}
+        shelf={shelf}
+        label={label}
+        onClose={() => {
+          if (saving) {
+            return;
+          }
+          setShowCreateModal(false);
+          resetDraft();
+        }}
+        onZoneChange={setZone}
+        onAisleChange={setAisle}
+        onShelfChange={setShelf}
+        onLabelChange={setLabel}
+        onCreate={() => void handleCreate()}
+      />
+    </>
   );
 }

@@ -19,7 +19,8 @@ import { sessionHasPermission } from "@/lib/auth/permissions";
 export type InventoryBackendInitialData = {
   warehouses: { id: string; name: string; is_active: boolean; is_default: boolean }[];
   warehouseId: string;
-  multiWarehouse: boolean;
+  /** @deprecated Ignorado: con 2+ bodegas Inventario siempre permite elegir. */
+  multiWarehouse?: boolean;
   canManageWarehouses?: boolean;
   categoryConfigs: CategoryConfig[];
   items: InventoryStockItem[];
@@ -43,7 +44,6 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
     { id: string; name: string; is_active: boolean; is_default: boolean }[]
   >(initialData?.warehouses || []);
   const [warehouseId, setWarehouseId] = useState(initialData?.warehouseId || "");
-  const [multiWarehouse, setMultiWarehouse] = useState(Boolean(initialData?.multiWarehouse));
   const [canManageWarehouses, setCanManageWarehouses] = useState(
     Boolean(initialData?.canManageWarehouses),
   );
@@ -261,7 +261,6 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
       const session = sessionResult.ok ? sessionResult.data : null;
 
       if (session) {
-        setMultiWarehouse(session.multiWarehouseEnabled);
         setCanManageWarehouses(
           sessionHasPermission(session, "warehouses.manage"),
         );
@@ -378,7 +377,6 @@ export function useInventoryBackend(initialData?: InventoryBackendInitialData) {
     enabled,
     loaded,
     error,
-    multiWarehouse,
     canManageWarehouses,
     warehouses: activeWarehouses,
     setWarehouses,

@@ -4,7 +4,7 @@ import { Plus, Warehouse } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createWarehouseAction } from "@/app/actions/warehouses";
+import { createWarehouseAction, rememberPreferredWarehouseAction } from "@/app/actions/warehouses";
 import {
   loadWarehouseInventoryCoreAction,
   loadWarehouseInventoryHistoryAction,
@@ -78,7 +78,6 @@ export function InventarioClient({
     enabled,
     loaded,
     error,
-    multiWarehouse,
     canManageWarehouses,
     warehouses,
     setWarehouses,
@@ -198,6 +197,15 @@ export function InventarioClient({
     enabled: loaded && enabled,
   });
 
+  function selectWarehouse(nextWarehouseId: string) {
+    if (!nextWarehouseId || nextWarehouseId === warehouseId) {
+      return;
+    }
+
+    setWarehouseId(nextWarehouseId);
+    void rememberPreferredWarehouseAction(nextWarehouseId);
+  }
+
   useEffect(() => {
     if (!loaded || warehouseId || !warehouses.length) {
       return;
@@ -210,6 +218,7 @@ export function InventarioClient({
 
     if (target) {
       setWarehouseId(target);
+      void rememberPreferredWarehouseAction(target);
     }
   }, [loaded, warehouseId, warehouses, setWarehouseId]);
 
@@ -300,7 +309,7 @@ export function InventarioClient({
   if (showWarehouseSettings) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <WarehousesSettingsPanel />
+        <WarehousesSettingsPanel initialCanManageWarehouses={canManageWarehouses} />
       </div>
     );
   }
@@ -328,6 +337,7 @@ export function InventarioClient({
     setWarehouses((current) => [result.data, ...current]);
     setNewWarehouseName("");
     setWarehouseId(result.data.id);
+    void rememberPreferredWarehouseAction(result.data.id);
   }
 
   function saveProductCountryAssignments(nextCountries: typeof pricingCountries) {
@@ -372,22 +382,6 @@ export function InventarioClient({
       );
     }
 
-    if (!multiWarehouse && warehouses.length > 0) {
-      return (
-        <p className="text-sm font-bold text-slate-400">
-          Activa{" "}
-          <span className="text-slate-200">modo múltiples bodegas</span> en{" "}
-          <Link
-            href={INVENTORY_WAREHOUSES_HREF}
-            className="text-emerald-300 underline-offset-2 hover:underline"
-          >
-            Inventario → Bodegas
-          </Link>{" "}
-          para agregar otra.
-        </p>
-      );
-    }
-
     return (
       <div
         className={`inset-shell flex w-full items-center gap-2 rounded-xl bg-[#111827] p-2 ${compact ? "max-w-md" : "max-w-sm sm:w-80"}`}
@@ -428,7 +422,7 @@ export function InventarioClient({
             Crea tu primera bodega
           </h1>
           <p className="mt-1 text-sm font-bold text-slate-400">
-            Las categorias se comparten. El stock vive dentro de cada bodega.
+            Luego podrás crear más y cambiar entre ellas desde Inventario.
           </p>
           <div className="mt-5 w-full">{warehouseCreateForm(true)}</div>
         </div>
@@ -517,7 +511,7 @@ export function InventarioClient({
               compact
               warehouses={warehouses}
               warehouseId={warehouseId}
-              onChange={setWarehouseId}
+              onChange={selectWarehouse}
             />
           </>
         }

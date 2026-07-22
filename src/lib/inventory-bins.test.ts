@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   buildWarehouseBinCode,
@@ -8,6 +10,11 @@ import {
   unplacedWarehouseQuantity,
   validateBinPlacementQuantity,
 } from "./inventory-bins";
+
+const createBinModalSource = readFileSync(
+  join(process.cwd(), "src/components/config/create-warehouse-bin-modal.tsx"),
+  "utf8",
+);
 
 describe("inventory-bins", () => {
   it("builds bin codes from zone, aisle and shelf", () => {
@@ -67,5 +74,15 @@ describe("inventory-bins", () => {
       ]),
       "A-1: 40 · B-2: 10 · +1",
     );
+  });
+});
+
+describe("create warehouse bin modal layout", () => {
+  it("keeps zone/aisle/shelf inputs inside equal grid columns", () => {
+    assert.match(createBinModalSource, /grid grid-cols-3 gap-2/);
+    assert.match(createBinModalSource, /grid min-w-0 gap-1\.5/);
+    assert.match(createBinModalSource, /w-full min-w-0 text-center/);
+    assert.match(createBinModalSource, /size=\{1\}/);
+    assert.match(createBinModalSource, /block w-full text-center/);
   });
 });

@@ -52,7 +52,6 @@ export default async function InventarioPage() {
         initialData={{
           warehouses,
           warehouseId: "",
-          multiWarehouse: session.multiWarehouseEnabled,
           canManageWarehouses,
           categoryConfigs: [],
           items: [],
@@ -68,7 +67,6 @@ export default async function InventarioPage() {
     ? {
         warehouses,
         warehouseId: defaultWarehouse.id,
-        multiWarehouse: session.multiWarehouseEnabled,
         canManageWarehouses,
         categoryConfigs: inventoryResult.data.categoryConfigs,
         items: inventoryResult.data.items,

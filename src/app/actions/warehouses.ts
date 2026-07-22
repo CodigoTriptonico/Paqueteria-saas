@@ -2,7 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAppSession } from "@/lib/auth/session";
-import { sessionHasPermission } from "@/lib/auth/permissions";
+import { canAccessWarehouse, sessionHasPermission } from "@/lib/auth/permissions";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import type { WarehouseRow } from "@/lib/auth/types";
@@ -379,6 +379,53 @@ export async function copyWarehouseCatalogAction(
     );
 
     return ok({ copied });
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+/** Recuerda la bodega activa del usuario para la próxima visita a Inventario. */
+export async function rememberPreferredWarehouseAction(
+  warehouseId: string,
+): Promise<ActionResult<{ warehouseId: string }>> {
+  try {
+    const session = await requireAppSession();
+
+    if (!canAccessWarehouse(session, warehouseId)) {
+      return fail("No tienes acceso a esa bodega");
+    }
+
+    if (session.preferredWarehouseId === warehouseId) {
+      return ok({ warehouseId });
+    }
+
+    const supabase = await createScopedSupabase(session);
+    if (!supabase) {
+      return fail("Supabase no configurado");
+    }
+
+    const { data: warehouse } = await supabase
+      .from("warehouses")
+      .select("id, is_active")
+      .eq("id", warehouseId)
+      .eq("organization_id", session.organizationId)
+      .maybeSingle();
+
+    if (!warehouse?.is_active) {
+      return fail("Bodega no encontrada o inactiva");
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ default_warehouse_id: warehouseId })
+      .eq("id", session.userId)
+      .eq("organization_id", session.organizationId);
+
+    if (error) {
+      return fail(error.message);
+    }
+
+    return ok({ warehouseId });
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
