@@ -43,7 +43,13 @@ import {
   secondaryButtonClass,
 } from "@/components/ui-blocks";
 import type { PlatformOrganizationRow } from "@/lib/auth/types";
-import { summarizePlatformOrganizations } from "@/lib/platform-console-summary";
+import {
+  formatPlatformExtraUserLimit,
+  formatPlatformUserCount,
+  formatPlatformWarehouseCount,
+  formatPlatformWarehouseLimit,
+  summarizePlatformOrganizations,
+} from "@/lib/platform-console-summary";
 
 type StatusFilter = "all" | "active" | "inactive";
 
@@ -380,8 +386,16 @@ export function PlatformConsole() {
             );
           })}
           <span className="ml-auto flex items-center gap-3 px-1 text-xs font-bold text-slate-400">
-            <span>👥 <b className="text-slate-100">{platformStats.users}</b> usuarios</span>
-            <span>🏭 <b className="text-slate-100">{platformStats.warehouses}</b> bodegas</span>
+            <span>
+              👥{" "}
+              <b className="text-slate-100">{platformStats.users}</b>{" "}
+              {platformStats.users === 1 ? "usuario" : "usuarios"}
+            </span>
+            <span>
+              🏭{" "}
+              <b className="text-slate-100">{platformStats.warehouses}</b>{" "}
+              {platformStats.warehouses === 1 ? "bodega" : "bodegas"}
+            </span>
           </span>
         </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -428,11 +442,11 @@ export function PlatformConsole() {
                   <StatusPill active={org.is_active} />
                   <span className="inline-flex items-center gap-1.5">
                     <Users className="h-3.5 w-3.5 text-slate-500" aria-hidden />
-                    {org.user_count} usuarios
+                    {formatPlatformUserCount(org.user_count)}
                   </span>
                   <span className="flex items-center gap-1">
                     <Warehouse className="h-3.5 w-3.5 text-slate-500" aria-hidden />
-                    <span>{org.warehouse_count} bodegas</span>
+                    <span>{formatPlatformWarehouseCount(org.warehouse_count)}</span>
                     <Ellipsis className="h-4 w-4 text-slate-500" aria-hidden />
                   </span>
                 </div>
@@ -535,10 +549,10 @@ export function PlatformConsole() {
             <div className="rounded-xl border border-black bg-surface-card p-4 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
               <p className={labelMutedClass}>Limites</p>
               <p className="mt-1 text-sm font-black text-slate-100">
-                {selectedOrg.max_users ?? "-"} usuarios extra
+                {formatPlatformExtraUserLimit(selectedOrg.max_users)}
               </p>
               <p className="mt-1 text-xs font-bold text-slate-500">
-                {selectedOrg.max_warehouses ?? "-"} bodegas permitidas
+                {formatPlatformWarehouseLimit(selectedOrg.max_warehouses)}
               </p>
             </div>
           </div>

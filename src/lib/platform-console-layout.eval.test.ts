@@ -49,4 +49,16 @@ describe("platform companies layout eval", () => {
     assert.match(source, /<ArrowLeft className="h-4 w-4" \/>/);
     assert.match(source, /Cerrar y archivar/);
   });
+
+  it("pluralizes user/warehouse counts and never shows dash limits", () => {
+    assert.match(source, /formatPlatformUserCount\(org\.user_count\)/);
+    assert.match(source, /formatPlatformWarehouseCount\(org\.warehouse_count\)/);
+    assert.match(source, /formatPlatformExtraUserLimit\(selectedOrg\.max_users\)/);
+    assert.match(source, /formatPlatformWarehouseLimit\(selectedOrg\.max_warehouses\)/);
+    assert.doesNotMatch(source, /\{org\.user_count\} usuarios/);
+    assert.doesNotMatch(source, /\{org\.warehouse_count\} bodegas/);
+    assert.doesNotMatch(source, /max_users \?\? "-"\} usuarios extra/);
+    assert.doesNotMatch(source, /max_warehouses \?\? "-"\} bodegas permitidas/);
+  });
 });
+
