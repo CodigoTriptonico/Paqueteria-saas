@@ -170,7 +170,7 @@ describe("app shell sidebar eval", () => {
 
   it("keeps a fixed two-row brand header with permanent action-button space", () => {
     assert.match(brandHeaderSource, /flex h-\[5\.25rem\] flex-col/);
-    assert.match(brandHeaderSource, /mt-auto h-8/);
+    assert.match(brandHeaderSource, /mt-auto flex h-8 min-w-0 items-center gap-1/);
     assert.match(brandHeaderSource, /bottomBackVisible \? "visible" : "invisible"/);
     assert.match(brandHeaderSource, /const showBottomBack = Boolean\(onBack && keepBrand\)/);
     assert.doesNotMatch(brandHeaderSource, /row-span-2/);
