@@ -3637,7 +3637,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     <>
       <div
         className={
-          boundedPersonListLayout || activeStep === "box"
+          boundedPersonListLayout ||
+          activeStep === "box" ||
+          activeStep === "delivery"
             ? "flex min-h-0 flex-1 flex-col lg:overflow-hidden"
             : "pb-6"
         }
@@ -3840,7 +3842,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
       {selectedSender &&
       (mode === "clients" || mode === "sale" || mode === "new-recipient") &&
-      (activeStep !== "client" || mode === "new-recipient") ? (
+      (activeStep === "recipient" ||
+        activeStep === "box" ||
+        mode === "new-recipient") ? (
         <div
           ref={recipientsRef}
           className={
@@ -4066,25 +4070,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 </section>
               ) : (
                 <>
-                <div className="sticky top-0 z-20 -mx-2 shrink-0 border-b border-black/80 bg-[#1a221f]/95 px-2 pb-3 pt-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pt-0 sm:backdrop-blur-none">
-                  <div className="flex w-full max-w-md flex-col items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={selectedBoxCount < 1}
-                      onClick={continueFromCart}
-                      className={`${primaryButtonClass} flex h-12 w-full items-center justify-center gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-35`}
-                    >
-                      Siguiente
-                      <ChevronRight className="h-4 w-4" aria-hidden />
-                    </button>
-                    {selectedBoxCount < 1 ? (
-                      <p className="text-center text-xs font-bold text-slate-500">
-                        Clic izquierdo en una caja para agregar &middot; clic derecho para quitar.
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                   <SaleBoxPicker
                     boxes={boxesForCountry}
                     viewLayout={viewLayout}
@@ -4117,6 +4103,24 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     firstBoxCoachTarget={ONBOARDING_TARGETS.VENTA_SELECT_PRODUCT}
                   />
                 </div>
+                <div className="flex shrink-0 justify-center border-t border-black/80 pt-4">
+                  <div className="flex w-full max-w-md flex-col items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={selectedBoxCount < 1}
+                      onClick={continueFromCart}
+                      className={`${primaryButtonClass} flex h-12 w-full items-center justify-center gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-35`}
+                    >
+                      Siguiente
+                      <ChevronRight className="h-4 w-4" aria-hidden />
+                    </button>
+                    {selectedBoxCount < 1 ? (
+                      <p className="text-center text-xs font-bold text-slate-500">
+                        Clic izquierdo en una caja para agregar &middot; clic derecho para quitar.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
                 </>
               )}
               </div>
@@ -4126,41 +4130,37 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         </div>
       ) : null}
 
-      {selectedSender && selectedRecipient && selectedBox ? (
-        <div
-          className="mt-3 grid gap-3 pb-6 sm:pb-8"
-        >
-          {activeStep === "delivery" ? (
+          {selectedSender && selectedRecipient && selectedBox && activeStep === "delivery" ? (
           <div
             ref={deliveryRef}
-            className={`min-w-0 flex-1 ${stepShellClass("delivery")}`}
+            className={`flex min-h-0 flex-1 flex-col ${stepShellClass("delivery")}`}
           >
           <Panel
-            className={flowPanelFlushClass}
-            contentClassName={`${flowPanelContentClass} pb-4 sm:pb-5`}
+            className={`${flowPanelFlushClass} flex min-h-0 flex-1 flex-col`}
+            contentClassName={`${flowPanelContentClass} flex min-h-0 flex-1 flex-col`}
             clipContent={false}
             hideHeader
             title="Opciones del envio"
           >
-            <div className={flowStepBodyClass}>
-              <SaleLogisticsStep
-                emptyBoxMode={emptyBoxMode}
-                emptyBoxScheduleMode={emptyBoxScheduleMode}
-                emptyBoxScheduleAt={emptyBoxScheduleAt}
-                fullBoxMode={fullBoxMode}
-                fullBoxScheduleMode={fullBoxScheduleMode}
-                fullBoxScheduleAt={fullBoxScheduleAt}
-                emptyBoxRouteSummary={saleRouteDecisionSummary(emptyBoxRouteDecision)}
-                fullBoxRouteSummary={saleRouteDecisionSummary(fullBoxRouteDecision)}
-                onSelectEmptyBoxMode={selectEmptyBoxMode}
-                onConfigureEmptyBoxRoute={() => void openRoutePlanner("emptyBox")}
-                onSelectFullBoxMode={selectFullBoxMode}
-                onConfigureFullBoxRoute={() => void openRoutePlanner("fullBox")}
-                fullBoxPickupExpanded={fullBoxPickupExpanded}
-                onExpandFullBoxPickup={expandFullBoxPickup}
-                onDeferFullBoxPickup={deferFullBoxPickup}
-              />
-              <div className="flex justify-center border-t border-black/80 pt-4">
+            <div className={`${flowStepBodyClass} flex min-h-0 flex-1 flex-col !space-y-0`}>
+              <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto py-2">
+                <SaleLogisticsStep
+                  emptyBoxMode={emptyBoxMode}
+                  emptyBoxScheduleMode={emptyBoxScheduleMode}
+                  emptyBoxScheduleAt={emptyBoxScheduleAt}
+                  fullBoxMode={fullBoxMode}
+                  fullBoxScheduleMode={fullBoxScheduleMode}
+                  fullBoxScheduleAt={fullBoxScheduleAt}
+                  emptyBoxRouteSummary={saleRouteDecisionSummary(emptyBoxRouteDecision)}
+                  fullBoxRouteSummary={saleRouteDecisionSummary(fullBoxRouteDecision)}
+                  onSelectEmptyBoxMode={selectEmptyBoxMode}
+                  onSelectFullBoxMode={selectFullBoxMode}
+                  fullBoxPickupExpanded={fullBoxPickupExpanded}
+                  onExpandFullBoxPickup={expandFullBoxPickup}
+                  onDeferFullBoxPickup={deferFullBoxPickup}
+                />
+              </div>
+              <div className="flex shrink-0 justify-center border-t border-black/80 pt-4">
                 <div className="flex w-full max-w-md flex-col items-center gap-2">
                   <button
                     type="button"
@@ -4183,6 +4183,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           </div>
           ) : null}
 
+      {selectedSender && selectedRecipient && selectedBox && activeStep === "finish" ? (
+        <div
+          className="mt-3 grid gap-3 pb-6 sm:pb-8"
+        >
           {activeStep === "finish" ? (
           <div
             ref={finishRef}

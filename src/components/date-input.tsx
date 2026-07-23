@@ -11,10 +11,10 @@ const shellBaseClass =
   `${insetShellClass} box-border inline-flex min-w-0 items-center gap-2 rounded-lg border border-solid border-black bg-surface-inset`;
 
 const triggerClass =
-  "inset-field min-w-0 flex-1 h-full border-0 bg-transparent p-0 text-left text-sm font-black leading-5 text-[#f8fafc] outline-none";
+  "inset-field flex min-h-0 min-w-0 flex-1 items-center truncate border-0 bg-transparent p-0 text-left text-sm font-black leading-none text-[#f8fafc] outline-none";
 
 const trailingClass =
-  "inline-flex h-4 w-4 shrink-0 items-center justify-center text-slate-400 transition hover:text-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-4 w-4 shrink-0 items-center justify-center self-center text-slate-400 transition hover:text-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50";
 
 export type DateInputProps = {
   value: string;
@@ -60,8 +60,8 @@ export function DateInput({
   const shellClass = embedded
     ? `${shellBaseClass} h-9 min-w-[11.5rem] w-[12.75rem] px-2.5`
     : compact
-      ? `${shellBaseClass} h-9 min-w-[12rem] w-[13.5rem] px-2.5`
-      : `${shellBaseClass} h-11 min-w-[13rem] w-[14.5rem] px-3`;
+      ? `${shellBaseClass} h-9 min-w-0 px-2.5`
+      : `${shellBaseClass} h-11 min-w-0 px-3`;
 
   const updatePanelPosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -106,6 +106,15 @@ export function DateInput({
     [onBlur, onChange],
   );
 
+  const togglePicker = useCallback(() => {
+    if (open) {
+      closePicker();
+      return;
+    }
+
+    openPicker();
+  }, [closePicker, open, openPicker]);
+
   useEffect(() => {
     if (!open) {
       return;
@@ -142,45 +151,23 @@ export function DateInput({
 
   return (
     <>
-      <div className={`${shellClass} ${className}`}>
-        <button
-          ref={triggerRef}
-          type="button"
-          disabled={disabled}
-          className={triggerClass}
-          aria-label={ariaLabel}
-          aria-expanded={open}
-          aria-haspopup="dialog"
-          onClick={() => {
-            if (open) {
-              closePicker();
-              return;
-            }
-
-            openPicker();
-          }}
-        >
+      <button
+        ref={triggerRef}
+        type="button"
+        disabled={disabled}
+        className={`${shellClass} ${className}`}
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        onClick={togglePicker}
+      >
+        <span className={`${triggerClass} pointer-events-none`}>
           {formatDateInputDisplay(value)}
-        </button>
-        <button
-          type="button"
-          disabled={disabled}
-          className={trailingClass}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => {
-            if (open) {
-              closePicker();
-              return;
-            }
-
-            openPicker();
-          }}
-          aria-label={`Abrir calendario: ${ariaLabel}`}
-          tabIndex={-1}
-        >
-          <CalendarDays className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-        </button>
-      </div>
+        </span>
+        <span className={`${trailingClass} pointer-events-none`} aria-hidden>
+          <CalendarDays className="h-4 w-4" strokeWidth={2.25} />
+        </span>
+      </button>
 
       {open && panelPosition ? (
         <div

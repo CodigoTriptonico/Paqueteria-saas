@@ -28,6 +28,10 @@ describe("date input standard", () => {
     assert.equal(dateInputSource.includes("formatDateInputDisplay(value)"), true);
     assert.equal(dateInputSource.includes("aria-haspopup=\"dialog\""), true);
     assert.match(dateInputSource, /onChange=\{pickDate\}/);
+    assert.match(dateInputSource, /h-9 min-w-0 px-2\.5/);
+    assert.match(dateInputSource, /togglePicker/);
+    assert.match(dateInputSource, /leading-none/);
+    assert.match(dateInputSource, /items-center truncate/);
   });
 
   it("hides out-of-month spill days in the calendar grid", () => {

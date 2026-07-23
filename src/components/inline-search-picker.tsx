@@ -308,7 +308,7 @@ export function InlineSearchPicker({
   const triggerIcon = leadingIcon ?? activeOption?.icon;
 
   return (
-    <div className={`relative shrink-0 ${className}`}>
+    <div className={`relative min-w-0 ${className || "shrink-0"}`}>
       <div
         ref={rootRef}
         className={`${shellClass} ${shellStateClass(open, disabled)}`}

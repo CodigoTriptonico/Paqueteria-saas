@@ -23,7 +23,10 @@ describe("sale route decision", () => {
       scheduledAt: "2026-07-27T17:00:00.000Z",
       requestedRouteDate: null,
     });
-    assert.match(saleRouteDecisionSummary(selected), /^Ruta norte · 2026-07-27T/);
+    assert.equal(
+      saleRouteDecisionSummary(selected),
+      "Ruta norte · 27 de julio de 2026 a las 10:00 AM",
+    );
     assert.deepEqual(saleRouteDecisionSchedule(selected), {
       scheduleMode: "scheduled",
       scheduleAt: "2026-07-27T10:00",
@@ -39,7 +42,10 @@ describe("sale route decision", () => {
       scheduledAt: null,
       requestedRouteDate: "2026-07-29",
     });
-    assert.equal(saleRouteDecisionSummary(pending), "Ruta pendiente · 2026-07-29");
+    assert.equal(
+      saleRouteDecisionSummary(pending),
+      "Ruta pendiente · 29 de julio de 2026",
+    );
     assert.deepEqual(saleRouteDecisionSchedule(pending), {
       scheduleMode: "pending",
       scheduleAt: "",

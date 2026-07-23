@@ -19,5 +19,6 @@ describe("logistics section nav eval", () => {
     assert.ok(vehiculosIndex > conductoresIndex);
     assert.ok(rutasIndex > vehiculosIndex);
     assert.equal(source.includes('routesHref = "/logistica?view=rutas"'), true);
+    assert.match(source, /!h-9/);
   });
 });

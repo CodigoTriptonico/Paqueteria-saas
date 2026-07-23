@@ -67,5 +67,7 @@ describe("schedule date picker eval", () => {
 
     assert.match(schedulePanelSource, /DateInput[\s\S]*?min=\{minScheduleDateInput\(\)\}/);
     assert.match(schedulePanelSource, /selectDate/);
+    assert.match(schedulePanelSource, /ariaLabel="Fecha de entrega"/);
+    assert.match(schedulePanelSource, /allowedWeekdays=\{\s*availableWeekdays\.includes\(weekday\) \? \[weekday\] : availableWeekdays\s*\}/);
   });
 });

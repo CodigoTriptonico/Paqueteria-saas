@@ -260,10 +260,10 @@ export function SalePersonRow({
       onClick={onClick}
       onKeyDown={onKeyDown}
       onContextMenu={onContextMenu}
-      className={`${listRowBaseClass} px-3 py-1.5 sm:px-4 ${variant.focusRing} ${listRowHoverClass}${className ? ` ${className}` : ""}`}
+      className={`${listRowBaseClass} px-3 py-2.5 sm:px-4 sm:py-3 ${variant.focusRing} ${listRowHoverClass}${className ? ` ${className}` : ""}`}
       data-sale-person-row
     >
-      <div className="grid w-full min-w-0 cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-2 overflow-hidden sm:grid-cols-[2rem_minmax(0,1fr)_minmax(0,1.4fr)_auto] sm:gap-x-3">
+      <div className="grid w-full min-w-0 cursor-pointer grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-x-2.5 overflow-hidden sm:grid-cols-[2.5rem_minmax(0,1fr)_minmax(0,1.4fr)_auto] sm:gap-x-3">
         {onIconClick ? (
           <button
             type="button"
@@ -273,22 +273,22 @@ export function SalePersonRow({
               event.stopPropagation();
               onIconClick(event);
             }}
-            className={`flex h-7 w-7 shrink-0 items-center justify-center text-slate-950 transition hover:scale-105 active:scale-95 ${variant.iconWell}`}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center text-slate-950 transition hover:scale-105 active:scale-95 ${variant.iconWell}`}
           >
-            <User className="h-3.5 w-3.5" />
+            <User className="h-4 w-4" />
           </button>
         ) : (
           <span
-            className={`flex h-7 w-7 shrink-0 items-center justify-center text-slate-950 ${variant.iconWell}`}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center text-slate-950 ${variant.iconWell}`}
           >
-            <User className="h-3.5 w-3.5" />
+            <User className="h-4 w-4" />
           </span>
         )}
 
         <div className="min-w-0 py-0.5">
-          <p className="truncate text-sm font-black leading-tight text-[#f8fafc]">{name}</p>
-          <div className="mt-0.5 flex min-w-0 items-center gap-2 overflow-hidden text-[10px] font-bold leading-none text-slate-500">
-            <Phone className="h-3 w-3 shrink-0" aria-hidden />
+          <p className="truncate text-base font-black leading-tight text-[#f8fafc]">{name}</p>
+          <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden text-xs font-bold leading-none text-slate-500">
+            <Phone className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span className="min-w-0 truncate">{phone}</span>
             <CountryName
               name={country}
@@ -301,12 +301,12 @@ export function SalePersonRow({
 
         <div className="hidden min-w-0 sm:block">
           <p
-            className={`truncate text-[11px] font-bold leading-snug ${addressSummary ? "text-slate-400" : "text-slate-600"}`}
+            className={`truncate text-xs font-bold leading-snug sm:text-sm ${addressSummary ? "text-slate-400" : "text-slate-600"}`}
             title={addressSummary || "Sin dirección registrada"}
           >
             {addressSummary ? (
               <>
-                <MapPin className="mr-1 inline h-3 w-3 shrink-0 align-[-2px] text-slate-500" aria-hidden />
+                <MapPin className="mr-1 inline h-3.5 w-3.5 shrink-0 align-[-2px] text-slate-500" aria-hidden />
                 {addressSummary}
               </>
             ) : (
@@ -316,7 +316,7 @@ export function SalePersonRow({
         </div>
 
         <div
-          className="flex shrink-0 items-center justify-end gap-1.5"
+          className="flex shrink-0 items-center justify-end gap-2"
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
         >
@@ -332,10 +332,10 @@ export function SalePersonRow({
                 event.stopPropagation();
                 onQuickSale();
               }}
-              className={`inline-flex h-7 items-center justify-center gap-1 rounded-md border px-2 text-[10px] font-black text-slate-950 transition active:scale-[0.98] ${variant.quickSale}`}
+              className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-black text-slate-950 transition active:scale-[0.98] sm:h-10 sm:px-3.5 sm:text-sm ${variant.quickSale}`}
             >
-              <Package className="h-3 w-3 shrink-0" strokeWidth={2.25} />
-              <span className="hidden lg:inline">Rápida</span>
+              <Package className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+              <span>Rápido</span>
             </button>
           ) : null}
         </div>
@@ -377,7 +377,7 @@ function SalePersonStatBadge({
 }) {
   return (
     <span
-      className={`inline-flex h-6 items-center rounded-md border px-1.5 text-[10px] font-black ${
+      className={`inline-flex h-8 items-center rounded-md border px-2 text-[11px] font-black sm:h-9 sm:px-2.5 sm:text-xs ${
         highlighted
           ? "border-amber-600/40 bg-amber-400/15 text-amber-200"
           : "border-amber-950/50 bg-amber-400/10 text-amber-200"

@@ -15,7 +15,7 @@ type LogisticsSectionNavProps = {
 };
 
 function sectionButtonClass(active: LogisticsSection, section: LogisticsSection) {
-  return `${active === section ? primaryButtonClass : secondaryButtonClass} inline-flex h-9 shrink-0 items-center justify-center gap-2 px-2.5 text-xs`;
+  return `${active === section ? primaryButtonClass : secondaryButtonClass} !h-9 shrink-0 items-center justify-center gap-2 px-2.5 text-xs`;
 }
 
 export function LogisticsSectionNav({

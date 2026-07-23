@@ -56,6 +56,20 @@ test("seguimiento wires program-route into logistics approval flow", () => {
   assert.match(panel, /selectWeekday/);
   assert.match(panel, /nextWeekdayScheduleHint/);
   assert.match(panel, /availableWeekdays|enabledWeekdayIndexes/);
+  assert.match(panel, /ariaLabel="Fecha de entrega"/);
+  assert.match(panel, /Elige el día de la semana; abajo eliges cuál fecha/);
+  assert.match(panel, /className="w-full"/);
+  assert.match(panel, /minWidthClass="w-full"/);
+  assert.equal(
+    panel.includes("Fallback for callers that only pass templates"),
+    false,
+    "disabled catalog days must not reappear via leftover route templates",
+  );
+  assert.equal(
+    /fromEnabled\.length[\s\S]*templates\.map/.test(panel),
+    false,
+    "schedule confirm must only offer enabledDays, never template weekdays as fallback",
+  );
   assert.match(panel, /dayAsRoute/);
   assert.match(panel, /ensureLogisticsDayRouteTemplateAction/);
   assert.match(panel, /resolveDayRouteTemplateId/);

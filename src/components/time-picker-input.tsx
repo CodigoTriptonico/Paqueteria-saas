@@ -14,7 +14,7 @@ const shellBaseClass =
   `${insetShellClass} box-border inline-flex min-w-0 items-center gap-2 rounded-lg border border-solid border-black bg-surface-inset`;
 
 const triggerClass =
-  "inset-field min-w-0 flex-1 h-full border-0 bg-transparent p-0 text-left text-sm font-black leading-5 text-[#f8fafc] outline-none";
+  "inset-field flex min-h-0 min-w-0 flex-1 items-center truncate border-0 bg-transparent p-0 text-left text-sm font-black leading-none text-[#f8fafc] outline-none";
 
 type TimePickerInputProps = {
   value: string;
@@ -60,7 +60,7 @@ export function TimePickerInput({
     };
   }, [value]);
 
-  const shellClass = `${shellBaseClass} h-11 w-full px-3 ${active ? "ring-2 ring-emerald-500/70" : ""} ${shellClassName}`;
+  const shellClass = `${shellBaseClass} h-9 w-full px-2.5 ${active ? "ring-2 ring-emerald-500/70" : ""} ${shellClassName}`;
 
   const updatePanelPosition = useCallback(() => {
     const trigger = triggerRef.current;

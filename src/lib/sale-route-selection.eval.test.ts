@@ -18,8 +18,13 @@ test("venta creates driver tasks and keeps a recoverable route workflow", () => 
   assert.match(venta, /Reintentar \{retry\.label\.toLowerCase\(\)\}/);
   assert.match(venta, /allowPendingRoute/);
   assert.match(venta, /requireExplicitRouteSelection/);
-  assert.match(saleStep, /Elegir ruta/);
-  assert.match(saleStep, /Cambiar ruta/);
+  assert.match(venta, /openRoutePlanner\("emptyBox"\)/);
+  assert.match(venta, /openRoutePlanner\("fullBox"\)/);
+  assert.equal(saleStep.includes("Ruta del chofer"), false);
+  assert.equal(saleStep.includes("Elegir ruta"), false);
+  assert.equal(saleStep.includes("Cambiar ruta"), false);
+  assert.equal(saleStep.includes("SchedulePanel"), false);
+  assert.match(saleStep, /Quedó así/);
   assert.match(scheduler, /pendingRouteDate/);
   assert.match(scheduler, /Ruta pendiente conserva el día/);
   assert.match(shipments, /requestedRouteDate/);

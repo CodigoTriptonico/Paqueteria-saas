@@ -284,7 +284,7 @@ describe("logistica single-action invoice card eval", () => {
 
     assert.equal(
       toolbar.includes(
-        'className={`${filtersOpen || hasFilters ? primaryButtonClass : secondaryButtonClass} h-9 shrink-0 px-2.5 text-xs`}',
+        'className={`${filtersOpen || hasFilters ? primaryButtonClass : secondaryButtonClass} !h-9 shrink-0 px-2.5 text-xs`}',
       ),
       true,
     );

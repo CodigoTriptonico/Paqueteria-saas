@@ -58,12 +58,16 @@ describe("sale person row layout eval", () => {
   it("keeps compact row grid aligned like envios", () => {
     assert.equal(
       personCardSource.includes(
-        "grid-cols-[2rem_minmax(0,1fr)_auto]",
+        "grid-cols-[2.5rem_minmax(0,1fr)_auto]",
       ),
       true,
     );
     assert.equal(personCardSource.includes("divide-y"), false);
     assert.equal(personCardSource.includes("salePersonAddressSummary"), true);
+    assert.match(
+      personCardSource,
+      /inline-flex h-9 items-center[\s\S]*?sm:h-10[\s\S]*?>\s*<Package[\s\S]*?>\s*<span>Rápido<\/span>/,
+    );
   });
 
   it("uses row-specific selection classes in venta", () => {

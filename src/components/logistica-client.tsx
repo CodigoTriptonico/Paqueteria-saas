@@ -2512,7 +2512,7 @@ export function LogisticaClient({
                 ) : (
                   <button
                     type="button"
-                    className={`${primaryButtonClass} h-9 shrink-0 gap-1.5 px-2.5 text-xs font-black`}
+                    className={`${primaryButtonClass} !h-9 shrink-0 gap-1.5 px-2.5 text-xs font-black`}
                     aria-label="Mostrando tareas de todos los días"
                     title="Mostrando todos los días"
                     onClick={() => selectWeekdayFilter(defaultWeekdayFilter)}
@@ -2524,7 +2524,7 @@ export function LogisticaClient({
               </div>
 
               <select
-                className={`h-9 min-w-[12rem] shrink-0 rounded-lg border px-2.5 pr-8 text-sm font-black outline-none ${
+                className={`box-border h-9 min-w-[12rem] shrink-0 rounded-lg border px-2.5 pr-8 text-sm font-black leading-none outline-none ${
                   typeFilter
                     ? "border-emerald-500 bg-emerald-950/50 text-emerald-100"
                     : "border-black bg-surface-inset text-[#f8fafc]"
@@ -2574,7 +2574,7 @@ export function LogisticaClient({
               {selectedTasks.length ? (
                 <button
                   type="button"
-                  className={`${primaryButtonClass} h-9 shrink-0 px-3 text-xs`}
+                  className={`${primaryButtonClass} !h-9 shrink-0 px-3 text-xs`}
                   onClick={() => setRouteAssignmentOpen(true)}
                 >
                   <Route className="h-4 w-4" />
@@ -2585,7 +2585,7 @@ export function LogisticaClient({
               <div className="relative shrink-0">
                 <button
                   type="button"
-                  className={`${filtersOpen || hasFilters ? primaryButtonClass : secondaryButtonClass} h-9 shrink-0 px-2.5 text-xs`}
+                  className={`${filtersOpen || hasFilters ? primaryButtonClass : secondaryButtonClass} !h-9 shrink-0 px-2.5 text-xs`}
                   aria-expanded={filtersOpen}
                   onClick={() => setFiltersOpen((current) => !current)}
                 >

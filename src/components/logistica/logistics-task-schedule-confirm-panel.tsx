@@ -100,16 +100,10 @@ export function LogisticsTaskScheduleConfirmPanel({
 }) {
   const notify = useNotify();
   const routeFirst = selectionOrder === "route-first";
-  const availableWeekdays = useMemo(() => {
-    const fromEnabled = enabledWeekdayIndexes(enabledDays);
-    if (fromEnabled.length) {
-      return fromEnabled;
-    }
-    // Fallback for callers that only pass templates (legacy).
-    return [...new Set(templates.map((template) => Number(template.weekday)))]
-      .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
-      .sort((a, b) => a - b);
-  }, [enabledDays, templates]);
+  const availableWeekdays = useMemo(
+    () => enabledWeekdayIndexes(enabledDays),
+    [enabledDays],
+  );
   const initialScheduleDraft = scheduleDraft(scheduledAt);
   const initialDraft =
     /^\d{4}-\d{2}-\d{2}$/.test(String(pendingRouteDate || ""))
@@ -292,12 +286,12 @@ export function LogisticsTaskScheduleConfirmPanel({
   const showTimeField = Boolean(dayAsRoute || routeTemplateId);
 
   const routeField = (
-    <label className="grid gap-1">
+    <div className="grid gap-1">
       <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-slate-500">
         <Route className="h-3.5 w-3.5" /> {routeFirst ? "Ruta" : "Ruta del día"}
       </span>
       {dayAsRoute ? (
-        <div className="rounded-lg border border-black bg-surface-inset px-3 py-2">
+        <div className="rounded-lg border border-black bg-surface-inset px-3 py-2.5">
           <p className="text-sm font-black text-[#f8fafc]">{weekdayLabel || "Día"}</p>
           <p className="mt-0.5 text-[11px] font-bold text-slate-500">{dayAsRouteHint(weekday)}</p>
         </div>
@@ -316,6 +310,8 @@ export function LogisticsTaskScheduleConfirmPanel({
           searchPlaceholder="Buscar ruta..."
           emptyLabel={routeFirst ? "No hay rutas semanales" : `No hay rutas para ${weekdayLabel || "ese día"}`}
           ariaLabel="Ruta semanal"
+          className="w-full"
+          minWidthClass="w-full"
         />
       )}
       {!routeFirst && !dayAsRoute && weekdayLabel ? (
@@ -328,11 +324,11 @@ export function LogisticsTaskScheduleConfirmPanel({
           Solo se pueden elegir fechas de {logisticsWeekdayKeys[selectedTemplate.weekday] || "ese día"}.
         </span>
       ) : null}
-    </label>
+    </div>
   );
 
   const dateField = routeFirst ? (
-    <label className="grid gap-1">
+    <div className="grid gap-1">
       <span className="text-[10px] font-black uppercase text-slate-500">Qué día de esa ruta</span>
       <DateInput
         value={draft.date}
@@ -341,40 +337,66 @@ export function LogisticsTaskScheduleConfirmPanel({
         disabled={!selectedTemplate}
         onChange={selectDate}
         ariaLabel="Día de la ruta"
+        className="w-full"
       />
       {weekdayLabel ? (
         <span className="text-[11px] font-bold text-slate-500">{weekdayLabel}</span>
       ) : null}
-    </label>
+    </div>
   ) : (
-    <div className="grid gap-1">
-      <span className="text-[10px] font-black uppercase text-slate-500">Día</span>
-      <LogisticsWeekdayPicker
-        value={weekday}
-        availableWeekdays={availableWeekdays}
-        disabled={availableWeekdays.length === 0}
-        onChange={selectWeekday}
-        ariaLabel="Día de entrega"
-      />
-      {availableWeekdays.length === 0 ? (
-        <span className="text-[11px] font-bold text-amber-200">
-          No hay días disponibles en el calendario de rutas.
-        </span>
-      ) : dateHint ? (
-        <span className="text-[11px] font-bold text-slate-500">{dateHint}</span>
-      ) : null}
+    <div className="grid gap-3">
+      <div className="grid gap-1">
+        <span className="text-[10px] font-black uppercase text-slate-500">Día</span>
+        <LogisticsWeekdayPicker
+          value={weekday}
+          availableWeekdays={availableWeekdays}
+          disabled={availableWeekdays.length === 0}
+          onChange={selectWeekday}
+          ariaLabel="Día de entrega"
+        />
+        {availableWeekdays.length === 0 ? (
+          <span className="text-[11px] font-bold text-amber-200">
+            No hay días disponibles en el calendario de rutas.
+          </span>
+        ) : (
+          <span className="text-[11px] font-bold text-slate-500">
+            Elige el día de la semana; abajo eliges cuál fecha.
+          </span>
+        )}
+      </div>
+      <div className="grid gap-1">
+        <span className="text-[10px] font-black uppercase text-slate-500">Fecha</span>
+        <DateInput
+          value={draft.date}
+          min={minScheduleDateInput()}
+          allowedWeekdays={
+            availableWeekdays.includes(weekday) ? [weekday] : availableWeekdays
+          }
+          disabled={availableWeekdays.length === 0}
+          onChange={selectDate}
+          ariaLabel="Fecha de entrega"
+          className="w-full"
+        />
+        {availableWeekdays.length === 0 ? null : dateHint ? (
+          <span className="text-[11px] font-bold text-slate-500">{dateHint}</span>
+        ) : weekdayLabel ? (
+          <span className="text-[11px] font-bold text-slate-500">
+            Solo fechas de {weekdayLabel}.
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 
   const timeField = (
-    <label className="grid gap-1">
+    <div className="grid gap-1">
       <span className="text-[10px] font-black uppercase text-slate-500">Hora</span>
       <TimePickerInput
         value={draft.time}
         onChange={(time) => setDraft((current) => ({ ...current, time }))}
         ariaLabel="Hora confirmada"
       />
-    </label>
+    </div>
   );
 
   return (

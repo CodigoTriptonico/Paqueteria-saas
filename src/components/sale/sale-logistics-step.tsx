@@ -27,39 +27,11 @@ type SaleLogisticsStepProps = {
   emptyBoxRouteSummary: string;
   fullBoxRouteSummary: string;
   onSelectEmptyBoxMode: (mode: string) => void;
-  onConfigureEmptyBoxRoute: () => void;
   onSelectFullBoxMode: (mode: string) => void;
-  onConfigureFullBoxRoute: () => void;
   fullBoxPickupExpanded: boolean;
   onExpandFullBoxPickup: () => void;
   onDeferFullBoxPickup: () => void;
 };
-
-function SchedulePanel({
-  routeSummary,
-  onConfigureRoute,
-}: {
-  routeSummary: string;
-  onConfigureRoute: () => void;
-}) {
-  return (
-    <div className="rounded-xl border border-black/80 bg-[#2e3834] p-3">
-      <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">
-        Ruta del chofer
-      </p>
-      <p className="rounded-lg border border-black/70 bg-surface-inset px-3 py-2.5 text-sm font-bold leading-snug text-slate-300">
-        {routeSummary || "Elige el día y la ruta, o deja la ruta pendiente para Logística."}
-      </p>
-      <button
-        type="button"
-        onClick={onConfigureRoute}
-        className="mt-3 h-10 w-full rounded-lg border border-black bg-emerald-400 px-3 text-sm font-black text-slate-950 transition hover:bg-emerald-300"
-      >
-        {routeSummary ? "Cambiar ruta" : "Elegir ruta"}
-      </button>
-    </div>
-  );
-}
 
 function StepBadge({
   step,
@@ -94,9 +66,7 @@ function MovementCard({
   driverLabel,
   officeDetail,
   driverDetail,
-  routeSummary,
   onSelectMode,
-  onConfigureRoute,
   showOfficeHandingOption = false,
 }: {
   step: 1 | 2;
@@ -111,9 +81,7 @@ function MovementCard({
   driverLabel: string;
   officeDetail: string;
   driverDetail: string;
-  routeSummary: string;
   onSelectMode: (mode: string) => void;
-  onConfigureRoute: () => void;
   showOfficeHandingOption?: boolean;
 }) {
   const officeSelected = mode === officeMode;
@@ -214,13 +182,6 @@ function MovementCard({
             Sin ruta de chofer — el cliente se encarga en oficina.
           </p>
         </div>
-      ) : driverSelected ? (
-        <div className="mt-3">
-          <SchedulePanel
-            routeSummary={routeSummary}
-            onConfigureRoute={onConfigureRoute}
-          />
-        </div>
       ) : null}
 
       {hasSelection && !compactOfficeSelection ? (
@@ -243,24 +204,24 @@ export function SaleLogisticsStep({
   emptyBoxRouteSummary,
   fullBoxRouteSummary,
   onSelectEmptyBoxMode,
-  onConfigureEmptyBoxRoute,
   onSelectFullBoxMode,
-  onConfigureFullBoxRoute,
   fullBoxPickupExpanded,
   onExpandFullBoxPickup,
   onDeferFullBoxPickup,
 }: SaleLogisticsStepProps) {
-  const emptySummary = deliverySummary(
-    emptyBoxMode,
-    emptyBoxScheduleMode,
-    emptyBoxScheduleAt,
-  );
-  const fullSummary = fullBoxSummaryLine(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt);
+  const emptySummary =
+    emptyBoxMode === EMPTY_BOX_DRIVER_MODE && emptyBoxRouteSummary
+      ? emptyBoxRouteSummary
+      : deliverySummary(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt);
+  const fullSummary =
+    fullBoxMode === FULL_BOX_DRIVER_MODE && fullBoxRouteSummary
+      ? fullBoxRouteSummary
+      : fullBoxSummaryLine(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt);
   const emptyComplete = logisticsLegComplete(emptyBoxMode, emptyBoxScheduleMode, emptyBoxScheduleAt);
   const fullComplete = logisticsLegComplete(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt);
 
   return (
-    <div className="grid w-full gap-3 pb-2 sm:gap-4 sm:pb-4">
+    <div className="grid w-full gap-3 sm:gap-4">
       <div className="mx-auto w-full max-w-2xl space-y-2.5 sm:space-y-3">
         <MovementCard
           step={1}
@@ -275,9 +236,7 @@ export function SaleLogisticsStep({
           driverLabel="Chofer entrega"
           officeDetail="Se entrega ahora en mostrador."
           driverDetail="La llevamos a su domicilio."
-          routeSummary={emptyBoxRouteSummary}
           onSelectMode={onSelectEmptyBoxMode}
-          onConfigureRoute={onConfigureEmptyBoxRoute}
           showOfficeHandingOption
         />
 
@@ -321,9 +280,7 @@ export function SaleLogisticsStep({
               driverLabel="Chofer recoge"
               officeDetail="La devuelve en la oficina."
               driverDetail="Pasamos a recogerla."
-              routeSummary={fullBoxRouteSummary}
               onSelectMode={onSelectFullBoxMode}
-              onConfigureRoute={onConfigureFullBoxRoute}
             />
           </div>
         ) : null}
