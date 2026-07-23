@@ -15,6 +15,7 @@ const sources = {
   platform: component("platform/platform-console.tsx"),
   warehouse: component("warehouse/warehouse-client.tsx"),
 };
+const uiStyle = readFileSync(new URL("../../UI-STYLE.md", import.meta.url), "utf8");
 
 describe("compact page introductions eval", () => {
   it("removes static title cards from operational workspaces", () => {
@@ -44,5 +45,12 @@ describe("compact page introductions eval", () => {
   it("merges warehouse actions into one operational strip", () => {
     assert.doesNotMatch(sources.warehouse, /<h1[^>]*>Bodega<\/h1>/);
     assert.match(sources.warehouse, /Camiones y recepción física[\s\S]*Ingreso[\s\S]*Descargar camión/);
+  });
+
+  it("documents the boundary between wasteful intros and necessary context", () => {
+    assert.match(uiStyle, /No crear encabezados permanentes de página/);
+    assert.match(uiStyle, /Sí conservar contexto operativo indispensable/);
+    assert.match(uiStyle, /nombre de un registro seleccionado, estado, paso activo, título de modal/);
+    assert.match(uiStyle, /Abrir la ayuda no debe empujar ni redimensionar el contenido/);
   });
 });

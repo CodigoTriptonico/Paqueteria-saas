@@ -10,6 +10,8 @@ const envios = component("envios-client.tsx");
 const venta = component("venta-client.tsx");
 const uiBlocks = component("ui-blocks.tsx");
 const platform = component("platform/platform-console.tsx");
+const agentsRules = readFileSync(new URL("../../AGENTS.md", import.meta.url), "utf8");
+const uiStyle = readFileSync(new URL("../../UI-STYLE.md", import.meta.url), "utf8");
 
 describe("compact page introductions", () => {
   it("removes the persistent shipping and sales-history introductions", () => {
@@ -36,5 +38,12 @@ describe("compact page introductions", () => {
     assert.doesNotMatch(platform, /Administración de plataforma/);
     assert.match(platform, /aria-label="Filtrar empresas por estado"[\s\S]*Nueva empresa/);
     assert.match(platform, /Información de empresas/);
+  });
+
+  it("keeps the no-intro-header rule in the project documentation", () => {
+    assert.match(agentsRules, /No crear encabezados introductorios permanentes de página/);
+    assert.match(agentsRules, /CompactInfoDisclosure/);
+    assert.match(uiStyle, /Regla estricta: sin encabezados introductorios/);
+    assert.match(uiStyle, /No reservar una franja solo para texto/);
   });
 });

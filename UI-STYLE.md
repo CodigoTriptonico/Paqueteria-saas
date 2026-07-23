@@ -31,12 +31,22 @@ El acento esmeralda es **confianza y acción**. Ámbar y rosa son **alerta opera
 
 ---
 
+## Regla estricta: sin encabezados introductorios
+
+- **No crear encabezados permanentes de página** que repitan el nombre de la vista, agreguen una etiqueta decorativa o mantengan una descripción visible. La navegación ya dice dónde está el usuario y el centro debe empezar con controles o contenido real.
+- **No reservar una franja solo para texto.** Títulos como “Operación de envíos” y frases como “Consulta, seguimiento y trazabilidad...” no ocupan espacio fijo.
+- **La ayuda opcional va bajo demanda.** Usar `CompactInfoDisclosure` con un `!`, `aria-label` específico y panel flotante. Abrir la ayuda no debe empujar ni redimensionar el contenido.
+- **Sí conservar contexto operativo indispensable:** nombre de un registro seleccionado, estado, paso activo, título de modal o encabezado de una sección que distingue datos o acciones. Debe ser compacto y no repetir la navegación.
+- **Integrar acciones en barras existentes.** Filtros, pestañas, conteos y acciones primarias comparten la toolbar; no crear otra tarjeta encima para presentarlos.
+
+---
+
 ## Patrón oficial: superficie operativa oscura
 
 Este es el estilo por defecto para toda pantalla nueva de administración, configuración, empresas, equipos o detalle de un registro. La referencia implementada está en `platform-console.tsx`.
 
-- **Una sola cabecera por vista.** Fondo `bg-surface-card`, borde negro, sombra negra suave y radio `rounded-xl`. La navegación atrás, estado y menú de opciones viven dentro de esa misma cabecera. Nunca repetir el nombre del registro en el `Panel` y otra barra debajo.
-- **Cabecera informativa, no promocional.** Icono compacto sobre `bg-surface-inset`, etiqueta en esmeralda, título claro y una sola frase que explique qué se controla. No usar franjas turquesa, cyan, azul o gradientes brillantes como fondo de páginas o listas.
+- **Sin cabecera genérica de página.** La vista empieza en la toolbar, las métricas o el contenido. Nunca repetir el nombre de la ruta dentro de una tarjeta introductoria.
+- **Identidad de registro compacta.** Si se abrió una empresa, agencia, ruta o persona concreta, su nombre, estado, navegación atrás y opciones pueden vivir en una sola barra baja. La explicación va en `CompactInfoDisclosure`, no en un párrafo fijo.
 - **Acción contenida.** Solo la acción primaria puede usar el esmeralda estándar (`primaryButtonClass`). Estados usan su tono semántico en una cápsula pequeña. El resto de controles son oscuros (`bg-surface-inset`) con borde negro.
 - **Métricas y datos como tarjetas operativas.** `bg-surface-card`, borde negro, radio `rounded-xl` y sombra negra muy leve. Etiqueta corta arriba, dato legible debajo, ayuda en gris. No tarjetas blancas, fondos de color completo ni decoraciones para rellenar.
 - **Detalles con capas, no más colores.** Para campos secundarios, separar con `border-black` y usar `bg-surface-inset/40`; no crear otra paleta. Un bloque de identidad puede ser ancho y el contexto secundario puede ir al lado, pero ambos conservan la misma superficie.

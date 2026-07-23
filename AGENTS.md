@@ -166,4 +166,6 @@ When Pablo asks for something, the answer is the finished product — not a plan
 - Siempre guardar en UTF-8.
 - Este proyecto usa Next.js nuevo. Antes de tocar codigo Next.js, revisar `node_modules/next/dist/docs/`.
 - Antes de tocar UI, leer `UI-STYLE.md` (criterio de gusto, no spec técnica). Implementar mirando componentes existentes.
+- No crear encabezados introductorios permanentes de página con nombre, subtítulo o descripción. La navegación ya identifica la vista y ese texto roba espacio operativo.
+- Conservar títulos solo cuando identifican un registro, estado, paso, modal o sección necesaria para trabajar. Si una explicación es opcional, usar `CompactInfoDisclosure` con `!` para mostrarla bajo demanda.
 - Arquitectura: app Next.js (App Router) en `src/`, no microservicios bajo `services/`. La sección services-first arriba aplica a scripts y módulos autocontenidos, no a dividir la app web.
