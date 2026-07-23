@@ -12,8 +12,10 @@ const source = readFileSync(
 );
 
 describe("BoxarioBrandHeader layout", () => {
-  it("gives the brand title its own top row and keeps actions on the lower row", () => {
-    assert.match(source, /mt-auto flex h-8 min-w-0 items-center gap-1/);
+  it("keeps the brand and its actions in one compact row", () => {
+    assert.match(source, /flex h-12 items-center overflow-visible/);
+    assert.match(source, /inline-flex h-8 min-w-0 items-center rounded-lg/);
+    assert.match(source, /ml-1 flex h-8 shrink-0 items-center gap-1/);
     assert.match(source, /variant="brand"/);
     assert.match(source, /<h1 className=\{`min-w-0 flex-1 \$\{titleClass\}`\}>\{brandTitle\}<\/h1>/);
     assert.match(source, /sidebarGroupsToggle \? \([\s\S]*ChevronsDownUp[\s\S]*\{showNotifications \? <NotificationsCenter/);
@@ -23,10 +25,10 @@ describe("BoxarioBrandHeader layout", () => {
     assert.match(source, /import Link from "next\/link"/);
     assert.match(source, /<Link[\s\S]*?href="\/"[\s\S]*?aria-label="Ir al inicio"/);
     assert.match(source, /<h1 className=\{`min-w-0 flex-1 \$\{titleClass\}`\}>\{brandTitle\}<\/h1>/);
-    assert.match(source, /onBack && keepBrand/);
+    assert.match(source, /keepBrand = false/);
     assert.match(source, /reserveBackSlot\?: boolean/);
-    assert.match(source, /flex h-\[5\.25rem\] flex-col/);
-    assert.doesNotMatch(source, /row-span-2/);
+    assert.match(source, /const showContextBack = Boolean\(onBack\)/);
+    assert.doesNotMatch(source, /h-\[5\.25rem\]/);
     assert.doesNotMatch(source, /<House className=/);
     assert.match(source, /\{onBack && !keepBrand && showContextualTitle \? \(/);
   });
@@ -48,25 +50,22 @@ describe("BoxarioBrandHeader layout", () => {
 
   it("keeps context back navigation separate from sidebar collapse", () => {
     assert.match(source, /\{isHydrated && showContextBack \? \([\s\S]*onClick=\{onBack\}/);
-    assert.match(source, /showBottomBack \? \([\s\S]*onClick=\{onBack\}/);
     assert.doesNotMatch(source, /sidebarToggle/);
   });
 
-  it("uses the reserved lower row for back navigation and header actions", () => {
-    assert.match(source, /const showBottomBack = Boolean\(onBack && keepBrand\)/);
-    assert.match(source, /mt-auto flex h-8 min-w-0 items-center gap-1/);
-    assert.match(source, /bottomBackVisible \? "visible" : "invisible"/);
-    assert.match(source, /flex h-8 min-w-0 flex-1 items-center gap-1\.5/);
-    assert.match(source, /<span className="min-w-0 truncate">\{title\}<\/span>/);
-    assert.match(source, /<div className="min-w-0 flex-1" aria-hidden \/>/);
+  it("keeps back navigation inline without creating an empty second row", () => {
+    assert.match(source, /const showContextBack = Boolean\(onBack\)/);
+    assert.match(source, /isHydrated && showContextBack/);
+    assert.match(source, /flex min-w-0 flex-1 items-center gap-1\.5/);
+    assert.doesNotMatch(source, /bottomBackVisible/);
+    assert.doesNotMatch(source, /mt-auto flex h-8/);
   });
 
-  it("pins the brand to the top row and keeps permanent space for the action buttons below", () => {
-    assert.match(source, /flex h-\[5\.25rem\] flex-col/);
-    assert.match(source, /mt-auto flex h-8 min-w-0 items-center gap-1/);
-    assert.doesNotMatch(source, /row-span-2/);
-    assert.doesNotMatch(source, /grid-rows-\[2rem_2rem\]/);
-    assert.match(source, /bottomBackVisible \? "visible" : "invisible"/);
+  it("does not reserve vertical space when no contextual action exists", () => {
+    assert.match(source, /flex h-12 items-center overflow-visible/);
+    assert.match(source, /ml-1 flex h-8 shrink-0 items-center gap-1/);
+    assert.doesNotMatch(source, /h-\[5\.25rem\]/);
+    assert.doesNotMatch(source, /bottomBackVisible/);
   });
 
   it("does not clip brand title descenders with leading-none truncate", () => {

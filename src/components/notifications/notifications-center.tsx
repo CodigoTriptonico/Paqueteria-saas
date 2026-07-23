@@ -59,7 +59,7 @@ type BoxarioBrandHeaderProps = {
 const backButtonClass =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-700/40 bg-emerald-400/10 text-emerald-300 transition hover:bg-emerald-400/15 hover:text-emerald-200 active:scale-[0.98]";
 const homeButtonClass =
-  "inline-flex min-w-0 items-center rounded-lg px-1.5 py-2 text-left transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70";
+  "inline-flex h-8 min-w-0 items-center rounded-lg px-1.5 text-left transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70";
 
 type SidebarCollapseButtonProps = {
   collapsed: boolean;
@@ -106,11 +106,11 @@ export function BoxarioBrandHeader({
   });
   const brandTitle = branding.brandTitle;
   const resolvedTitle = title ?? brandTitle;
-  const shellClass = `relative flex h-[5.25rem] flex-col overflow-hidden rounded-xl border border-black bg-surface-card-header px-2.5 py-2 text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
-    compact ? "" : "px-3"
+  const shellClass = `relative flex h-12 items-center overflow-visible rounded-xl border border-black bg-surface-card-header px-2 py-1.5 text-[#f8fafc] shadow-[0_6px_18px_rgba(0,0,0,0.2)] ${
+    compact ? "" : "px-2.5"
   } ${className}`;
   const titleClass = `font-black tracking-tight ${
-    compact ? "text-lg" : "text-xl"
+    compact ? "text-base" : "text-lg"
   } ${textTruncateSafeClass}`;
   const showNotifications = Boolean(session && !isPlatformOnlySession(session));
   const expandAllGroupsLabel = sidebarGroupsToggle?.allExpanded
@@ -118,14 +118,12 @@ export function BoxarioBrandHeader({
     : "Expandir todos los grupos del menú";
   const showContextualTitle =
     isHydrated && onBack && !keepBrand && resolvedTitle !== brandTitle;
-  const showContextBack = Boolean(onBack && !keepBrand);
+  const showContextBack = Boolean(onBack);
   const showReservedBack = !showContextBack && reserveBackSlot && !keepBrand;
-  const showBottomBack = Boolean(onBack && keepBrand);
-  const bottomBackVisible = Boolean(showBottomBack && isHydrated);
 
   return (
     <div className={shellClass}>
-      <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
         {isHydrated && showContextBack ? (
           <button
             type="button"
@@ -166,48 +164,26 @@ export function BoxarioBrandHeader({
           </Link>
         )}
       </div>
-      <div className="mt-auto flex h-8 min-w-0 items-center gap-1">
-        {showBottomBack ? (
+      <div className="ml-1 flex h-8 shrink-0 items-center gap-1">
+        {sidebarGroupsToggle ? (
           <button
             type="button"
-            onClick={onBack}
-            title={backTitle}
-            aria-label={`${backTitle}: ${title}`}
-            data-onboarding-target={backTarget}
-            tabIndex={bottomBackVisible ? undefined : -1}
-            aria-hidden={!bottomBackVisible}
-            disabled={!bottomBackVisible}
-            className={`flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-emerald-700/35 bg-emerald-400/10 px-2 text-left text-xs font-black text-emerald-200 transition hover:bg-emerald-400/15 hover:text-emerald-100 ${
-              bottomBackVisible ? "visible" : "invisible"
-            }`}
+            onClick={sidebarGroupsToggle.onToggle}
+            title={expandAllGroupsLabel}
+            aria-label={expandAllGroupsLabel}
+            aria-expanded={sidebarGroupsToggle.allExpanded}
+            className={backButtonClass}
           >
-            <ArrowLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-            <span className="min-w-0 truncate">{title}</span>
+            <ChevronsDownUp
+              className={`h-4 w-4 transition-transform duration-200 ${
+                sidebarGroupsToggle.allExpanded ? "rotate-180" : ""
+              }`}
+              strokeWidth={2.5}
+              aria-hidden
+            />
           </button>
-        ) : (
-          <div className="min-w-0 flex-1" aria-hidden />
-        )}
-        <div className="flex shrink-0 items-center gap-1">
-          {sidebarGroupsToggle ? (
-            <button
-              type="button"
-              onClick={sidebarGroupsToggle.onToggle}
-              title={expandAllGroupsLabel}
-              aria-label={expandAllGroupsLabel}
-              aria-expanded={sidebarGroupsToggle.allExpanded}
-              className={backButtonClass}
-            >
-              <ChevronsDownUp
-                className={`h-4 w-4 transition-transform duration-200 ${
-                  sidebarGroupsToggle.allExpanded ? "rotate-180" : ""
-                }`}
-                strokeWidth={2.5}
-                aria-hidden
-              />
-            </button>
-          ) : null}
-          {showNotifications ? <NotificationsCenter session={session} variant="brand" /> : null}
-        </div>
+        ) : null}
+        {showNotifications ? <NotificationsCenter session={session} variant="brand" /> : null}
       </div>
     </div>
   );
