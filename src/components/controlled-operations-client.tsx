@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCheck, ClipboardCheck, PackageCheck, Send, ShieldCheck, UserRoundCheck } from "lucide-react";
+import { AlertTriangle, CheckCheck, ClipboardCheck, PackageCheck, Send, UserRoundCheck } from "lucide-react";
 import { useState, useTransition } from "react";
 import {
   acceptPackageCustodyHandoffAction,
@@ -12,7 +12,7 @@ import {
   type ControlledHandoff,
   type ControlledPackageCustody,
 } from "@/app/actions/controlled-operations";
-import { inputClass, Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import { CompactInfoDisclosure, inputClass, Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
 import { custodyHolderLabel, exceptionTypeLabel, type CustodyHolderType, type OperationalExceptionType } from "@/lib/controlled-operations";
 import { custodyCurrentLabel, packageCustodyEventLabel } from "@/lib/package-custody";
@@ -92,11 +92,17 @@ export function ControlledOperationsClient({
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-4 p-3 sm:p-5">
-      <header className="rounded-xl border border-black bg-surface-shell p-4 sm:p-5">
-        <div className="flex items-start gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-emerald-700 bg-emerald-400 text-slate-950"><ShieldCheck className="h-6 w-6" /></span><div><p className="text-xs font-black uppercase tracking-wider text-emerald-300">Control operativo</p><h1 className="text-2xl font-black text-slate-50">Custodia y excepciones</h1><p className="mt-1 max-w-3xl text-sm font-bold text-slate-300">Cada cambio físico deja quién la tenía, quién la recibió, cuándo y por qué. La última línea es la custodia actual.</p></div></div>
-      </header>
-
-      <Panel title={packageId ? "Quién tiene esta caja" : "Quién tiene cada caja ahora"} action={<UserRoundCheck className="h-5 w-5 text-emerald-300" />}>
+      <Panel
+        title={packageId ? "Quién tiene esta caja" : "Quién tiene cada caja ahora"}
+        action={
+          <>
+            <UserRoundCheck className="h-5 w-5 text-emerald-300" />
+            <CompactInfoDisclosure ariaLabel="Cómo funciona la custodia">
+              Cada cambio físico deja quién la tenía, quién la recibió, cuándo y por qué. La última línea es la custodia actual.
+            </CompactInfoDisclosure>
+          </>
+        }
+      >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {custody.map((row) => <article key={row.packageId} className="rounded-lg border border-black bg-surface-list-row p-3"><div className="flex items-start justify-between gap-3"><div><p className="font-black text-slate-100">{row.packageCode}</p><p className="mt-1 text-sm font-black text-emerald-200">La tiene: {custodyCurrentLabel(row.holderLabel)}</p></div><span className="rounded-md border border-black bg-surface-inset px-2 py-1 text-[11px] font-black text-slate-300">{row.history.length} pasos</span></div><p className="mt-2 text-xs font-bold text-slate-500">Desde {new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(row.since))}</p><details className="mt-3 border-t border-black pt-3"><summary className="cursor-pointer text-xs font-black text-slate-300">Ver cómo llegó</summary><ol className="mt-3 grid gap-2">{row.history.map((event) => <li key={event.id} className="text-xs font-bold text-slate-400"><span className="text-slate-100">{packageCustodyEventLabel[event.type]}</span>{event.fromLabel ? ` · ${event.fromLabel} → ` : " · "}{event.toLabel || "Destino sin registrar"}<br /><span className="text-slate-500">{new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(event.occurredAt))} · {event.actorName}</span></li>)}</ol>{!row.history.length ? <p className="mt-3 text-xs font-bold text-slate-500">Abre esta caja para cargar su historial completo.</p> : null}</details></article>)}
           {!custody.length ? <p className="text-sm font-bold text-slate-500">No hay cajas con custodia registrada todavía.</p> : null}

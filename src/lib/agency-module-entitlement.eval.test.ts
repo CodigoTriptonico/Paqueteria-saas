@@ -60,7 +60,8 @@ describe("agency module entitlement eval", () => {
 
   it("removes agency references from every shared client surface while disabled", () => {
     assert.match(planSource, /usage\.agenciesEnabled \? <section/);
-    assert.match(commercialSource, /initialData\.agencyModuleEnabled \? "Vendedores y Agencias" : "Vendedores"/);
+    assert.match(commercialSource, /initialData\.agencyModuleEnabled\s+\? audienceTabs\s+: audienceTabs\.filter/);
+    assert.match(commercialSource, /title=\{audience==="agency"\?"Agencias":"Vendedores"\}/);
     assert.match(commercialSource, /initialData\.agencyModuleEnabled \? <AppTabs/);
     assert.match(financeSource, /if \(!agencyModuleEnabled\)/);
     assert.match(countryServiceSource, /agencyModuleEnabled \? "Las agencias y vendedores los heredan" : "Los vendedores los heredan"/);

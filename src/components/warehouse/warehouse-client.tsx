@@ -224,12 +224,10 @@ export function WarehouseClient({
   return (
     <Panel title="Bodega" hideHeader className="min-h-0" contentClassName="p-0">
       <div className="min-h-full space-y-5 p-4 pb-8 sm:p-5 sm:pb-10">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-black pb-4">
-          <div>
-            <h1 className="text-xl font-black text-slate-100">Bodega</h1>
-            <p className="mt-1 text-sm font-bold text-slate-400">
-              Cajas ya transferidas a bodega.
-            </p>
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-900/60 bg-sky-950/15 p-4">
+          <div className="flex items-center gap-2">
+            <Truck className="h-5 w-5 text-sky-300" />
+            <p className="font-black text-slate-100">Camiones y recepción física</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -244,23 +242,11 @@ export function WarehouseClient({
               )}
               Ingreso <span>{intake.length}</span>
             </button>
+            <Link href="/ingreso-bodega" className={`${secondaryButtonClass} h-10`}>
+              <Truck className="h-4 w-4" />
+              Descargar camión
+            </Link>
           </div>
-        </header>
-
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-900/60 bg-sky-950/15 p-4">
-          <div className="flex items-center gap-2">
-            <Truck className="h-5 w-5 text-sky-300" />
-            <div>
-              <p className="font-black text-slate-100">Camiones y recepción física</p>
-              <p className="text-sm font-bold text-slate-400">
-                Descarga primero las cajas de un camión finalizado; después confírmalas una por una.
-              </p>
-            </div>
-          </div>
-          <Link href="/ingreso-bodega" className={`${secondaryButtonClass} h-10`}>
-            <Truck className="h-4 w-4" />
-            Descargar camión
-          </Link>
         </section>
 
         <section hidden={!showIntake}>

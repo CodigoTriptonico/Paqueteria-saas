@@ -62,12 +62,18 @@ describe("envios page layout eval", () => {
     assert.equal(enviosSource.includes(">Vista</span>"), false);
     assert.equal(enviosSource.includes('isHistoryMode ? "entregados" : "total"'), true);
     const toolbarSearchIndex = enviosSource.indexOf('aria-label="Buscar envíos"');
-    const toolbarTotalIndex = enviosSource.indexOf('isHistoryMode ? "entregados" : "total"', toolbarSearchIndex);
-    const toolbarListosIndex = enviosSource.indexOf(">Listos</span>", toolbarSearchIndex);
-    const toolbarPendientesIndex = enviosSource.indexOf(">Pendientes</span>", toolbarSearchIndex);
-    assert.equal(toolbarSearchIndex > -1 && toolbarTotalIndex > toolbarSearchIndex, true);
-    assert.equal(toolbarListosIndex > toolbarSearchIndex, true);
-    assert.equal(toolbarPendientesIndex > toolbarSearchIndex, true);
+    const workspaceRowIndex = enviosSource.indexOf("{workspaceTabs ? (");
+    const workspaceTabsIndex = enviosSource.indexOf("{workspaceTabs}", workspaceRowIndex);
+    const workspaceReadinessIndex = enviosSource.indexOf("<EnviosReadinessActions", workspaceTabsIndex);
+    assert.equal(toolbarSearchIndex > -1, true);
+    assert.equal(workspaceRowIndex > -1 && workspaceTabsIndex > workspaceRowIndex, true);
+    assert.equal(workspaceReadinessIndex > workspaceTabsIndex, true);
+    assert.equal(
+      enviosSource.includes(
+        'className="mb-2 flex w-full items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"',
+      ),
+      true,
+    );
     assert.equal(enviosSource.includes("readinessFilter"), true);
     assert.equal(enviosSource.includes("EnviosBulkSelectionBar"), true);
     assert.equal(enviosSource.includes("useEnviosShipmentSelection"), true);

@@ -36,6 +36,7 @@ import { useContextNav } from "@/hooks/use-context-nav";
 import { useNotify } from "@/hooks/use-notify";
 import { DEFAULT_MAX_WAREHOUSES } from "@/lib/organizations/settings";
 import {
+  CompactInfoDisclosure,
   inputClass,
   labelMutedClass,
   Panel,
@@ -331,28 +332,6 @@ export function PlatformConsole() {
         hideHeader
         title="Empresas"
       >
-        <header className="rounded-xl border border-black bg-surface-card px-5 py-5 shadow-[0_12px_28px_rgba(0,0,0,0.18)] sm:px-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-wide text-emerald-300">Administración de plataforma</p>
-              <h1 className="mt-1 flex items-center gap-2 text-3xl font-black tracking-tight text-slate-100 sm:text-4xl">
-                <Building2 className="h-7 w-7 text-emerald-300 sm:h-8 sm:w-8" aria-hidden />
-                Empresas
-              </h1>
-              <p className="mt-1 max-w-2xl text-sm font-bold text-slate-400">
-                Cada empresa controla por su cuenta sus usuarios, permisos y datos operativos.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowCreateOrg(true)}
-              className={`${primaryButtonClass} h-11 shrink-0 px-4 shadow-[0_8px_18px_rgba(16,185,129,0.12)]`}
-            >
-              <Plus className="h-4 w-4" />
-              Nueva empresa
-            </button>
-          </div>
-        </header>
         <div className="p-4 sm:p-5">
         {error ? (
           <p className="mb-4 flex items-start gap-2 rounded-lg border border-rose-700 bg-rose-950/40 px-3 py-2 text-sm font-bold text-rose-200">
@@ -398,6 +377,17 @@ export function PlatformConsole() {
               {platformStats.warehouses === 1 ? "bodega" : "bodegas"}
             </span>
           </span>
+          <CompactInfoDisclosure ariaLabel="Información de empresas" align="right">
+            Cada empresa controla por su cuenta sus usuarios, permisos y datos operativos.
+          </CompactInfoDisclosure>
+          <button
+            type="button"
+            onClick={() => setShowCreateOrg(true)}
+            className={`${primaryButtonClass} h-9 shrink-0 px-3`}
+          >
+            <Plus className="h-4 w-4" />
+            Nueva empresa
+          </button>
         </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs font-black uppercase tracking-wide text-slate-400">
@@ -472,51 +462,39 @@ export function PlatformConsole() {
           contentClassName="p-0"
           hideHeader
         >
-          <header className="rounded-xl border border-black bg-surface-card px-5 py-5 shadow-[0_12px_28px_rgba(0,0,0,0.18)] sm:px-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={handlePlatformNavBack}
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-black bg-surface-inset px-3 text-sm font-black text-slate-100 transition-colors hover:bg-surface-card-hover"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Empresas
-              </button>
-              <div className="flex items-center gap-2">
-                <StatusPill active={selectedOrg.is_active} />
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setContextMenu({
-                      organizationId: selectedOrg.id,
-                      x: Math.max(8, rect.right - 216),
-                      y: rect.bottom + 8,
-                    });
-                  }}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300 transition-colors hover:bg-surface-card-hover"
-                  aria-label={`Abrir opciones de ${selectedOrg.name}`}
-                  title="Opciones"
-                >
-                  <Ellipsis className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-            <div className="mt-4 flex min-w-0 items-start gap-3">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-xl border border-black bg-surface-inset text-emerald-300" aria-hidden>
-                <Building2 className="h-6 w-6" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-xs font-black uppercase tracking-wide text-emerald-300">Administración de empresa</p>
-                <h1 className={`mt-1 text-3xl font-black tracking-tight text-slate-100 sm:text-4xl ${textTruncateSafeClass}`}>
-                  {selectedOrg.name}
-                </h1>
-                <p className="mt-1 text-sm font-bold text-slate-400">
-                  Usuarios, bodegas y operación de esta empresa.
-                </p>
-              </div>
-            </div>
-          </header>
+          <div className="flex min-h-11 items-center gap-2 border-b border-black bg-surface-card px-4 py-2 sm:px-5">
+            <button
+              type="button"
+              onClick={handlePlatformNavBack}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-100 transition-colors hover:bg-surface-card-hover"
+              aria-label="Volver a empresas"
+              title="Empresas"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <Building2 className="h-4 w-4 shrink-0 text-emerald-300" aria-hidden />
+            <p className={`min-w-0 flex-1 font-black text-slate-100 ${textTruncateSafeClass}`}>{selectedOrg.name}</p>
+            <CompactInfoDisclosure ariaLabel={`Información de ${selectedOrg.name}`} align="right">
+              Usuarios, bodegas y operación de esta empresa.
+            </CompactInfoDisclosure>
+            <StatusPill active={selectedOrg.is_active} />
+            <button
+              type="button"
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                setContextMenu({
+                  organizationId: selectedOrg.id,
+                  x: Math.max(8, rect.right - 216),
+                  y: rect.bottom + 8,
+                });
+              }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-slate-300 transition-colors hover:bg-surface-card-hover"
+              aria-label={`Abrir opciones de ${selectedOrg.name}`}
+              title="Opciones"
+            >
+              <Ellipsis className="h-5 w-5" />
+            </button>
+          </div>
           <div className="p-4 sm:p-5">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-black bg-surface-card p-4 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">

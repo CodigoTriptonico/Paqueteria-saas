@@ -61,6 +61,34 @@ export const labelMutedClass = "text-xs font-black uppercase text-slate-500";
 
 export const textMutedClass = "text-sm font-bold text-slate-300";
 
+export function CompactInfoDisclosure({
+  ariaLabel,
+  children,
+  align = "left",
+}: {
+  ariaLabel: string;
+  children: React.ReactNode;
+  align?: "left" | "right";
+}) {
+  return (
+    <details className="group relative shrink-0">
+      <summary
+        aria-label={ariaLabel}
+        className="flex h-6 w-6 cursor-pointer list-none items-center justify-center rounded-full border border-slate-600 text-xs font-black text-slate-300 transition hover:border-slate-400 hover:bg-surface-inset hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-300 [&::-webkit-details-marker]:hidden"
+      >
+        !
+      </summary>
+      <div
+        className={`fixed inset-x-4 top-1/2 z-30 max-w-none -translate-y-1/2 rounded-lg border border-black bg-surface-panel px-3 py-2.5 text-sm font-bold leading-snug text-slate-200 shadow-xl sm:absolute sm:inset-x-auto sm:top-full sm:mt-2 sm:w-72 sm:max-w-[calc(100vw-2rem)] sm:translate-y-0 ${
+          align === "right" ? "sm:right-0" : "sm:left-0"
+        }`}
+      >
+        {children}
+      </div>
+    </details>
+  );
+}
+
 /** Ellipsis without clipping descenders (g/y/p). Prefer over Tailwind `truncate`. */
 export const textTruncateSafeClass = "text-truncate-safe min-w-0";
 

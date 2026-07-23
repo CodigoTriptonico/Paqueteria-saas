@@ -10,11 +10,11 @@ const source = readFileSync(
 
 describe("platform companies layout eval", () => {
   it("uses the company status summary itself as the filter control", () => {
-    const headerPosition = source.indexOf("Administración de plataforma");
+    const infoPosition = source.indexOf("Información de empresas");
     const filtersPosition = source.indexOf("FILTER_OPTIONS.map");
     const searchPosition = source.indexOf('placeholder="Buscar empresa"');
 
-    assert.ok(headerPosition > 0 && headerPosition < searchPosition);
+    assert.ok(infoPosition > 0 && infoPosition < searchPosition);
     assert.ok(filtersPosition > 0 && filtersPosition < searchPosition);
     assert.match(source, /aria-pressed=\{selected\}/);
     assert.match(source, /aria-label="Filtrar empresas por estado"/);
@@ -30,7 +30,9 @@ describe("platform companies layout eval", () => {
     assert.match(source, /className="group grid w-full cursor-context-menu/);
     assert.match(source, /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
     assert.match(source, /rounded-xl border border-black bg-surface-card/);
-    assert.match(source, /rounded-xl border border-black bg-surface-card px-5 py-5/);
+    assert.doesNotMatch(source, /rounded-xl border border-black bg-surface-card px-5 py-5/);
+    assert.match(source, /CompactInfoDisclosure ariaLabel="Información de empresas"/);
+    assert.match(source, /className=\{`\$\{primaryButtonClass\} h-9 shrink-0 px-3`\}/);
     assert.match(source, /<StatusPill active=\{org\.is_active\} \/>/);
     assert.match(source, /<Users className="h-3\.5 w-3\.5 text-slate-500"/);
     assert.doesNotMatch(source, /from-emerald-300 via-teal-300 to-cyan-300/);
@@ -44,7 +46,8 @@ describe("platform companies layout eval", () => {
     assert.match(source, /role="menu"/);
     assert.match(source, /className=\{selectedOrg \? "hidden" : "min-h-\[calc\(100dvh-7rem\)\] border-0 bg-transparent"\}/);
     assert.match(source, /min-h-\[calc\(100dvh-7rem\)\]/);
-    assert.match(source, /Administración de empresa/);
+    assert.match(source, /flex min-h-11 items-center gap-2 border-b border-black/);
+    assert.match(source, /Información de \$\{selectedOrg\.name\}/);
     assert.match(source, /contentClassName="p-0"\s+hideHeader/);
     assert.match(source, /<ArrowLeft className="h-4 w-4" \/>/);
     assert.match(source, /Cerrar y archivar/);
@@ -80,4 +83,3 @@ describe("platform companies layout eval", () => {
     assert.doesNotMatch(source, /max_users \?\? 5/);
   });
 });
-

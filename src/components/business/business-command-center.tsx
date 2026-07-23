@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Building2, CircleDollarSign, ClipboardList, PackageOpen, ShieldCheck, WalletCards } from "lucide-react";
-import { Panel, StatCard, secondaryButtonClass } from "@/components/ui-blocks";
+import { Building2, ClipboardList, ShieldCheck, WalletCards } from "lucide-react";
+import { CompactInfoDisclosure, Panel, StatCard, secondaryButtonClass } from "@/components/ui-blocks";
 import { formatUsdCents, type BusinessWorkspace } from "@/lib/business/workspace";
 import { AgencyCaptorCreatePanel } from "@/components/business/agency-captor-create-panel";
 import { AgencyOperationsPanel } from "@/components/business/agency-operations-panel";
@@ -181,7 +181,6 @@ function Agency({ workspace, canManageTeam, canRequest, canCloseDay }: { workspa
 }
 
 export function BusinessCommandCenter({ surface, workspace, canManageAgencyTeam = false, canRequestAgencyOperations = false, canCloseAgencyDay = false, agencyModuleEnabled = false }: { surface: BusinessSurface; workspace: BusinessWorkspace; canManageAgencyTeam?: boolean; canRequestAgencyOperations?: boolean; canCloseAgencyDay?: boolean; agencyModuleEnabled?: boolean }) {
-  const title = surface === "network" ? "Red de agencias" : surface === "agency" ? "Mi agencia" : surface === "captor" ? "Agencias a mi cargo" : surface === "operations" ? "Solicitudes" : "Contabilidad";
   const description = surface === "finance"
     ? "Cargos, pagos, aplicaciones, efectivo en tránsito y liberaciones en una sola vista."
     : surface === "operations"
@@ -192,15 +191,12 @@ export function BusinessCommandCenter({ surface, workspace, canManageAgencyTeam 
 
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-4 p-3 sm:p-5">
-      <ContextTrail workspace={workspace} />
-      <header className="rounded-xl border border-black bg-surface-shell p-4 sm:p-5">
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-emerald-700 bg-emerald-400 text-slate-950">
-            {surface === "finance" ? <CircleDollarSign className="h-6 w-6" /> : surface === "operations" ? <PackageOpen className="h-6 w-6" /> : <Building2 className="h-6 w-6" />}
-          </div>
-          <div className="min-w-0"><h1 className="text-2xl font-black tracking-tight text-slate-50 sm:text-3xl">{title}</h1><p className="mt-1 max-w-3xl text-sm font-bold text-slate-300">{description}</p></div>
-        </div>
-      </header>
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1"><ContextTrail workspace={workspace} /></div>
+        <CompactInfoDisclosure ariaLabel="Información de esta vista" align="right">
+          {description}
+        </CompactInfoDisclosure>
+      </div>
       {surface === "network" ? <Network workspace={workspace} /> : surface === "captor" ? <Network workspace={workspace} captorOnly /> : surface === "agency" ? <Agency workspace={workspace} canManageTeam={canManageAgencyTeam} canRequest={canRequestAgencyOperations} canCloseDay={canCloseAgencyDay} /> : surface === "operations" ? <Operations workspace={workspace} /> : <Finance workspace={workspace} agencyModuleEnabled={agencyModuleEnabled} />}
     </div>
   );

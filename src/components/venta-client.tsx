@@ -51,7 +51,6 @@ import {
   flowPersonToolbarSearchShellClass,
 } from "@/components/flow-form-styles";
 import { ActionConfirmDialog } from "@/components/action-confirm-dialog";
-import { FlowPageHeader } from "@/components/flow-page-header";
 import { InlineSearchCombobox } from "@/components/inline-search-picker";
 import { SaleContextMenu } from "@/components/sale/sale-context-menu";
 import { SaleCustomerHistoryDrawer } from "@/components/sale/sale-customer-history-drawer";
@@ -4351,10 +4350,6 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
       {mode === "history" ? (
         <>
-          <FlowPageHeader
-            title="Historial"
-            description="Ventas, remitentes y destinatarios registrados."
-          />
           <Panel
             hideHeader
             className={flowPanelFlushClass}

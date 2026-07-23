@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { History, Package, PhoneCall, Search, Star, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, memo } from "react";
+import { useEffect, useMemo, useRef, useState, memo, type ReactNode } from "react";
 import {
   listLogisticsRouteCatalogAction,
   listLogisticsRoutesAction,
@@ -1003,15 +1003,6 @@ export function EnviosClient({
       className="flex min-h-0 flex-col lg:flex-1 lg:overflow-hidden"
       contentClassName="flex min-h-0 flex-1 flex-col p-3 sm:p-4"
     >
-      {unified ? (
-        <EnviosWorkspaceTabs
-          activeMode={activeMode}
-          trackingCount={filterShipmentsForEnviosMode(shipments, "tracking").length}
-          historyCount={filterShipmentsForEnviosMode(shipments, "history").length}
-          onModeChange={selectWorkspaceMode}
-        />
-      ) : null}
-
       {!supabaseReady ? (
         <SupabaseRequiredBanner detail="Los envíos se listan desde Supabase. Sin credenciales no hay datos que mostrar." />
       ) : null}
@@ -1025,6 +1016,16 @@ export function EnviosClient({
       {supabaseReady ? (
         <>
           <EnviosFiltersToolbar
+            workspaceTabs={
+              unified ? (
+                <EnviosWorkspaceTabs
+                  activeMode={activeMode}
+                  trackingCount={filterShipmentsForEnviosMode(shipments, "tracking").length}
+                  historyCount={filterShipmentsForEnviosMode(shipments, "history").length}
+                  onModeChange={selectWorkspaceMode}
+                />
+              ) : null
+            }
             mode={activeMode}
             readinessFilter={readinessFilter}
             onReadinessFilterChange={setReadinessFilter}
@@ -1342,11 +1343,7 @@ function EnviosWorkspaceTabs({
   onModeChange: (mode: EnviosClientMode) => void;
 }) {
   return (
-    <div className="mb-3 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-black bg-surface-card-header p-2">
-      <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-wide text-emerald-300">Operación de envíos</p>
-        <p className="truncate text-sm font-black text-[#f8fafc]">Consulta, seguimiento y trazabilidad en un solo lugar</p>
-      </div>
+    <div className="flex shrink-0">
       <div className="flex shrink-0 rounded-lg border border-black bg-surface-inset p-0.5" role="tablist" aria-label="Vista de envíos">
         {([
           ["tracking", "En curso", trackingCount],
@@ -1377,7 +1374,98 @@ function EnviosWorkspaceTabs({
   );
 }
 
+function EnviosReadinessActions({
+  mode,
+  readinessFilter,
+  onReadinessFilterChange,
+  totalCount,
+  listosCount,
+  pendientesCount,
+  canManageSales,
+  isConductor,
+}: {
+  mode: EnviosClientMode;
+  readinessFilter: EnviosReadinessFilter;
+  onReadinessFilterChange: (value: EnviosReadinessFilter) => void;
+  totalCount: number;
+  listosCount: number;
+  pendientesCount: number;
+  canManageSales: boolean;
+  isConductor: boolean;
+}) {
+  const isHistoryMode = mode === "history";
+
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <div className="flex h-9 shrink-0 divide-x divide-black overflow-hidden rounded-lg border border-black bg-surface-inset">
+        <button
+          type="button"
+          aria-pressed={readinessFilter === "all"}
+          onClick={() => onReadinessFilterChange("all")}
+          className={`flex min-w-[3.75rem] items-center gap-1.5 px-2 transition sm:min-w-[4.5rem] ${
+            readinessFilter === "all"
+              ? "bg-emerald-400/15 text-emerald-200"
+              : "text-slate-500 hover:bg-surface-card hover:text-slate-300"
+          }`}
+          title={isHistoryMode ? "Ver todos los entregados" : "Ver todos los envíos"}
+        >
+          <span className="text-[9px] font-black uppercase leading-none">
+            {isHistoryMode ? "entregados" : "total"}
+          </span>
+          <span className="text-sm font-black tabular-nums leading-none text-[#f8fafc]">
+            {totalCount}
+          </span>
+        </button>
+        {!isHistoryMode ? (
+          <>
+            <button
+              type="button"
+              aria-pressed={readinessFilter === "listos"}
+              onClick={() => onReadinessFilterChange("listos")}
+              className={`flex min-w-[4rem] items-center gap-1.5 px-2 transition sm:min-w-[4.75rem] ${
+                readinessFilter === "listos"
+                  ? "bg-emerald-400/15 text-emerald-200"
+                  : "text-slate-500 hover:bg-surface-card hover:text-slate-300"
+              }`}
+              title="Ver envíos ya marcados para dejar o recoger"
+            >
+              <span className="text-[9px] font-black uppercase leading-none">Listos</span>
+              <span className="text-sm font-black tabular-nums leading-none text-[#f8fafc]">
+                {listosCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-pressed={readinessFilter === "pendientes"}
+              onClick={() => onReadinessFilterChange("pendientes")}
+              className={`flex min-w-[4.75rem] items-center gap-1.5 px-2 transition sm:min-w-[5.5rem] ${
+                readinessFilter === "pendientes"
+                  ? "bg-amber-400/15 text-amber-200"
+                  : "text-slate-500 hover:bg-surface-card hover:text-slate-300"
+              }`}
+              title="Ver envíos pendientes de marcar para dejar o recoger"
+            >
+              <span className="text-[9px] font-black uppercase leading-none">Pendientes</span>
+              <span className="text-sm font-black tabular-nums leading-none text-amber-300">
+                {pendientesCount}
+              </span>
+            </button>
+          </>
+        ) : null}
+      </div>
+
+      {canManageSales && !isConductor && !isHistoryMode ? (
+        <Link href="/venta" className={`${primaryButtonClass} h-9 shrink-0 px-2 sm:px-4`}>
+          <span className="sm:hidden">Nuevo</span>
+          <span className="hidden sm:inline">Nuevo envío</span>
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
 type EnviosFiltersToolbarProps = {
+  workspaceTabs?: ReactNode;
   mode: EnviosClientMode;
   readinessFilter: EnviosReadinessFilter;
   onReadinessFilterChange: (value: EnviosReadinessFilter) => void;
@@ -1401,6 +1489,7 @@ type EnviosFiltersToolbarProps = {
 };
 
 const EnviosFiltersToolbar = memo(function EnviosFiltersToolbar({
+  workspaceTabs,
   mode,
   readinessFilter,
   onReadinessFilterChange,
@@ -1426,6 +1515,23 @@ const EnviosFiltersToolbar = memo(function EnviosFiltersToolbar({
 
   return (
     <div className="mb-3 shrink-0 rounded-xl border border-black bg-surface-card-header p-2">
+      {workspaceTabs ? (
+        <div className="mb-2 flex w-full items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {workspaceTabs}
+          <div className="ml-auto shrink-0">
+            <EnviosReadinessActions
+              mode={mode}
+              readinessFilter={readinessFilter}
+              onReadinessFilterChange={onReadinessFilterChange}
+              totalCount={totalCount}
+              listosCount={listosCount}
+              pendientesCount={pendientesCount}
+              canManageSales={canManageSales}
+              isConductor={isConductor}
+            />
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <label className="min-w-0 w-full basis-full sm:w-auto sm:min-w-[14rem] sm:max-w-[20rem] sm:flex-[1_1_16rem]">
           <span className="sr-only">Buscar envíos</span>
@@ -1486,71 +1592,20 @@ const EnviosFiltersToolbar = memo(function EnviosFiltersToolbar({
         />
         ) : null}
 
-        <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
-          <div className="flex h-9 shrink-0 divide-x divide-black overflow-hidden rounded-lg border border-black bg-surface-inset">
-            <button
-              type="button"
-              aria-pressed={readinessFilter === "all"}
-              onClick={() => onReadinessFilterChange("all")}
-              className={`flex min-w-[4.5rem] items-center gap-1.5 px-2 transition ${
-                readinessFilter === "all"
-                  ? "bg-emerald-400/15 text-emerald-200"
-                  : "text-slate-500 hover:bg-surface-card hover:text-slate-300"
-              }`}
-              title={isHistoryMode ? "Ver todos los entregados" : "Ver todos los envíos"}
-            >
-              <span className="text-[9px] font-black uppercase leading-none">
-                {isHistoryMode ? "entregados" : "total"}
-              </span>
-              <span className="text-sm font-black tabular-nums leading-none text-[#f8fafc]">
-                {totalCount}
-              </span>
-            </button>
-            {!isHistoryMode ? (
-              <>
-                <button
-                  type="button"
-                  aria-pressed={readinessFilter === "listos"}
-                  onClick={() => onReadinessFilterChange("listos")}
-                  className={`flex min-w-[4.75rem] items-center gap-1.5 px-2 transition ${
-                    readinessFilter === "listos"
-                      ? "bg-emerald-400/15 text-emerald-200"
-                      : "text-slate-500 hover:bg-surface-card hover:text-slate-300"
-                  }`}
-                  title="Ver envíos ya marcados para dejar o recoger"
-                >
-                  <span className="text-[9px] font-black uppercase leading-none">Listos</span>
-                  <span className="text-sm font-black tabular-nums leading-none text-[#f8fafc]">
-                    {listosCount}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={readinessFilter === "pendientes"}
-                  onClick={() => onReadinessFilterChange("pendientes")}
-                  className={`flex min-w-[5.5rem] items-center gap-1.5 px-2 transition ${
-                    readinessFilter === "pendientes"
-                      ? "bg-amber-400/15 text-amber-200"
-                      : "text-slate-500 hover:bg-surface-card hover:text-slate-300"
-                  }`}
-                  title="Ver envíos pendientes de marcar para dejar o recoger"
-                >
-                  <span className="text-[9px] font-black uppercase leading-none">Pendientes</span>
-                  <span className="text-sm font-black tabular-nums leading-none text-amber-300">
-                    {pendientesCount}
-                  </span>
-                </button>
-              </>
-            ) : null}
+        {!workspaceTabs ? (
+          <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
+            <EnviosReadinessActions
+              mode={mode}
+              readinessFilter={readinessFilter}
+              onReadinessFilterChange={onReadinessFilterChange}
+              totalCount={totalCount}
+              listosCount={listosCount}
+              pendientesCount={pendientesCount}
+              canManageSales={canManageSales}
+              isConductor={isConductor}
+            />
           </div>
-
-
-          {canManageSales && !isConductor && !isHistoryMode ? (
-            <Link href="/venta" className={`${primaryButtonClass} h-9 shrink-0 px-4`}>
-              Nuevo envío
-            </Link>
-          ) : null}
-        </div>
+        ) : null}
       </div>
     </div>
   );
