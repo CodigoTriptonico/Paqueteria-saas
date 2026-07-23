@@ -31,6 +31,7 @@ import {
   INVENTORY_ITEMS_SURFACE_SELECTOR,
   INTERACTIVE_SELECTOR,
   itemsGridClass,
+  itemsRowsClass,
   stockItemForTreeItem,
 } from "@/lib/inventory-structure-utils";
 import { type CategoryConfig, type InventoryTreeItem } from "@/lib/inventory-tree";
@@ -101,6 +102,7 @@ function InventoryItemCard({
       className={`group relative flex min-h-[7.75rem] cursor-context-menu overflow-hidden rounded-2xl border p-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_20px_rgba(0,0,0,0.18)] sm:p-3.5 ${stockCardClass[stockLevel]}`}
     >
       <div className="mx-auto flex h-full w-full max-w-[10.5rem] flex-1 flex-col">
+
         {photoUrl ? (
           <div className="mb-2 overflow-hidden rounded-xl border border-black/40 bg-black/20">
             {/* Supabase inventory photos use signed URLs outside Next static remote hosts. */}
@@ -549,7 +551,7 @@ export function InventoryItemGrid({
             {filteredItems.length ? (
               <div className="grid gap-2">
                 {viewLayout === "rows" ? (
-                  <div className={itemsGridClass}>
+                  <div className={itemsRowsClass}>
                     {filteredItems.map((item) =>
                       selectedCategoryData ? (
                         <InventoryItemRow

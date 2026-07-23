@@ -4,6 +4,8 @@ import type { CategoryConfig } from "@/lib/inventory-tree";
 import {
   categoryLeafEntries,
   formatScopedItemCount,
+  itemsGridClass,
+  itemsRowsClass,
   sameStockLeaf,
 } from "./inventory-structure-utils";
 
@@ -56,5 +58,11 @@ describe("inventory-structure-utils", () => {
       ),
       true,
     );
+  });
+
+  it("keeps card and row item layout classes distinct", () => {
+    assert.match(itemsGridClass, /auto-fill/);
+    assert.match(itemsRowsClass, /minmax\(20rem,22rem\)/);
+    assert.notEqual(itemsGridClass, itemsRowsClass);
   });
 });

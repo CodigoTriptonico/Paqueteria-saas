@@ -27,5 +27,8 @@ describe("inventario view layout eval", () => {
     assert.equal(gridSource.includes('viewLayout === "rows"'), true);
     assert.equal(gridSource.includes("InventoryItemRow"), true);
     assert.equal(gridSource.includes("InventoryItemCard"), true);
+    assert.equal(gridSource.includes("itemsRowsClass"), true);
+    assert.equal(gridSource.includes("itemsGridClass"), true);
+    assert.match(gridSource, /viewLayout === "rows"[\s\S]*?itemsRowsClass/);
   });
 });
