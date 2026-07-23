@@ -312,8 +312,6 @@ export function ShipmentStepContextMenu({
           : "Chofer — sin fecha aún"
         : undefined;
 
-  const legShortLabel = isEmpty ? EMPTY_BOX_LEG_LABELS.short : FULL_BOX_LEG_LABELS.short;
-
   function applyOfficeDelivery() {
     if (isEmpty) {
       onApply({

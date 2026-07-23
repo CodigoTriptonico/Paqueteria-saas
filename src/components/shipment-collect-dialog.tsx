@@ -94,16 +94,16 @@ export function ShipmentCollectDialog({
 
         {mode === "choose" ? (
           <>
-            <dl className="mt-4 grid gap-2 rounded-lg border border-black bg-surface-card px-3 py-3 text-sm">
-              <div className="flex items-center justify-between gap-3">
+            <dl className="mt-4 divide-y divide-black/70 border-y border-black/70 text-sm">
+              <div className="flex items-center justify-between gap-3 py-2">
                 <dt className="font-bold text-slate-400">Total</dt>
                 <dd className="font-black tabular-nums text-[#f8fafc]">{formatMoneyValue(total)}</dd>
               </div>
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 py-2">
                 <dt className="font-bold text-slate-400">Pagado</dt>
                 <dd className="font-black tabular-nums text-emerald-300">{formatMoneyValue(deposit)}</dd>
               </div>
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 py-2">
                 <dt className="font-bold text-slate-400">Pendiente</dt>
                 <dd className="font-black tabular-nums text-amber-300">{formatMoneyValue(balanceDue)}</dd>
               </div>
@@ -145,17 +145,17 @@ export function ShipmentCollectDialog({
           </>
         ) : (
           <>
-            <dl className="mt-4 grid gap-2 rounded-lg border border-black bg-surface-card px-3 py-3 text-sm">
-              <div className="flex items-center justify-between gap-3">
+            <dl className="mt-4 divide-y divide-black/70 border-y border-black/70 text-sm">
+              <div className="flex items-center justify-between gap-3 py-2">
                 <dt className="font-bold text-slate-400">Total</dt>
                 <dd className="font-black tabular-nums text-[#f8fafc]">{formatMoneyValue(total)}</dd>
               </div>
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 py-2">
                 <dt className="font-bold text-slate-400">Pagado</dt>
                 <dd className="font-black tabular-nums text-emerald-300">{formatMoneyValue(deposit)}</dd>
               </div>
               {mode === "full" ? (
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-3 py-2">
                   <dt className="font-bold text-slate-400">{copy.pendingLineLabel}</dt>
                   <dd className="font-black tabular-nums text-amber-300">
                     {formatMoneyValue(balanceDue)}
@@ -163,13 +163,13 @@ export function ShipmentCollectDialog({
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center justify-between gap-3 py-2">
                     <dt className="font-bold text-slate-400">Pendiente</dt>
                     <dd className="font-black tabular-nums text-amber-300">
                       {formatMoneyValue(balanceDue)}
                     </dd>
                   </div>
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center justify-between gap-3 py-2">
                     <dt className="font-bold text-slate-400">{copy.pendingLineLabel}</dt>
                     <dd className="font-black tabular-nums text-[#f8fafc]">
                       {formatMoneyValue(projectedBalance)}

@@ -7,6 +7,7 @@ import {
   type OrganizationPlanUsage,
 } from "@/app/actions/organization";
 import { PageLoading } from "@/components/page-loading";
+import { CompactInfoDisclosure } from "@/components/ui-blocks";
 import {
   settingsIconBoxClass as iconBoxClass,
   settingsSectionClass as sectionClass,
@@ -147,18 +148,16 @@ export function PlanSettingsPanel() {
 
   return (
     <div className="grid gap-4">
-      <div className="rounded-xl border border-black bg-[#1a2320] px-4 py-3">
-        <div className="flex items-start gap-3">
-          <span className={iconBoxClass}>
-            <Gauge className="h-4 w-4" />
-          </span>
-          <div>
-            <p className="text-lg font-black text-[#f8fafc]">Límites del plan</p>
-            <p className="mt-1 text-sm font-bold text-slate-400">
+      <div className="flex items-center gap-3 border-b border-black/70 pb-3">
+        <span className={iconBoxClass}>
+          <Gauge className="h-4 w-4" />
+        </span>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="text-lg font-black text-[#f8fafc]">Límites del plan</p>
+          <CompactInfoDisclosure ariaLabel="Información de los límites del plan">
               Uso actual de tu paquetería según el contrato configurado por el
               administrador de la plataforma.
-            </p>
-          </div>
+          </CompactInfoDisclosure>
         </div>
       </div>
 
@@ -192,9 +191,11 @@ export function PlanSettingsPanel() {
             <span className={iconBoxClass}>
               <Network className="h-4 w-4" />
             </span>
-            <div>
+            <div className="flex min-w-0 items-center gap-2">
               <p className="text-base font-black text-[#f8fafc]">Módulo Agencias</p>
-              <p className="text-xs font-bold text-slate-400">Capacidad exclusiva del contrato.</p>
+              <CompactInfoDisclosure ariaLabel="Información del módulo Agencias">
+                Capacidad exclusiva del contrato.
+              </CompactInfoDisclosure>
             </div>
           </div>
           <div className="px-4 py-4">

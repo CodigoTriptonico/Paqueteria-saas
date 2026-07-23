@@ -255,7 +255,7 @@ export function CompanySettingsPanel() {
             <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">
               Vista previa
             </p>
-            <div className="mt-3 rounded-lg border border-black bg-surface-card p-2.5">
+            <div className="mt-3 border-b border-black/70 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-black bg-emerald-600 text-xs font-black text-white">
                   {logoUrl ? (
@@ -271,7 +271,7 @@ export function CompanySettingsPanel() {
                 </div>
               </div>
             </div>
-            <div className="mt-2 rounded-lg border border-black bg-surface-card px-2.5 py-2">
+            <div className="mt-2 pt-2">
               <p className="text-[10px] font-black uppercase text-slate-500">Factura</p>
               <p className="mt-1 truncate text-xs font-black text-[#f8fafc]">{invoiceName}</p>
               {form.phone.trim() ? (

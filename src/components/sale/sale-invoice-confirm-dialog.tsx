@@ -56,9 +56,9 @@ export function SaleInvoiceConfirmDialog({
         </p>
         <p className="mt-1 break-words text-sm font-bold text-slate-400">{invoiceLabel}</p>
 
-        <dl className="mt-4 grid gap-2 rounded-lg border border-black bg-surface-card px-3 py-3 text-sm">
+        <dl className="mt-4 divide-y divide-black/70 border-y border-black/70 text-sm">
           {lines.map((line) => (
-            <div key={line.label} className="flex items-start justify-between gap-3">
+            <div key={line.label} className="flex items-start justify-between gap-3 py-2">
               <dt className="font-bold text-slate-400">{line.label}</dt>
               <dd className="min-w-0 break-words text-right font-black tabular-nums text-[#f8fafc]">{line.value}</dd>
             </div>

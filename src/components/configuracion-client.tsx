@@ -39,7 +39,6 @@ import { AppearanceSettingsPanel } from "@/components/config/appearance-settings
 import {
   OrganizationManagementPanel,
   isOrganizationManagementTab,
-  type OrganizationManagementTab,
 } from "@/components/config/organization-management-panel";
 import { PageLoading } from "@/components/page-loading";
 import { useSetShellConfig } from "@/components/app-frame";

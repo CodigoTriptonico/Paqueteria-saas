@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Package, RefreshCw, Truck } from "lucide-react";
 import { useState, useTransition } from "react";
 import { listConductorTruckBalancesAction } from "@/app/actions/conductor-tasks";
-import { secondaryButtonClass } from "@/components/ui-blocks";
+import { CompactInfoDisclosure, secondaryButtonClass } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
 import type { ConductorTruckBalance } from "@/lib/conductor-truck-inventory";
 
@@ -50,15 +50,15 @@ export function InventoryTruckPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#17201d] p-4 sm:p-5">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-black uppercase tracking-wide text-sky-300">
-            Inventario físico
-          </p>
-          <h2 className="mt-1 text-xl font-black text-[#f8fafc]">Cajas en camiones</h2>
-          <p className="mt-1 max-w-2xl text-sm font-bold text-slate-400">
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="min-w-0 text-xl font-black text-[#f8fafc]">Cajas en camiones</h2>
+          <CompactInfoDisclosure
+            ariaLabel="Cómo funciona el inventario de camiones"
+            title="Inventario físico"
+          >
             Saldo por vehículo. Las cajas siguen en el camión aunque cambie el conductor asignado;
             bajan cuando se entregan, vuelven a bodega o se transfieren a otro camión.
-          </p>
+          </CompactInfoDisclosure>
         </div>
         <button
           type="button"

@@ -9,7 +9,7 @@ import {
 } from "@/app/actions/conductor-tasks";
 import { ConductorHomePanel } from "@/components/conductor/conductor-home-panel";
 import { DashboardSummary } from "@/components/dashboard-summary";
-import { BigAction, cardClass, labelMutedClass, Panel, textMutedClass } from "@/components/ui-blocks";
+import { BigAction, cardClass, Panel, textMutedClass } from "@/components/ui-blocks";
 import { SupabaseRequiredBanner } from "@/components/supabase-required-banner";
 import { isPlatformOnlySession } from "@/lib/auth/permissions";
 import { getAppSession } from "@/lib/auth/session";
@@ -100,13 +100,6 @@ export default async function Home() {
   return (
     <>
       <Panel title="Inicio" hideHeader>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className={labelMutedClass}>Resumen</p>
-            <h3 className="truncate text-2xl font-black text-[#f8fafc]">Inicio</h3>
-          </div>
-        </div>
-
         {!isSupabaseConfigured() ? (
           <SupabaseRequiredBanner detail="El panel de resumen mostrará métricas cuando existan ventas y envíos en Supabase." />
         ) : null}
@@ -136,12 +129,12 @@ export default async function Home() {
               <span>Mas opciones</span>
               <ChevronDown className="h-5 w-5 shrink-0 text-slate-300 transition-transform group-open:rotate-180" />
             </summary>
-            <div className="grid border-t border-black">
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] border-t border-black">
               {secondaryActions.map((action) => (
                 <Link
                   key={action.title}
                   href={action.href}
-                  className="flex min-h-16 items-center gap-3 border-b border-black px-3 py-2 last:border-b-0 active:bg-surface-card-hover"
+                  className="flex min-h-16 min-w-0 items-center gap-3 border-b border-black px-3 py-2 last:border-b-0 active:bg-surface-card-hover"
                 >
                   <span
                     className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black text-slate-950 ${action.color}`}

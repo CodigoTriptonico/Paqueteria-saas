@@ -59,16 +59,16 @@ export function LogisticsDriverChangeDialog({
           {copy.warningMessage}
         </p>
 
-        <dl className="mt-4 grid gap-2 rounded-lg border border-black bg-surface-card px-3 py-3 text-sm">
-          <div className="flex items-start justify-between gap-3">
+        <dl className="mt-4 divide-y divide-black/70 border-y border-black/70 text-sm">
+          <div className="flex items-start justify-between gap-3 py-2">
             <dt className="font-bold text-slate-400">Tarea</dt>
             <dd className="min-w-0 break-words text-right font-black text-[#f8fafc]">{taskTypeLabel}</dd>
           </div>
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-3 py-2">
             <dt className="font-bold text-slate-400">Chofer actual</dt>
             <dd className="min-w-0 break-words text-right font-black text-[#f8fafc]">{currentLabel}</dd>
           </div>
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-3 py-2">
             <dt className="font-bold text-slate-400">Chofer nuevo</dt>
             <dd className="min-w-0 break-words text-right font-black text-emerald-300">{nextLabel}</dd>
           </div>

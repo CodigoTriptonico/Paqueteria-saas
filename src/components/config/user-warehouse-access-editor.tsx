@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Shield, Star, Warehouse } from "lucide-react";
+import { CompactInfoDisclosure } from "@/components/ui-blocks";
 
 type WarehouseAccessOption = {
   id: string;
@@ -187,9 +188,12 @@ export function UserWarehouseAccessEditor({
           Sin bodegas marcadas, el usuario no podrá operar inventario.
         </p>
       ) : showFavoriteHint ? (
-        <p className="text-xs font-bold text-slate-500">
-          Toca la estrella para elegir la bodega favorita (inventario abre ahí).
-        </p>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-black text-slate-400">Bodega favorita</span>
+          <CompactInfoDisclosure ariaLabel="Cómo elegir la bodega favorita">
+            Toca la estrella para elegir la bodega favorita. Inventario abrirá allí.
+          </CompactInfoDisclosure>
+        </div>
       ) : preferredId ? (
         <p className="text-xs font-bold text-slate-500">
           Favorita:{" "}

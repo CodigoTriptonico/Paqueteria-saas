@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { listRowBaseClass } from "@/components/ui-blocks";
+import { CompactInfoDisclosure, listRowBaseClass } from "@/components/ui-blocks";
 import { SurfacePalettePicker } from "@/components/ui/surface-palette-picker";
 import { useUiSurfacePreferences } from "@/components/ui/ui-surface-preferences-provider";
 import {
@@ -83,12 +83,12 @@ export function AppearanceSettingsPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-black bg-surface-inset/40 px-4 py-3">
+      <div className="flex items-center gap-2 border-b border-black/70 pb-3">
         <p className="text-sm font-black text-[#f8fafc]">Colores por pantalla</p>
-        <p className="mt-1 text-xs font-bold leading-snug text-slate-400">
+        <CompactInfoDisclosure ariaLabel="Cómo configurar los colores por pantalla">
           Cada listado puede tener su propia paleta. Usa el botón de paleta fijo en el sidebar (arriba del
           perfil) o ajusta aquí con temas, colores del catálogo y colores personalizados.
-        </p>
+        </CompactInfoDisclosure>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">

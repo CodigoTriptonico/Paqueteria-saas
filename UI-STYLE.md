@@ -41,6 +41,17 @@ El acento esmeralda es **confianza y acción**. Ámbar y rosa son **alerta opera
 
 ---
 
+## Regla estricta: una superficie, no cajas dentro de cajas
+
+- **Una sección operativa usa una sola superficie principal.** Dentro de ella, agrupa campos y datos con espacio, columnas, jerarquía tipográfica y divisores `border-black`; no repitas borde, fondo y radio en cada bloque.
+- **Reserva las tarjetas internas** para contenido independiente, interactivo, seleccionable o crítico. Un resumen simple, una explicación o un grupo de campos no necesita otra caja.
+- **Listas y resúmenes usan filas separadas.** Prefiere `divide-y`, `border-y` o una línea superior antes que una tarjeta por fila. En celular se permiten tarjetas cuando mejoren de verdad la lectura o el toque.
+- **La ayuda secundaria usa `CompactInfoDisclosure`.** El activador `!` tiene un área táctil mínima de 32 px, nombre accesible, apertura por clic o toque, cierre con Escape y un panel flotante que se ajusta a la pantalla.
+- **Nunca escondas información necesaria.** Labels, validaciones, bloqueos, advertencias críticas, consecuencias de pagos o movimientos, estados operativos e importes que deban revisarse permanecen visibles.
+- **El contenido largo debe ceder espacio.** Usa `min-w-0`, ajuste de palabras, truncado o scroll horizontal controlado según el tipo de dato. No tapes el problema con `overflow-hidden`.
+
+---
+
 ## Patrón oficial: superficie operativa oscura
 
 Este es el estilo por defecto para toda pantalla nueva de administración, configuración, empresas, equipos o detalle de un registro. La referencia implementada está en `platform-console.tsx`.

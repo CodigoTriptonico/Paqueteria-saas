@@ -563,13 +563,15 @@ export function PlatformConsole() {
                 </div>
               </dl>
             </section>
-            <section className="rounded-xl border border-black bg-surface-card p-4 shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
-              <p className={labelMutedClass}>Cuenta y operación</p>
-              <p className="mt-2 text-sm font-black text-slate-100">
+            <section className="border-l-2 border-emerald-700/50 pl-4">
+              <div className="flex items-center gap-2">
+                <p className={labelMutedClass}>Cuenta y operación</p>
+                <CompactInfoDisclosure ariaLabel="Información de aislamiento por empresa">
+                  Usuarios, permisos y registros operativos quedan dentro de esta paquetería.
+                </CompactInfoDisclosure>
+              </div>
+              <p className="mt-1 text-sm font-black text-slate-100">
                 Datos separados por empresa
-              </p>
-              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                Usuarios, permisos y registros operativos quedan dentro de esta paquetería.
               </p>
             </section>
           </div>
@@ -577,7 +579,7 @@ export function PlatformConsole() {
           {showEditOrg ? (
             <form
               onSubmit={handleUpdateOrg}
-              className="mt-5 grid gap-4 rounded-xl border border-black bg-surface-card p-4"
+              className="mt-5 grid gap-4 border-t border-black/70 pt-4"
             >
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="grid gap-1.5">

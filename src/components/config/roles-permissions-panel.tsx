@@ -28,7 +28,7 @@ import {
 } from "@/app/actions/roles";
 import type { RoleCatalogEntry } from "@/lib/auth/role-catalog";
 import type { PermissionKey, PermissionRow, RoleRow } from "@/lib/auth/types";
-import { inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import { CompactInfoDisclosure, inputClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { useNotify } from "@/hooks/use-notify";
 import { AddRoleModal } from "@/components/config/add-role-modal";
 import { settingsSectionClass as sectionClass } from "@/components/config/settings-panel-styles";
@@ -809,11 +809,11 @@ export function RolesPermissionsPanel({
             <span className="flex h-8 w-8 items-center justify-center rounded-md border border-black bg-surface-inset text-slate-400">
               <Settings2 className="h-4 w-4" />
             </span>
-            <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 flex-1 items-center gap-2">
               <span className="block text-sm font-black text-[#f8fafc]">Roles base</span>
-              <span className="mt-0.5 block text-xs font-bold text-slate-500">
+              <CompactInfoDisclosure ariaLabel="Cómo agregar roles">
                 Usa Agregar rol para abrir el modal de sugeridos o personalizados.
-              </span>
+              </CompactInfoDisclosure>
             </span>
           </div>
         )}

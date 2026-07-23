@@ -8,7 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { iconWellEmerald } from "@/components/ui-blocks";
+import { CompactInfoDisclosure, iconWellEmerald } from "@/components/ui-blocks";
 import {
   describeComboRuleShort,
   type PricingPromotionConfig,
@@ -155,13 +155,14 @@ export function PromotionSortableList({
 
   return (
     <div className="grid gap-2">
-      {canReorder ? (
-        <p className="text-xs font-bold text-slate-500">
-          Arrastra para cambiar la prioridad. Clic derecho para más opciones.
-        </p>
-      ) : (
-        <p className="text-xs font-bold text-slate-500">Clic derecho para más opciones.</p>
-      )}
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-black uppercase text-slate-500">Prioridad</span>
+        <CompactInfoDisclosure ariaLabel="Cómo ordenar y editar promociones">
+          {canReorder
+            ? "Arrastra para cambiar la prioridad. Clic derecho para más opciones."
+            : "Clic derecho para más opciones."}
+        </CompactInfoDisclosure>
+      </div>
 
       <div className="overflow-hidden rounded-xl border border-black bg-surface-card">
         {promotions.map((promotion, index) => {

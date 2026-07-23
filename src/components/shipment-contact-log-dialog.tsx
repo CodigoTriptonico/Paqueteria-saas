@@ -152,7 +152,7 @@ export function ShipmentContactLogDialog({
         </div>
 
         <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-3 sm:grid-cols-[1fr_0.92fr] sm:p-4">
-          <section className="rounded-lg border border-black bg-surface-card p-3">
+          <section className="min-w-0 sm:border-r sm:border-black/70 sm:pr-3">
             <label className="grid gap-1 text-[10px] font-black uppercase text-slate-500">
               Medio
               <select
@@ -302,7 +302,7 @@ export function ShipmentContactLogDialog({
             </div>
           </section>
 
-          <section className="min-h-0 rounded-lg border border-black bg-surface-card p-3">
+          <section className="min-h-0 min-w-0 border-t border-black/70 pt-3 sm:border-t-0 sm:pt-0">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-xs font-black uppercase text-slate-400">Historial</p>
               <span className="rounded-full border border-black bg-surface-inset px-2 py-0.5 text-[10px] font-black text-slate-300">
@@ -311,9 +311,9 @@ export function ShipmentContactLogDialog({
             </div>
 
             {logs.length ? (
-              <div className="grid max-h-[54vh] gap-2 overflow-y-auto pr-1">
+              <div className="max-h-[54vh] divide-y divide-black/70 overflow-y-auto pr-1">
                 {logs.map((log) => (
-                  <article key={log.id} className="rounded-lg border border-black bg-surface-inset p-2">
+                  <article key={log.id} className="py-2 first:pt-0 last:pb-0">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-xs font-black text-[#f8fafc]">
                         {shipmentContactChannelLabel(log.channel, log.channelOther)} ·{" "}
@@ -342,7 +342,7 @@ export function ShipmentContactLogDialog({
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border border-black bg-surface-inset px-3 py-6 text-center">
+              <div className="px-3 py-6 text-center">
                 <PhoneCall className="mx-auto h-6 w-6 text-slate-500" aria-hidden />
                 <p className="mt-2 text-sm font-black text-[#f8fafc]">
                   Sin seguimiento

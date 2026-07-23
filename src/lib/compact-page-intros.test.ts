@@ -8,7 +8,9 @@ function component(path: string) {
 
 const envios = component("envios-client.tsx");
 const venta = component("venta-client.tsx");
+const home = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 const uiBlocks = component("ui-blocks.tsx");
+const infoDisclosure = component("compact-info-disclosure.tsx");
 const platform = component("platform/platform-console.tsx");
 const agentsRules = readFileSync(new URL("../../AGENTS.md", import.meta.url), "utf8");
 const uiStyle = readFileSync(new URL("../../UI-STYLE.md", import.meta.url), "utf8");
@@ -17,6 +19,12 @@ describe("compact page introductions", () => {
   it("removes the persistent shipping and sales-history introductions", () => {
     assert.doesNotMatch(envios, /Operación de envíos|Consulta, seguimiento y trazabilidad en un solo lugar/);
     assert.doesNotMatch(venta, /FlowPageHeader|Ventas, remitentes y destinatarios registrados/);
+    assert.doesNotMatch(home, /labelMutedClass|<h3[^>]*>Inicio<\/h3>/);
+  });
+
+  it("keeps collapsed mobile actions inside the narrow home surface", () => {
+    assert.match(home, /grid min-w-0 grid-cols-\[minmax\(0,1fr\)\] border-t border-black/);
+    assert.match(home, /min-h-16 min-w-0 items-center/);
   });
 
   it("keeps the shipping tabs as the only workspace control", () => {
@@ -28,10 +36,13 @@ describe("compact page introductions", () => {
   });
 
   it("provides one accessible disclosure pattern for optional explanations", () => {
-    assert.match(uiBlocks, /export function CompactInfoDisclosure/);
-    assert.match(uiBlocks, /<details className="group relative shrink-0">/);
-    assert.match(uiBlocks, /<summary[\s\S]*aria-label=\{ariaLabel\}/);
-    assert.match(uiBlocks, /focus-visible:outline/);
+    assert.match(uiBlocks, /export \{ CompactInfoDisclosure \}/);
+    assert.match(infoDisclosure, /aria-label=\{ariaLabel\}/);
+    assert.match(infoDisclosure, /aria-expanded=\{open\}/);
+    assert.match(infoDisclosure, /event\.key !== "Escape"/);
+    assert.match(infoDisclosure, /createPortal/);
+    assert.match(infoDisclosure, /resolveFloatingPanelPosition/);
+    assert.match(infoDisclosure, /focus-visible:outline/);
   });
 
   it("integrates platform creation into the existing filter toolbar", () => {

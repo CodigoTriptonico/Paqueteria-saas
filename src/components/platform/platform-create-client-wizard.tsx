@@ -45,7 +45,7 @@ import {
   createOrgSteps,
   type CreateOrgStep,
 } from "@/components/platform/platform-create-org-flow-nav";
-import { inputClass, Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
+import { CompactInfoDisclosure, inputClass, Panel, primaryButtonClass, secondaryButtonClass } from "@/components/ui-blocks";
 import { generateTemporaryPassword, slugifyOrgName } from "@/lib/organizations/slug";
 import {
   formatInitialTeamPlan,
@@ -58,9 +58,9 @@ import { passwordConfirmationMessage } from "@/lib/auth/password-confirmation";
 const createOrgPageShellClass = "flex w-full min-h-0 flex-1 flex-col space-y-5 pb-8";
 const createOrgPanelContentClass = "p-3 sm:p-4";
 const createOrgStepBodyClass =
-  "w-full rounded-lg border border-white/10 bg-[#34413b] p-4 shadow-[0_14px_34px_rgba(0,0,0,0.24)] sm:p-5";
+  "w-full p-1 sm:p-2";
 const configBoxClass =
-  "rounded-lg border border-emerald-400/25 bg-[#202a26] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
+  "border-l border-emerald-400/35 pl-4";
 const dataColumnClass = "min-w-0 w-full space-y-5";
 const compactFieldClass = `${flowFormFieldClass} max-w-none`;
 const compactInputClass = `${inputClass} w-full border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20`;
@@ -564,9 +564,12 @@ export function PlatformCreateClientWizard({
                       </button>
                     </div>
                   ))}
-                  <span className="text-xs font-bold text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-slate-400">Recuperación SMS</span>
+                    <CompactInfoDisclosure ariaLabel="Información de recuperación por SMS">
                     Cualquiera de estos celulares sirve para recuperar contraseña por SMS.
-                  </span>
+                    </CompactInfoDisclosure>
+                  </div>
                 </div>
                 <div className={passwordFieldsClass}>
                   <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2">
@@ -660,7 +663,7 @@ export function PlatformCreateClientWizard({
               <aside className={configBoxClass}>
                 <p className="text-xs font-black uppercase text-emerald-300">Plan inicial</p>
                 <div className="mt-3 space-y-4">
-                  <section className="rounded-md border border-white/10 bg-[#26322e] p-3">
+                  <section className="border-b border-white/10 pb-3">
                     <p className={flowFieldLabelClass}>Equipo incluido</p>
                     <div className="mt-2 space-y-2">
                       {initialTeamPlan.map((role) => (

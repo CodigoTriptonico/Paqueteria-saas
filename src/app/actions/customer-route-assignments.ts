@@ -7,7 +7,6 @@ import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { recordActivityHistory } from "@/lib/activity-history";
 import { confirmLogisticsTaskScheduleAction } from "@/app/actions/logistics-routes";
-import { revokeCustomerRouteVerificationsForZoneChange } from "@/lib/customer-route-verifications-mutate";
 import {
   customerHasRouteGeo,
   customerZoneKeyFromParts,
