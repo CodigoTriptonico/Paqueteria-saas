@@ -51,4 +51,20 @@ describe("sale route decision", () => {
       scheduleAt: "",
     });
   });
+
+  it("keeps an unknown day pending without date or route", () => {
+    const undated: SaleRouteDecision = { kind: "undated", routeDate: null };
+
+    assert.deepEqual(saleRouteDecisionTask(undated), {
+      taskType: "deliver_empty_box",
+      status: "pending",
+      scheduledAt: null,
+      requestedRouteDate: null,
+    });
+    assert.equal(saleRouteDecisionSummary(undated), "Día y ruta pendientes");
+    assert.deepEqual(saleRouteDecisionSchedule(undated), {
+      scheduleMode: "pending",
+      scheduleAt: "",
+    });
+  });
 });

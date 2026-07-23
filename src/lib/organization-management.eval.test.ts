@@ -42,10 +42,6 @@ describe("organization management information architecture", () => {
     assert.match(managementSource, /"import"/);
     assert.match(managementSource, /ariaLabel="Empresa, plan, usuarios, bodegas e importar"/);
     assert.match(configSource, /isOrganizationManagementTab/);
-    assert.match(planUsageSource, /WAREHOUSES_CONFIG_HREF/);
-    assert.match(
-      planUsageSource,
-      /\/configuracion\?view=organization&tab=warehouses/,
-    );
+    assert.doesNotMatch(planUsageSource, /WAREHOUSES_CONFIG_HREF/);
   });
 });

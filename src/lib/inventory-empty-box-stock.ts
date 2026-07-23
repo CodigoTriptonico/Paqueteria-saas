@@ -77,7 +77,7 @@ export function readEmptyBoxQuoteLinesFromPlan(value: unknown): EmptyBoxQuoteLin
   ];
 }
 
-export function emptyBoxStockAlreadyDeducted(plan: Record<string, unknown>) {
+function emptyBoxStockAlreadyDeducted(plan: Record<string, unknown>) {
   const emptyBox = asRecord(plan.emptyBox);
   return Boolean(emptyBox.stockDeductedAt);
 }

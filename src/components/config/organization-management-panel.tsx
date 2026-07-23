@@ -10,7 +10,7 @@ import { PageLoading } from "@/components/page-loading";
 
 export type OrganizationManagementTab = "company" | "plan" | "users" | "warehouses" | "import";
 
-export const ORGANIZATION_MANAGEMENT_TABS: OrganizationManagementTab[] = [
+const ORGANIZATION_MANAGEMENT_TABS: OrganizationManagementTab[] = [
   "company",
   "plan",
   "users",

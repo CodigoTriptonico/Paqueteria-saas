@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { resolveAppNavActiveLabel } from "../app-navigation";
 
 const shell = readFileSync(join(process.cwd(), "src/components/app-shell.tsx"), "utf8");
-const frame = readFileSync(join(process.cwd(), "src/components/app-frame.tsx"), "utf8");
 const commandCenter = readFileSync(join(process.cwd(), "src/components/business/business-command-center.tsx"), "utf8");
 
 describe("business navigation", () => {
@@ -21,7 +21,8 @@ describe("business navigation", () => {
     assert.ok(administrationItem > requestsItem);
     assert.ok(managedAgenciesItem > administrationItem);
     assert.equal(shell.includes('label: "Mis agencias"'), false);
-    assert.match(frame, /pathname\.startsWith\("\/captacion"\)[\s\S]*return "Agencias a mi cargo"/);
+    assert.equal(resolveAppNavActiveLabel("/captacion"), "Agencias a mi cargo");
+    assert.equal(resolveAppNavActiveLabel("/captacion/agencia/demo"), "Agencias a mi cargo");
   });
 
   it("keeps sidebar routes out of Mi agencia shortcuts", () => {

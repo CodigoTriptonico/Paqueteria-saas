@@ -34,12 +34,6 @@ export type InventoryMovementReferenceType =
   | "physical_count"
   | "manual";
 
-export type InventoryMovementLocation = {
-  type: InventoryMovementLocationType | null;
-  id: string | null;
-  label: string;
-};
-
 export type InventoryMovementEvidence = {
   photos?: string[];
   note?: string;
@@ -64,7 +58,7 @@ export const inventoryMovementReasonLabel: Record<InventoryMovementReasonCode, s
   other: "Otro",
 };
 
-export const inventoryMovementReferenceLabel: Record<InventoryMovementReferenceType, string> = {
+const inventoryMovementReferenceLabel: Record<InventoryMovementReferenceType, string> = {
   shipment: "Envío",
   assignment: "Asignación",
   warehouse_transfer: "Transferencia",

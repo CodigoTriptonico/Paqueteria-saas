@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, MapPin, Package, Phone, Plus, User } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin, Package, Phone, User } from "lucide-react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { CountryName } from "@/components/country-flag";
 import { listCardShellClass, listRowBaseClass, listRowHoverClass } from "@/components/ui-blocks";
@@ -14,9 +14,6 @@ import {
   salePersonAddressLines,
   salePersonAddressSummary,
 } from "@/components/sale/venta-parts";
-
-const salePersonCardAddClass =
-  "flex h-full min-h-[12.5rem] w-full min-w-0 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-amber-900/25 bg-[#2f281f]/50 p-4 text-center transition-colors hover:border-amber-600/40 hover:bg-amber-400/5";
 
 export const salePersonCardEmptyClass =
   "col-span-full flex min-h-[5.25rem] items-center justify-center rounded-xl border border-amber-800/40 bg-[#2f281f] px-4 text-center text-sm font-black text-amber-100/85";
@@ -344,30 +341,6 @@ export function SalePersonRow({
   );
 }
 
-export function SalePersonAddRow({
-  label,
-  onClick,
-  onboardingTarget,
-}: {
-  label: string;
-  onClick: () => void;
-  onboardingTarget?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-surface-card-hover sm:px-4"
-      data-onboarding-target={onboardingTarget}
-    >
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-inset text-emerald-300">
-        <Plus className="h-4 w-4" aria-hidden />
-      </span>
-      <span className="text-sm font-black text-emerald-300">{label}</span>
-    </button>
-  );
-}
-
 function SalePersonStatBadge({
   children,
   highlighted = false,
@@ -385,32 +358,6 @@ function SalePersonStatBadge({
     >
       {children}
     </span>
-  );
-}
-
-export function SalePersonAddCard({
-  label,
-  onClick,
-  className,
-  onboardingTarget,
-}: {
-  label: string;
-  onClick: () => void;
-  className?: string;
-  onboardingTarget?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`${salePersonCardAddClass}${className ? ` ${className}` : ""}`}
-      data-onboarding-target={onboardingTarget}
-    >
-      <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-amber-600/70 bg-amber-400/95 text-slate-950">
-        <Plus className="h-5 w-5" />
-      </span>
-      <span className="text-sm font-black leading-tight text-amber-300">{label}</span>
-    </button>
   );
 }
 

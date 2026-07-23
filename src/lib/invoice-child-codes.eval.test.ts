@@ -10,16 +10,27 @@ test("new shipments persist one child invoice per physical box without splitting
   assert.match(source, /invoice_code: invoiceBoxCode/);
 });
 
-test("the completed sale prints box invoices only when there are two or more boxes", async () => {
-  const [saleSource, invoiceSource] = await Promise.all([
+test("the completed sale prints one compact label per physical box", async () => {
+  const [saleSource, invoiceSource, globalStyles] = await Promise.all([
     readFile(new URL("../components/venta-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/sale/venta-parts.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(saleSource, /printableBoxInvoiceCodes\(invoiceNumber, boxCount\)/);
-  assert.match(saleSource, /One-box sales print only the parent invoice/);
-  assert.match(saleSource, /parentInvoiceNumber=\{createdInvoice\.invoiceNumber\}/);
-  assert.match(invoiceSource, /Factura principal/);
+  assert.match(saleSource, /<SaleBoxLabel/);
+  assert.match(invoiceSource, /Etiqueta de caja/);
+  assert.match(invoiceSource, /Datos para Excel/);
+  assert.match(invoiceSource, /customerInvoiceBoxChargeLines/);
+  assert.match(invoiceSource, /Array\.from\(\{ length: Math\.max\(1, Math\.floor\(line\.quantity\)/);
+  assert.match(invoiceSource, /invoiceBoxCode\(invoiceNumber, boxPosition\)/);
+  assert.match(invoiceSource, /value=\{invoiceNumber\}/);
+  assert.match(invoiceSource, /value=\{recipientQrValue\}/);
+  assert.match(saleSource, /<SaleDocumentActions/);
+  assert.match(saleSource, /<Share2/);
+  assert.match(saleSource, /sale-print-single/);
+  assert.match(globalStyles, /html\.sale-print-single #sale-print-documents/);
+  assert.match(globalStyles, /\.sale-document-print-selected/);
 });
 
 test("field and warehouse screens use the individual box invoice, not only the sale number", async () => {

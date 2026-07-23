@@ -10,6 +10,17 @@ describe("invoiceQrValue", () => {
     );
   });
 
+  it("uses the expiring bearer token returned by the sale command", () => {
+    assert.equal(
+      invoiceQrValue(
+        "INV-000042",
+        "https://app.example.com",
+        "secure_random_tracking_token",
+      ),
+      "https://app.example.com/rastrear?token=secure_random_tracking_token",
+    );
+  });
+
   it("falls back to invoice number without origin", () => {
     const previous = process.env.NEXT_PUBLIC_APP_URL;
     delete process.env.NEXT_PUBLIC_APP_URL;

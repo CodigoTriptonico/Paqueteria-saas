@@ -275,8 +275,8 @@ export function WarehouseIntakeClient({
 
   useEffect(() => {
     if (!pendingScanCode || !activeSession) return;
-    setPendingScanCode("");
-    requestAnimationFrame(() => {
+    const frame = requestAnimationFrame(() => {
+      setPendingScanCode("");
       if (isFoundIntake || !selectedPackage) {
         setCondition("unidentified");
         setIssueOpen(true);
@@ -284,6 +284,7 @@ export function WarehouseIntakeClient({
       }
       weightRef.current?.focus();
     });
+    return () => cancelAnimationFrame(frame);
   }, [activeSession, isFoundIntake, pendingScanCode, selectedPackage]);
 
   function resetScanner() {

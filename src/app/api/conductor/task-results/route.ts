@@ -1,4 +1,5 @@
 import { submitConductorTaskResultAction } from "@/app/actions/conductor-tasks";
+import { randomUUID } from "node:crypto";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,7 @@ const RETRYABLE_ERRORS = [
   "rate limit",
   "Sincronización en curso",
 ];
+const MAX_MULTIPART_BYTES = 9 * 1024 * 1024;
 
 function responseStatus(error: string) {
   if (error === "Sesion requerida") return 401;
@@ -29,7 +31,22 @@ function responseStatus(error: string) {
 }
 
 export async function POST(request: Request) {
+  const correlationId = randomUUID();
   try {
+    const contentLength = Number(request.headers.get("content-length") || 0);
+    if (contentLength > MAX_MULTIPART_BYTES) {
+      return Response.json(
+        { ok: false, retryable: false, error: "Operacion demasiado grande", correlationId },
+        { status: 413, headers: { "Cache-Control": "private, no-store" } },
+      );
+    }
+    const contentType = request.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().startsWith("multipart/form-data;")) {
+      return Response.json(
+        { ok: false, retryable: false, error: "Formato de operacion invalido", correlationId },
+        { status: 415, headers: { "Cache-Control": "private, no-store" } },
+      );
+    }
     const formData = await request.formData();
     const result = await submitConductorTaskResultAction(formData);
     if (result.ok) {
@@ -46,11 +63,16 @@ export async function POST(request: Request) {
       { status, headers: { "Cache-Control": "private, no-store" } },
     );
   } catch (error) {
+    console.error("[conductor/task-results] request failed", {
+      correlationId,
+      error: error instanceof Error ? error.name : "unknown",
+    });
     return Response.json(
       {
         ok: false,
         retryable: true,
-        error: error instanceof Error ? error.message : "No se pudo leer la operación",
+        error: "No se pudo procesar la operacion",
+        correlationId,
       },
       { status: 503, headers: { "Cache-Control": "private, no-store" } },
     );

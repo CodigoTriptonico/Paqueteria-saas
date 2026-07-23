@@ -1,8 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
-import { connectPg, loadEnvLocal, assertLocalSupabaseUrl } from "./lib/db-connection.mjs";
+import { connectPg } from "./lib/db-connection.mjs";
+import {
+  assertLocalCredentialScript,
+  requireLocalCredential,
+} from "./lib/local-credential-guard.mjs";
 
-loadEnvLocal();
-assertLocalSupabaseUrl();
+assertLocalCredentialScript();
+const localUserPassword = requireLocalCredential("LOCAL_TEST_USER_PASSWORD");
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -21,12 +25,12 @@ const admin = createClient(url, serviceKey, {
 const users = [
   {
     email: "conductor1@scgs.local",
-    password: "123456789",
+    password: localUserPassword,
     fullName: "Conductor 1",
   },
   {
     email: "conductor2@scgs.local",
-    password: "123456789",
+    password: localUserPassword,
     fullName: "Conductor 2",
   },
 ];

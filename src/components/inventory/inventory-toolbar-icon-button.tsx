@@ -27,9 +27,6 @@ export const inventoryToolbarSubcategoryPickerWidthClass =
 export const inventoryToolbarChevronButtonClass =
   "inline-flex h-9 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-[#243029] hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:cursor-default disabled:hover:bg-transparent";
 
-/** @deprecated Use inventoryToolbarRowClass */
-export const inventoryToolbarFiltersClass = inventoryToolbarRowClass;
-
 const baseClass =
   "group relative inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40";
 

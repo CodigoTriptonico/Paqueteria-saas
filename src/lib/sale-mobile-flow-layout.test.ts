@@ -39,7 +39,8 @@ describe("venta mobile flow layout", () => {
 
   it("keeps mobile steps scrollable and wide enough to contain contact data", () => {
     assert.match(stepBarSource, /snap-x snap-mandatory overflow-x-auto/);
-    assert.match(stepBarSource, /w-\[8\.5rem\] shrink-0 snap-start/);
-    assert.match(stepBarSource, /lg:min-w-0 lg:w-auto lg:flex-1/);
+    assert.match(stepBarSource, /relative flex shrink-0 snap-start flex-col lg:min-w-0 lg:w-auto/);
+    assert.match(stepBarSource, /w-\[13\.5rem\] lg:flex-\[1\.45\]/);
+    assert.match(stepBarSource, /w-\[8\.5rem\] lg:flex-1/);
   });
 });

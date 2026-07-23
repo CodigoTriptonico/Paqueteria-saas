@@ -8,6 +8,7 @@ import { requireAppSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { createStorageSignedUrl } from "@/lib/supabase/storage-url";
+import { decodeAndSanitizeImage } from "@/lib/security/safe-image";
 import {
   buildWarehouseIntakeSummary,
   validateWarehouseIntakeDraft,
@@ -113,11 +114,11 @@ async function uploadEvidence(input: {
   if (!EVIDENCE_TYPES.has(input.file.type)) throw new Error("La foto debe ser JPG, PNG o WebP.");
   const admin = createSupabaseAdminClient();
   if (!admin) throw new Error("Supabase service role no configurado");
-  const extension = input.file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "webp";
+  const safeImage = await decodeAndSanitizeImage(input.file, { maxBytes: EVIDENCE_MAX_BYTES });
   const safeOperation = input.operationKey.replace(/[^a-zA-Z0-9-]/g, "");
-  const path = `${input.organizationId}/${input.sessionId}/${safeOperation}.${extension}`;
-  const { error } = await admin.storage.from(EVIDENCE_BUCKET).upload(path, input.file, {
-    contentType: input.file.type,
+  const path = `${input.organizationId}/${input.sessionId}/${safeOperation}.${safeImage.extension}`;
+  const { error } = await admin.storage.from(EVIDENCE_BUCKET).upload(path, safeImage.bytes, {
+    contentType: safeImage.contentType,
     upsert: false,
   });
   if (error && !/already exists|duplicate/i.test(error.message)) throw new Error(error.message);

@@ -126,7 +126,7 @@ export type WarehouseIntakeWorkspace = {
   canReopen: boolean;
 };
 
-export function conditionNeedsEvidence(condition: WarehouseIntakeCondition) {
+function conditionNeedsEvidence(condition: WarehouseIntakeCondition) {
   return condition !== "correct";
 }
 

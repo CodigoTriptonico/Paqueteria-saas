@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarCheck2, Route, Truck } from "lucide-react";
+import { CalendarCheck2, CalendarOff, Route, Truck } from "lucide-react";
 import { ensureLogisticsDayRouteTemplateAction } from "@/app/actions/logistics-routes";
 import { DateInput } from "@/components/date-input";
 import { InlineSearchPicker } from "@/components/inline-search-picker";
@@ -62,12 +62,15 @@ export function LogisticsTaskScheduleConfirmPanel({
   confirmLabel = "Confirmar y programar",
   selectionOrder = "date-first",
   showDriverPicker = true,
+  allowPendingDay = false,
+  pendingDayLabel = "No sé el día",
   allowPendingRoute = false,
   pendingRouteLabel = "No sé la ruta todavía",
   pendingRouteDate = null,
   requireExplicitRouteSelection = false,
   onCancel,
   onConfirm,
+  onConfirmPendingDay,
   onConfirmPendingRoute,
 }: {
   open: boolean;
@@ -86,6 +89,8 @@ export function LogisticsTaskScheduleConfirmPanel({
   selectionOrder?: SelectionOrder;
   /** Sellers assign day+route; logistics owns the driver. */
   showDriverPicker?: boolean;
+  allowPendingDay?: boolean;
+  pendingDayLabel?: string;
   allowPendingRoute?: boolean;
   pendingRouteLabel?: string;
   pendingRouteDate?: string | null;
@@ -96,6 +101,7 @@ export function LogisticsTaskScheduleConfirmPanel({
     driverId: string;
     routeTemplateId: string;
   }) => void | Promise<void>;
+  onConfirmPendingDay?: () => void | Promise<void>;
   onConfirmPendingRoute?: (input: { routeDate: string }) => void | Promise<void>;
 }) {
   const notify = useNotify();
@@ -423,6 +429,27 @@ export function LogisticsTaskScheduleConfirmPanel({
         </div>
 
         <div className="mt-5 grid gap-4">
+          {allowPendingDay && onConfirmPendingDay ? (
+            <button
+              type="button"
+              disabled={saving || ensuringDayRoute}
+              onClick={() => void onConfirmPendingDay()}
+              className="flex min-h-12 w-full items-center gap-3 rounded-lg border border-black bg-surface-inset px-3 py-2.5 text-left transition hover:bg-surface-card-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:opacity-40"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-surface-card text-slate-300">
+                <CalendarOff className="h-4 w-4" aria-hidden />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-black text-slate-100">
+                  {pendingDayLabel}
+                </span>
+                <span className="mt-0.5 block text-[11px] font-bold text-slate-500">
+                  Deja día, fecha, ruta y conductor pendientes.
+                </span>
+              </span>
+            </button>
+          ) : null}
+
           {routeFirst ? (
             <>
               {routeField}
@@ -519,7 +546,9 @@ export function LogisticsTaskScheduleConfirmPanel({
           </div>
           {allowPendingRoute ? (
             <p className="text-center text-[11px] font-bold text-slate-500">
-              Ruta pendiente conserva el día; Logística define la ruta y la hora.
+              {allowPendingDay
+                ? "No sé el día deja todo pendiente. No sé la ruta conserva el día elegido."
+                : "Ruta pendiente conserva el día; Logística define la ruta y la hora."}
             </p>
           ) : null}
         </div>

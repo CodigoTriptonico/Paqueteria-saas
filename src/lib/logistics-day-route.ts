@@ -1,5 +1,4 @@
 import {
-  isLogisticsWeekdayKey,
   logisticsWeekdayKeys,
   type LogisticsWeekdayKey,
 } from "@/lib/logistics-route-catalog";
@@ -119,7 +118,7 @@ export function enabledWeekdayIndexes(
     .filter((index) => index >= 0);
 }
 
-export function availableEnabledWeekdayLabels(weekdays: ReadonlyArray<number>) {
+function availableEnabledWeekdayLabels(weekdays: ReadonlyArray<number>) {
   return weekdays
     .map((day) => logisticsWeekdayKeys[day])
     .filter((label): label is LogisticsWeekdayKey => Boolean(label))
@@ -162,8 +161,4 @@ export function resolveDayRouteTemplateId(input: {
   const preferred =
     dayTemplates.find((template) => template.id !== input.preferNotId) || dayTemplates[0];
   return preferred?.id || DAY_AS_ROUTE_TEMPLATE_ID;
-}
-
-export function isEnabledWeekdayKeyList(value: unknown): value is LogisticsWeekdayKey[] {
-  return Array.isArray(value) && value.every(isLogisticsWeekdayKey);
 }

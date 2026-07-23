@@ -1,8 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
-import { connectPg, loadEnvLocal, assertLocalSupabaseUrl } from "./lib/db-connection.mjs";
+import { connectPg } from "./lib/db-connection.mjs";
+import { assertLocalCredentialScript } from "./lib/local-credential-guard.mjs";
 
-loadEnvLocal();
-assertLocalSupabaseUrl();
+assertLocalCredentialScript();
 
 const fromEmail = process.argv[2]?.trim().toLowerCase();
 const toEmail = process.argv[3]?.trim().toLowerCase();

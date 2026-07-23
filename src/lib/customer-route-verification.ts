@@ -4,8 +4,6 @@ import {
   type LogisticsRouteStopAddress,
 } from "@/lib/logistics-routing";
 
-export type CustomerRouteVerificationStatus = "verified" | "revoked";
-
 export type CustomerRouteAssignmentRequestStatus = "pending" | "approved" | "rejected";
 
 export type CustomerRouteAssignmentOutcome = "assigned" | "pending_approval";
@@ -51,7 +49,7 @@ export function customerHasRouteGeo(input: CustomerRouteZoneInput) {
   return hasRouteGeo({ lat: input.lat, lng: input.lng });
 }
 
-export function isActiveCustomerRouteVerification(
+function isActiveCustomerRouteVerification(
   verification: Pick<ActiveCustomerRouteVerification, "endedAt"> | null | undefined,
 ) {
   return Boolean(verification && !verification.endedAt);

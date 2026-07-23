@@ -20,7 +20,7 @@ export const REMITENTE_COLUMNS = [
   "rem_referencia",
 ] as const;
 
-export const DESTINATARIO_COLUMNS = [
+const DESTINATARIO_COLUMNS = [
   "dest_nombre",
   "dest_apellido",
   "dest_telefono",
@@ -37,8 +37,6 @@ export const DESTINATARIO_COLUMNS = [
 
 export const CUSTOMERS_IMPORT_COLUMNS = [...REMITENTE_COLUMNS, ...DESTINATARIO_COLUMNS] as const;
 
-export type RemitenteColumn = (typeof REMITENTE_COLUMNS)[number];
-export type DestinatarioColumn = (typeof DESTINATARIO_COLUMNS)[number];
 export type CustomersImportColumn = (typeof CUSTOMERS_IMPORT_COLUMNS)[number];
 
 export type CustomersImportRawRow = Record<CustomersImportColumn, string>;
@@ -48,7 +46,7 @@ export type CustomersImportRowError = {
   message: string;
 };
 
-export type CustomersImportSender = {
+type CustomersImportSender = {
   clave: string;
   firstName: string;
   lastName: string;
@@ -64,7 +62,7 @@ export type CustomersImportSender = {
   addressReference: string;
 };
 
-export type CustomersImportRecipient = {
+type CustomersImportRecipient = {
   firstName: string;
   lastName: string;
   phone: string;
@@ -140,7 +138,7 @@ export function hasRecipientSideData(row: CustomersImportRawRow): boolean {
   return DESTINATARIO_COLUMNS.some((column) => row[column].length > 0);
 }
 
-export function isBlankImportRow(row: CustomersImportRawRow): boolean {
+function isBlankImportRow(row: CustomersImportRawRow): boolean {
   return CUSTOMERS_IMPORT_COLUMNS.every((column) => row[column].length === 0);
 }
 

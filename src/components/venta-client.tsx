@@ -5,6 +5,7 @@ import {
   Plus,
   Printer,
   Search,
+  Share2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -196,6 +197,7 @@ import {
   historyDateLabel,
   logisticsDriverTaskCount,
   logisticsLegComplete,
+  logisticsStepDetailRows,
   logisticsSummary,
   saleLogisticsContinueHint,
   saleLogisticsPlanReady,
@@ -216,6 +218,7 @@ import {
   senderPhoneKey,
   senderPhonesLabel,
   samePersonName,
+  SaleBoxLabel,
   SaleInvoicePaper,
   unselectedDimClass,
   applyAddressSuggestResult,
@@ -223,6 +226,7 @@ import {
 
 type CreatedInvoiceSnapshot = {
   invoiceNumber: string;
+  trackingToken?: string;
   sender: Sender;
   recipient: Recipient;
   box: string[];
@@ -363,12 +367,68 @@ function boxInvoicesForSale(invoiceNumber: string, lines: SaleBoxCartLine[]) {
   );
   const boxCount = boxes.length;
 
-  // One-box sales print only the parent invoice. Extra /A sheets are for 2+ boxes.
+  // Every physical box receives one printable label under the parent customer invoice.
   return printableBoxInvoiceCodes(invoiceNumber, boxCount).map((childInvoiceNumber, index) => ({
     invoiceNumber: childInvoiceNumber,
     box: boxes[index] || [],
     position: index + 1,
   }));
+}
+
+function salePrintTargetId(invoiceNumber: string) {
+  return `sale-document-${invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function printSaleDocument(targetId: string) {
+  const target = document.getElementById(targetId);
+  if (!target) {
+    return;
+  }
+
+  const root = document.documentElement;
+  const cleanup = () => {
+    root.classList.remove("sale-print-single");
+    target.classList.remove("sale-document-print-selected");
+  };
+
+  root.classList.add("sale-print-single");
+  target.classList.add("sale-document-print-selected");
+  window.addEventListener("afterprint", cleanup, { once: true });
+  window.print();
+}
+
+function SaleDocumentActions({
+  targetId,
+  label,
+  onShare,
+}: {
+  targetId: string;
+  label: string;
+  onShare: () => void;
+}) {
+  return (
+    <div className="no-print flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => printSaleDocument(targetId)}
+        aria-label={`Imprimir ${label}`}
+        className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-black bg-surface-inset px-3 text-xs font-black text-slate-100 hover:bg-surface-card"
+      >
+        <Printer className="h-4 w-4" aria-hidden />
+        Imprimir
+      </button>
+      <button
+        type="button"
+        onClick={onShare}
+        aria-label={`Compartir ${label}`}
+        title="Próximamente por mensaje o WhatsApp"
+        className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-black bg-surface-inset px-3 text-xs font-black text-slate-300 hover:bg-surface-card"
+      >
+        <Share2 className="h-4 w-4" aria-hidden />
+        Compartir
+      </button>
+    </div>
+  );
 }
 
 function saleCartTotalCost(lines: SaleBoxCartLine[]) {
@@ -622,6 +682,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   const [quickSaleDraft, setQuickSaleDraft] = useState<QuickEmptyBoxDraft | null>(null);
   const [showQuickCheckout, setShowQuickCheckout] = useState(false);
   const [quickInvoiceNumber, setQuickInvoiceNumber] = useState("");
+  const [quickTrackingToken, setQuickTrackingToken] = useState("");
   const [activeCopyGroup, setActiveCopyGroup] = useState<string | null>(null);
   const [creatingOpenInvoice, setCreatingOpenInvoice] = useState(false);
   const [creatingQuickInvoice, setCreatingQuickInvoice] = useState(false);
@@ -693,6 +754,35 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
   ]
     .filter(Boolean)
     .join(" · ");
+  const currentLogisticsDetails = useMemo(
+    () =>
+      logisticsStepDetailRows({
+        emptyBoxMode,
+        emptyBoxScheduleMode,
+        emptyBoxScheduleAt,
+        emptyBoxRouteSummary:
+          emptyBoxMode === EMPTY_BOX_DRIVER_MODE
+            ? saleRouteDecisionSummary(emptyBoxRouteDecision)
+            : "",
+        fullBoxMode,
+        fullBoxScheduleMode,
+        fullBoxScheduleAt,
+        fullBoxRouteSummary:
+          fullBoxMode === FULL_BOX_DRIVER_MODE
+            ? saleRouteDecisionSummary(fullBoxRouteDecision)
+            : "",
+      }),
+    [
+      emptyBoxMode,
+      emptyBoxRouteDecision,
+      emptyBoxScheduleAt,
+      emptyBoxScheduleMode,
+      fullBoxMode,
+      fullBoxRouteDecision,
+      fullBoxScheduleAt,
+      fullBoxScheduleMode,
+    ],
+  );
   const currentDriverTaskCount = logisticsDriverTaskCount(emptyBoxMode, fullBoxMode);
   const selectedBoxPromotions = useMemo(
     () =>
@@ -1408,6 +1498,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setShowQuickCheckout(false);
     setQuickSaleDraft(null);
     setQuickInvoiceNumber("");
+    setQuickTrackingToken("");
     setQuickPayNowDraft("");
     setQuickPayNowDraftTouched(false);
     setQuickPaymentMethod(SALE_PAYMENT_UNSET);
@@ -2511,6 +2602,28 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     setRoutePlannerLeg(null);
   }
 
+  function confirmSalePendingDay() {
+    if (!routePlannerLeg) {
+      return;
+    }
+
+    const decision: SaleRouteDecision = { kind: "undated", routeDate: null };
+
+    if (routePlannerLeg === "emptyBox") {
+      setEmptyBoxScheduleMode("pending");
+      setEmptyBoxScheduleAt("");
+      setEmptyBoxRouteDecision(decision);
+    } else if (routePlannerLeg === "fullBox") {
+      setFullBoxScheduleMode("pending");
+      setFullBoxScheduleAt("");
+      setFullBoxRouteDecision(decision);
+    } else {
+      setQuickEmptyBoxRouteDecision(decision);
+    }
+
+    setRoutePlannerLeg(null);
+  }
+
   function openContextMenu(
     event: MouseEvent,
     title: string,
@@ -2873,6 +2986,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
 
       setCreatedInvoice({
         invoiceNumber: invoice,
+        trackingToken: shipmentResult.data.publicTrackingToken,
         sender: selectedSender,
         recipient: selectedRecipient,
         box: selectedBox,
@@ -3089,6 +3203,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
       void reloadSaleShortcuts();
 
       setQuickCheckoutCompleted(true);
+      setQuickTrackingToken(shipmentResult.data.publicTrackingToken || "");
       setQuickPaymentMethod(SALE_PAYMENT_UNSET);
       setQuickPaymentNote("");
       notify.success(`Invoice ${invoice} creado.`);
@@ -3555,13 +3670,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 ? `${selectedBoxCount} producto${selectedBoxCount === 1 ? "" : "s"}`
                 : ""
               : step.id === "delivery"
-                ? logisticsPlanReady
-                  ? currentLogisticsSummary
-                  : emptyBoxComplete
-                    ? fullBoxMode
-                      ? currentLogisticsSummary
-                      : FULL_BOX_DEFERRED_SUMMARY
-                    : "Logistica"
+                ? logisticsPlanReady || emptyBoxComplete
+                  ? undefined
+                  : "Logistica"
                 : logisticsPlanReady
                   ? nextInvoiceNumber
                   : "";
@@ -3587,6 +3698,10 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         value,
         subtitle: subtitle || undefined,
         detail: detail || undefined,
+        detailRows:
+          step.id === "delivery" && (logisticsPlanReady || emptyBoxComplete)
+            ? currentLogisticsDetails
+            : undefined,
         country: country || undefined,
         isActive,
         isDone,
@@ -3608,7 +3723,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
     emptyBoxComplete,
     fullBoxMode,
     currentDriverTaskCount,
-    currentLogisticsSummary,
+    currentLogisticsDetails,
     nextInvoiceNumber,
     invoiceBillingForPayment,
   ]);
@@ -4230,30 +4345,70 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                     </div>
                   </div>
                 ) : null}
-                <SaleInvoicePaper
-                  branding={organizationBranding}
-                  invoiceNumber={createdInvoice.invoiceNumber}
-                  sender={createdInvoice.sender}
-                  recipient={createdInvoice.recipient}
-                  box={createdInvoice.box}
-                  serviceOperation={createdInvoice.serviceOperation}
-                  billing={createdInvoice.billing}
-                />
-                {createdInvoice.boxInvoices.map((boxInvoice) => (
-                  <SaleInvoicePaper
-                    branding={organizationBranding}
-                    key={boxInvoice.invoiceNumber}
-                    className="print:break-before-page"
-                    invoiceNumber={boxInvoice.invoiceNumber}
-                    parentInvoiceNumber={createdInvoice.invoiceNumber}
-                    boxPosition={boxInvoice.position}
-                    boxCount={createdInvoice.boxInvoices.length}
-                    sender={createdInvoice.sender}
-                    recipient={createdInvoice.recipient}
-                    box={boxInvoice.box}
-                    serviceOperation={createdInvoice.serviceOperation}
-                  />
-                ))}
+                <div id="sale-print-documents" className="grid w-full gap-3">
+                  <div
+                    id={salePrintTargetId(createdInvoice.invoiceNumber)}
+                    data-sale-print-document={createdInvoice.invoiceNumber}
+                    className="sale-document-shell grid w-full gap-2"
+                  >
+                    <div className="no-print mx-auto flex w-full max-w-[210mm] flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-400">
+                        Factura del cliente
+                      </p>
+                      <SaleDocumentActions
+                        targetId={salePrintTargetId(createdInvoice.invoiceNumber)}
+                        label={`factura ${createdInvoice.invoiceNumber}`}
+                        onShare={() =>
+                          notify.info("Compartir por mensaje o WhatsApp estará disponible próximamente.")
+                        }
+                      />
+                    </div>
+                    <SaleInvoicePaper
+                      branding={organizationBranding}
+                      invoiceNumber={createdInvoice.invoiceNumber}
+                      trackingToken={createdInvoice.trackingToken}
+                      sender={createdInvoice.sender}
+                      recipient={createdInvoice.recipient}
+                      box={createdInvoice.box}
+                      serviceOperation={createdInvoice.serviceOperation}
+                      billing={createdInvoice.billing}
+                    />
+                  </div>
+                  <p className="no-print mx-auto mt-3 w-full max-w-[100mm] text-xs font-black uppercase tracking-wide text-slate-400">
+                    Etiquetas para las cajas
+                  </p>
+                  {createdInvoice.boxInvoices.map((boxInvoice) => {
+                    const targetId = salePrintTargetId(boxInvoice.invoiceNumber);
+                    return (
+                    <div
+                      key={boxInvoice.invoiceNumber}
+                      id={targetId}
+                      data-sale-print-document={boxInvoice.invoiceNumber}
+                      className="sale-document-shell grid w-full gap-2"
+                    >
+                      <div className="no-print mx-auto flex w-full max-w-[100mm] items-center justify-end">
+                        <SaleDocumentActions
+                          targetId={targetId}
+                          label={`etiqueta ${boxInvoice.invoiceNumber}`}
+                          onShare={() =>
+                            notify.info("Compartir por mensaje o WhatsApp estará disponible próximamente.")
+                          }
+                        />
+                      </div>
+                      <SaleBoxLabel
+                        branding={organizationBranding}
+                        invoiceNumber={boxInvoice.invoiceNumber}
+                        parentInvoiceNumber={createdInvoice.invoiceNumber}
+                        position={boxInvoice.position}
+                        boxCount={createdInvoice.boxInvoices.length}
+                        sender={createdInvoice.sender}
+                        recipient={createdInvoice.recipient}
+                        box={boxInvoice.box}
+                      />
+                    </div>
+                    );
+                  })}
+                </div>
                 <div className="no-print grid w-full max-w-[210mm] gap-3 sm:grid-cols-3">
                   <button
                     type="button"
@@ -4280,6 +4435,9 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
               </div>
             ) : logisticsPlanReady ? (
               <div className="flex w-full flex-col items-center gap-3">
+            <p className="w-full max-w-[210mm] text-xs font-black uppercase tracking-wide text-slate-400">
+              Factura del cliente
+            </p>
             <SaleInvoicePaper
               branding={organizationBranding}
               invoiceNumber={nextInvoiceNumber}
@@ -4295,6 +4453,22 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
                 setPayNowDraft(value.replace(/[^\d]/g, ""));
               }}
             />
+            <p className="mt-3 w-full max-w-[100mm] text-xs font-black uppercase tracking-wide text-slate-400">
+              Etiquetas para las cajas
+            </p>
+            {boxInvoicesForSale(nextInvoiceNumber, selectedBoxLines).map((boxInvoice) => (
+              <SaleBoxLabel
+                branding={organizationBranding}
+                key={boxInvoice.invoiceNumber}
+                invoiceNumber={boxInvoice.invoiceNumber}
+                parentInvoiceNumber={nextInvoiceNumber}
+                position={boxInvoice.position}
+                boxCount={invoiceBilling?.boxCount || 1}
+                sender={selectedSender}
+                recipient={selectedRecipient}
+                box={boxInvoice.box}
+              />
+            ))}
             {invoiceBilling && invoiceBilling.promotionCandidates.length > 1 ? (
               <div className="no-print w-full max-w-[210mm]">
                 <PromotionSelector
@@ -4543,6 +4717,7 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
         <SaleQuickCheckoutModal
           branding={organizationBranding}
           invoiceNumber={quickInvoiceNumber}
+          trackingToken={quickTrackingToken}
           draft={quickSaleDraft}
           billing={quickInvoiceBilling}
           billingForPayment={quickInvoiceBillingForPayment}
@@ -4599,11 +4774,14 @@ export function VentaClient({ initialData }: { initialData?: VentaBootstrapData 
           confirmLabel="Asignar ruta"
           selectionOrder="date-first"
           showDriverPicker={false}
+          allowPendingDay
+          pendingDayLabel="No sé el día"
           allowPendingRoute
-          pendingRouteLabel="Dejar ruta pendiente"
+          pendingRouteLabel="No sé la ruta"
           requireExplicitRouteSelection
           onCancel={() => setRoutePlannerLeg(null)}
           onConfirm={(input) => confirmSaleRoute(input)}
+          onConfirmPendingDay={confirmSalePendingDay}
           onConfirmPendingRoute={confirmSalePendingRoute}
         />
       ) : null}

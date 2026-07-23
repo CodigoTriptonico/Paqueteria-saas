@@ -6,8 +6,10 @@ import {
 } from "@/components/flow-form-styles";
 import { cardHoverClass, insetShellClass, selectionActiveClass, selectionShellClass } from "@/components/ui-blocks";
 import { CountryFlag } from "@/components/country-flag";
+import { DataQrCode } from "@/components/sale/data-qr-code";
 import { InvoiceQrCode } from "@/components/sale/invoice-qr-code";
 import type { InvoiceBillingSnapshot } from "@/lib/invoice-billing";
+import { invoiceBoxCode } from "@/lib/invoice-child-codes";
 import type { LogisticsTaskType } from "@/lib/logistics-routing";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
 import type { OrganizationBranding } from "@/lib/organizations/branding";
@@ -16,6 +18,7 @@ import {
   PLATFORM_BRAND_TITLE,
 } from "@/lib/organizations/branding";
 import type { SaleRecipient, SaleSender } from "@/lib/customers/mappers";
+import { recipientExcelQrValue } from "@/lib/recipient-qr";
 import {
   saleInvoiceEtaLabel,
   saleInvoiceServiceLabel,
@@ -243,6 +246,63 @@ export function logisticsSummary(
   return parts.join(" | ");
 }
 
+export type SaleLogisticsDetailRow = {
+  label: string;
+  value: string;
+};
+
+export function logisticsStepDetailRows({
+  emptyBoxMode,
+  emptyBoxScheduleMode,
+  emptyBoxScheduleAt,
+  emptyBoxRouteSummary = "",
+  fullBoxMode,
+  fullBoxScheduleMode,
+  fullBoxScheduleAt,
+  fullBoxRouteSummary = "",
+}: {
+  emptyBoxMode: string;
+  emptyBoxScheduleMode: string;
+  emptyBoxScheduleAt: string;
+  emptyBoxRouteSummary?: string;
+  fullBoxMode: string;
+  fullBoxScheduleMode: string;
+  fullBoxScheduleAt: string;
+  fullBoxRouteSummary?: string;
+}): SaleLogisticsDetailRow[] {
+  const emptyRoute = emptyBoxRouteSummary.trim();
+  const fullRoute = fullBoxRouteSummary.trim();
+  const emptyValue =
+    emptyRoute ||
+    (emptyBoxMode === EMPTY_BOX_OFFICE_MODE
+      ? "Entregada en mostrador"
+      : emptyBoxMode === EMPTY_BOX_DRIVER_MODE
+        ? emptyBoxScheduleMode === "pending"
+          ? "Entrega pendiente"
+          : emptyBoxScheduleMode === "scheduled" && emptyBoxScheduleAt
+            ? `Entrega · ${formatScheduleAtDisplay(emptyBoxScheduleAt)}`
+            : "Falta programar entrega"
+        : "Pendiente");
+  const fullValue =
+    fullRoute ||
+    (!fullBoxMode
+      ? FULL_BOX_DEFERRED_SUMMARY
+      : fullBoxMode === FULL_BOX_OFFICE_MODE
+        ? "Cliente entrega en oficina"
+        : fullBoxMode === FULL_BOX_DRIVER_MODE
+          ? fullBoxScheduleMode === "pending"
+            ? FULL_BOX_DEFERRED_SUMMARY
+            : fullBoxScheduleMode === "scheduled" && fullBoxScheduleAt
+              ? `Recolección · ${formatScheduleAtDisplay(fullBoxScheduleAt)}`
+              : "Falta programar recolección"
+          : fullBoxSummaryLine(fullBoxMode, fullBoxScheduleMode, fullBoxScheduleAt));
+
+  return [
+    { label: "Caja vacía", value: emptyValue },
+    { label: "Caja llena", value: fullValue },
+  ];
+}
+
 export type SaleStep = "client" | "recipient" | "box" | "delivery" | "finish";
 export type AddressFormKind = "client" | "recipient";
 export type AddressValidation = {
@@ -322,6 +382,7 @@ export function historyDateLabel(value: string) {
 export type SaleInvoicePaperProps = {
   branding?: OrganizationBranding | null;
   invoiceNumber: string;
+  trackingToken?: string;
   parentInvoiceNumber?: string;
   boxPosition?: number;
   boxCount?: number;
@@ -341,6 +402,39 @@ export type SaleInvoicePaperProps = {
 
 function invoiceBoxTitle(label: string) {
   return label.replace(/^Caja\s+/i, "").trim() || label;
+}
+
+function customerInvoiceBoxChargeLines(
+  billing: InvoiceBillingSnapshot,
+  invoiceNumber: string,
+  fallbackBoxTitle: string,
+) {
+  let position = 0;
+  const configuredLines = billing.cartLines.flatMap((line) =>
+    Array.from({ length: Math.max(1, Math.floor(line.quantity) || 1) }, () => {
+      const boxPosition = position;
+      position += 1;
+      return {
+        key: `box:${boxPosition}`,
+        label: line.label || fallbackBoxTitle,
+        invoiceNumber: invoiceBoxCode(invoiceNumber, boxPosition),
+        amount: formatMoneyValue(parseMoneyValue(line.unitPrice)),
+      };
+    }),
+  );
+
+  if (configuredLines.length) {
+    return configuredLines;
+  }
+
+  const boxCount = Math.max(1, Math.floor(billing.boxCount) || 1);
+  const unitAmount = parseMoneyValue(billing.boxSubtotalBeforeDiscount) / boxCount;
+  return Array.from({ length: boxCount }, (_, boxPosition) => ({
+    key: `box:${boxPosition}`,
+    label: fallbackBoxTitle,
+    invoiceNumber: invoiceBoxCode(invoiceNumber, boxPosition),
+    amount: formatMoneyValue(unitAmount),
+  }));
 }
 
 function InvoicePartyCard({
@@ -384,6 +478,7 @@ function InvoicePartyCard({
 export function SaleInvoicePaper({
   branding,
   invoiceNumber,
+  trackingToken,
   parentInvoiceNumber,
   boxPosition,
   boxCount,
@@ -430,19 +525,7 @@ export function SaleInvoicePaper({
     "inline w-[4.5rem] bg-transparent p-0 text-right font-serif text-xl font-black tabular-nums leading-none text-zinc-950 outline-none";
   const chargeLines = billing
     ? [
-        ...(billing.cartLines.length
-          ? billing.cartLines.map((line) => ({
-              key: line.catalogKey || line.label,
-              label: `${line.label}${line.quantity > 1 ? ` × ${line.quantity}` : ""}`,
-              amount: formatMoneyValue(parseMoneyValue(line.unitPrice) * line.quantity),
-            }))
-          : [
-              {
-                key: "box",
-                label: `Caja ${boxTitle}${billing.boxCount > 1 ? ` × ${billing.boxCount}` : ""}`,
-                amount: billing.boxSubtotalBeforeDiscount,
-              },
-            ]),
+        ...customerInvoiceBoxChargeLines(billing, invoiceNumber, boxTitle),
         ...(parseMoneyValue(billing.promotionDiscount) > 0
           ? [
               {
@@ -570,7 +653,14 @@ export function SaleInvoicePaper({
               <div className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2">
                 {chargeLines.map((line) => (
                   <div key={line.key} className="contents">
-                    <span className="text-[12px] font-bold text-zinc-900">{line.label}</span>
+                    <span className="flex min-w-0 items-baseline gap-2 text-[12px] font-bold text-zinc-900">
+                      {"invoiceNumber" in line ? (
+                        <strong className="shrink-0 font-mono text-[10px] font-black tabular-nums text-zinc-950">
+                          {line.invoiceNumber}
+                        </strong>
+                      ) : null}
+                      <span className="truncate">{line.label}</span>
+                    </span>
                     <span className={invoiceAmountCellClass}>{line.amount}</span>
                   </div>
                 ))}
@@ -646,11 +736,111 @@ export function SaleInvoicePaper({
           </p>
           <InvoiceQrCode
             invoiceNumber={invoiceNumber}
+            trackingToken={trackingToken}
             size={56}
             className="flex h-16 w-16 items-center justify-center rounded-sm border border-zinc-400 bg-white p-1"
           />
         </footer>
       </div>
+    </article>
+  );
+}
+
+export function SaleBoxLabel({
+  branding,
+  invoiceNumber,
+  parentInvoiceNumber,
+  position,
+  boxCount,
+  sender,
+  recipient,
+  box,
+  className,
+}: {
+  branding?: OrganizationBranding | null;
+  invoiceNumber: string;
+  parentInvoiceNumber: string;
+  position: number;
+  boxCount: number;
+  sender: Sender;
+  recipient: Recipient;
+  box: string[];
+  className?: string;
+}) {
+  const companyName = branding?.name?.trim() || PLATFORM_BRAND_TITLE;
+  const boxTitle = invoiceBoxTitle(box[0] || "Paquete");
+  const recipientQrValue = recipientExcelQrValue(recipient);
+
+  return (
+    <article
+      className={`sale-box-label mx-auto flex min-h-[150mm] w-full max-w-[100mm] flex-col bg-white p-5 text-zinc-950 shadow-[0_18px_40px_rgba(0,0,0,0.2)] ${className ?? ""}`}
+    >
+      <header className="border-b-4 border-zinc-950 pb-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">
+              Etiqueta de caja
+            </p>
+            <p className="mt-1 truncate text-sm font-black">{companyName}</p>
+          </div>
+          <p className="shrink-0 text-[10px] font-black uppercase tracking-wide">
+            {position} / {boxCount}
+          </p>
+        </div>
+        <p className="mt-4 break-all font-mono text-[1.65rem] font-black leading-none tracking-[-0.06em]">
+          {invoiceNumber}
+        </p>
+        <p className="mt-2 text-xs font-black uppercase tracking-[0.12em]">
+          Caja {boxTitle}
+        </p>
+      </header>
+
+      <section className="grid border-b-2 border-zinc-950">
+        <div className="grid grid-cols-[6.5rem_1fr] border-b border-zinc-300 py-3">
+          <span className="text-[9px] font-black uppercase tracking-[0.16em] text-zinc-500">
+            Remitente
+          </span>
+          <strong className="text-sm font-black leading-tight">{personFullName(sender)}</strong>
+        </div>
+        <div className="grid grid-cols-[6.5rem_1fr] py-3">
+          <span className="text-[9px] font-black uppercase tracking-[0.16em] text-zinc-500">
+            Destinatario
+          </span>
+          <strong className="text-sm font-black leading-tight">{personFullName(recipient)}</strong>
+        </div>
+      </section>
+
+      <section className="grid flex-1 grid-cols-2 items-start gap-4 py-5">
+        <div className="text-center">
+          <DataQrCode
+            value={invoiceNumber}
+            label={`QR con invoice ${invoiceNumber}`}
+            size={132}
+            className="mx-auto flex aspect-square items-center justify-center border-2 border-zinc-950 bg-white p-2"
+          />
+          <p className="mt-2 text-[9px] font-black uppercase tracking-[0.16em]">Invoice</p>
+          <p className="mt-1 break-all font-mono text-[9px] font-bold">{invoiceNumber}</p>
+        </div>
+        <div className="text-center">
+          <DataQrCode
+            value={recipientQrValue}
+            label={`QR con datos del destinatario ${personFullName(recipient)}`}
+            size={132}
+            className="mx-auto flex aspect-square items-center justify-center border-2 border-zinc-950 bg-white p-2"
+          />
+          <p className="mt-2 text-[9px] font-black uppercase tracking-[0.16em]">
+            Datos para Excel
+          </p>
+          <p className="mt-1 text-[8px] font-bold leading-tight text-zinc-600">
+            Columnas separadas por tabulaciones
+          </p>
+        </div>
+      </section>
+
+      <footer className="border-t border-zinc-400 pt-3 text-[9px] font-bold text-zinc-600">
+        Factura del cliente:{" "}
+        <strong className="font-mono text-zinc-950">{parentInvoiceNumber}</strong>
+      </footer>
     </article>
   );
 }
@@ -808,6 +998,7 @@ export type SaleStepBarItem = {
   value: string;
   subtitle?: string;
   detail?: string;
+  detailRows?: SaleLogisticsDetailRow[];
   country?: string;
   isActive: boolean;
   isDone: boolean;
@@ -844,6 +1035,10 @@ function saleStepBarBadgeClass(item: SaleStepBarItem) {
 }
 
 function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boolean }) {
+  const hasVisibleDetail = Boolean(
+    (step.detail || step.detailRows?.length) && (step.isActive || step.isDone),
+  );
+
   return (
     <div
       className={`flex flex-col items-center justify-center gap-0.5 lg:gap-1 ${
@@ -910,7 +1105,7 @@ function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boole
       {options?.hideDetail ? null : (
         <span
           className={`flex min-h-[1.75rem] w-full min-w-0 max-w-full items-center justify-center overflow-hidden px-1 text-center leading-tight sm:min-h-[1.25rem] ${
-            step.detail && (step.isActive || step.isDone)
+            hasVisibleDetail
               ? step.id === "box"
                 ? step.isActive
                   ? "text-sm font-black text-emerald-300 sm:text-base"
@@ -920,9 +1115,27 @@ function saleStepTileInner(step: SaleStepBarItem, options?: { hideDetail?: boole
                   : "text-[11px] font-black tracking-tight text-slate-200"
               : "invisible"
           }`}
-          aria-hidden={!step.detail || !(step.isActive || step.isDone)}
+          aria-hidden={!hasVisibleDetail}
         >
-          <span className="line-clamp-2 max-w-full break-words">{step.detail || "\u00a0"}</span>
+          {step.detailRows?.length ? (
+            <span className="grid w-full gap-0.5">
+              {step.detailRows.map((row) => (
+                <span
+                  key={row.label}
+                  className="grid min-w-0 grid-cols-[3.9rem_minmax(0,1fr)] items-start gap-1 border-t border-black/35 pt-0.5 text-left first:border-t-0 first:pt-0"
+                >
+                  <span className="truncate text-[8px] font-black uppercase tracking-wide text-emerald-300/80">
+                    {row.label}
+                  </span>
+                  <span className="line-clamp-2 min-w-0 break-words text-[10px] font-bold leading-[1.1] text-slate-100">
+                    {row.value}
+                  </span>
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span className="line-clamp-2 max-w-full break-words">{step.detail || "\u00a0"}</span>
+          )}
         </span>
       )}
     </div>
@@ -995,7 +1208,13 @@ export function SaleStepBar({
                     />
                   </div>
                 ) : null}
-                <li className="relative flex w-[8.5rem] shrink-0 snap-start flex-col lg:min-w-0 lg:w-auto lg:flex-1">
+                <li
+                  className={`relative flex shrink-0 snap-start flex-col lg:min-w-0 lg:w-auto ${
+                    step.detailRows?.length
+                      ? "w-[13.5rem] lg:flex-[1.45]"
+                      : "w-[8.5rem] lg:flex-1"
+                  }`}
+                >
                   {step.isActive && stepPopovers?.[step.id] ? (
                     <div
                       className={`min-w-0 w-full overflow-hidden rounded-md border text-center transition sm:rounded-lg ${saleStepBarButtonClass(

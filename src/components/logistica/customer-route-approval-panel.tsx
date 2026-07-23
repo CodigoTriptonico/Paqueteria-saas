@@ -149,6 +149,10 @@ export function CustomerRouteApprovalPanel({
   const availableWeekdays = useMemo(() => enabledWeekdayIndexes(enabledDays), [enabledDays]);
 
   const replaceWeekday = replaceDraft ? getLogisticsWeekdayIndex(replaceDraft.date) : -1;
+  const replaceWeekdayLabel =
+    replaceWeekday >= 0
+      ? logisticsWeekdayKeys[replaceWeekday as 0 | 1 | 2 | 3 | 4 | 5 | 6]
+      : "";
   const replaceDateHint =
     replaceDraft && replaceWeekday >= 0 ? nextWeekdayScheduleHint(replaceDraft.date) : "";
 
@@ -363,14 +367,12 @@ export function CustomerRouteApprovalPanel({
         <div className="grid gap-1">
           <span className="text-[10px] font-black uppercase text-slate-500">
             Ruta del día
-            {logisticsWeekdayKeys[replaceWeekday]
-              ? ` · ${logisticsWeekdayKeys[replaceWeekday]}`
-              : ""}
+            {replaceWeekdayLabel ? ` · ${replaceWeekdayLabel}` : ""}
           </span>
           {dayAsRoute ? (
             <div className="rounded-lg border border-black bg-surface-inset px-3 py-2">
               <p className="text-sm font-black text-[#f8fafc]">
-                {logisticsWeekdayKeys[replaceWeekday] || "Día"}
+                {replaceWeekdayLabel || "Día"}
               </p>
               <p className="mt-0.5 text-[11px] font-bold text-slate-500">
                 {dayAsRouteHint(replaceWeekday)}
@@ -383,11 +385,11 @@ export function CustomerRouteApprovalPanel({
               options={dayTemplateOptions}
               placeholder={
                 dayTemplates.length
-                  ? `Rutas de ${logisticsWeekdayKeys[replaceWeekday] || "ese día"}`
+                  ? `Rutas de ${replaceWeekdayLabel || "ese día"}`
                   : "No hay rutas ese día"
               }
               searchPlaceholder="Buscar ruta..."
-              emptyLabel={`No hay rutas para ${logisticsWeekdayKeys[replaceWeekday] || "ese día"}`}
+              emptyLabel={`No hay rutas para ${replaceWeekdayLabel || "ese día"}`}
               ariaLabel="Ruta de reemplazo"
               className="w-full min-w-0"
               minWidthClass="min-w-0 w-full"

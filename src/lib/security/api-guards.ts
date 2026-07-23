@@ -38,23 +38,37 @@ function publicTrackingRateLimitKey(ip: string, code: string) {
 export async function enforceLoginRateLimit(headers: Headers, email: string) {
   const admin = createSupabaseAdminClient();
   if (!admin) {
-    return;
+    throw new Error("RATE_LIMIT_UNAVAILABLE");
   }
 
   const ip = readClientIp(headers);
-
-  await assertRateLimit(admin, {
-    bucket: LOGIN_RATE_LIMIT.bucket,
-    key: loginRateLimitKey(ip, email),
-    windowMs: LOGIN_RATE_LIMIT.windowMs,
-    maxAttempts: LOGIN_RATE_LIMIT.maxAttempts,
-  });
+  const account = email.trim().toLowerCase();
+  await Promise.all([
+    assertRateLimit(admin, {
+      bucket: LOGIN_RATE_LIMIT.bucket,
+      key: loginRateLimitKey(ip, account),
+      windowMs: LOGIN_RATE_LIMIT.windowMs,
+      maxAttempts: LOGIN_RATE_LIMIT.maxAttempts,
+    }),
+    assertRateLimit(admin, {
+      bucket: `${LOGIN_RATE_LIMIT.bucket}_ip`,
+      key: `ip:${ip}`,
+      windowMs: LOGIN_RATE_LIMIT.windowMs,
+      maxAttempts: 30,
+    }),
+    assertRateLimit(admin, {
+      bucket: `${LOGIN_RATE_LIMIT.bucket}_account`,
+      key: `account:${account}`,
+      windowMs: LOGIN_RATE_LIMIT.windowMs,
+      maxAttempts: 12,
+    }),
+  ]);
 }
 
 export async function enforceValidateAddressRateLimit(headers: Headers, userId: string) {
   const admin = createSupabaseAdminClient();
   if (!admin) {
-    return;
+    throw new Error("RATE_LIMIT_UNAVAILABLE");
   }
 
   const ip = readClientIp(headers);
@@ -69,13 +83,28 @@ export async function enforceValidateAddressRateLimit(headers: Headers, userId: 
 
 export async function enforcePublicTrackingRateLimit(headers: Headers, code: string) {
   const admin = createSupabaseAdminClient();
-  if (!admin) return;
-  await assertRateLimit(admin, {
-    bucket: PUBLIC_TRACKING_RATE_LIMIT.bucket,
-    key: publicTrackingRateLimitKey(readClientIp(headers), code),
-    windowMs: PUBLIC_TRACKING_RATE_LIMIT.windowMs,
-    maxAttempts: PUBLIC_TRACKING_RATE_LIMIT.maxAttempts,
-  });
+  if (!admin) throw new Error("RATE_LIMIT_UNAVAILABLE");
+  const ip = readClientIp(headers);
+  await Promise.all([
+    assertRateLimit(admin, {
+      bucket: PUBLIC_TRACKING_RATE_LIMIT.bucket,
+      key: publicTrackingRateLimitKey(ip, code),
+      windowMs: PUBLIC_TRACKING_RATE_LIMIT.windowMs,
+      maxAttempts: PUBLIC_TRACKING_RATE_LIMIT.maxAttempts,
+    }),
+    assertRateLimit(admin, {
+      bucket: `${PUBLIC_TRACKING_RATE_LIMIT.bucket}_ip`,
+      key: `ip:${ip}`,
+      windowMs: PUBLIC_TRACKING_RATE_LIMIT.windowMs,
+      maxAttempts: 24,
+    }),
+    assertRateLimit(admin, {
+      bucket: `${PUBLIC_TRACKING_RATE_LIMIT.bucket}_code`,
+      key: `code:${code}`,
+      windowMs: PUBLIC_TRACKING_RATE_LIMIT.windowMs,
+      maxAttempts: 12,
+    }),
+  ]);
 }
 
 export function isRateLimitError(error: unknown) {

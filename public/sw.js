@@ -9,6 +9,8 @@ const META_STORE_NAME = "metadata";
 const SYNC_TAG = "boxario-conductor-task-results";
 const SYNCING_LEASE_MS = 2 * 60 * 1000;
 const RETRY_DELAYS_MS = [0, 3000, 10000, 30000, 60000, 300000];
+const PRIVATE_SHELL_TTL_MS = 8 * 60 * 60 * 1000;
+const OPERATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE_URLS)));
@@ -59,10 +61,12 @@ self.addEventListener("fetch", (event) => {
       fetch(request).catch(async () => {
         if (url.pathname.startsWith("/conductor")) {
           const scopeKey = await readMetadata("active-scope");
-          if (scopeKey) {
+          const cachedAt = Date.parse(await readMetadata("private-cache-at") || "");
+          if (scopeKey && Number.isFinite(cachedAt) && cachedAt + PRIVATE_SHELL_TTL_MS > Date.now()) {
             const cached = await caches.match(privateCacheRequest(scopeKey));
             if (cached) return cached;
           }
+          await clearPrivateConductorCache();
         }
         return caches.match(OFFLINE_URL);
       }),
@@ -138,6 +142,7 @@ async function clearPrivateConductorCache() {
     const transaction = database.transaction(META_STORE_NAME, "readwrite");
     transaction.objectStore(META_STORE_NAME).delete("active-scope");
     transaction.objectStore(META_STORE_NAME).delete("active-user");
+    transaction.objectStore(META_STORE_NAME).delete("private-cache-at");
     await transactionDone(transaction);
   } finally {
     database.close();
@@ -154,6 +159,7 @@ async function cacheConductorShell(message) {
   await cache.put(privateCacheRequest(message.scopeKey), response.clone());
   await writeMetadata("active-scope", message.scopeKey);
   await writeMetadata("active-user", message.userKey);
+  await writeMetadata("private-cache-at", new Date().toISOString());
   return true;
 }
 
@@ -164,7 +170,11 @@ async function claimNextOperation() {
     const transaction = database.transaction(STORE_NAME, "readwrite");
     const store = transaction.objectStore(STORE_NAME);
     const operations = await requestResult(store.getAll());
+    operations
+      .filter((item) => Date.parse(item.createdAt) + OPERATION_TTL_MS <= now)
+      .forEach((item) => store.delete(item.id));
     const operation = operations
+      .filter((item) => Date.parse(item.createdAt) + OPERATION_TTL_MS > now)
       .filter((item) => {
         if (item.status === "pending") return !item.nextAttemptAt || Date.parse(item.nextAttemptAt) <= now;
         return item.status === "syncing" && Date.parse(item.updatedAt) + SYNCING_LEASE_MS <= now;

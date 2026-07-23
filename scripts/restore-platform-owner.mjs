@@ -7,31 +7,14 @@
  *   PLATFORM_OWNER_FULL_NAME=...
  *   PLATFORM_OWNER_ORG_NAME=...   (default: Boxario)
  */
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
-const LOCAL_CANONICAL_PASSWORD = "123456789";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.join(__dirname, "..");
-
-function loadEnvLocal() {
-  const envPath = path.join(root, ".env.local");
-  if (!fs.existsSync(envPath)) return;
-  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const value = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
-    if (!process.env[key]) process.env[key] = value;
-  }
-}
+import {
+  assertLocalCredentialScript,
+  requireLocalCredential,
+} from "./lib/local-credential-guard.mjs";
 
 async function main() {
-  loadEnvLocal();
+  assertLocalCredentialScript();
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -48,7 +31,6 @@ async function main() {
   }
 
   const resetPassword = process.argv.includes("--reset-password");
-  const password = process.env.PLATFORM_OWNER_PASSWORD?.trim() || LOCAL_CANONICAL_PASSWORD;
   const fullName = process.env.PLATFORM_OWNER_FULL_NAME?.trim() || "Pablo Isaza";
   const orgName = process.env.PLATFORM_OWNER_ORG_NAME?.trim() || "Boxario";
   const orgKind = "platform";
@@ -59,6 +41,10 @@ async function main() {
 
   const { data: existingList } = await admin.auth.admin.listUsers({ perPage: 200 });
   const existing = existingList?.users?.find((u) => u.email?.toLowerCase() === email);
+  const password =
+    !existing || resetPassword
+      ? requireLocalCredential("PLATFORM_OWNER_PASSWORD")
+      : null;
 
   let userId = existing?.id;
 
@@ -151,8 +137,7 @@ async function main() {
   } else if (resetPassword) {
     console.log("\nContraseña local actualizada.");
   } else {
-    console.log(`\nContraseña: sin cambios. Canónica local: ${LOCAL_CANONICAL_PASSWORD}`);
-    console.log("  (npm run db:restore-owner -- --reset-password para forzar)");
+    console.log("\nContraseña local sin cambios.");
   }
 }
 

@@ -6,6 +6,7 @@ import { sessionHasPermission } from "@/lib/auth/permissions";
 import { requireAppSession as loadAppSession } from "@/lib/auth/session";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { canReadDriverAgencyVisits } from "@/lib/security/agency-visit-access";
 
 async function requireAppSession() {
   const session = await loadAppSession();
@@ -317,10 +318,20 @@ export type AgencyDriverVisit = {
 export async function listConductorAgencyVisitsAction(driverId: string): Promise<ActionResult<AgencyDriverVisit[]>> {
   try {
     const session = await requireAppSession();
-    if (session.roleSlug === "conductor" && session.userId !== driverId) throw new Error("FORBIDDEN");
+    const requestedDriverId = driverId.trim();
+    if (!canReadDriverAgencyVisits(session, requestedDriverId)) throw new Error("FORBIDDEN");
     const admin = createSupabaseAdminClient();
     if (!admin) throw new Error("Supabase no configurado");
-    const { data: routes, error: routeError } = await admin.from("logistics_routes").select("id, name").eq("organization_id", session.organizationId).eq("assigned_to", driverId).not("status", "in", "(cancelled,completed)");
+    const { data: driver, error: driverError } = await admin
+      .from("profiles")
+      .select("id, organization_id, is_active, roles!inner(slug)")
+      .eq("id", requestedDriverId)
+      .eq("organization_id", session.organizationId)
+      .eq("is_active", true)
+      .eq("roles.slug", "conductor")
+      .maybeSingle();
+    if (driverError || !driver) throw new Error("FORBIDDEN");
+    const { data: routes, error: routeError } = await admin.from("logistics_routes").select("id, name").eq("organization_id", session.organizationId).eq("assigned_to", requestedDriverId).not("status", "in", "(cancelled,completed)");
     if (routeError) throw new Error(routeError.message);
     const routeById = new Map((routes || []).map((route) => [route.id, route.name]));
     if (!routeById.size) return ok([]);

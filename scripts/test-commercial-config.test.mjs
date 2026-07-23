@@ -21,7 +21,8 @@ describe('commercial database integration harness', () => {
 
   it('preserves the original database error when a transaction is aborted', () => {
     assert.match(source, /catch \(error\)/);
-    assert.match(source, /try \{ await client\.query\('reset role'\); \} catch \{\}/);
+    assert.match(source, /savepoint authenticated_scope_/);
+    assert.match(source, /rollback to savepoint/);
     assert.match(source, /throw error/);
   });
 });

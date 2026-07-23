@@ -38,7 +38,9 @@ npm run db:restore-owner
 npm run dev
 ```
 
-Login: `http://localhost:3000/login` — contraseña de todos los usuarios locales: `123456789`
+Login: `http://localhost:3000/login` — usa la credencial definida únicamente en
+`.env.local`. Los scripts sensibles requieren `NODE_ENV=development`,
+`ALLOW_LOCAL_CREDENTIAL_SCRIPTS=1` y Supabase en localhost.
 
 ## Comandos utiles
 

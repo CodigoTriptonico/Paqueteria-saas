@@ -4,15 +4,26 @@ import { connectPg } from './lib/db-connection.mjs';
 const { client, label } = await connectPg();
 console.log(`Testing Boxario business model on ${label}`);
 
+let authScopeCounter = 0;
+
 async function authenticated(userId, task) {
+  authScopeCounter += 1;
+  const savepoint = `authenticated_scope_${authScopeCounter}`;
+  await client.query(`savepoint ${savepoint}`);
   await client.query('set local role authenticated');
   await client.query("select set_config('request.jwt.claims', $1, true)", [
     JSON.stringify({ sub: userId, role: 'authenticated' }),
   ]);
   try {
-    return await task();
-  } finally {
+    const result = await task();
     await client.query('reset role');
+    await client.query(`release savepoint ${savepoint}`);
+    return result;
+  } catch (error) {
+    await client.query(`rollback to savepoint ${savepoint}`);
+    await client.query('reset role');
+    await client.query(`release savepoint ${savepoint}`);
+    throw error;
   }
 }
 

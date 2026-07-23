@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
 import { requireAppSession } from "@/lib/auth/session";
 import { normalizePersonName, normalizePersonNameSnapshot } from "@/lib/person-name";
 import { canAccessWarehouse, sessionHasPermission } from "@/lib/auth/permissions";
@@ -12,11 +13,14 @@ import {
   logisticsScheduleWindowPatch,
 } from "@/lib/logistics-schedule-window";
 import {
+  computeInvoiceBilling,
+  defaultInvoiceBillingConfig,
   depositStatusForPayment,
   invoicePaymentKindForCurrentDeposit,
   readBillingFromPlan,
 } from "@/lib/invoice-billing";
 import { formatMoneyValue } from "@/lib/logistics-fees";
+import { promotionFromDbRow } from "@/lib/combo-rules";
 import {
   DEFAULT_PAYMENT_METHOD,
   isPaymentMethod,
@@ -219,6 +223,9 @@ export type ShipmentRow = {
   logisticsTasks: ShipmentLogisticsTaskRow[];
   payments: ShipmentPaymentRow[];
   contactLogs?: ShipmentContactLogRow[];
+  /** Returned only by the atomic creation command; never selected from storage. */
+  publicTrackingToken?: string;
+  publicTrackingExpiresAt?: string;
 };
 
 export type RouteMemberRow = {
@@ -405,6 +412,109 @@ function parseMoney(value: string | number | null | undefined) {
   }
 
   return Number(String(value || "").replace(/[^\d.-]/g, "")) || 0;
+}
+
+async function authoritativeSaleQuote(
+  supabase: NonNullable<Awaited<ReturnType<typeof createScopedSupabase>>>,
+  organizationId: string,
+  countryInput: string,
+  planInput: Record<string, unknown>,
+) {
+  const { data: countries, error: countryError } = await supabase
+    .from("pricing_countries")
+    .select("id, code, name, pricing_country_boxes(size, price, cost, catalog_key)")
+    .eq("organization_id", organizationId);
+  if (countryError) throw new Error(countryError.message);
+  const normalizedCountry = countryInput.trim().toLocaleLowerCase("es");
+  const country = (countries || []).find((row) =>
+    [row.code, row.name].some(
+      (value) => String(value || "").trim().toLocaleLowerCase("es") === normalizedCountry,
+    ),
+  );
+  if (!country) throw new Error("Pais sin tarifa vigente");
+
+  const plan = asRecord(planInput);
+  const rawLines = Array.isArray(plan.boxLines) && plan.boxLines.length
+    ? plan.boxLines
+    : [asRecord(plan.box)];
+  const boxes = (country.pricing_country_boxes || []) as Array<{
+    size: string;
+    price: string;
+    cost: string | null;
+    catalog_key: string | null;
+  }>;
+  const lines = rawLines.map((raw) => {
+    const line = asRecord(raw);
+    const key = String(line.catalogKey || "").trim();
+    const label = String(line.label || "").trim();
+    const box = boxes.find((candidate) =>
+      (key && candidate.catalog_key === key) ||
+      candidate.size.trim().toLocaleLowerCase("es") === label.toLocaleLowerCase("es"),
+    );
+    const quantity = readPositiveIntegerQty(line.quantity || plan.boxCount || 1);
+    if (!box || quantity > 100) throw new Error("Caja sin tarifa vigente");
+    return {
+      label: box.size,
+      catalogKey: box.catalog_key || box.size,
+      quantity,
+      unitPrice: box.price,
+      unitCost: box.cost || "$0",
+    };
+  });
+
+  const { data: promotionRows, error: promotionError } = await supabase
+    .from("pricing_promotions")
+    .select("id, catalog_key, name, is_active, promotion_type, bundle_quantity, bundle_price, paid_quantity, discounted_quantity, discount_percent, rule_json, sort_order")
+    .eq("organization_id", organizationId)
+    .eq("country_id", country.id)
+    .eq("is_active", true);
+  if (promotionError) throw new Error(promotionError.message);
+  const promotions = (promotionRows || []).map((row) =>
+    promotionFromDbRow({
+      id: row.id,
+      countryName: country.name,
+      name: row.name,
+      active: row.is_active,
+      catalog_key: row.catalog_key,
+      sort_order: row.sort_order,
+      rule_json: row.rule_json,
+      legacy: row,
+    }),
+  );
+  const requestedBilling = readBillingFromPlan(plan);
+  const billing = computeInvoiceBilling({
+    cartLines: lines,
+    boxUnitPrice: lines[0]?.unitPrice || "$0",
+    boxCount: lines.reduce((sum, line) => sum + line.quantity, 0),
+    catalogKey: lines[0]?.catalogKey,
+    emptyBoxDriver: false,
+    fullBoxDriver: false,
+    fees: defaultInvoiceBillingConfig,
+    promotions,
+    selectedPromotionId: requestedBilling?.promotion?.promotionId,
+  });
+  const cost = lines.reduce(
+    (sum, line) => sum + parseMoney(line.unitCost) * line.quantity,
+    0,
+  );
+  const securedLines = lines.map((line) => ({
+    label: line.label,
+    catalogKey: line.catalogKey,
+    quantity: line.quantity,
+    paid: line.unitPrice,
+    cost: line.unitCost,
+  }));
+  return {
+    cost,
+    total: parseMoney(billing.quotedTotal),
+    plan: {
+      ...plan,
+      boxLines: securedLines,
+      boxCount: securedLines.reduce((sum, line) => sum + line.quantity, 0),
+      box: securedLines[0] || null,
+      billing,
+    },
+  };
 }
 
 function readPaymentMethod(value: unknown): PaymentMethod {
@@ -1202,7 +1312,7 @@ export async function listSalesOwnersAction(): Promise<ActionResult<SalesOwnerRo
   }
 }
 
-export async function createShipmentAction(input: {
+type CreateShipmentInput = {
   invoiceNumber: string;
   customerId?: string;
   recipientId?: string;
@@ -1220,7 +1330,201 @@ export async function createShipmentAction(input: {
   invoiceStatus?: InvoiceStatus;
   accountingStatus?: AccountingStatus;
   logisticsTasks?: CreateLogisticsTaskInput[];
-}): Promise<ActionResult<ShipmentRow>> {
+  idempotencyKey?: string;
+};
+
+async function atomicSaleInventoryCommand(
+  session: AppSession,
+  plan: Record<string, unknown>,
+  tasks: CreateLogisticsTaskInput[],
+) {
+  const reserve = shouldReserveEmptyBoxStockOnSale(plan) && !emptyBoxStockReserved(plan);
+  const deduct = shouldDeductCounterHandingStock(plan);
+  if (!reserve && !deduct) {
+    return null;
+  }
+
+  const quoteLines = readEmptyBoxQuoteLinesFromPlan(plan);
+  if (!quoteLines.length) {
+    return null;
+  }
+
+  const { admin, warehouseId } = await resolveTaskWarehouse(
+    session,
+    tasks[0]?.warehouseId || null,
+  );
+  const { data: stockRows, error } = await admin
+    .from("inventory_stock")
+    .select("id, item_id, stock, reserved, inventory_items(id, name, kind)")
+    .eq("warehouse_id", warehouseId)
+    .eq("organization_id", session.organizationId);
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    mode: deduct ? "deduct" : "reserve",
+    lines: matchEmptyBoxQuoteLinesToStock(quoteLines, stockRows || []).map((line) => ({
+      warehouseId,
+      itemId: line.itemId,
+      itemName: line.itemName,
+      qty: line.quantity,
+    })),
+  };
+}
+
+export async function createShipmentAction(
+  input: CreateShipmentInput,
+): Promise<ActionResult<ShipmentRow>> {
+  try {
+    const session = await requireAppSession();
+    if (!sessionHasPermission(session, "sales.manage")) {
+      throw new Error("FORBIDDEN");
+    }
+
+    const supabase = await createScopedSupabase(session);
+    const admin = createSupabaseAdminClient();
+    if (!supabase || !admin) {
+      return fail("Supabase no configurado");
+    }
+
+    await assertSameOrgCustomerIds(supabase, session.organizationId, [input.customerId || ""]);
+    await assertSameOrgRecipientIds(supabase, session.organizationId, [input.recipientId || ""]);
+    const tasks = input.logisticsTasks || [];
+    await assertSameOrgWarehouseIds(
+      supabase,
+      session.organizationId,
+      tasks.map((task) => task.warehouseId || "").filter(Boolean),
+    );
+
+    const country = input.country || "USA";
+    const quote = await authoritativeSaleQuote(
+      supabase,
+      session.organizationId,
+      country,
+      input.logisticsPlan || {},
+    );
+    const paid = parseMoney(input.paid);
+    if (paid < 0 || paid > quote.total) {
+      return fail("El pago no coincide con el total vigente");
+    }
+
+    const saleKind = input.saleKind || (input.recipientId ? "full" : "empty_box_deposit");
+    if (saleKind !== "full" && saleKind !== "empty_box_deposit") {
+      return fail("Tipo de venta invalido");
+    }
+    const invoiceStatus: InvoiceStatus =
+      quote.total > 0 && paid >= quote.total ? "paid" : "open";
+    const deliveryNotes = input.deliveryNotes || "";
+    const initialStatus = resolveInitialShipmentStatus({
+      saleKind,
+      logisticsPlan: quote.plan,
+      logisticsTasks: tasks.map((task, index) => ({
+        id: `draft-${index}`,
+        shipmentId: "",
+        taskType: task.taskType,
+        status: task.status || (task.scheduledAt ? "scheduled" : "pending"),
+        assignedTo: null,
+        scheduledAt: task.scheduledAt || null,
+        warehouseId: task.warehouseId || null,
+        notes: task.notes || "",
+        stockDeductedAt: null,
+        completedAt: null,
+        orderedAt: null,
+        assignedAt: null,
+        loadedAt: null,
+        createdAt: new Date().toISOString(),
+      })),
+      deliveryNotes,
+      emptyBoxDeliveredAt: shouldDeductCounterHandingStock(quote.plan)
+        ? new Date().toISOString()
+        : null,
+    });
+    const inventory = await atomicSaleInventoryCommand(session, quote.plan, tasks);
+    const trackingToken = randomBytes(32).toString("base64url");
+    const trackingExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    const packages = physicalPackageCodesForShipment(input.invoiceNumber, quote.plan).map(
+      (code, index) => ({ code, invoiceCode: invoiceBoxCode(input.invoiceNumber, index) }),
+    );
+    const logisticsTasks = tasks.map((task) => {
+      const schedule = task.scheduledAt
+        ? logisticsScheduleWindowPatch(task.scheduledAt)
+        : logisticsRequestedRouteDayPatch(task.requestedRouteDate);
+      return {
+        taskType: task.taskType,
+        status: task.status || (task.scheduledAt ? "scheduled" : "pending"),
+        scheduledAt: schedule.scheduled_at,
+        requestedScheduleAt: schedule.requested_schedule_at,
+        scheduleConfirmationStatus: schedule.schedule_confirmation_status,
+        scheduleKind: schedule.schedule_kind,
+        windowStartAt: schedule.window_start_at,
+        windowEndAt: schedule.window_end_at,
+        warehouseId: task.warehouseId || null,
+        notes: task.notes || "",
+      };
+    });
+    const idempotencyKey =
+      input.idempotencyKey?.trim() ||
+      `shipment:${session.organizationId}:${input.invoiceNumber.trim()}`;
+
+    const { data: commandResult, error: commandError } = await admin.rpc(
+      "create_shipment_sale_atomic",
+      {
+        p_idempotency_key: idempotencyKey,
+        p_command: {
+          organizationId: session.organizationId,
+          actorId: session.userId,
+          actorName: session.fullName || session.email,
+          invoiceNumber: input.invoiceNumber,
+          customerId: input.customerId || null,
+          recipientId: input.recipientId || null,
+          customerName: normalizePersonName(input.customerName),
+          country,
+          carrier: input.carrier || "Sin carrier",
+          paidCents: Math.round(paid * 100),
+          costCents: Math.round(quote.cost * 100),
+          totalCents: Math.round(quote.total * 100),
+          recipientSnapshot: normalizePersonNameSnapshot(input.recipientSnapshot),
+          saleKind,
+          deliveryNotes,
+          logisticsPlan: quote.plan,
+          invoiceStatus,
+          status: initialStatus,
+          paymentMethod: readPaymentMethod(input.paymentMethod),
+          paymentNote: cleanPaymentNote(input.paymentNote),
+          packages,
+          logisticsTasks,
+          inventory,
+          trackingToken,
+          trackingExpiresAt,
+        },
+      },
+    );
+    if (commandError || !commandResult) {
+      return fail(commandError?.message || "No se pudo registrar el envio");
+    }
+
+    const result = commandResult as {
+      shipmentId?: string;
+      trackingToken?: string;
+      trackingExpiresAt?: string;
+    };
+    if (!result.shipmentId) {
+      return fail("No se pudo confirmar el envio");
+    }
+    const shipment = await listShipmentById(supabase, session, result.shipmentId);
+    if (!shipment) {
+      return fail("El envio fue creado, pero no se pudo recargar");
+    }
+    shipment.publicTrackingToken = result.trackingToken;
+    shipment.publicTrackingExpiresAt = result.trackingExpiresAt;
+    return ok(shipment);
+  } catch (error) {
+    return fail(actionErrorMessage(error));
+  }
+}
+
+async function createShipmentActionLegacy(input: CreateShipmentInput): Promise<ActionResult<ShipmentRow>> {
   try {
     const session = await requireAppSession();
 
@@ -1246,17 +1550,31 @@ export async function createShipmentAction(input: {
 
     await assertSameOrgWarehouseIds(supabase, session.organizationId, taskWarehouseIds);
 
-    const paid = parseMoney(input.paid);
-    const cost = parseMoney(input.cost);
-    const saleKind = input.saleKind || (input.recipientId ? "full" : "empty_box_deposit");
     const country = input.country || "USA";
+    const authoritativeQuote = await authoritativeSaleQuote(
+      supabase,
+      session.organizationId,
+      country,
+      input.logisticsPlan || {},
+    );
+    const requestedPaid = parseMoney(input.paid);
+    if (requestedPaid < 0 || requestedPaid > authoritativeQuote.total) {
+      return fail("El pago no coincide con el total vigente");
+    }
+    const paid = requestedPaid;
+    const cost = authoritativeQuote.cost;
+    const saleKind = input.saleKind || (input.recipientId ? "full" : "empty_box_deposit");
+    if (saleKind !== "full" && saleKind !== "empty_box_deposit") {
+      return fail("Tipo de venta invalido");
+    }
     const deliveryNotes = input.deliveryNotes || "";
-    const invoiceStatus = input.invoiceStatus || "paid";
-    const accountingStatus =
-      input.accountingStatus || (invoiceStatus === "paid" ? "exportable" : "not_exportable");
+    const invoiceStatus: InvoiceStatus =
+      authoritativeQuote.total > 0 && paid >= authoritativeQuote.total ? "paid" : "open";
+    const accountingStatus: AccountingStatus =
+      invoiceStatus === "paid" ? "exportable" : "not_exportable";
     const paymentMethod = readPaymentMethod(input.paymentMethod);
     const paymentNote = cleanPaymentNote(input.paymentNote);
-    let logisticsPlan = { ...(input.logisticsPlan || {}) };
+    let logisticsPlan: Record<string, unknown> = authoritativeQuote.plan;
     const logisticsTasks = input.logisticsTasks || [];
     const initialStatus = resolveInitialShipmentStatus({
       saleKind,
@@ -1300,7 +1618,7 @@ export async function createShipmentAction(input: {
         recipient_snapshot: normalizePersonNameSnapshot(input.recipientSnapshot),
         sale_kind: saleKind,
         delivery_notes: deliveryNotes,
-        logistics_plan: input.logisticsPlan || {},
+        logistics_plan: logisticsPlan,
         invoice_status: invoiceStatus,
         accounting_status: accountingStatus,
         finalized_at: invoiceStatus === "paid" ? new Date().toISOString() : null,
@@ -1492,6 +1810,10 @@ export async function createShipmentAction(input: {
     return fail(actionErrorMessage(error));
   }
 }
+
+// Kept temporarily as a rollback reference while migration 132 rolls out. It is
+// not exported, and the database guards reject its direct authoritative writes.
+void createShipmentActionLegacy;
 
 async function listShipmentById(
   supabase: Awaited<ReturnType<typeof createScopedSupabase>>,

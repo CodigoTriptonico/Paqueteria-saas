@@ -15,11 +15,19 @@ export type SaleRouteDecision =
   | {
       kind: "pending";
       routeDate: string;
+    }
+  | {
+      kind: "undated";
+      routeDate: null;
     };
 
 export function saleRouteDecisionSummary(decision: SaleRouteDecision | null) {
   if (!decision) {
     return "";
+  }
+
+  if (decision.kind === "undated") {
+    return "Día y ruta pendientes";
   }
 
   if (decision.kind === "pending") {
@@ -34,7 +42,7 @@ export function saleRouteDecisionSchedule(decision: SaleRouteDecision | null) {
     return { scheduleMode: "", scheduleAt: "" } as const;
   }
 
-  if (decision.kind === "pending") {
+  if (decision.kind === "pending" || decision.kind === "undated") {
     return { scheduleMode: "pending", scheduleAt: "" } as const;
   }
 

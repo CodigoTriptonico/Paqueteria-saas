@@ -1,7 +1,9 @@
-import { loadEnvLocal } from "./lib/db-connection.mjs";
+import {
+  assertLocalCredentialScript,
+  requireLocalCredential,
+} from "./lib/local-credential-guard.mjs";
 
 const BASE = process.env.APP_BASE_URL || "http://localhost:3000";
-const LOCAL_CANONICAL_PASSWORD = "123456789";
 
 function parseSetCookie(header) {
   const cookies = new Map();
@@ -65,12 +67,8 @@ async function fetchWithJar(path, jar, init = {}) {
   return response;
 }
 
-async function ownerPassword() {
-  return process.env.PLATFORM_OWNER_PASSWORD?.trim() || LOCAL_CANONICAL_PASSWORD;
-}
-
 async function main() {
-  loadEnvLocal();
+  assertLocalCredentialScript();
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -82,7 +80,7 @@ async function main() {
     process.exit(1);
   }
 
-  const password = await ownerPassword();
+  const password = requireLocalCredential("PLATFORM_OWNER_PASSWORD");
   const jar = {};
 
   console.log("1. Login vía API…");

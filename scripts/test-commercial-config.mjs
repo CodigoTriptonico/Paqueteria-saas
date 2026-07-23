@@ -5,15 +5,23 @@ import { connectPg } from './lib/db-connection.mjs';
 const { client, label } = await connectPg();
 console.log(`Testing commercial inheritance on ${label}`);
 
+let authScopeCounter = 0;
+
 async function authenticated(userId, task) {
+  authScopeCounter += 1;
+  const savepoint = `authenticated_scope_${authScopeCounter}`;
+  await client.query(`savepoint ${savepoint}`);
   await client.query('set local role authenticated');
   await client.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: userId, role: 'authenticated' })]);
   try {
     const result = await task();
     await client.query('reset role');
+    await client.query(`release savepoint ${savepoint}`);
     return result;
   } catch (error) {
-    try { await client.query('reset role'); } catch {}
+    await client.query(`rollback to savepoint ${savepoint}`);
+    await client.query('reset role');
+    await client.query(`release savepoint ${savepoint}`);
     throw error;
   }
 }
@@ -69,9 +77,9 @@ try {
     await client.query(`insert into public.logistics_route_templates(id,organization_id,weekday,name) values($1,$3,1,'Ruta QA 1'),($2,$3,2,'Ruta QA 2')`,[routeIds[0],routeIds[1],matrix.id]);
     await client.query(`select public.change_agency_default_route($1,$2,'Inicial',$3)`,[agencyIds[0],routeIds[0],randomUUID()]);
     await client.query(`select public.change_agency_default_route($1,$2,'Cambio',$3)`,[agencyIds[0],routeIds[1],randomUUID()]);
-    const history=await client.query(`select count(*)::int total,count(*) filter(where ended_at is null)::int active from public.agency_default_route_assignments where agency_id=$1`,[agencyIds[0]]);
-    assert.deepEqual(history.rows[0],{total:2,active:1});
   });
+  const history=await client.query(`select count(*)::int total,count(*) filter(where ended_at is null)::int active from public.agency_default_route_assignments where agency_id=$1`,[agencyIds[0]]);
+  assert.deepEqual(history.rows[0],{total:2,active:1});
   const platform=await client.query(`select user_id from public.platform_admins limit 1`);
   if(platform.rowCount){await assert.rejects(()=>authenticated(platform.rows[0].user_id,()=>client.query(`select public.save_commercial_price_override('agency',null,$1,$2,'public','international_shipping',100,null,'USD','{}'::jsonb,$3)`,[catalog.code,catalog.product_code,randomUUID()])));}
   console.log(JSON.stringify({countryInheritance:'pass',groupOverride:'pass',entityOverride:'pass',restoreInheritance:'pass',sellerParity:'pass',agencySpecificPricing:'pass',routeHistory:'pass',unauthorizedMutation:'pass'},null,2));

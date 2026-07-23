@@ -76,7 +76,3 @@ export const flowPersonFormSectionClass = "flex w-full flex-col";
 
 /** Cuerpo de listas de persona — espaciado estable entre toolbar, grilla y paginación. */
 export const flowPersonListSectionClass = "flex min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden";
-
-/** Grilla flexible para cajas y tarjetas grandes. */
-export const flowCardGridClass =
-  "grid w-full gap-3 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]";

@@ -69,7 +69,7 @@ try {
       id, organization_id, shipment_id, code, country, status, truck_route_id,
       truck_arrived_at, collection_weight_kg, collection_source, collection_recorded_at,
       collection_recorded_by, invoice_code
-    ) values ($1, $2, $3, $4, 'Colombia', 'in_truck', $5, now(), 10, 'driver', now(), $6, 'INV-QA/A')
+    ) values ($1, $2, $3, $4, 'Colombia', 'in_truck', $5, now(), 10, 'driver', now(), $6, 'INV-QA-A')
   `, [packageId, context.organization_id, shipmentId, packageCode, routeId, context.user_id]);
 
   await authenticated(context.user_id, async () => {

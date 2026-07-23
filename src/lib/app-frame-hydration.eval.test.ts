@@ -39,6 +39,9 @@ describe("app shell hydration contract", () => {
     assert.match(brandHeaderSource, /const showContextualTitle =\s*isHydrated && onBack/);
     assert.match(brandHeaderSource, /\{isHydrated && showContextBack \? \(/);
     assert.match(brandHeaderSource, /const showReservedBack = !showContextBack && reserveBackSlot && !keepBrand/);
-    assert.match(brandHeaderSource, /<h1 className=\{titleClass\}>\{brandTitle\}<\/h1>/);
+    assert.match(
+      brandHeaderSource,
+      /<Link[\s\S]*?aria-label="Ir al inicio"[\s\S]*?<h1 className=\{`min-w-0 flex-1 \$\{titleClass\}`\}>\{brandTitle\}<\/h1>/,
+    );
   });
 });

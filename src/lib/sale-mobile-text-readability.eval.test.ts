@@ -8,11 +8,17 @@ const boxPickerSource = readFileSync(new URL("../components/sale/sale-box-picker
 describe("venta mobile text readability eval", () => {
   it("preserves the desktop stepper while mobile tiles scroll instead of squeezing text", () => {
     assert.match(stepBarSource, /min-w-max items-start gap-0 lg:min-w-0 lg:w-full/);
-    assert.match(stepBarSource, /w-\[8\.5rem\] shrink-0 snap-start flex-col lg:min-w-0 lg:w-auto lg:flex-1/);
+    assert.match(stepBarSource, /relative flex shrink-0 snap-start flex-col lg:min-w-0 lg:w-auto/);
+    assert.match(stepBarSource, /step\.detailRows\?\.length/);
+    assert.match(stepBarSource, /w-\[13\.5rem\] lg:flex-\[1\.45\]/);
+    assert.match(stepBarSource, /w-\[8\.5rem\] lg:flex-1/);
   });
 
   it("uses the product title as the flexible mobile row field", () => {
     assert.match(boxPickerSource, /<div className="min-w-0">\s*<p className="truncate text-sm font-black/);
-    assert.match(boxPickerSource, /<p className="whitespace-nowrap text-sm font-black text-slate-200">\{box\[1\]\}<\/p>/);
+    assert.match(
+      boxPickerSource,
+      /<p className="whitespace-nowrap[^"]*tabular-nums[^"]*">[\s\S]*?\{box\[1\]\}[\s\S]*?<\/p>/,
+    );
   });
 });

@@ -20,6 +20,7 @@ import {
   type LogisticsVehicleRow,
 } from "@/lib/logistics-fleet";
 import type { AppSession, RoleSlug } from "@/lib/auth/types";
+import { decodeAndSanitizeImage } from "@/lib/security/safe-image";
 
 export type {
   LogisticsDriverInput,
@@ -804,11 +805,12 @@ export async function uploadLogisticsVehiclePhotoAction(
       return fail(validation.error);
     }
 
-    const path = buildStorageObjectPath(session.organizationId, file.name);
+    const safeImage = await decodeAndSanitizeImage(file, { maxBytes: 4 * 1024 * 1024 });
+    const path = buildStorageObjectPath(session.organizationId, `vehicle.${safeImage.extension}`);
     const { error } = await admin.storage
       .from(LOGISTICS_VEHICLE_PHOTO_BUCKET)
-      .upload(path, file, {
-        contentType: file.type,
+      .upload(path, safeImage.bytes, {
+        contentType: safeImage.contentType,
         upsert: false,
       });
 

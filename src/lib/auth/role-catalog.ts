@@ -29,7 +29,7 @@ export function isBaseRoleSlug(slug: string): slug is BaseRoleSlug {
  * Catálogo de producto: base + opcionales.
  * Los opcionales aparecen al agregar roles; no se crean solos.
  */
-export const ROLE_CATALOG: RoleCatalogEntry[] = [
+const ROLE_CATALOG: RoleCatalogEntry[] = [
   {
     slug: "administrador",
     name: "Administrador",

@@ -36,7 +36,7 @@ type SaleDepositPaidToggleProps = {
   onChange: (paid: boolean) => void;
 };
 
-export function SaleDepositPaidToggle({
+function SaleDepositPaidToggle({
   paid,
   disabled = false,
   className = "",

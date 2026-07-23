@@ -24,6 +24,7 @@ const PATH_PERMISSIONS: Record<string, PermissionKey[]> = {
   "/paletas": ["warehouses.manage", "sales.manage"],
   "/conductor": ["routes.view"],
   "/time-clock": ["time_clock.view", "time_clock.manage"],
+  "/reloj": ["time_clock.view", "time_clock.manage"],
   "/agencias": [
     "agency.view",
     "agency.create",
@@ -123,6 +124,10 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
     return true;
   }
 
+  if (pathname === "/") {
+    return true;
+  }
+
   if (
     !session.agencyModuleEnabled &&
     ["/agencia", "/agencias", "/captacion", "/solicitudes"].some(
@@ -175,7 +180,7 @@ export function canAccessPath(session: AppSession | null, pathname: string) {
 
   const required = PATH_PERMISSIONS[base];
   if (!required?.length) {
-    return true;
+    return false;
   }
 
   return required.some((permission) =>

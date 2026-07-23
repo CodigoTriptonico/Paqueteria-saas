@@ -23,6 +23,7 @@ export const CONDUCTOR_OFFLINE_CHANGED_EVENT = "boxario:conductor-offline-change
 
 const DB_VERSION = 2;
 const SYNCING_LEASE_MS = 2 * 60_000;
+const OPERATION_TTL_MS = 7 * 24 * 60 * 60_000;
 const flushPromises = new Map<string, Promise<ConductorOfflineSnapshot>>();
 
 function createOperationId() {
@@ -103,10 +104,18 @@ function broadcastQueueChanged() {
 async function allOperations() {
   const database = await openDatabase();
   try {
-    const transaction = database.transaction(CONDUCTOR_OFFLINE_STORE, "readonly");
-    return await requestResult(
-      transaction.objectStore(CONDUCTOR_OFFLINE_STORE).getAll() as IDBRequest<ConductorOfflineOperation[]>,
+    const transaction = database.transaction(CONDUCTOR_OFFLINE_STORE, "readwrite");
+    const store = transaction.objectStore(CONDUCTOR_OFFLINE_STORE);
+    const operations = await requestResult(
+      store.getAll() as IDBRequest<ConductorOfflineOperation[]>,
     );
+    const cutoff = Date.now() - OPERATION_TTL_MS;
+    const current = operations.filter((operation) => Date.parse(operation.createdAt) > cutoff);
+    operations
+      .filter((operation) => Date.parse(operation.createdAt) <= cutoff)
+      .forEach((operation) => store.delete(operation.id));
+    await transactionDone(transaction);
+    return current;
   } finally {
     database.close();
   }

@@ -10,6 +10,8 @@ function sellerSession(): AppSession {
     fullName: "Seller",
     organizationId: "org-1",
     organizationName: "Org",
+    organizationShortName: null,
+    organizationLogoUrl: null,
     agencyModuleEnabled: false,
     multiWarehouseEnabled: false,
     maxWarehouses: 1,
@@ -29,6 +31,8 @@ function adminSession(): AppSession {
     fullName: "Admin",
     organizationId: "org-1",
     organizationName: "Org",
+    organizationShortName: null,
+    organizationLogoUrl: null,
     agencyModuleEnabled: false,
     multiWarehouseEnabled: false,
     maxWarehouses: 1,
@@ -48,6 +52,8 @@ function driverSession(): AppSession {
     fullName: "Conductor Test",
     organizationId: "org-1",
     organizationName: "Org",
+    organizationShortName: null,
+    organizationLogoUrl: null,
     agencyModuleEnabled: false,
     multiWarehouseEnabled: false,
     maxWarehouses: 1,
@@ -155,6 +161,29 @@ describe("canAccessPath own profile", () => {
     assert.equal(canAccessPath(driverSession(), "/perfil"), true);
     assert.equal(canAccessPath(distributorSession(), "/perfil"), true);
     assert.equal(canAccessPath(captorSession(), "/perfil"), true);
+  });
+});
+
+describe("canAccessPath default deny", () => {
+  it("denies an authenticated route that has no explicit registration", () => {
+    assert.equal(canAccessPath(adminSession(), "/ruta-nueva-sin-permiso"), false);
+    assert.equal(canAccessPath(sellerSession(), "/ui"), false);
+  });
+
+  it("keeps only the authenticated home and profile as general routes", () => {
+    assert.equal(canAccessPath(sellerSession(), "/"), true);
+    assert.equal(canAccessPath(sellerSession(), "/perfil"), true);
+  });
+
+  it("requires a time clock capability for the kiosk route", () => {
+    assert.equal(canAccessPath(sellerSession(), "/reloj"), false);
+    assert.equal(
+      canAccessPath(
+        businessRoleSession("reloj", ["time_clock.view"]),
+        "/reloj",
+      ),
+      true,
+    );
   });
 });
 

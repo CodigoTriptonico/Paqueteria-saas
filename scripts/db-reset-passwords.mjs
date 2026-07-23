@@ -1,8 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
-import { connectPg, loadEnvLocal, assertLocalSupabaseUrl } from "./lib/db-connection.mjs";
+import { connectPg } from "./lib/db-connection.mjs";
+import { assertLocalCredentialScript } from "./lib/local-credential-guard.mjs";
 
-loadEnvLocal();
-assertLocalSupabaseUrl();
+assertLocalCredentialScript();
 
 const password = process.argv[2];
 if (!password) {

@@ -24,7 +24,7 @@ export function invoiceBoxCode(invoiceCode: string, index: number) {
     throw new Error("La factura principal es obligatoria para numerar una caja.");
   }
 
-  return `${parentInvoiceCode}/${invoiceBoxSuffix(index)}`;
+  return `${parentInvoiceCode}-${invoiceBoxSuffix(index)}`;
 }
 
 export function invoiceBoxCodes(invoiceCode: string, count: number) {
@@ -35,14 +35,9 @@ export function invoiceBoxCodes(invoiceCode: string, count: number) {
 }
 
 /**
- * Extra printed sheets for multi-box sales only.
- * A single box already has the parent invoice; printing /A is a duplicate paper.
- * Logistics still stores one child invoice_code per package.
+ * Every physical box gets a printable label, including a one-box sale.
  */
 export function printableBoxInvoiceCodes(invoiceCode: string, count: number) {
   const boxCount = Math.max(0, Math.floor(count));
-  if (boxCount <= 1) {
-    return [];
-  }
   return invoiceBoxCodes(invoiceCode, boxCount);
 }

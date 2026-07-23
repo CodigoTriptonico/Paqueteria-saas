@@ -5,14 +5,21 @@ import { invoiceQrValue } from "@/lib/invoice-qr";
 
 type InvoiceQrCodeProps = {
   invoiceNumber: string;
+  trackingToken?: string;
   size?: number;
   className?: string;
 };
 
-export function InvoiceQrCode({ invoiceNumber, size = 56, className }: InvoiceQrCodeProps) {
+export function InvoiceQrCode({
+  invoiceNumber,
+  trackingToken,
+  size = 56,
+  className,
+}: InvoiceQrCodeProps) {
   const value = invoiceQrValue(
     invoiceNumber,
     typeof window !== "undefined" ? window.location.origin : undefined,
+    trackingToken,
   );
 
   return (

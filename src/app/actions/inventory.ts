@@ -33,6 +33,7 @@ import {
   type CategoryConfig,
 } from "@/lib/inventory-tree";
 import { InvalidQuantityError, readPositiveQty } from "@/lib/security/qty";
+import { decodeAndSanitizeImage } from "@/lib/security/safe-image";
 import {
   defaultReasonCodeForMovementType,
   isAgencyInventoryMovement,
@@ -724,7 +725,9 @@ async function ensureItemsForWarehouse(
       warehouse_id: warehouseId,
       item_id: itemId,
       stock: 0,
-      reserved: stockItem?.reserved ?? 0,
+      // Authoritative quantities only change through inventory movement or
+      // reservation commands; catalog editing cannot inject a balance.
+      reserved: 0,
       min_stock: stockItem?.minStock ?? 2,
     };
 
@@ -732,7 +735,6 @@ async function ensureItemsForWarehouse(
       await supabase
         .from("inventory_stock")
         .update({
-          reserved: stockPayload.reserved,
           min_stock: stockPayload.min_stock,
         })
         .eq("id", stockRow.id);
@@ -980,9 +982,10 @@ export async function uploadInventoryItemPhotoAction(
       return fail(validation.error);
     }
 
-    const path = buildInventoryItemPhotoPath(session.organizationId, file.name);
-    const { error } = await admin.storage.from(INVENTORY_ITEM_PHOTO_BUCKET).upload(path, file, {
-      contentType: file.type,
+    const safeImage = await decodeAndSanitizeImage(file, { maxBytes: 4 * 1024 * 1024 });
+    const path = buildInventoryItemPhotoPath(session.organizationId, `photo.${safeImage.extension}`);
+    const { error } = await admin.storage.from(INVENTORY_ITEM_PHOTO_BUCKET).upload(path, safeImage.bytes, {
+      contentType: safeImage.contentType,
       upsert: false,
     });
 

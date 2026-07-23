@@ -23,7 +23,9 @@ describe("mobile navigation and public tracking eval", () => {
     assert.match(proxy, /isPublicProxyPath\(pathname\)/);
     assert.match(proxyPaths, /"\/rastrear"/);
     assert.match(route, /enforcePublicTrackingRateLimit/);
-    assert.match(route, /senderPhoneMatches/);
+    assert.match(route, /public_tracking_token_hash/);
+    assert.match(route, /public_tracking_expires_at/);
+    assert.doesNotMatch(route, /senderPhoneMatches|phoneLastFour/);
     assert.match(dto, /export type PublicTrackingShipment/);
     assert.doesNotMatch(dto, /profit:/);
     assert.doesNotMatch(dto, /assigned_to:/);

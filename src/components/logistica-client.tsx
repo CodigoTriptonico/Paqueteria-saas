@@ -726,32 +726,35 @@ export function LogisticaClient({
   }
 
   useEffect(() => {
-    if (!availableFilterWeekdays.length) {
-      weekdayFilterInitializedRef.current = false;
-      setWeekdayFilter((current) => (current == null ? current : null));
-      setRouteTemplateFilter("");
-      setDateFilter("");
-      return;
-    }
-
-    if (!weekdayFilterInitializedRef.current) {
-      weekdayFilterInitializedRef.current = true;
-      const initial = defaultLogisticsWeekdayFilter(availableFilterWeekdays, todayWeekday);
-      setWeekdayFilter(initial);
-      setRouteTemplateFilter("");
-      setDateFilter(initial == null ? "" : selectWeekdayDate(initial, todayDate));
-      return;
-    }
-
-    setWeekdayFilter((current) => {
-      if (current == null || availableFilterWeekdays.includes(current)) {
-        return current;
+    const frame = requestAnimationFrame(() => {
+      if (!availableFilterWeekdays.length) {
+        weekdayFilterInitializedRef.current = false;
+        setWeekdayFilter((current) => (current == null ? current : null));
+        setRouteTemplateFilter("");
+        setDateFilter("");
+        return;
       }
-      const next = defaultLogisticsWeekdayFilter(availableFilterWeekdays, todayWeekday);
-      setRouteTemplateFilter("");
-      setDateFilter(next == null ? "" : selectWeekdayDate(next, todayDate));
-      return next;
+
+      if (!weekdayFilterInitializedRef.current) {
+        weekdayFilterInitializedRef.current = true;
+        const initial = defaultLogisticsWeekdayFilter(availableFilterWeekdays, todayWeekday);
+        setWeekdayFilter(initial);
+        setRouteTemplateFilter("");
+        setDateFilter(initial == null ? "" : selectWeekdayDate(initial, todayDate));
+        return;
+      }
+
+      setWeekdayFilter((current) => {
+        if (current == null || availableFilterWeekdays.includes(current)) {
+          return current;
+        }
+        const next = defaultLogisticsWeekdayFilter(availableFilterWeekdays, todayWeekday);
+        setRouteTemplateFilter("");
+        setDateFilter(next == null ? "" : selectWeekdayDate(next, todayDate));
+        return next;
+      });
     });
+    return () => cancelAnimationFrame(frame);
   }, [availableFilterWeekdays, todayDate, todayWeekday]);
 
   const routeByTaskId = useMemo(() => {

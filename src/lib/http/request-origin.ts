@@ -55,7 +55,24 @@ function originFromUrl(url: string): string | null {
   }
 }
 
-function resolveForwardedOrigin(headers: Headers): string | null {
+function configuredOrigins(options?: { tunnelUrl?: string | null; readTunnelFile?: boolean }) {
+  return [
+    process.env.APP_ORIGIN,
+    process.env.NEXT_PUBLIC_APP_ORIGIN,
+    options?.tunnelUrl,
+    process.env.DEV_TUNNEL_URL,
+    options?.readTunnelFile === false ? null : readTunnelUrlFromFile(),
+  ]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .map(originFromUrl)
+    .filter((value): value is string => Boolean(value));
+}
+
+function resolveForwardedOrigin(headers: Headers, allowedOrigins: string[]): string | null {
+  if (process.env.TRUST_PROXY_HEADERS !== "1") {
+    return null;
+  }
   const forwardedHost = parseHostHeader(headers.get("x-forwarded-host"));
   const host = forwardedHost ?? parseHostHeader(headers.get("host"));
 
@@ -69,30 +86,33 @@ function resolveForwardedOrigin(headers: Headers): string | null {
     (host.hostname.endsWith(".trycloudflare.com") ? "https" : "http");
   const portSuffix = host.port ? `:${host.port}` : "";
 
-  return `${proto}://${host.hostname}${portSuffix}`;
+  const candidate = `${proto}://${host.hostname}${portSuffix}`;
+  return allowedOrigins.includes(candidate) ? candidate : null;
 }
 
 export function resolveRequestOrigin(
   request: Request,
   options?: { tunnelUrl?: string | null; readTunnelFile?: boolean },
 ): string {
-  const forwardedOrigin = resolveForwardedOrigin(request.headers);
+  const allowedOrigins = configuredOrigins(options);
+  const configuredOrigin = allowedOrigins[0];
+  if (configuredOrigin) {
+    return configuredOrigin;
+  }
+
+  const forwardedOrigin = resolveForwardedOrigin(request.headers, allowedOrigins);
   if (forwardedOrigin) {
     return forwardedOrigin;
   }
 
-  const configuredTunnel =
-    options?.tunnelUrl?.trim() ||
-    process.env.DEV_TUNNEL_URL?.trim() ||
-    (options?.readTunnelFile === false ? null : readTunnelUrlFromFile());
-  const tunnelOrigin = configuredTunnel ? originFromUrl(configuredTunnel) : null;
-  if (tunnelOrigin) {
-    return tunnelOrigin;
-  }
-
-  return new URL(request.url).origin;
+  const requestOrigin = new URL(request.url).origin;
+  return isLocalHostname(new URL(requestOrigin).hostname) ? requestOrigin : "http://localhost";
 }
 
-export function resolveRequestUrl(request: Request, pathname: string): URL {
-  return new URL(pathname, resolveRequestOrigin(request));
+export function resolveRequestUrl(
+  request: Request,
+  pathname: string,
+  options?: { tunnelUrl?: string | null; readTunnelFile?: boolean },
+): URL {
+  return new URL(pathname, resolveRequestOrigin(request, options));
 }

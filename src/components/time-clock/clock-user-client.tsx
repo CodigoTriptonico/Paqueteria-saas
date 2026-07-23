@@ -67,6 +67,7 @@ function stateCopy(snapshot: ClockUserSnapshot) {
 export function ClockUserClient({ initialSnapshot = null }: ClockUserClientProps) {
   const [snapshot, setSnapshot] = useState<ClockUserSnapshot | null>(initialSnapshot);
   const [employeeId, setEmployeeId] = useState("");
+  const [pin, setPin] = useState("");
   const [saving, setSaving] = useState<TimeClockAction | "session" | "logout" | null>(null);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => new Date().toISOString());
@@ -85,7 +86,7 @@ export function ClockUserClient({ initialSnapshot = null }: ClockUserClientProps
     event.preventDefault();
     setError("");
     setSaving("session");
-    const result = await startTimeClockSessionAction(employeeId);
+    const result = await startTimeClockSessionAction({ employeeId, pin });
     setSaving(null);
     if (!result.ok) {
       setError(result.error);
@@ -93,6 +94,7 @@ export function ClockUserClient({ initialSnapshot = null }: ClockUserClientProps
     }
     setSnapshot(result.data);
     setEmployeeId("");
+    setPin("");
   }
 
   async function recordAction(action: TimeClockAction) {
@@ -127,7 +129,7 @@ export function ClockUserClient({ initialSnapshot = null }: ClockUserClientProps
           </div>
           <h1 className="mt-5 text-3xl font-black tracking-tight">Time Clock</h1>
           <p className="mt-1 text-sm font-bold text-slate-400">
-            Escribe tu Employee ID para marcar tu jornada.
+            Escribe tu Employee ID y PIN para marcar tu jornada.
           </p>
           <label className="mt-5 grid gap-1.5 text-xs font-black uppercase tracking-wide text-slate-500">
             Employee ID
@@ -138,6 +140,21 @@ export function ClockUserClient({ initialSnapshot = null }: ClockUserClientProps
               onChange={(event) => setEmployeeId(event.target.value)}
               placeholder="Ej. EMP-001"
               autoComplete="username"
+            />
+          </label>
+          <label className="mt-3 grid gap-1.5 text-xs font-black uppercase tracking-wide text-slate-500">
+            PIN
+            <input
+              className={inputClass}
+              value={pin}
+              onChange={(event) => setPin(event.target.value)}
+              inputMode="numeric"
+              pattern="[0-9]{4,12}"
+              minLength={4}
+              maxLength={12}
+              autoComplete="current-password"
+              type="password"
+              required
             />
           </label>
           {error ? <p className="mt-3 text-sm font-bold text-rose-200">{error}</p> : null}

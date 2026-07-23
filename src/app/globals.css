@@ -208,6 +208,11 @@ input.client-form-field {
   -webkit-print-color-adjust: exact;
 }
 
+.sale-box-label {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
 @media print {
   @page {
     margin: 12mm;
@@ -227,7 +232,11 @@ input.client-form-field {
   }
 
   .sale-invoice-paper,
-  .sale-invoice-paper * {
+  .sale-invoice-paper *,
+  .sale-box-label,
+  .sale-box-label *,
+  .sale-document-shell,
+  #sale-print-documents {
     visibility: visible;
   }
 
@@ -242,6 +251,44 @@ input.client-form-field {
     background: #fff !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+
+  #sale-print-documents {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+  }
+
+  #sale-print-documents .sale-invoice-paper {
+    position: relative;
+    inset: auto;
+  }
+
+  #sale-print-documents .sale-box-label {
+    position: relative;
+    margin: 0 auto;
+    min-height: 150mm;
+    max-width: 100mm;
+    box-shadow: none !important;
+  }
+
+  #sale-print-documents > .sale-document-shell {
+    display: block;
+    break-after: page;
+  }
+
+  #sale-print-documents > .sale-document-shell:last-child {
+    break-after: auto;
+  }
+
+  html.sale-print-single #sale-print-documents > .sale-document-shell {
+    display: none !important;
+  }
+
+  html.sale-print-single #sale-print-documents > .sale-document-print-selected {
+    display: block !important;
+    break-after: auto;
   }
 }
 

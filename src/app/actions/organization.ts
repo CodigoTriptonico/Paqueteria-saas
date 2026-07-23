@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { avatarExtension, validateAvatarUpload } from "@/lib/account/profile-validation";
+import { validateAvatarUpload } from "@/lib/account/profile-validation";
 import { ORGANIZATION_LOGO_BUCKET } from "@/lib/organizations/branding";
 import { sessionHasPermission } from "@/lib/auth/permissions";
 import { requireAppSession } from "@/lib/auth/session";
@@ -9,9 +9,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createStorageSignedUrl } from "@/lib/supabase/storage-url";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
+import { decodeAndSanitizeImage } from "@/lib/security/safe-image";
 import {
-  canEnableMultiWarehouseHub,
-  getConfiguredWarehouseLimit,
   isAgencyModuleEnabled,
   parsePlanLimit,
   type OrganizationSettings,
@@ -69,63 +68,6 @@ export async function getOrganizationPlanLimitsAction(): Promise<
       extraUserCount: Math.max(0, totalUsers - 1),
       agenciesEnabled: isAgencyModuleEnabled(settings),
     });
-  } catch (error) {
-    return fail(actionErrorMessage(error));
-  }
-}
-
-export async function updateOrganizationSettingsAction(settings: {
-  multiWarehouseEnabled: boolean;
-}): Promise<ActionResult<{ multiWarehouseEnabled: boolean }>> {
-  try {
-    const session = await requireAppSession();
-
-    if (!sessionHasPermission(session, "settings.manage")) {
-      throw new Error("FORBIDDEN");
-    }
-
-    const supabase = await createScopedSupabase(session);
-    if (!supabase) {
-      return fail("Supabase no configurado");
-    }
-
-    const { data: org } = await supabase
-      .from("organizations")
-      .select("settings")
-      .eq("id", session.organizationId)
-      .single();
-
-    const currentSettings = (org?.settings || {}) as OrganizationSettings;
-
-    if (settings.multiWarehouseEnabled && !canEnableMultiWarehouseHub(currentSettings)) {
-      const configured = getConfiguredWarehouseLimit(currentSettings);
-
-      if (configured === null) {
-        return fail(
-          "Límite de bodegas no configurado en el plan. Pide al administrador de la plataforma que lo defina.",
-        );
-      }
-
-      return fail(
-        "Tu plan permite 1 bodega. Pide ampliar el límite en la plataforma para activar el selector de inventario.",
-      );
-    }
-
-    const nextSettings = {
-      ...(org?.settings as Record<string, unknown> | undefined),
-      multi_warehouse_enabled: settings.multiWarehouseEnabled,
-    };
-
-    const { error } = await supabase
-      .from("organizations")
-      .update({ settings: nextSettings })
-      .eq("id", session.organizationId);
-
-    if (error) {
-      return fail(error.message);
-    }
-
-    return ok({ multiWarehouseEnabled: settings.multiWarehouseEnabled });
   } catch (error) {
     return fail(actionErrorMessage(error));
   }
@@ -276,10 +218,11 @@ export async function uploadOrganizationLogoAction(
       return fail("No se pudo conectar con el almacenamiento");
     }
 
-    const path = `${session.organizationId}/logo.${avatarExtension(file.type)}`;
-    const { error: uploadError } = await admin.storage.from(ORGANIZATION_LOGO_BUCKET).upload(path, file, {
+    const safeImage = await decodeAndSanitizeImage(file, { maxBytes: 4 * 1024 * 1024 });
+    const path = `${session.organizationId}/logo.${safeImage.extension}`;
+    const { error: uploadError } = await admin.storage.from(ORGANIZATION_LOGO_BUCKET).upload(path, safeImage.bytes, {
       cacheControl: "3600",
-      contentType: file.type,
+      contentType: safeImage.contentType,
       upsert: true,
     });
     if (uploadError) {

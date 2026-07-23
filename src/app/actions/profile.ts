@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { requireAppSession } from "@/lib/auth/session";
 import {
-  avatarExtension,
   PROFILE_AVATAR_BUCKET,
   validateAvatarUpload,
   validateNewPassword,
@@ -14,6 +13,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createStorageSignedUrl } from "@/lib/supabase/storage-url";
 import { normalizePersonName } from "@/lib/person-name";
+import { decodeAndSanitizeImage } from "@/lib/security/safe-image";
 
 function refreshAccountSurfaces() {
   revalidatePath("/", "layout");
@@ -116,10 +116,11 @@ export async function uploadMyProfileAvatarAction(
       return fail("No se pudo conectar con el almacenamiento");
     }
 
-    const path = `${session.userId}/avatar.${avatarExtension(file.type)}`;
-    const { error: uploadError } = await admin.storage.from(PROFILE_AVATAR_BUCKET).upload(path, file, {
+    const safeImage = await decodeAndSanitizeImage(file, { maxBytes: 4 * 1024 * 1024 });
+    const path = `${session.userId}/avatar.${safeImage.extension}`;
+    const { error: uploadError } = await admin.storage.from(PROFILE_AVATAR_BUCKET).upload(path, safeImage.bytes, {
       cacheControl: "3600",
-      contentType: file.type,
+      contentType: safeImage.contentType,
       upsert: true,
     });
     if (uploadError) {

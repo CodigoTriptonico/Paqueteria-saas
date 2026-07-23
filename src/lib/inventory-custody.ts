@@ -50,23 +50,10 @@ export function inventoryCustodyRowKey(productKey: string, boxSize: string) {
   ].join("|");
 }
 
-export function inventoryCustodyProductLabel(productKey: string, boxSize: string) {
+function inventoryCustodyProductLabel(productKey: string, boxSize: string) {
   const key = String(productKey || "Caja").trim() || "Caja";
   const size = String(boxSize || "Estándar").trim() || "Estándar";
   return `${key} · ${size}`;
-}
-
-export function inventoryItemCustodyIdentity(
-  item: Pick<InventoryStockItem, "name" | "kind" | "subcategory" | "size" | "category">,
-) {
-  const productKey = item.subcategory?.trim() || item.kind?.trim() || item.name.trim() || "Caja";
-  const boxSize = item.size?.trim() || "Estándar";
-  return {
-    productKey,
-    boxSize,
-    label: inventoryCustodyProductLabel(productKey, boxSize),
-    catalogKey: catalogKeyFromStockItem(item),
-  };
 }
 
 function readItemProductKey(item: InventoryStockItem) {

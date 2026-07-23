@@ -20,6 +20,7 @@ import { useState } from "react";
 type SaleQuickCheckoutModalProps = {
   branding?: OrganizationBranding | null;
   invoiceNumber: string;
+  trackingToken?: string;
   draft: QuickEmptyBoxDraft;
   billing: InvoiceBillingSnapshot | null;
   billingForPayment: InvoiceBillingSnapshot | null;
@@ -44,6 +45,7 @@ type SaleQuickCheckoutModalProps = {
 export function SaleQuickCheckoutModal({
   branding,
   invoiceNumber,
+  trackingToken,
   draft,
   billing,
   billingForPayment,
@@ -105,6 +107,7 @@ export function SaleQuickCheckoutModal({
               <SaleInvoicePaper
                 branding={branding}
                 invoiceNumber={invoiceNumber}
+                trackingToken={trackingToken}
                 sender={draft.sender}
                 box={draft.box}
                 serviceOperation="deliver_empty_box"
@@ -127,7 +130,11 @@ export function SaleQuickCheckoutModal({
 
           <div className="no-print rounded-xl border border-black bg-surface-card p-4 text-center text-[#f8fafc]">
             <div className="rounded-lg bg-[#f8fafc] p-3">
-              <InvoiceQrCode invoiceNumber={invoiceNumber} size={144} />
+              <InvoiceQrCode
+                invoiceNumber={invoiceNumber}
+                trackingToken={trackingToken}
+                size={144}
+              />
             </div>
             <p className="mt-3 text-lg font-black">{invoiceNumber}</p>
             <p className="text-sm font-bold text-slate-300">QR del invoice</p>

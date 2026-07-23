@@ -48,6 +48,7 @@ type EmployeeDraft = {
   employeeType: "clock" | "system";
   profileId: string;
   isActive: boolean;
+  pin: string;
 };
 
 const tabs: AppTabDefinition[] = [
@@ -67,6 +68,7 @@ function initialEmployeeDraft(): EmployeeDraft {
     employeeType: "clock" as const,
     profileId: "",
     isActive: true,
+    pin: "",
   };
 }
 
@@ -92,6 +94,7 @@ function employeeDraftFromRow(employee: TimeClockEmployee): EmployeeDraft {
     employeeType: employee.employeeType,
     profileId: employee.profileId || "",
     isActive: employee.isActive,
+    pin: "",
   };
 }
 
@@ -194,6 +197,7 @@ export function TimeClockAdminClient({
       employeeType: employeeDraft.employeeType,
       profileId: employeeDraft.employeeType === "system" ? employeeDraft.profileId || null : null,
       isActive: employeeDraft.isActive,
+      pin: employeeDraft.pin || undefined,
     };
     const result = editingEmployeeId
       ? await updateTimeClockEmployeeAction(editingEmployeeId, input)
@@ -284,7 +288,7 @@ export function TimeClockAdminClient({
                 <p className="text-xs font-black uppercase tracking-wide text-emerald-300">Pantalla de marcación</p>
                 <h2 className="mt-1 text-xl font-black text-slate-100">Reloj de empleados</h2>
                 <p className="mt-1 max-w-2xl text-sm font-bold text-slate-400">
-                  Abre el acceso independiente para probar Clock In, comida, Clock Out y el resumen con un Employee ID.
+                  Abre el acceso protegido para probar Clock In, comida, Clock Out y el resumen con Employee ID y PIN.
                 </p>
               </div>
               <a href="/reloj" className={primaryButtonClass}>
@@ -294,7 +298,7 @@ export function TimeClockAdminClient({
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs font-bold text-emerald-100/80 sm:px-5">
               <span>Ruta directa: <code className="rounded bg-black/30 px-1.5 py-0.5 text-emerald-200">/reloj</code></span>
-              <span>El empleado entra solamente con su Employee ID.</span>
+              <span>El empleado entra con Employee ID y PIN.</span>
             </div>
           </section>
         ) : null}
@@ -413,11 +417,12 @@ export function TimeClockAdminClient({
         {tab === "settings" && canManage ? (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
             <section className="rounded-xl border border-black bg-surface-card p-4 sm:p-5">
-              <div className="flex items-center justify-between gap-3"><div><h2 className="font-black">{editingEmployeeId ? "Editar empleado" : "Nuevo empleado"}</h2><p className="mt-1 text-sm font-bold text-slate-400">Clock User entra solo con Employee ID. Usuario del sistema conserva sus permisos normales.</p></div>{editingEmployeeId ? <button type="button" className={`${secondaryButtonClass} h-8 text-xs`} onClick={() => { setEditingEmployeeId(null); setEmployeeDraft(initialEmployeeDraft()); }}>Cancelar</button> : null}</div>
+              <div className="flex items-center justify-between gap-3"><div><h2 className="font-black">{editingEmployeeId ? "Editar empleado" : "Nuevo empleado"}</h2><p className="mt-1 text-sm font-bold text-slate-400">El acceso al reloj requiere Employee ID y PIN. Deja el PIN vacío al editar para conservarlo.</p></div>{editingEmployeeId ? <button type="button" className={`${secondaryButtonClass} h-8 text-xs`} onClick={() => { setEditingEmployeeId(null); setEmployeeDraft(initialEmployeeDraft()); }}>Cancelar</button> : null}</div>
               <form className="mt-4 grid gap-3" onSubmit={saveEmployee}>
                 <div className="grid gap-3 sm:grid-cols-2"><label className={fieldLabelClass}>Employee ID<input className={inputClass} value={employeeDraft.employeeId} onChange={(event) => setEmployeeDraft((current) => ({ ...current, employeeId: event.target.value }))} placeholder="EMP-001" required /></label><label className={fieldLabelClass}>Tipo<select className={inputClass} value={employeeDraft.employeeType} onChange={(event) => setEmployeeDraft((current) => ({ ...current, employeeType: event.target.value as "clock" | "system", profileId: "" }))}><option value="clock">Clock User</option><option value="system">Usuario del sistema</option></select></label></div>
                 {employeeDraft.employeeType === "system" ? <label className={fieldLabelClass}>Usuario del sistema<select className={inputClass} value={employeeDraft.profileId} onChange={(event) => { const user = snapshot.systemUsers.find((entry) => entry.id === event.target.value); setEmployeeDraft((current) => ({ ...current, profileId: event.target.value, fullName: user?.fullName || current.fullName })); }} required><option value="">Elegir usuario</option>{snapshot.systemUsers.map((user) => <option key={user.id} value={user.id}>{user.fullName} · {user.email}</option>)}</select></label> : null}
                 <label className={fieldLabelClass}>Nombre<input className={inputClass} value={employeeDraft.fullName} onChange={(event) => setEmployeeDraft((current) => ({ ...current, fullName: formatPersonNameInput(event.target.value) }))} placeholder="Nombre completo" required /></label>
+                <label className={fieldLabelClass}>PIN {editingEmployeeId ? "(opcional)" : ""}<input className={inputClass} type="password" inputMode="numeric" pattern="[0-9]{4,12}" minLength={4} maxLength={12} autoComplete="new-password" value={employeeDraft.pin} onChange={(event) => setEmployeeDraft((current) => ({ ...current, pin: event.target.value }))} required={!editingEmployeeId} /></label>
                 <div className="flex flex-wrap gap-2"><button type="submit" className={primaryButtonClass} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}{editingEmployeeId ? "Guardar empleado" : "Crear empleado"}</button>{editingEmployeeId ? <button type="button" className={secondaryButtonClass} disabled={saving} onClick={() => { const employee = snapshot.employees.find((entry) => entry.id === editingEmployeeId); if (employee) void toggleEmployee(employee); }}>{employeeDraft.isActive ? "Desactivar" : "Activar"}</button> : null}</div>
               </form>
             </section>

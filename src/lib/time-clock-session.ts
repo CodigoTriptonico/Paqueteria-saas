@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const TIME_CLOCK_SESSION_COOKIE = "boxario_time_clock";
+const TIME_CLOCK_SESSION_IDLE_MS = 30 * 60 * 1000;
 
 export type ClockSessionEmployee = {
   sessionId: string;
@@ -27,7 +28,7 @@ export async function readClockSession(): Promise<ClockSessionEmployee | null> {
   const { data } = await admin
     .from("time_clock_sessions")
     .select(
-      "id, employee_id, expires_at, revoked_at, time_clock_employees(id, organization_id, employee_id, full_name, employee_type, is_active)",
+      "id, employee_id, expires_at, revoked_at, last_seen_at, time_clock_employees(id, organization_id, employee_id, full_name, employee_type, is_active)",
     )
     .eq("token_hash", hashTimeClockToken(token))
     .maybeSingle();
@@ -58,7 +59,8 @@ export async function readClockSession(): Promise<ClockSessionEmployee | null> {
     !employee ||
     data.revoked_at ||
     !employee.is_active ||
-    Date.parse(data.expires_at) <= Date.now()
+    Date.parse(data.expires_at) <= Date.now() ||
+    Date.parse(data.last_seen_at) + TIME_CLOCK_SESSION_IDLE_MS <= Date.now()
   ) {
     return null;
   }

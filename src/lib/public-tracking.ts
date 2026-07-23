@@ -1,7 +1,3 @@
-import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
-import { isPaymentMethod, paymentMethodLabel } from "@/lib/payment-methods";
-import { readBillingFromPlan } from "@/lib/invoice-billing";
-
 type PublicTrackingMilestone = {
   id: "created" | "empty_box" | "full_box" | "office" | "departed" | "shipped" | "delivered";
   label: string;
@@ -12,13 +8,11 @@ type PublicTrackingMilestone = {
 export type PublicTrackingShipment = {
   code: string;
   status: string;
-  sender: { name: string; address: string };
-  recipient: { name: string; phone: string; address: string };
+  sender: { name: string };
+  recipient: { name: string; destination: string };
   country: string;
   carrier: string;
   boxes: Array<{ label: string; quantity: number }>;
-  payment: { total: string; paid: string; balance: string; status: string };
-  payments: Array<{ amount: string; method: string; at: string }>;
   milestones: PublicTrackingMilestone[];
   providerTracking: Array<{ code: string; provider: string; number: string; url: string }>;
 };
@@ -28,7 +22,6 @@ type PublicTrackingSource = {
   customer_name: string;
   country: string;
   carrier: string;
-  paid: number | string | null;
   status: string;
   created_at: string | null;
   empty_box_delivered_at: string | null;
@@ -62,10 +55,6 @@ type PublicTrackingSource = {
 };
 
 export const PUBLIC_TRACKING_ERROR = "No encontramos un envío con esos datos.";
-
-export function normalizeTrackingCode(value: unknown) {
-  return String(value || "").trim().toUpperCase().slice(0, 80);
-}
 
 export function lastFourDigits(value: unknown) {
   return String(value || "").replace(/\D/g, "").slice(-4);
@@ -110,17 +99,12 @@ function boxes(planValue: Record<string, unknown> | null) {
   return label ? [{ label, quantity: Math.max(1, Number(plan.boxCount) || 1) }] : [];
 }
 
-function payment(source: PublicTrackingSource) {
-  const billing = readBillingFromPlan(source.logistics_plan || {});
-  const total = billing ? parseMoneyValue(billing.quotedTotal) : parseMoneyValue(String(source.paid || 0));
-  const paid = parseMoneyValue(String(source.paid || 0));
-  const balance = Math.max(total - paid, 0);
-  return {
-    total: formatMoneyValue(total),
-    paid: formatMoneyValue(paid),
-    balance: formatMoneyValue(balance),
-    status: balance > 0 ? "Saldo pendiente" : "Pagado",
-  };
+function initials(...values: unknown[]) {
+  return values
+    .map(text)
+    .filter(Boolean)
+    .map((value) => `${value.charAt(0).toUpperCase()}.`)
+    .join(" ");
 }
 
 function milestones(source: PublicTrackingSource): PublicTrackingMilestone[] {
@@ -143,27 +127,15 @@ export function publicTrackingShipment(source: PublicTrackingSource): PublicTrac
     code: source.code,
     status: source.status,
     sender: {
-      name: source.customer_name,
-      address: customer.formatted_address || address([
-        customer.street, customer.house_number, customer.neighborhood, customer.city, customer.state, customer.postal_code, customer.country,
-      ]),
+      name: initials(customer.first_name, customer.last_name) || "Cliente verificado",
     },
     recipient: {
-      name: [text(recipient.firstName), text(recipient.lastName)].filter(Boolean).join(" "),
-      phone: text(recipient.phone),
-      address: text(recipient.formattedAddress) || address([
-        recipient.street, recipient.houseNumber, recipient.neighborhood, recipient.city, recipient.state, recipient.postalCode, recipient.country,
-      ]),
+      name: initials(recipient.firstName, recipient.lastName) || "Destinatario",
+      destination: address([recipient.city, recipient.state, recipient.country || source.country]),
     },
     country: source.country,
     carrier: source.carrier,
     boxes: boxes(source.logistics_plan),
-    payment: payment(source),
-    payments: (source.shipment_payments || []).map((row) => ({
-      amount: formatMoneyValue(parseMoneyValue(String(row.amount || 0))),
-      method: paymentMethodLabel(isPaymentMethod(row.method) ? row.method : "cash"),
-      at: row.created_at,
-    })),
     milestones: milestones(source),
     providerTracking: [],
   };

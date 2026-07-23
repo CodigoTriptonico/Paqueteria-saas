@@ -21,7 +21,7 @@ export const conductorRouteArrivalReasonHelp: Record<ConductorRouteArrivalReason
   other: "Escribiré lo que pasó.",
 };
 
-export type ConductorArrivalWarehouse = {
+type ConductorArrivalWarehouse = {
   id: string;
   name: string;
   code: string;
@@ -79,4 +79,3 @@ export function validateConductorRouteArrival(input: {
 
   return { ok: true, reason: input.reason as ConductorRouteArrivalReason };
 }
-

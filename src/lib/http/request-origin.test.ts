@@ -7,14 +7,15 @@ function makeRequest(url: string, headers: Record<string, string> = {}) {
 }
 
 describe("resolveRequestOrigin", () => {
-  it("prefers x-forwarded-host over localhost request url", () => {
+  it("ignores an untrusted forwarded host", () => {
     const origin = resolveRequestOrigin(
       makeRequest("http://127.0.0.1:3000/api/auth/sign-in", {
-        "x-forwarded-host": "demo.trycloudflare.com",
+        "x-forwarded-host": "attacker.example",
         "x-forwarded-proto": "https",
       }),
+      { readTunnelFile: false },
     );
-    assert.equal(origin, "https://demo.trycloudflare.com");
+    assert.equal(origin, "http://127.0.0.1:3000");
   });
 
   it("falls back to tunnel url when host is local", () => {
@@ -41,6 +42,7 @@ describe("resolveRequestUrl", () => {
         "x-forwarded-proto": "https",
       }),
       "/platform",
+      { tunnelUrl: "https://demo.trycloudflare.com" },
     );
     assert.equal(url.toString(), "https://demo.trycloudflare.com/platform");
   });

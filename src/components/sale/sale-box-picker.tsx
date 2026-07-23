@@ -79,7 +79,7 @@ function SaleBoxCard({
 
       <div className="w-full border-y border-white/10 py-2 text-xs font-black text-slate-300">
         <span className="block truncate rounded-md bg-[#202926] px-2 py-1.5">
-          {box[4] || "Tiempo —"}
+          {box[4] || "Tiempo de entrega —"}
         </span>
       </div>
 
@@ -122,22 +122,30 @@ function SaleBoxRow({
     <button
       {...boxInteractionProps(box, onChoose, onRemove)}
       data-onboarding-target={coachTarget}
-      className={`${listRowBaseClass} grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-3 text-left sm:px-4 ${listRowHoverClass}${className ? ` ${className}` : ""}`}
+      className={`${listRowBaseClass} group relative grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 overflow-hidden px-3 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_3px_10px_rgba(0,0,0,0.12)] outline-none hover:border-emerald-950 focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202926] sm:px-4 ${listRowHoverClass}${className ? ` ${className}` : ""}`}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400 text-slate-950">
-        <Package className="h-4 w-4" />
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-300/40 bg-emerald-400 text-slate-950 shadow-[0_5px_12px_rgba(16,185,129,0.18)] transition-transform motion-safe:group-hover:scale-105">
+        <Package className="h-4 w-4" aria-hidden />
       </span>
       <div className="min-w-0">
-        <p className="truncate text-sm font-black text-[#f8fafc]">{box[0]}</p>
-        <div className="flex min-w-0 items-center gap-1.5 text-[10px] font-bold">
-          <span className="truncate text-slate-400">{box[4] || "Tiempo —"}</span>
+        <p className="truncate text-sm font-black leading-tight tracking-[-0.01em] text-[#f8fafc]">
+          {box[0]}
+        </p>
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] font-bold leading-none">
+          <span className="truncate text-slate-400">
+            {box[4] || "Tiempo de entrega —"}
+          </span>
           {promoCount > 0 ? (
-            <span className="shrink-0 font-black uppercase text-emerald-300">{promoCount} promo</span>
+            <span className="shrink-0 rounded-full bg-emerald-400/10 px-1.5 py-0.5 font-black uppercase text-emerald-300">
+              {promoCount} promo
+            </span>
           ) : null}
         </div>
       </div>
       <div className="flex min-w-[4.5rem] flex-col items-end justify-center gap-1 text-right">
-        <p className="whitespace-nowrap text-sm font-black text-slate-200">{box[1]}</p>
+        <p className="whitespace-nowrap rounded-lg border border-white/[0.06] bg-black/15 px-2.5 py-1 text-sm font-black tabular-nums text-slate-100 shadow-inner">
+          {box[1]}
+        </p>
         {cartQuantity ? <SaleBoxCartQtyBadge quantity={cartQuantity} /> : null}
       </div>
     </button>

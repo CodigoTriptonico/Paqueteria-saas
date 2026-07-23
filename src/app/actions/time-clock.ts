@@ -1,7 +1,8 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
-import { cookies } from "next/headers";
+import { createHash } from "node:crypto";
+import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/errors";
 import { sessionHasPermission } from "@/lib/auth/permissions";
@@ -27,6 +28,13 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createScopedSupabase } from "@/lib/supabase/scoped";
 import { normalizePersonName } from "@/lib/person-name";
+import { assertRateLimit, RateLimitError } from "@/lib/security/rate-limit";
+import { readClientIp } from "@/lib/security/request-ip";
+import {
+  hashTimeClockPin,
+  validateTimeClockPin,
+  verifyTimeClockPin,
+} from "@/lib/security/time-clock-pin";
 
 type TimeClockEmployeeInput = {
   employeeId: string;
@@ -34,6 +42,7 @@ type TimeClockEmployeeInput = {
   employeeType: "clock" | "system";
   profileId?: string | null;
   isActive?: boolean;
+  pin?: string;
 };
 
 type TimeClockSettingsInput = {
@@ -77,7 +86,11 @@ function validateEmployeeInput(input: TimeClockEmployeeInput) {
   if (input.employeeType === "system" && !input.profileId) {
     throw new Error("Selecciona el usuario del sistema");
   }
-  return { employeeId, employeeIdKey, fullName };
+  const pin = input.pin?.trim() || "";
+  if (pin) {
+    validateTimeClockPin(pin);
+  }
+  return { employeeId, employeeIdKey, fullName, pin };
 }
 
 async function assertSystemProfile(
@@ -162,6 +175,10 @@ export async function createTimeClockEmployeeAction(
       throw new Error("FORBIDDEN");
     }
     const values = validateEmployeeInput(input);
+    if (!values.pin) {
+      throw new Error("Asigna un PIN al empleado");
+    }
+    const pinHash = await hashTimeClockPin(values.pin);
     await assertSystemProfile(input.employeeType === "system" ? input.profileId : null, session.organizationId);
     const supabase = await createScopedSupabase(session);
     if (!supabase) {
@@ -179,6 +196,7 @@ export async function createTimeClockEmployeeAction(
         is_active: input.isActive ?? true,
         created_by: session.userId,
         updated_by: session.userId,
+        pin_hash: pinHash,
       })
       .select("id")
       .single();
@@ -203,23 +221,33 @@ export async function updateTimeClockEmployeeAction(
       throw new Error("FORBIDDEN");
     }
     const values = validateEmployeeInput(input);
+    const pinHash = values.pin ? await hashTimeClockPin(values.pin) : null;
     await assertSystemProfile(input.employeeType === "system" ? input.profileId : null, session.organizationId);
     const supabase = await createScopedSupabase(session);
     if (!supabase) {
       return fail("Supabase no configurado");
     }
+    const updates = {
+      employee_id: values.employeeId,
+      employee_id_key: values.employeeIdKey,
+      full_name: values.fullName,
+      employee_type: input.employeeType,
+      profile_id: input.employeeType === "system" ? input.profileId || null : null,
+      is_active: input.isActive ?? true,
+      updated_at: new Date().toISOString(),
+      updated_by: session.userId,
+      ...(pinHash
+        ? {
+            pin_hash: pinHash,
+            failed_pin_attempts: 0,
+            pin_locked_until: null,
+            last_failed_pin_at: null,
+          }
+        : {}),
+    };
     const { error } = await supabase
       .from("time_clock_employees")
-      .update({
-        employee_id: values.employeeId,
-        employee_id_key: values.employeeIdKey,
-        full_name: values.fullName,
-        employee_type: input.employeeType,
-        profile_id: input.employeeType === "system" ? input.profileId || null : null,
-        is_active: input.isActive ?? true,
-        updated_at: new Date().toISOString(),
-        updated_by: session.userId,
-      })
+      .update(updates)
       .eq("id", employeeId)
       .eq("organization_id", session.organizationId);
     if (error) {
@@ -307,27 +335,98 @@ export async function acknowledgeTimeClockAlertAction(alertId: string): Promise<
 }
 
 export async function startTimeClockSessionAction(
-  employeeId: string,
+  input: { employeeId: string; pin: string },
 ): Promise<ActionResult<ClockUserSnapshot>> {
   try {
-    const employeeIdKey = normalizeEmployeeId(employeeId);
-    if (!employeeIdKey) {
-      return fail("Escribe tu Employee ID");
+    const appSession = await requireAppSession();
+    if (!canViewTimeClock(appSession)) {
+      throw new Error("FORBIDDEN");
     }
+    const employeeIdKey = normalizeEmployeeId(input.employeeId);
+    const pin = input.pin.trim();
+    const genericFailure = "Employee ID o PIN incorrecto";
+    if (!employeeIdKey || !pin) return fail(genericFailure);
+
     const admin = createSupabaseAdminClient();
-    if (!admin) {
-      return fail("Supabase no configurado");
+    if (!admin) return fail("Servicio de reloj no disponible");
+
+    const requestHeaders = await headers();
+    const ip = readClientIp(requestHeaders);
+    const lookupHash = createHash("sha256")
+      .update(`${appSession.organizationId}|${employeeIdKey}`)
+      .digest("hex");
+    const ipHash = createHash("sha256").update(ip).digest("hex");
+    const audit = async (
+      outcome: "success" | "invalid_credentials" | "locked" | "rate_limited",
+      employeeIdValue?: string,
+    ) => {
+      await admin.from("time_clock_auth_events").insert({
+        organization_id: appSession.organizationId,
+        employee_id: employeeIdValue || null,
+        actor_user_id: appSession.userId,
+        outcome,
+        lookup_hash: lookupHash,
+        ip_hash: ipHash,
+      });
+    };
+
+    try {
+      await assertRateLimit(admin, {
+        bucket: "time_clock_login",
+        key: `${appSession.organizationId}|${ipHash}|${lookupHash}`,
+        windowMs: 15 * 60 * 1000,
+        maxAttempts: 8,
+      });
+    } catch (error) {
+      if (error instanceof RateLimitError) {
+        await audit("rate_limited");
+        return fail("Demasiados intentos. Intenta mas tarde.");
+      }
+      throw error;
     }
+
     const { data: employee } = await admin
       .from("time_clock_employees")
-      .select("id, organization_id, employee_id, full_name, employee_type, is_active")
+      .select("id, organization_id, employee_id, full_name, employee_type, is_active, pin_hash, failed_pin_attempts, pin_locked_until")
+      .eq("organization_id", appSession.organizationId)
       .eq("employee_id_key", employeeIdKey)
       .eq("is_active", true)
       .maybeSingle();
     if (!employee) {
-      return fail("Employee ID no disponible");
+      await audit("invalid_credentials");
+      return fail(genericFailure);
+    }
+    if (employee.pin_locked_until && Date.parse(employee.pin_locked_until) > Date.now()) {
+      await audit("locked", employee.id);
+      return fail("Cuenta temporalmente bloqueada. Intenta mas tarde.");
+    }
+    if (!(await verifyTimeClockPin(pin, employee.pin_hash))) {
+      const failedAttempts = Number(employee.failed_pin_attempts || 0) + 1;
+      await admin
+        .from("time_clock_employees")
+        .update({
+          failed_pin_attempts: failedAttempts,
+          last_failed_pin_at: new Date().toISOString(),
+          pin_locked_until:
+            failedAttempts >= 5
+              ? new Date(Date.now() + 15 * 60 * 1000).toISOString()
+              : null,
+        })
+        .eq("id", employee.id)
+        .eq("organization_id", appSession.organizationId);
+      await audit(failedAttempts >= 5 ? "locked" : "invalid_credentials", employee.id);
+      return fail(genericFailure);
     }
     const now = new Date();
+    await admin
+      .from("time_clock_employees")
+      .update({
+        failed_pin_attempts: 0,
+        pin_locked_until: null,
+        last_failed_pin_at: null,
+      })
+      .eq("id", employee.id)
+      .eq("organization_id", appSession.organizationId);
     const token = randomBytes(32).toString("hex");
     await admin
       .from("time_clock_sessions")
@@ -337,7 +436,7 @@ export async function startTimeClockSessionAction(
     const { error } = await admin.from("time_clock_sessions").insert({
       employee_id: employee.id,
       token_hash: hashTimeClockToken(token),
-      expires_at: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      expires_at: new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString(),
     });
     if (error) {
       return fail(error.message);
@@ -347,8 +446,9 @@ export async function startTimeClockSessionAction(
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: 30 * 24 * 60 * 60,
+      maxAge: 12 * 60 * 60,
     });
+    await audit("success", employee.id);
     return ok(
       await loadClockUserSnapshot({
         sessionId: "",

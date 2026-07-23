@@ -64,6 +64,7 @@ import { actionErrorMessage, fail, ok, type ActionResult } from "@/lib/actions/e
 import { recordActivityHistory } from "@/lib/activity-history";
 import { recordInventoryMovementAtomic } from "@/lib/security/inventory-movement";
 import { readPositiveIntegerQty } from "@/lib/security/qty";
+import { decodeAndSanitizeImage } from "@/lib/security/safe-image";
 import { formatMoneyValue, parseMoneyValue } from "@/lib/logistics-fees";
 import { depositStatusForPayment, readBillingFromPlan } from "@/lib/invoice-billing";
 import {
@@ -637,11 +638,11 @@ async function uploadEvidence(
     throw new Error("Foto debe ser JPG, PNG o WebP");
   }
 
-  const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "webp";
+  const safeImage = await decodeAndSanitizeImage(file, { maxBytes: EVIDENCE_MAX_BYTES });
   const safeOperationId = clientOperationId.replace(/[^a-zA-Z0-9-]/g, "");
-  const path = `${session.organizationId}/${taskId}/${safeOperationId}.${extension}`;
-  const { error } = await admin.storage.from(LOGISTICS_TASK_EVIDENCE_BUCKET).upload(path, file, {
-    contentType: file.type,
+  const path = `${session.organizationId}/${taskId}/${safeOperationId}.${safeImage.extension}`;
+  const { error } = await admin.storage.from(LOGISTICS_TASK_EVIDENCE_BUCKET).upload(path, safeImage.bytes, {
+    contentType: safeImage.contentType,
     upsert: false,
   });
 

@@ -103,7 +103,7 @@ export type LeafStockMetrics = {
   level: StockLevel;
 };
 
-export function inventoryItemFilterLabel(
+function inventoryItemFilterLabel(
   item: Pick<InventoryStockItem, "name" | "kind" | "subcategory" | "size">,
 ) {
   const base = item.name.trim() || item.subcategory?.trim() || item.kind.trim() || "Item";

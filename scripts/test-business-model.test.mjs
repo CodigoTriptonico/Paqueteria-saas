@@ -12,6 +12,8 @@ describe('business database integration harness', () => {
     assert.match(source, /archive_business_organization/);
     assert.match(source, /unbalanced_entries/);
     assert.match(source, /duplicate_operations/);
+    assert.match(source, /savepoint authenticated_scope_/);
+    assert.match(source, /rollback to savepoint/);
     assert.match(source, /rollback/);
   });
 });

@@ -17,7 +17,7 @@ export type InventoryBinPlacement = {
   quantity: number;
 };
 
-export function normalizeBinSegment(value: string) {
+function normalizeBinSegment(value: string) {
   return String(value || "")
     .trim()
     .replace(/\s+/g, " ");
